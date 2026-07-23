@@ -4,10 +4,10 @@
 package loggerplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	"yomi-boot/plugin"
 )
 
 // loggerPlugin 日志插件

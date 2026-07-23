@@ -1,6 +1,6 @@
 package aes
 
-import "yt-boot/errors"
+import "yomi-boot/errors"
 
 // ErrOpen 表示解密失败（认证失败、密文过短或 padding 非法）
 var ErrOpen = errors.NewNoStack("aes: open failed")

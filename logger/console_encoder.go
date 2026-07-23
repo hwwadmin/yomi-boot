@@ -6,8 +6,8 @@ package logger
 import (
 	"strings"
 	"time"
-	"yt-boot/errors"
-	"yt-boot/shared"
+	"yomi-boot/errors"
+	"yomi-boot/shared"
 
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"

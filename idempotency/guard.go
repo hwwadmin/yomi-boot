@@ -12,14 +12,14 @@ import (
 	"context"
 	"encoding/json"
 	"time"
-	"yt-boot/db"
-	"yt-boot/distlock"
-	"yt-boot/dtm"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	ytredis "yt-boot/redis"
-	"yt-boot/shared/enums"
-	"yt-boot/snowflake"
+	"yomi-boot/db"
+	"yomi-boot/distlock"
+	"yomi-boot/dtm"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	yomiredis "yomi-boot/redis"
+	"yomi-boot/shared/enums"
+	"yomi-boot/snowflake"
 
 	"github.com/google/uuid"
 )
@@ -35,7 +35,7 @@ type Guard struct {
 	repo            *Repository
 	idGenerator     snowflake.Generator
 	dbType          enums.DbType
-	redisService    ytredis.RedisService
+	redisService    yomiredis.RedisService
 	distLockFactory distlock.DistLockFactory
 }
 
@@ -45,7 +45,7 @@ func NewGuard(
 	repo *Repository,
 	idGenerator snowflake.Generator,
 	dbType enums.DbType,
-	redisService ytredis.RedisService,
+	redisService yomiredis.RedisService,
 	distLockFactory distlock.DistLockFactory,
 ) *Guard {
 	if repo == nil {

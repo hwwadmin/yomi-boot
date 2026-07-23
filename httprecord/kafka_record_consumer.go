@@ -7,10 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 
-	ytkafka "yt-boot/kafka"
+	ytkafka "yomi-boot/kafka"
 )
 
 // KafkaConsumerID 是 HTTP 访问记录 Kafka 消费者在 ConsumerManager 中的标识

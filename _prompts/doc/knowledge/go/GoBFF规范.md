@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：约束入口编排层 `handler`、`bff`、`saga` 的职责边界与协作方式。
-- **边界**：可部署服务类型与 yt-boot 能力见 [Go架构规范](./Go架构规范.md)；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；DTM 子事务见 [Go事务规范](./Go事务规范.md)；**微服务信封与幂等见 [微服务调用规范](../api/微服务调用规范.md) §3（权威），本文不重复**。
+- **边界**：可部署服务类型与 yomi-boot 能力见 [Go架构规范](./Go架构规范.md)；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；DTM 子事务见 [Go事务规范](./Go事务规范.md)；**微服务信封与幂等见 [微服务调用规范](../api/微服务调用规范.md) §3（权威），本文不重复**。
 - **适用对象**：入口编排（BFF）服务类型的可部署单元（含单体中的编排模块）。
 
 ---
@@ -52,9 +52,9 @@ saga/        写操作（含单域），按 usecase 平铺，提交 DTM Saga
 
 **存储约束**：
 
-- BFF **允许**连接本服务独立 MySQL/PostgreSQL（配置 `db`、经 `yt-boot` 初始化 GORM），用于基础设施表（如 `yt-boot/event` 收件箱幂等），库名遵循一服务一库（`yt_go_{bff}`）。
+- BFF **允许**连接本服务独立 MySQL/PostgreSQL（配置 `db`、经 `yomi-boot` 初始化 GORM），用于基础设施表（如 `yomi-boot/event` 收件箱幂等），库名遵循一服务一库（`yt_go_{bff}`）。
 - BFF **禁止**连接或访问**领域服务数据库**；禁止在 BFF 内建设领域业务表、领域 Repository 或跨库 JOIN。
-- 允许使用 **Redis** 作为令牌 Store 与业务缓存（经 `yt-boot/redis.RedisService`）。
+- 允许使用 **Redis** 作为令牌 Store 与业务缓存（经 `yomi-boot/redis.RedisService`）。
 
 | 目录 | 职责 | 禁止 |
 | ---- | ---- | ---- |
@@ -62,7 +62,7 @@ saga/        写操作（含单域），按 usecase 平铺，提交 DTM Saga
 | `bff/` | 多服务只读聚合（如 Profile + 角色） | 提交 DTM；写领域数据 |
 | `saga/` | 写 Saga 定义与提交（含单域） | 实现领域补偿逻辑 |
 
-> BFF 通过**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 yt-boot）调用下游领域服务，通过 `infra.TokenService`（来自 `yt-boot/token`）完成令牌签发/校验/撤销。事件 Inbox 等本库访问经 `yt-boot/event` 等组件，不在 `handler/` 内散落 SQL。
+> BFF 通过**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 yomi-boot）调用下游领域服务，通过 `infra.TokenService`（来自 `yomi-boot/token`）完成令牌签发/校验/撤销。事件 Inbox 等本库访问经 `yomi-boot/event` 等组件，不在 `handler/` 内散落 SQL。
 
 ### 3.2 跨域调用规则
 
@@ -117,15 +117,15 @@ claims := token.FromContext(c)
 resource, err := b.resourceClient.GetProfile(ctx, claims.SubjectID)
 ```
 
-### 3.3 令牌（yt-boot/token 统一注入）
+### 3.3 令牌（yomi-boot/token 统一注入）
 
-#### 3.3.1 yt-boot/token 统一提供
+#### 3.3.1 yomi-boot/token 统一提供
 
-`yt-boot/token` 提供完整的令牌能力，包括 Store（Redis）、Claims、鉴权中间件、`TokenService`（签发/校验/撤销）。BFF 在 `NewServer` 中通过 `infra.TokenService` 直接注入，**无需**在 BFF 内部独立实现。
+`yomi-boot/token` 提供完整的令牌能力，包括 Store（Redis）、Claims、鉴权中间件、`TokenService`（签发/校验/撤销）。BFF 在 `NewServer` 中通过 `infra.TokenService` 直接注入，**无需**在 BFF 内部独立实现。
 
 | 层级 | 内容 |
 | ---- | ---- |
-| `yt-boot/token` | Store 接口、Redis 实现、Claims、`TokenService`、中间件 `AuthMiddleware`、Context 读写 |
+| `yomi-boot/token` | Store 接口、Redis 实现、Claims、`TokenService`、中间件 `AuthMiddleware`、Context 读写 |
 | BFF `handler/` | 通过 `infra.TokenService` 使用签发/校验/撤销能力 |
 
 - 多入口时在 `config/*.yml` 的 **`auth`** 段按端配置不同 `store_prefix`；键模式见 [Redis设计规范](../redis/Redis设计规范.md) §3.2.3。
@@ -171,7 +171,7 @@ Saga 成功后按业务键回查组装响应
 ### 3.5 saga/ 写操作
 
 - 按 **usecase 平铺**，一文件一 Saga 用例（含 create、update-status、register 等）；**单域写亦经 Saga**（可为单分支）。
-- **仅** BFF `saga/` 调用 `yt-boot/dtm` 提交 Saga；**禁止** BFF 经领域 client 直调领域写接口。
+- **仅** BFF `saga/` 调用 `yomi-boot/dtm` 提交 Saga；**禁止** BFF 经领域 client 直调领域写接口。
 - DTM **必须**配置；`dtmClient.Enabled()` 为 false 时写操作返回 `dtm.ErrNotConfigured`，**禁止** Facade/Direct 回退。
 - Saga 定义 Action URL 与 Compensate URL（来自领域 client 的 URL 辅助函数），指向领域成对 Handler。
 - BFF 负责组装信封与业务 payload（含补偿快照）；字段规则见 [微服务调用规范](../api/微服务调用规范.md) §3.2。
@@ -203,7 +203,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 
 ### 3.6 下游客户端（领域 client 契约模块）
 
-**领域 client** 为业务工程独立契约模块（非 yt-boot；业务 Workspace 下通常为 `client/`），**按领域分子包**（`{client}/{domain}/`）。参考实现中的包名随业务域变化，不构成本规范硬性清单。
+**领域 client** 为业务工程独立契约模块（非 yomi-boot；业务 Workspace 下通常为 `client/`），**按领域分子包**（`{client}/{domain}/`）。参考实现中的包名随业务域变化，不构成本规范硬性清单。
 
 - **读**：`client.go` 中提供查询/验密等方法，封装 URL、Request/Response DTO、POST 调用。
 - **写**：提供 `CreateXxx(ctx, saga, payload)` 等方法，内部经 `dtm.AddSagaStep` 向 Saga 追加 Action/Compensate 分支；**不**直接 POST 领域写 URL。
@@ -230,7 +230,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 | -- | ---- |
 | 路由前缀 | 各入口独立 `http.router_prefix`（按端在配置中设置） |
 | 验密对象 | 各入口对应的主体领域 |
-| token | 统一 `infra.TokenService`（`yt-boot/token`），`auth.store_prefix` 按端隔离 |
+| token | 统一 `infra.TokenService`（`yomi-boot/token`），`auth.store_prefix` 按端隔离 |
 | 下游领域 client | 仅依赖本入口需要的 `{client}/{domain}` 包 |
 
 ---

@@ -6,7 +6,7 @@ package distlock
 import (
 	"context"
 	"time"
-	"yt-boot/appctx"
+	"yomi-boot/appctx"
 )
 
 // watchdogInterval 返回看门狗续期间隔，默认 TTL/3

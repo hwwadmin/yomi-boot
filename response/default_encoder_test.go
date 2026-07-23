@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/gin-gonic/gin"
 )

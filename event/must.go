@@ -4,7 +4,7 @@
 package event
 
 import (
-	"yt-boot/logger"
+	"yomi-boot/logger"
 )
 
 // MustNewAndStart 创建并启动事件组件，失败时 log + panic

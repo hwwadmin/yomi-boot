@@ -8,16 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"yt-boot/appctx"
-	"yt-boot/config"
-	"yt-boot/cors"
-	"yt-boot/httprecord"
-	"yt-boot/logger"
-	"yt-boot/ratelimit"
-	"yt-boot/router"
-	"yt-boot/token"
+	"yomi-boot/appctx"
+	"yomi-boot/config"
+	"yomi-boot/cors"
+	"yomi-boot/httprecord"
+	"yomi-boot/logger"
+	"yomi-boot/ratelimit"
+	"yomi-boot/router"
+	"yomi-boot/token"
 
-	ytkafka "yt-boot/kafka"
+	ytkafka "yomi-boot/kafka"
 )
 
 // ======================== mock 实现 ========================

@@ -6,8 +6,8 @@ package dtm
 import (
 	"context"
 	"net/http"
-	"yt-boot/errors"
-	"yt-boot/handler"
+	"yomi-boot/errors"
+	"yomi-boot/handler"
 
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/gin-gonic/gin"

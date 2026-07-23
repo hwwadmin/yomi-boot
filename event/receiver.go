@@ -6,17 +6,17 @@ package event
 import (
 	"context"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/db"
-	"yt-boot/distlock"
-	"yt-boot/errors"
-	"yt-boot/event/cfg"
-	"yt-boot/event/model"
-	"yt-boot/event/repo"
-	"yt-boot/logger"
-	"yt-boot/snowflake"
+	"yomi-boot/appctx"
+	"yomi-boot/db"
+	"yomi-boot/distlock"
+	"yomi-boot/errors"
+	"yomi-boot/event/cfg"
+	"yomi-boot/event/model"
+	"yomi-boot/event/repo"
+	"yomi-boot/logger"
+	"yomi-boot/snowflake"
 
-	ytkafka "yt-boot/kafka"
+	ytkafka "yomi-boot/kafka"
 )
 
 // Receiver 幂等消息队列事件接收器

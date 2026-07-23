@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 	"time"
-	"yt-boot/worker"
+	"yomi-boot/worker"
 )
 
 // queueFullWorker 模拟工作池队列已满

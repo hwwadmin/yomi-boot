@@ -8,11 +8,11 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"yt-boot/distlock"
-	"yt-boot/errors"
-	"yt-boot/redis/redistest"
+	"yomi-boot/distlock"
+	"yomi-boot/errors"
+	"yomi-boot/redis/redistest"
 
-	ytredis "yt-boot/redis"
+	yomiredis "yomi-boot/redis"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )
@@ -22,7 +22,7 @@ func newTestRedisStore(t *testing.T) (*RedisStore, *redisv9.Client, func()) {
 	t.Helper()
 
 	client, cleanup := redistest.NewClient(t)
-	return NewRedisStore(ytredis.NewRedisHelper(client)), client, cleanup
+	return NewRedisStore(yomiredis.NewRedisHelper(client)), client, cleanup
 }
 
 // newTestService 创建带内存 Redis 的令牌服务，allowMultiLogin 控制是否允许多端并发登录

@@ -3,8 +3,8 @@ package aes
 import (
 	stdaes "crypto/aes"
 	"crypto/cipher"
-	"yt-boot/bc/random"
-	"yt-boot/errors"
+	"yomi-boot/bc/random"
+	"yomi-boot/errors"
 )
 
 const gcmNonceSize = 12

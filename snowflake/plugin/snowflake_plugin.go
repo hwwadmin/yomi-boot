@@ -4,9 +4,9 @@
 package snowflakeplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/plugin"
-	"yt-boot/snowflake"
+	"yomi-boot/config"
+	"yomi-boot/plugin"
+	"yomi-boot/snowflake"
 )
 
 // snowflakePlugin 雪花 ID 插件

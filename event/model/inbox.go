@@ -3,7 +3,7 @@
 // @author zwei
 package model
 
-import "yt-boot/db"
+import "yomi-boot/db"
 
 // SysEventInbox 映射 sys_event_inbox 收件箱表
 type SysEventInbox struct {

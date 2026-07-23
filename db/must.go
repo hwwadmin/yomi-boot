@@ -4,7 +4,7 @@
 package db
 
 import (
-	"yt-boot/logger"
+	"yomi-boot/logger"
 
 	"gorm.io/gorm"
 )

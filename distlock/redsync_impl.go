@@ -7,8 +7,8 @@ import (
 	"context"
 	"sync"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
 
 	"github.com/go-redsync/redsync/v4"
 	goredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"

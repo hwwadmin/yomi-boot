@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
-	"yt-boot/errors"
-	"yt-boot/worker"
+	"yomi-boot/errors"
+	"yomi-boot/worker"
 )
 
 var _ PublisherService = (*asyncPublisher)(nil)

@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/logger"
 )
 
 const probeTimeout = 3 * time.Second

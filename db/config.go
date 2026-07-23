@@ -5,9 +5,9 @@ package db
 
 import (
 	"strings"
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/shared/enums"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/shared/enums"
 )
 
 // SectionKey YAML 根 key

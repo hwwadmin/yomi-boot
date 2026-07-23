@@ -10,11 +10,11 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/banner"
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/banner"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 )
 
 // ServerBundle 表示入口启动完成后的 HTTP 服务和资源清理器

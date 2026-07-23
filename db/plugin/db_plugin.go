@@ -4,9 +4,9 @@
 package dbplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/db"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/db"
+	"yomi-boot/plugin"
 )
 
 // dbPlugin 数据库插件

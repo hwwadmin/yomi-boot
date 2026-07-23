@@ -5,16 +5,16 @@ package bootstrap
 
 import (
 	"net/http"
-	"yt-boot/config"
-	"yt-boot/cors"
-	"yt-boot/httprecord"
-	"yt-boot/logger"
-	"yt-boot/requestguard"
-	"yt-boot/response"
-	"yt-boot/router"
-	"yt-boot/runner"
-	"yt-boot/token"
-	"yt-boot/traceid"
+	"yomi-boot/config"
+	"yomi-boot/cors"
+	"yomi-boot/httprecord"
+	"yomi-boot/logger"
+	"yomi-boot/requestguard"
+	"yomi-boot/response"
+	"yomi-boot/router"
+	"yomi-boot/runner"
+	"yomi-boot/token"
+	"yomi-boot/traceid"
 
 	"github.com/gin-gonic/gin"
 )

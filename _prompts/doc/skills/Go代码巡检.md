@@ -4,7 +4,7 @@
 
 ## 0. 基础信息
 - **Skill 名称**: Go代码巡检
-- **描述**: 对基于 yt-boot 的 Go 后端（本仓为基础库；业务仓为可部署单元）执行分层架构、BFF 编排、数据访问、DTM 事务、令牌鉴权、注释规范等多维巡检；在 **yt-boot 本仓**执行时以 [Go基础库检查规范](../knowledge/go/Go基础库检查规范.md) 为主
+- **描述**: 对基于 yomi-boot 的 Go 后端（本仓为基础库；业务仓为可部署单元）执行分层架构、BFF 编排、数据访问、DTM 事务、令牌鉴权、注释规范等多维巡检；在 **yomi-boot 本仓**执行时以 [Go基础库检查规范](../knowledge/go/Go基础库检查规范.md) 为主
 - **作者**: zwei
 - **创建日期**: 2026-06-02
 
@@ -37,10 +37,10 @@
 
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
-| `_prompts/doc/基础库能力索引.md` | 全文 | yt-boot 各能力库速查；判断是否应复用基础库而非平行实现 |
+| `_prompts/doc/基础库能力索引.md` | 全文 | yomi-boot 各能力库速查；判断是否应复用基础库而非平行实现 |
 | `_prompts/doc/knowledge/go/Go业务分层规范.md` | §3 | handler / usecase / contract / service / repository 分层、跨模块协作、轻量 DDD-lite 与贫血/充血 Entity 建模 |
 | `_prompts/doc/knowledge/api/微服务调用规范.md` | §3 | POST/JSON、Header 链路 ID、bizId/bizSubId、idempotency |
-| `_prompts/doc/knowledge/go/Go架构规范.md` | §3 | yt-boot、services、Workspace、bootstrap、Consul、DTM |
+| `_prompts/doc/knowledge/go/Go架构规范.md` | §3 | yomi-boot、services、Workspace、bootstrap、Consul、DTM |
 | `_prompts/doc/knowledge/go/Go数据库规范.md` | §3 | GORM 链式查询、Model 映射规则、事务感知 repository |
 | `_prompts/doc/knowledge/go/Go事务规范.md` | §3 | 本地子事务、DTM Saga、Execute/Compensate |
 | `_prompts/doc/knowledge/go/Go注释规范.md` | §3 | 文件头注释、类型与字段注释、函数注释、常量枚举注释 |
@@ -101,19 +101,19 @@
 
 | 检查项 | 检查内容 | 依据 |
 | ------ | -------- | ---- |
-| 依赖引用 | 业务单元是否 `require yt-boot` + `replace`（或本地 `go.work`）；`yt-boot` 不依赖业务代码 | Go架构规范 §3.5 |
+| 依赖引用 | 业务单元是否 `require yomi-boot` + `replace`（或本地 `go.work`）；`yomi-boot` 不依赖业务代码 | Go架构规范 §3.5 |
 | bootstrap | 各服务 `internal/bootstrap/` 以 `server.go` 为入口；Kafka 消费者用 `*_consumer_plugin.go` + `AddCustomPlugin`；无 `wire/` 子目录 | Go架构规范 §3.4 |
 | BFF 目录 | 是否含 `internal/handler/`、`bff/`、`saga/`、`bizerr/`；无领域库访问/领域业务表；本服务库仅基础设施用途 | GoBFF规范 §3.1 |
 | 领域目录 | `biz/handler`、`usecase` 平铺；含 `api_types.go` 别名 client DTO；无 token 中间件 | Go业务分层规范 §3.4 |
 | 领域零互调 | 领域服务是否无 HTTP 调其他领域 | Go架构规范 §3.1.3 |
 | 微服务契约 | 符合 [微服务调用规范](../api/微服务调用规范.md) §3 | 微服务调用规范 |
-| 业务幂等 | 写 usecase 使用 `yt-boot/idempotency.Execute` | 微服务调用规范 §3.4 |
+| 业务幂等 | 写 usecase 使用 `yomi-boot/idempotency.Execute` | 微服务调用规范 §3.4 |
 | BFF 喂饱 | 各接口 DTO 按需传参；领域不读 token | GoBFF规范 §3.2.3 |
-| handler | 协议适配是否经 `yt-boot/handler`；领域写用 `dtm.BindAndHandleAction/Compensate` | Go代码规范 §3.3.1 |
+| handler | 协议适配是否经 `yomi-boot/handler`；领域写用 `dtm.BindAndHandleAction/Compensate` | Go代码规范 §3.3.1 |
 | usecase | 平铺命名；Saga 写含 `Compensate`；无跨域 HTTP | Go业务分层规范 §3.4.2 |
 | Saga Handler | Action/Compensate 是否独立入口，路由 `/compensate` 成对 | Go事务规范 §3.4.2 |
-| yt-boot | 是否无业务依赖；基础设施经 `plugin` + 各库 `{lib}/plugin` 生命周期管理；`event/` 为可选组件 | Go架构规范 §3.3、§3.4.4 |
-| 令牌 | BFF 经 `infra.TokenService`（yt-boot/token）注入；config 使用 `auth` 段 | GoBFF规范 §3.3 |
+| yomi-boot | 是否无业务依赖；基础设施经 `plugin` + 各库 `{lib}/plugin` 生命周期管理；`event/` 为可选组件 | Go架构规范 §3.3、§3.4.4 |
+| 令牌 | BFF 经 `infra.TokenService`（yomi-boot/token）注入；config 使用 `auth` 段 | GoBFF规范 §3.3 |
 | depguard | 分层依赖方向是否符合规范 | Go业务分层规范 §3.8 |
 
 ### 3.4 数据访问巡检
@@ -195,7 +195,7 @@
 ## 4. 约束与规范
 
 - [ ] 巡检必须以项目 Go 知识文档为唯一规范依据，禁止给出无来源的主观建议
-- [ ] 必须遵守 `_prompts/rules/基础库优先使用规则.md`：对照 `_prompts/doc/基础库能力索引.md`，将可复用 yt-boot 能力却平行实现或重复依赖的代码列为问题
+- [ ] 必须遵守 `_prompts/rules/基础库优先使用规则.md`：对照 `_prompts/doc/基础库能力索引.md`，将可复用 yomi-boot 能力却平行实现或重复依赖的代码列为问题
 - [ ] 未经用户允许，不扩大到无关目录或无关模块
 - [ ] 有可执行校验时，修复后必须重新执行编译或 lint 检查
 - [ ] 不得把推测写成确认事实，不确定的问题标注为"待确认"

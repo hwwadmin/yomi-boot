@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/gin-gonic/gin"
 )

@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/distlock"
-	"yt-boot/redis/redistest"
+	"yomi-boot/appctx"
+	"yomi-boot/distlock"
+	"yomi-boot/redis/redistest"
 )
 
 // TestConfig_validate 校验合法配置通过及各非法字段拒绝

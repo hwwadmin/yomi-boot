@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // TestIsRetryableRPCError 验证可重试 RPC 错误判定

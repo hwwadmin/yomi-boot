@@ -3,7 +3,7 @@
 // @author zwei
 package distlock
 
-import "yt-boot/errors"
+import "yomi-boot/errors"
 
 var (
 	// ErrLockNotHeld 当前实例未持有锁时调用 Unlock

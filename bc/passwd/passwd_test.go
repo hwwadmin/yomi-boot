@@ -2,7 +2,7 @@ package passwd
 
 import (
 	"testing"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // TestHashAndVerify 验证密码哈希与校验及错误密码返回 ErrMismatch

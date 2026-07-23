@@ -8,9 +8,9 @@ import (
 	"math/rand/v2"
 	"sync"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

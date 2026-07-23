@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-	"yt-boot/redis/redistest"
+	"yomi-boot/redis/redistest"
 )
 
 // TestRedisHelper_OpsStr4SetAndGet 验证 String 写入与读取

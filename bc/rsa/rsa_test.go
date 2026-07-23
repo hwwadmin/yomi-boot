@@ -3,7 +3,7 @@ package rsa
 import (
 	"bytes"
 	"testing"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // TestOAEPAndSign 验证 OAEP 加解密及 PSS/PKCS1v15 签名验签

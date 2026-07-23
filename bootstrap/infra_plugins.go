@@ -4,21 +4,21 @@
 package bootstrap
 
 import (
-	appctxplugin "yt-boot/appctx/plugin"
-	consulplugin "yt-boot/consul/plugin"
-	dbplugin "yt-boot/db/plugin"
-	dtmplugin "yt-boot/dtm/plugin"
-	eventplugin "yt-boot/event/plugin"
-	httprecordplugin "yt-boot/httprecord/plugin"
-	idempotencyplugin "yt-boot/idempotency/plugin"
-	kafkaplugin "yt-boot/kafka/plugin"
-	loggerplugin "yt-boot/logger/plugin"
-	"yt-boot/plugin"
-	pprofplugin "yt-boot/pprof/plugin"
-	ratelimitplugin "yt-boot/ratelimit/plugin"
-	redisplugin "yt-boot/redis/plugin"
-	snowflakeplugin "yt-boot/snowflake/plugin"
-	tokenplugin "yt-boot/token/plugin"
+	appctxplugin "yomi-boot/appctx/plugin"
+	consulplugin "yomi-boot/consul/plugin"
+	dbplugin "yomi-boot/db/plugin"
+	dtmplugin "yomi-boot/dtm/plugin"
+	eventplugin "yomi-boot/event/plugin"
+	httprecordplugin "yomi-boot/httprecord/plugin"
+	idempotencyplugin "yomi-boot/idempotency/plugin"
+	kafkaplugin "yomi-boot/kafka/plugin"
+	loggerplugin "yomi-boot/logger/plugin"
+	"yomi-boot/plugin"
+	pprofplugin "yomi-boot/pprof/plugin"
+	ratelimitplugin "yomi-boot/ratelimit/plugin"
+	redisplugin "yomi-boot/redis/plugin"
+	snowflakeplugin "yomi-boot/snowflake/plugin"
+	tokenplugin "yomi-boot/token/plugin"
 )
 
 // buildInfraPlugins 按严格顺序返回全部基础设施插件

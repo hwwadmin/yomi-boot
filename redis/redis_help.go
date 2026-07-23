@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/google/uuid"
 	redisv9 "github.com/redis/go-redis/v9"

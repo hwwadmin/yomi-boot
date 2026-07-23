@@ -4,11 +4,11 @@
 package tokenplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	"yt-boot/plugin"
-	"yt-boot/token"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	"yomi-boot/plugin"
+	"yomi-boot/token"
 )
 
 // tokenPlugin 令牌服务插件

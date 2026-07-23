@@ -5,9 +5,9 @@ package db
 
 import (
 	"strings"
-	"yt-boot/errors"
-	"yt-boot/shared"
-	"yt-boot/shared/enums"
+	"yomi-boot/errors"
+	"yomi-boot/shared"
+	"yomi-boot/shared/enums"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"

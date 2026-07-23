@@ -4,10 +4,10 @@
 package consulplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/consul"
-	"yt-boot/errors"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/consul"
+	"yomi-boot/errors"
+	"yomi-boot/plugin"
 )
 
 // consulPlugin Consul 插件

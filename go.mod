@@ -1,4 +1,4 @@
-module yt-boot
+module yomi-boot
 
 go 1.26
 

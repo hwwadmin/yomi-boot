@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

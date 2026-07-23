@@ -14,9 +14,9 @@ import (
 	"path"
 	"strings"
 	"time"
-	"yt-boot/shared"
-	"yt-boot/traceid"
-	"yt-boot/utils/ginutil"
+	"yomi-boot/shared"
+	"yomi-boot/traceid"
+	"yomi-boot/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

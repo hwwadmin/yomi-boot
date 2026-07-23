@@ -6,7 +6,7 @@ package token
 import (
 	"encoding/json"
 	"time"
-	"yt-boot/shared/dto"
+	"yomi-boot/shared/dto"
 )
 
 // TokenSession 表示令牌对应的会话快照

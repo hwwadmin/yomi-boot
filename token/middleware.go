@@ -6,8 +6,8 @@ package token
 import (
 	"path"
 	"strings"
-	"yt-boot/errors"
-	"yt-boot/handler"
+	"yomi-boot/errors"
+	"yomi-boot/handler"
 
 	"github.com/gin-gonic/gin"
 )

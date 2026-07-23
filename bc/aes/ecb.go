@@ -3,7 +3,7 @@ package aes
 import (
 	stdaes "crypto/aes"
 	"crypto/cipher"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // ECB AES-ECB + PKCS7（仅遗留对接；新业务禁止）

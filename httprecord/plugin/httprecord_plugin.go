@@ -4,9 +4,9 @@
 package httprecordplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/httprecord"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/httprecord"
+	"yomi-boot/plugin"
 )
 
 // httpRecordPlugin HTTP 访问记录插件

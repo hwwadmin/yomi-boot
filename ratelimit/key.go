@@ -6,7 +6,7 @@ package ratelimit
 import (
 	"strings"
 	"unicode"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 const maxRedisKeyLen = 256

@@ -3,7 +3,7 @@
 // @author zwei
 package rsa
 
-import "yt-boot/errors"
+import "yomi-boot/errors"
 
 // ErrVerify 表示签名校验失败
 var ErrVerify = errors.NewNoStack("rsa: verify failed")

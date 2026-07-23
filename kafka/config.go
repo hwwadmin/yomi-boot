@@ -6,8 +6,8 @@ package kafka
 import (
 	"strings"
 	"time"
-	"yt-boot/config"
-	"yt-boot/errors"
+	"yomi-boot/config"
+	"yomi-boot/errors"
 )
 
 // SectionKey YAML 根 key

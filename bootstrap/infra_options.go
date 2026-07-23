@@ -4,8 +4,8 @@
 package bootstrap
 
 import (
-	"yt-boot/config"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/plugin"
 )
 
 // InfraOptions 基础设施扩展选项；各组件是否启动由插件根据配置自行判断

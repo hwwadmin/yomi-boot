@@ -6,8 +6,8 @@ package idempotency
 import (
 	"context"
 	"time"
-	"yt-boot/db"
-	"yt-boot/errors"
+	"yomi-boot/db"
+	"yomi-boot/errors"
 
 	"gorm.io/gorm"
 )

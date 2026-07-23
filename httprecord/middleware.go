@@ -13,12 +13,12 @@ import (
 	"path"
 	"strings"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/logger"
-	"yt-boot/response"
-	"yt-boot/token"
-	"yt-boot/traceid"
-	"yt-boot/utils/ginutil"
+	"yomi-boot/appctx"
+	"yomi-boot/logger"
+	"yomi-boot/response"
+	"yomi-boot/token"
+	"yomi-boot/traceid"
+	"yomi-boot/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

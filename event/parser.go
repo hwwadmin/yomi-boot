@@ -5,7 +5,7 @@ package event
 
 import (
 	"encoding/json"
-	"yt-boot/logger"
+	"yomi-boot/logger"
 )
 
 // ParseAndValidate 解析并校验消息队列事件

@@ -3,7 +3,7 @@
 // @author zwei
 package idempotency
 
-import "yt-boot/db"
+import "yomi-boot/db"
 
 // 处理状态
 const (

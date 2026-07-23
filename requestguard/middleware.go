@@ -6,11 +6,11 @@ package requestguard
 import (
 	"context"
 	"net/http"
-	"yt-boot/appctx"
-	"yt-boot/errors"
-	"yt-boot/handler"
-	"yt-boot/router"
-	sharederr "yt-boot/shared/error"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
+	"yomi-boot/handler"
+	"yomi-boot/router"
+	sharederr "yomi-boot/shared/error"
 
 	"github.com/gin-gonic/gin"
 )

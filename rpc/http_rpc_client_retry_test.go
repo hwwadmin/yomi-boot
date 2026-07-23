@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // newTestRPCClient 构造带测试服务发现的 HTTP RPC 客户端

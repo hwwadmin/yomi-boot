@@ -9,9 +9,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 
 	"github.com/panjf2000/ants/v2"
 )

@@ -4,9 +4,9 @@
 package kafkaplugin
 
 import (
-	"yt-boot/config"
-	ytkafka "yt-boot/kafka"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	ytkafka "yomi-boot/kafka"
+	"yomi-boot/plugin"
 )
 
 // kafkaPlugin Kafka 插件

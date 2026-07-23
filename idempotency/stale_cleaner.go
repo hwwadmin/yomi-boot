@@ -7,11 +7,11 @@ import (
 	"context"
 	"strings"
 	"time"
-	"yt-boot/distlock"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	"yt-boot/roundrobin"
-	"yt-boot/runner"
+	"yomi-boot/distlock"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	"yomi-boot/roundrobin"
+	"yomi-boot/runner"
 )
 
 const staleCleanerRoundRobinPrefix = "idempotencyStaleProcessing"

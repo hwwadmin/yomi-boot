@@ -11,9 +11,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"yt-boot/consul"
-	"yt-boot/errors"
-	"yt-boot/traceid"
+	"yomi-boot/consul"
+	"yomi-boot/errors"
+	"yomi-boot/traceid"
 )
 
 // ErrDownstream 下游服务异常

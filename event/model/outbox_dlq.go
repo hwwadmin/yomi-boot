@@ -5,7 +5,7 @@ package model
 
 import (
 	"time"
-	"yt-boot/db"
+	"yomi-boot/db"
 )
 
 // SysEventOutboxDlq 映射 sys_event_outbox_dlq 发件箱死信表

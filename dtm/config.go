@@ -6,8 +6,8 @@ package dtm
 import (
 	"net/url"
 	"strings"
-	"yt-boot/config"
-	"yt-boot/errors"
+	"yomi-boot/config"
+	"yomi-boot/errors"
 )
 
 const (

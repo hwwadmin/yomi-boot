@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"yt-boot/db"
-	"yt-boot/errors"
-	"yt-boot/shared/enums"
+	"yomi-boot/db"
+	"yomi-boot/errors"
+	"yomi-boot/shared/enums"
 
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/gin-gonic/gin"

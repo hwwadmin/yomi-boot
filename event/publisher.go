@@ -5,14 +5,14 @@ package event
 
 import (
 	"context"
-	"yt-boot/db"
-	"yt-boot/errors"
-	"yt-boot/event/cfg"
-	"yt-boot/event/model"
-	"yt-boot/event/repo"
-	"yt-boot/logger"
-	"yt-boot/shared/enums"
-	"yt-boot/snowflake"
+	"yomi-boot/db"
+	"yomi-boot/errors"
+	"yomi-boot/event/cfg"
+	"yomi-boot/event/model"
+	"yomi-boot/event/repo"
+	"yomi-boot/logger"
+	"yomi-boot/shared/enums"
+	"yomi-boot/snowflake"
 )
 
 // Publisher 发件箱事件发布器

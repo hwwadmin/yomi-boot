@@ -4,10 +4,10 @@
 package redisplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/distlock"
-	"yt-boot/plugin"
-	ytredis "yt-boot/redis"
+	"yomi-boot/config"
+	"yomi-boot/distlock"
+	"yomi-boot/plugin"
+	yomiredis "yomi-boot/redis"
 )
 
 // redisPlugin Redis 插件
@@ -24,13 +24,13 @@ func NewRedis() plugin.Plugin {
 
 // Init 初始化 Redis 客户端并挂到 Host
 func (p *redisPlugin) Init(host *plugin.Host) {
-	cfg := config.MustSection[ytredis.Config](host.Doc, ytredis.SectionKey)
+	cfg := config.MustSection[yomiredis.Config](host.Doc, yomiredis.SectionKey)
 	if !cfg.EnabledOrDefault() {
 		return
 	}
-	conn := ytredis.MustNewClient(*cfg)
+	conn := yomiredis.MustNewClient(*cfg)
 	host.RedisClient = conn
-	host.RedisService = ytredis.NewRedisHelper(conn)
+	host.RedisService = yomiredis.NewRedisHelper(conn)
 	host.DistLockFactory = distlock.MustNewFactory(conn)
 	p.SetStarted()
 }

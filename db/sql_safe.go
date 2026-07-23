@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

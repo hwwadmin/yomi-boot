@@ -5,7 +5,7 @@ package model
 
 import (
 	"time"
-	"yt-boot/db"
+	"yomi-boot/db"
 )
 
 // SysEventOutbox 映射 sys_event_outbox 发件箱表

@@ -6,15 +6,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	ytredis "yt-boot/redis"
-	"yt-boot/redis/redistest"
+	yomiredis "yomi-boot/redis"
+	"yomi-boot/redis/redistest"
 
-	booterrors "yt-boot/errors"
+	booterrors "yomi-boot/errors"
 )
 
 // stubRedis 仅实现 OpsRateLimit4Allow，用于策略单测
 type stubRedis struct {
-	ytredis.RedisService
+	yomiredis.RedisService
 	allowed bool
 	err     error
 	calls   atomic.Int64
@@ -89,7 +89,7 @@ func TestAllow_Integration(t *testing.T) {
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
 
-	helper := ytredis.NewRedisHelper(client)
+	helper := yomiredis.NewRedisHelper(client)
 	lim := New(helper, enabledCfg(RedisErrorPolicyFailOpen))
 	ctx := context.Background()
 	rule := Rule{Limit: 2, Window: time.Minute}

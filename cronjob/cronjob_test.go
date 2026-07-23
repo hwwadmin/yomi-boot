@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"yt-boot/distlock"
-	"yt-boot/redis/redistest"
+	"yomi-boot/distlock"
+	"yomi-boot/redis/redistest"
 )
 
 // TestJob_validate 校验合法 Job 通过及各非法字段拒绝

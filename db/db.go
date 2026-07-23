@@ -6,9 +6,9 @@ package db
 import (
 	"fmt"
 	"time"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	"yt-boot/shared/enums"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	"yomi-boot/shared/enums"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"

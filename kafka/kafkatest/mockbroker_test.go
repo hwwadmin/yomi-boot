@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"yt-boot/kafka"
+	"yomi-boot/kafka"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

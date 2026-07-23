@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
-	ytredis "yt-boot/redis"
+	yomiredis "yomi-boot/redis"
 )
 
 var _ Store = (*RedisStore)(nil)
@@ -78,11 +78,11 @@ return 1
 
 // RedisStore 表示基于 Redis String 的令牌会话存储
 type RedisStore struct {
-	redisService ytredis.RedisService // redisService 是 Redis 读写服务
+	redisService yomiredis.RedisService // redisService 是 Redis 读写服务
 }
 
 // NewRedisStore 创建基于 Redis 的令牌会话存储
-func NewRedisStore(redisService ytredis.RedisService) *RedisStore {
+func NewRedisStore(redisService yomiredis.RedisService) *RedisStore {
 	return &RedisStore{redisService: redisService}
 }
 

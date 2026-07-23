@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"

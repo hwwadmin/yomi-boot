@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 	"testing"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/go-redsync/redsync/v4"
 	"github.com/hashicorp/go-multierror"

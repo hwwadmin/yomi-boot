@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
-	"yt-boot/shared"
+	"yomi-boot/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

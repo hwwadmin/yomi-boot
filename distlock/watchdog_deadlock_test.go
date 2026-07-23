@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
-	"yt-boot/errors"
-	"yt-boot/redis/redistest"
+	"yomi-boot/errors"
+	"yomi-boot/redis/redistest"
 
 	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"

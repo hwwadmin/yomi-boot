@@ -6,7 +6,7 @@ package token
 import (
 	"context"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // contextKey 是令牌会话在上下文中的键

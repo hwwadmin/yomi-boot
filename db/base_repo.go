@@ -6,7 +6,7 @@ package db
 import (
 	"context"
 	"reflect"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

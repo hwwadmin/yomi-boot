@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 )
 
 var _ WorkerService = (*channelWorker)(nil)

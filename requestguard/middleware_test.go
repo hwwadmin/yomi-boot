@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"yt-boot/handler"
-	"yt-boot/response"
-	"yt-boot/router"
+	"yomi-boot/handler"
+	"yomi-boot/response"
+	"yomi-boot/router"
 
 	"github.com/gin-gonic/gin"
 )

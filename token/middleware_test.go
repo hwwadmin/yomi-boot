@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"yt-boot/response"
-	"yt-boot/token"
+	"yomi-boot/response"
+	"yomi-boot/token"
 
 	"github.com/gin-gonic/gin"
 )

@@ -3,7 +3,7 @@ package filestorage
 import (
 	"testing"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // TestConfigValidate 验证 Config 构造时 provider 与必填项校验

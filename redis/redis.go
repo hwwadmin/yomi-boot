@@ -5,9 +5,9 @@ package redis
 
 import (
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 
 	"github.com/redis/go-redis/v9"
 )

@@ -6,8 +6,8 @@ package rpc
 import (
 	"context"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
 )
 
 // isRetryableRPCError 仅传输类故障可重试：网络/发现、502/503/504/408

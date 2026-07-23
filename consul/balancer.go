@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // ServiceInstance 表示一个可路由的服务实例

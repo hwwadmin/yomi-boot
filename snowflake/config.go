@@ -4,8 +4,8 @@
 package snowflake
 
 import (
-	"yt-boot/config"
-	"yt-boot/errors"
+	"yomi-boot/config"
+	"yomi-boot/errors"
 )
 
 const (

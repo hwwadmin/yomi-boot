@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"yt-boot/appctx"
-	"yt-boot/bootstrap"
-	"yt-boot/config"
-	"yt-boot/router"
-	"yt-boot/snowflake"
+	"yomi-boot/appctx"
+	"yomi-boot/bootstrap"
+	"yomi-boot/config"
+	"yomi-boot/router"
+	"yomi-boot/snowflake"
 )
 
 // testInfraRegistry 返回配置加载单测用注册表

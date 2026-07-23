@@ -4,8 +4,8 @@
 package dbplugin
 
 import (
-	"yt-boot/db"
-	"yt-boot/plugin"
+	"yomi-boot/db"
+	"yomi-boot/plugin"
 )
 
 // txPlugin 事务执行器插件

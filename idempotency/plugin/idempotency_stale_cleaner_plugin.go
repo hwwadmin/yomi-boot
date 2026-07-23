@@ -5,10 +5,10 @@ package idempotencyplugin
 
 import (
 	"context"
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/idempotency"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/idempotency"
+	"yomi-boot/plugin"
 )
 
 // idempotencyStaleCleanerPlugin 幂等 Processing 超时清理插件

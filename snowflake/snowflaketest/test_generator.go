@@ -5,7 +5,7 @@ package snowflaketest
 
 import (
 	"math/rand/v2"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	bwmarrin "github.com/bwmarrin/snowflake"
 )

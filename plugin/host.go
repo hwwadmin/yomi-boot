@@ -4,19 +4,19 @@
 package plugin
 
 import (
-	"yt-boot/appctx"
-	"yt-boot/config"
-	"yt-boot/consul"
-	"yt-boot/db"
-	"yt-boot/distlock"
-	"yt-boot/event"
-	"yt-boot/httprecord"
-	ytkafka "yt-boot/kafka"
-	"yt-boot/ratelimit"
-	ytredis "yt-boot/redis"
-	"yt-boot/shared/enums"
-	"yt-boot/snowflake"
-	"yt-boot/token"
+	"yomi-boot/appctx"
+	"yomi-boot/config"
+	"yomi-boot/consul"
+	"yomi-boot/db"
+	"yomi-boot/distlock"
+	"yomi-boot/event"
+	"yomi-boot/httprecord"
+	ytkafka "yomi-boot/kafka"
+	"yomi-boot/ratelimit"
+	yomiredis "yomi-boot/redis"
+	"yomi-boot/shared/enums"
+	"yomi-boot/snowflake"
+	"yomi-boot/token"
 
 	redisv9 "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -32,7 +32,7 @@ type Host struct {
 
 	DB                *gorm.DB
 	RedisClient       *redisv9.Client
-	RedisService      ytredis.RedisService
+	RedisService      yomiredis.RedisService
 	DistLockFactory   distlock.DistLockFactory
 	RateLimiter       ratelimit.LimitService
 	KafkaComponents   *ytkafka.Components

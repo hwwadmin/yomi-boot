@@ -8,7 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // SHA256 计算 HMAC-SHA256；key 为空时返回 error

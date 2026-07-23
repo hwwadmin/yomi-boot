@@ -6,10 +6,10 @@ package handler
 import (
 	"context"
 	"net/http"
-	"yt-boot/errors"
-	"yt-boot/response"
-	"yt-boot/shared/dto"
-	sharederr "yt-boot/shared/error"
+	"yomi-boot/errors"
+	"yomi-boot/response"
+	"yomi-boot/shared/dto"
+	sharederr "yomi-boot/shared/error"
 
 	"github.com/gin-gonic/gin"
 )

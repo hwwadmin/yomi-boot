@@ -4,7 +4,7 @@
 package consul
 
 import (
-	"yt-boot/logger"
+	"yomi-boot/logger"
 )
 
 // MustNewClient 创建 Consul 客户端，失败时 log + panic

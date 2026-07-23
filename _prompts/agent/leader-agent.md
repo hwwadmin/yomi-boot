@@ -27,7 +27,7 @@
 
 - 需要执行型 Skill 时，先读取 `_prompts/doc/Skill技能列表.md`，再根据列表中的目录地址加载已发布或发布中的 Skill
 - 需要静态规范、方案或模板类文档时，先读取 `_prompts/doc/知识库索引.md`，再根据目录地址加载对应知识文档
-- 分派或验收涉及 Go 基础设施时，必须督促子 Agent 遵守 `_prompts/rules/基础库优先使用规则.md`（先读 `_prompts/doc/基础库能力索引.md`，满足则强制使用 yt-boot 库）
+- 分派或验收涉及 Go 基础设施时，必须督促子 Agent 遵守 `_prompts/rules/基础库优先使用规则.md`（先读 `_prompts/doc/基础库能力索引.md`，满足则强制使用 yomi-boot 库）
 - 仅围绕当前任务按需读取 Agent、Skill 和知识文档，避免绕过索引直接搜索正文
 
 ---

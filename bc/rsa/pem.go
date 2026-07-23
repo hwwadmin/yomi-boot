@@ -5,7 +5,7 @@ import (
 	stdrsa "crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // GenerateKey 生成 RSA 私钥；bits 须 >= 2048

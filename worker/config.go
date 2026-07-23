@@ -5,7 +5,7 @@ package worker
 
 import (
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 const defaultSubmitTimeout = 10 * time.Second // defaultSubmitTimeout 是任务提交等待队列空位的默认超时

@@ -8,9 +8,9 @@ package ratelimit
 
 import (
 	"context"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	ytredis "yt-boot/redis"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	yomiredis "yomi-boot/redis"
 )
 
 // ErrRateLimited 请求触发限流
@@ -26,7 +26,7 @@ type LimitService interface {
 
 // limiter 基于 Redis 的限流实现
 type limiter struct {
-	redis    ytredis.RedisService
+	redis    yomiredis.RedisService
 	prefix   string
 	failOpen bool
 }
@@ -35,7 +35,7 @@ type limiter struct {
 type noopLimiter struct{}
 
 // New 创建限流服务；未启用时返回 Noop（Allow 恒成功）
-func New(redisService ytredis.RedisService, cfg Config) LimitService {
+func New(redisService yomiredis.RedisService, cfg Config) LimitService {
 	if !cfg.EnabledOrDefault() {
 		return noopLimiter{}
 	}

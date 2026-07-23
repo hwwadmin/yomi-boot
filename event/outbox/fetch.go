@@ -6,12 +6,12 @@ package outbox
 import (
 	"context"
 	"time"
-	"yt-boot/distlock"
-	"yt-boot/event/cfg"
-	"yt-boot/event/model"
-	"yt-boot/event/repo"
-	"yt-boot/logger"
-	"yt-boot/roundrobin"
+	"yomi-boot/distlock"
+	"yomi-boot/event/cfg"
+	"yomi-boot/event/model"
+	"yomi-boot/event/repo"
+	"yomi-boot/logger"
+	"yomi-boot/roundrobin"
 )
 
 // Fetcher 发件箱抓取器

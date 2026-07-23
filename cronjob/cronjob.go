@@ -7,10 +7,10 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/distlock"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/appctx"
+	"yomi-boot/distlock"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 
 	"github.com/robfig/cron/v3"
 )

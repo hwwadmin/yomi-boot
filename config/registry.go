@@ -6,7 +6,7 @@ package config
 import (
 	"fmt"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // Section 一段可注册配置

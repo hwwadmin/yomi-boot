@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 const (

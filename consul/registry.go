@@ -4,8 +4,8 @@ package consul
 import (
 	"fmt"
 	"strings"
-	"yt-boot/errors"
-	"yt-boot/logger"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
 
 	"github.com/hashicorp/consul/api"
 )

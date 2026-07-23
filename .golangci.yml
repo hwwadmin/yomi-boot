@@ -1,4 +1,4 @@
-# golangci-lint config for yt-boot module
+# golangci-lint config for yomi-boot module
 version: "2"
 
 run:

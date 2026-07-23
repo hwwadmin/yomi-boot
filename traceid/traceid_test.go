@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"yt-boot/shared"
+	"yomi-boot/shared"
 
 	"github.com/gin-gonic/gin"
 )

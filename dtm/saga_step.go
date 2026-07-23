@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"yt-boot/consul"
-	"yt-boot/errors"
-	"yt-boot/shared"
-	"yt-boot/traceid"
+	"yomi-boot/consul"
+	"yomi-boot/errors"
+	"yomi-boot/shared"
+	"yomi-boot/traceid"
 
 	"github.com/dtm-labs/client/dtmcli"
 )

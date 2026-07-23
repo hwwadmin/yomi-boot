@@ -6,7 +6,7 @@ package handler
 import (
 	"net/http"
 	"strings"
-	"yt-boot/appctx"
+	"yomi-boot/appctx"
 
 	"github.com/gin-gonic/gin"
 )

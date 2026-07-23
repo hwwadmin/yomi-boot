@@ -6,9 +6,9 @@ package httprecord
 import (
 	"context"
 	"encoding/json"
-	"yt-boot/logger"
+	"yomi-boot/logger"
 
-	ytkafka "yt-boot/kafka"
+	ytkafka "yomi-boot/kafka"
 )
 
 // KafkaHttpRecordService 通过 Kafka 异步发布 HTTP 访问记录

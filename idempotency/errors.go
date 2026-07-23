@@ -3,7 +3,7 @@
 // @author zwei
 package idempotency
 
-import "yt-boot/errors"
+import "yomi-boot/errors"
 
 var (
 	// ErrKeyInvalid 幂等键不合法

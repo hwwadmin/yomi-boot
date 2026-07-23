@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"yt-boot/errors"
-	"yt-boot/redis/redistest"
+	"yomi-boot/errors"
+	"yomi-boot/redis/redistest"
 )
 
 // newTestLock 创建测试用 Lock 实例，返回锁及 Redis 资源清理函数

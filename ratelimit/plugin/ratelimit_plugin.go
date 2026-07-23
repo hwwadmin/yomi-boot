@@ -4,9 +4,9 @@
 package ratelimitplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/plugin"
-	"yt-boot/ratelimit"
+	"yomi-boot/config"
+	"yomi-boot/plugin"
+	"yomi-boot/ratelimit"
 )
 
 // rateLimitPlugin 限流插件

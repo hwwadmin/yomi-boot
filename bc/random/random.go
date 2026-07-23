@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // Bytes 生成 n 字节密码学安全随机数据

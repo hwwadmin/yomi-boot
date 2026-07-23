@@ -6,7 +6,7 @@ package roundrobin
 import (
 	"context"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 const minInterval = 50 * time.Millisecond // minInterval 是轮询相关时间参数的最小合法值

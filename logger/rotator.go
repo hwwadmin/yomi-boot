@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 var historyNamePattern = regexp.MustCompile(`^(\d{8})-(\d{7})\.log(?:\.gz)?$`)

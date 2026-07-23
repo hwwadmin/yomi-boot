@@ -6,7 +6,7 @@ package filestorage
 import (
 	"strings"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // Provider 对象存储提供者标识

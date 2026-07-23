@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/hashicorp/consul/api"
 )

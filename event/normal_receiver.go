@@ -5,9 +5,9 @@ package event
 
 import (
 	"context"
-	"yt-boot/logger"
+	"yomi-boot/logger"
 
-	ytkafka "yt-boot/kafka"
+	ytkafka "yomi-boot/kafka"
 )
 
 // NormalReceiver 普通消息事件接收器，允许重复消费与消息丢失

@@ -8,7 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"

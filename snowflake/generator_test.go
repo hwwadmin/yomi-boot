@@ -2,7 +2,7 @@ package snowflake
 
 import (
 	"testing"
-	"yt-boot/snowflake/snowflaketest"
+	"yomi-boot/snowflake/snowflaketest"
 )
 
 var _ Generator = (*snowflaketest.TestGenerator)(nil)

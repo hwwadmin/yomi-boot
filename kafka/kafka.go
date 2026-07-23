@@ -7,10 +7,10 @@ import (
 	"context"
 	"strings"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
-	"yt-boot/logger"
-	"yt-boot/worker"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
+	"yomi-boot/logger"
+	"yomi-boot/worker"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

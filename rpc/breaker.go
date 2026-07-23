@@ -6,7 +6,7 @@ package rpc
 import (
 	"sync"
 	"time"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // breakerState 熔断器状态

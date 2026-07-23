@@ -4,9 +4,9 @@
 package pprofplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/plugin"
-	bootpprof "yt-boot/pprof"
+	"yomi-boot/config"
+	"yomi-boot/plugin"
+	bootpprof "yomi-boot/pprof"
 )
 
 // pprofPlugin pprof 性能剖析插件

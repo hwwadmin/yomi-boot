@@ -5,8 +5,8 @@ package cronjob
 
 import (
 	"context"
-	"yt-boot/distlock"
-	"yt-boot/errors"
+	"yomi-boot/distlock"
+	"yomi-boot/errors"
 
 	"github.com/robfig/cron/v3"
 )

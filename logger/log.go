@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"yt-boot/shared"
-	"yt-boot/traceid"
+	"yomi-boot/shared"
+	"yomi-boot/traceid"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

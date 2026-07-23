@@ -8,15 +8,15 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"yt-boot/db"
-	"yt-boot/errors"
-	"yt-boot/event/cfg"
-	"yt-boot/event/model"
-	"yt-boot/event/repo"
-	"yt-boot/logger"
-	"yt-boot/worker"
+	"yomi-boot/db"
+	"yomi-boot/errors"
+	"yomi-boot/event/cfg"
+	"yomi-boot/event/model"
+	"yomi-boot/event/repo"
+	"yomi-boot/logger"
+	"yomi-boot/worker"
 
-	ytkafka "yt-boot/kafka"
+	ytkafka "yomi-boot/kafka"
 )
 
 const (

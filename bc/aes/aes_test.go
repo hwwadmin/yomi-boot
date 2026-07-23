@@ -3,7 +3,7 @@ package aes
 import (
 	"bytes"
 	"testing"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // TestGCMRoundTrip 验证 GCM 加解密往返及密文篡改检测

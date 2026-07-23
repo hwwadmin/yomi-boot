@@ -6,7 +6,7 @@ package db
 import (
 	"context"
 	"testing"
-	"yt-boot/db/dbtest"
+	"yomi-boot/db/dbtest"
 )
 
 // TestCountPage_ZeroTotalClearsDest 验证 total=0 时清空调用方复用的结果切片

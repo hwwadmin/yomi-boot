@@ -1,5 +1,5 @@
-# yt-boot Makefile
-# 请在 yt-boot 根目录执行 make 命令
+# yomi-boot Makefile
+# 请在 yomi-boot 根目录执行 make 命令
 
 GO               ?= go
 GOLANGCI_VERSION ?= v2.1.6

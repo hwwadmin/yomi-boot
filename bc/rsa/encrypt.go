@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	stdrsa "crypto/rsa"
 	"crypto/sha256"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 )
 
 // EncryptOAEP 使用 OAEP + SHA-256 加密

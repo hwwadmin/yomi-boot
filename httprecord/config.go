@@ -5,8 +5,8 @@ package httprecord
 
 import (
 	"strings"
-	"yt-boot/config"
-	"yt-boot/errors"
+	"yomi-boot/config"
+	"yomi-boot/errors"
 )
 
 // HTTP 访问记录默认值

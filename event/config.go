@@ -6,9 +6,9 @@ package event
 import (
 	"strings"
 	"time"
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/event/cfg"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/event/cfg"
 )
 
 const (

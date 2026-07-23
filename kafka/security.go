@@ -8,7 +8,7 @@ import (
 	"crypto/x509"
 	"os"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"

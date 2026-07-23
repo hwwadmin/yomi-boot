@@ -4,9 +4,9 @@
 package dtmplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/dtm"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/dtm"
+	"yomi-boot/plugin"
 )
 
 // dtmPlugin DTM 插件

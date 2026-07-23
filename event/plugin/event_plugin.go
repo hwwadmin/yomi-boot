@@ -4,11 +4,11 @@
 package eventplugin
 
 import (
-	"yt-boot/config"
-	"yt-boot/errors"
-	"yt-boot/event"
-	"yt-boot/logger"
-	"yt-boot/plugin"
+	"yomi-boot/config"
+	"yomi-boot/errors"
+	"yomi-boot/event"
+	"yomi-boot/logger"
+	"yomi-boot/plugin"
 )
 
 // eventPlugin 消息队列事件插件

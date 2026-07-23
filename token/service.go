@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strconv"
 	"time"
-	"yt-boot/distlock"
-	"yt-boot/errors"
-	sharederr "yt-boot/shared/error"
+	"yomi-boot/distlock"
+	"yomi-boot/errors"
+	sharederr "yomi-boot/shared/error"
 )
 
 // ErrTokenInvalid 令牌无效或已过期

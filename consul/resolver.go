@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"yt-boot/errors"
+	"yomi-boot/errors"
 
 	"github.com/hashicorp/consul/api"
 )

@@ -22,7 +22,7 @@
 
 ### 2.1 适用范围
 
-- 适用于**基于 yt-boot 的业务工程**中 Redis Key 设计、TTL、数据结构、缓存更新、分布式锁和限流方案设计。
+- 适用于**基于 yomi-boot 的业务工程**中 Redis Key 设计、TTL、数据结构、缓存更新、分布式锁和限流方案设计。
 - 适用于缓存穿透、缓存击穿、大对象缓存和敏感数据缓存等治理场景。
 - 不涉及 Redis 集群部署、监控告警和运维参数调优。
 
@@ -151,8 +151,8 @@
 
 ### 3.6 限流约定
 
-- 原子限流能力收口在 `yt-boot/redis.RedisService.OpsRateLimit4Allow`（滑动窗口 ZSET + Lua，时钟用 Redis `TIME`）。
-- 业务侧经 `yt-boot/ratelimit.LimitService.Allow/AllowN` 调用，**禁止**业务包直连 go-redis 或自建第二套 Redis 客户端。
+- 原子限流能力收口在 `yomi-boot/redis.RedisService.OpsRateLimit4Allow`（滑动窗口 ZSET + Lua，时钟用 Redis `TIME`）。
+- 业务侧经 `yomi-boot/ratelimit.LimitService.Allow/AllowN` 调用，**禁止**业务包直连 go-redis 或自建第二套 Redis 客户端。
 - Key 模式：`{key_prefix}:{scene}:{dim}:{id}`，默认前缀 `yt:rl`（见配置 `ratelimit.key_prefix`）；全小写、冒号分隔。
 - 限流维度由调用方决定（用户、接口、IP 等）；`Limit`/`Window` 由调用方 `Rule` 传入，不进全局 yml 逐场景配置。
 - 超限返回业务错误码 `RATE_LIMITED`；Redis 故障策略默认为 `fail_open`（配置 `ratelimit.redis_error_policy`）。
@@ -173,7 +173,7 @@
 - [ ] 数据结构选择与缓存更新策略明确且可复核
 - [ ] 敏感数据未明文缓存
 - [ ] 分布式锁仅在必要场景使用且有超时控制
-- [ ] 限流经 `RedisService.OpsRateLimit4Allow` / `yt-boot/ratelimit`，Key 前缀与错误码符合 §3.6
+- [ ] 限流经 `RedisService.OpsRateLimit4Allow` / `yomi-boot/ratelimit`，Key 前缀与错误码符合 §3.6
 - [ ] 文档内容仅描述 Redis 本身的设计与使用约束
 
 ---

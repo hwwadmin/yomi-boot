@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"yt-boot/appctx"
-	"yt-boot/errors"
+	"yomi-boot/appctx"
+	"yomi-boot/errors"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
