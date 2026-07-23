@@ -5,7 +5,7 @@ package event
 
 import (
 	"encoding/json"
-	"yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/logger"
 )
 
 // ParseAndValidate 解析并校验消息队列事件

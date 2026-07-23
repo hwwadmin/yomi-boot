@@ -5,9 +5,9 @@ package dtm
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/handler"
 	"net/http"
-	"yomi-boot/errors"
-	"yomi-boot/handler"
 
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/gin-gonic/gin"

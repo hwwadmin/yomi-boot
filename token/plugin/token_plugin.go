@@ -4,11 +4,11 @@
 package tokenplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
-	"yomi-boot/plugin"
-	"yomi-boot/token"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/token"
 )
 
 // tokenPlugin 令牌服务插件

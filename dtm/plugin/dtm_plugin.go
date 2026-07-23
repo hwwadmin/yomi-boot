@@ -4,9 +4,9 @@
 package dtmplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/dtm"
-	"yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/dtm"
+	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // dtmPlugin DTM 插件

@@ -4,8 +4,8 @@
 package snowflake
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 const (

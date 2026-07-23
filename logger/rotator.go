@@ -6,6 +6,7 @@ package logger
 import (
 	"compress/gzip"
 	"fmt"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"yomi-boot/errors"
 )
 
 var historyNamePattern = regexp.MustCompile(`^(\d{8})-(\d{7})\.log(?:\.gz)?$`)

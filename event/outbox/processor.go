@@ -5,18 +5,18 @@ package outbox
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/event/cfg"
+	"gitee.com/hq_project/yomi-boot/event/model"
+	"gitee.com/hq_project/yomi-boot/event/repo"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/worker"
 	"strings"
 	"sync"
 	"time"
-	"yomi-boot/db"
-	"yomi-boot/errors"
-	"yomi-boot/event/cfg"
-	"yomi-boot/event/model"
-	"yomi-boot/event/repo"
-	"yomi-boot/logger"
-	"yomi-boot/worker"
 
-	yomikafka "yomi-boot/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 const (

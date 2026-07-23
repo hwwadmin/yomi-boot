@@ -10,13 +10,13 @@ package logger
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/shared"
+	"gitee.com/hq_project/yomi-boot/traceid"
+	"gitee.com/hq_project/yomi-boot/utils/ginutil"
 	"math/rand"
 	"path"
 	"strings"
 	"time"
-	"yomi-boot/shared"
-	"yomi-boot/traceid"
-	"yomi-boot/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

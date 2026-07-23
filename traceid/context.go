@@ -5,10 +5,10 @@ package traceid
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/shared"
 	"net/http"
 	"strings"
-	"yomi-boot/appctx"
-	"yomi-boot/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

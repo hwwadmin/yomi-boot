@@ -5,12 +5,12 @@ package filestorage
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/errors"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"

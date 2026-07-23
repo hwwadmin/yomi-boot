@@ -4,13 +4,13 @@
 package consul
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-	"yomi-boot/config"
-	"yomi-boot/errors"
 )
 
 const (

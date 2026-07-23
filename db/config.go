@@ -4,10 +4,10 @@
 package db
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/shared/enums"
 	"strings"
-	"yomi-boot/config"
-	"yomi-boot/errors"
-	"yomi-boot/shared/enums"
 )
 
 // SectionKey YAML 根 key

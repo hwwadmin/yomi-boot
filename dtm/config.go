@@ -4,10 +4,10 @@
 package dtm
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"net/url"
 	"strings"
-	"yomi-boot/config"
-	"yomi-boot/errors"
 )
 
 const (

@@ -6,7 +6,7 @@
 package passwd
 
 import (
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"golang.org/x/crypto/bcrypt"
 )

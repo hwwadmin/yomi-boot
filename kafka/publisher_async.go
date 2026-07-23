@@ -6,10 +6,10 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/worker"
 	"strings"
 	"time"
-	"yomi-boot/errors"
-	"yomi-boot/worker"
 )
 
 var _ PublisherService = (*asyncPublisher)(nil)

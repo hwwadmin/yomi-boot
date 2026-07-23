@@ -38,7 +38,7 @@
 | ---- | ---- | ---- |
 | Skill | 显化审核 | 审核执行的核心规则集，定义审核维度、问题分级（严重/警告/建议）、6 阶段执行流程、`audit.md` 输出骨架、约束与 DoD 自检清单；其 §2.2 已声明审核所需的全部知识文档依赖，按需通过知识库索引加载 |
 | 知识文档 | Go业务分层规范 | 验证 handler / usecase / contract / service / repository 分层与 Entity 贫血/充血建模是否符合规范 |
-| 知识文档 | Go架构规范 | 验证 internal/bootstrap 手写装配、yomi-boot 插件化启动与 Workspace 结构是否符合项目架构 |
+| 知识文档 | Go架构规范 | 验证 internal/bootstrap 手写装配、gitee.com/hq_project/yomi-boot 插件化启动与 Workspace 结构是否符合项目架构 |
 | 知识文档 | Go代码规范 | 验证 Input/Output 结构体、校验分层、Entity/Model 分离是否符合代码规范 |
 | 知识文档 | Go数据库规范 | 验证 GORM 链式查询、Entity/Model/Mapper 映射是否符合数据库规范 |
 | 知识文档 | Go事务规范 | 按两步法门禁：先审全部写数据动作的开否/传播关系，再审边界；缺决策或颠倒为严重 |

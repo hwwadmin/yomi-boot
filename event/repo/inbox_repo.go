@@ -5,9 +5,9 @@ package repo
 
 import (
 	"context"
-	"yomi-boot/db"
-	"yomi-boot/errors"
-	"yomi-boot/event/model"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/event/model"
 
 	"gorm.io/gorm"
 )

@@ -6,9 +6,9 @@ package traceid
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"gitee.com/hq_project/yomi-boot/shared"
 	"net/http"
 	"strings"
-	"yomi-boot/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

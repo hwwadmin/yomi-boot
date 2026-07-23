@@ -1,4 +1,4 @@
-module yomi-boot
+module gitee.com/hq_project/yomi-boot
 
 go 1.26
 

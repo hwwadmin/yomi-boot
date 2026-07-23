@@ -3,7 +3,7 @@
 // @author zwei
 package event
 
-import "yomi-boot/event/model"
+import "gitee.com/hq_project/yomi-boot/event/model"
 
 // Event 消息队列事件
 type Event = model.WireEvent

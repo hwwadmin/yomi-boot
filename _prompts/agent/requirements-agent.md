@@ -26,7 +26,7 @@
 
 - 需要执行型 Skill 时，先读取 `_prompts/doc/Skill技能列表.md`，再按列表地址加载《需求显化》Skill
 - 需要静态规范、说明或模板类文档时，先读取 `_prompts/doc/知识库索引.md`，再按索引地址加载对应知识文档
-- 涉及 Go 基础设施选型或方案设计时，必须遵守 `_prompts/rules/基础库优先使用规则.md`：先阅读 `_prompts/doc/基础库能力索引.md`，有候选库则阅读源码判断是否满足，满足则强制在方案中采用 yomi-boot 对应能力库
+- 涉及 Go 基础设施选型或方案设计时，必须遵守 `_prompts/rules/基础库优先使用规则.md`：先阅读 `_prompts/doc/基础库能力索引.md`，有候选库则阅读源码判断是否满足，满足则强制在方案中采用 gitee.com/hq_project/yomi-boot 对应能力库
 - 仅围绕当前需求显化任务按需加载资源，避免绕过索引直接搜索正文
 - 分析流程、章节结构、设计输出格式和禁止项以《需求显化》Skill 为准，不得在本 Agent 内自行重定义
 - 若目标 `spec.md` 已存在，必须先读取现有内容并结合用户指令决定覆盖重写还是增量修订
@@ -39,12 +39,12 @@
 | ---- | ---- | ---- |
 | Skill | 需求显化 | 需求显化的核心规则集，定义需求澄清方法、SQL/领域/模型/UseCase/API/前端各章节的分析流程与输出规范；其 §2.2 已声明生成所需的全部知识文档依赖，按需通过知识库索引加载 |
 | 知识文档 | Go业务分层规范 | 约束 handler / usecase / contract / service / repository 分层与跨模块协作规则，作为后端设计的分层依据 |
-| 知识文档 | Go架构规范 | 约束 internal/bootstrap 手写装配、yomi-boot 插件化启动与 Workspace 结构 |
+| 知识文档 | Go架构规范 | 约束 internal/bootstrap 手写装配、gitee.com/hq_project/yomi-boot 插件化启动与 Workspace 结构 |
 | 知识文档 | Go代码规范 | 约束校验分层、Input/Output 结构体、Model 建模与字段规范；HTTP 方法摘要引用架构/微服务权威 |
 | 知识文档 | Go数据库规范 | 约束 GORM 链式查询方式、Model 映射规则（gorm tag + 表名常量 + TableName）与事务感知 repository 实现 |
 | 知识文档 | Go事务规范 | 约束两步法：全部写数据动作先标明是否开事务及传播关系，再定 `TxRunner`/Saga 边界与禁止项 |
 | 知识文档 | GoBFF规范 | 约束入口编排跨域编排、`bff`/`saga`、令牌与喂饱；信封细则引用微服务调用规范 |
-| 知识文档 | 微服务调用规范 | 约束微服务间 POST/JSON、Header 链路 ID、bizId/bizSubId 信封与 `yomi-boot/idempotency` 幂等（权威） |
+| 知识文档 | 微服务调用规范 | 约束微服务间 POST/JSON、Header 链路 ID、bizId/bizSubId 信封与 `gitee.com/hq_project/yomi-boot/idempotency` 幂等（权威） |
 | 知识文档 | Go文件命名规范 | 约束 _handler/_usecase/_service/_repo/_model/_dto 文件命名后缀约定 |
 | 知识文档 | Go选型规范 | 提供 gin、gorm、zap、viper 等默认技术栈基线 |
 | 知识文档 | 数据库表设计规范 | 约束表命名、雪花 ID、审计字段、索引与枚举字段规范 |

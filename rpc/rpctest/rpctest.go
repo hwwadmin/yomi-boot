@@ -5,7 +5,7 @@ package rpctest
 
 import (
 	"context"
-	"yomi-boot/rpc"
+	"gitee.com/hq_project/yomi-boot/rpc"
 )
 
 // TestRpcService 可配置的 RpcService 测试桩

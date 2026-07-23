@@ -6,11 +6,11 @@ package httprecord
 import (
 	"context"
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 	"strings"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
 
-	yomikafka "yomi-boot/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // KafkaConsumerID 是 HTTP 访问记录 Kafka 消费者在 ConsumerManager 中的标识

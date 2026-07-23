@@ -4,17 +4,17 @@
 package bootstrap
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/cors"
+	"gitee.com/hq_project/yomi-boot/httprecord"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/requestguard"
+	"gitee.com/hq_project/yomi-boot/response"
+	"gitee.com/hq_project/yomi-boot/router"
+	"gitee.com/hq_project/yomi-boot/runner"
+	"gitee.com/hq_project/yomi-boot/token"
+	"gitee.com/hq_project/yomi-boot/traceid"
 	"net/http"
-	"yomi-boot/config"
-	"yomi-boot/cors"
-	"yomi-boot/httprecord"
-	"yomi-boot/logger"
-	"yomi-boot/requestguard"
-	"yomi-boot/response"
-	"yomi-boot/router"
-	"yomi-boot/runner"
-	"yomi-boot/token"
-	"yomi-boot/traceid"
 
 	"github.com/gin-gonic/gin"
 )

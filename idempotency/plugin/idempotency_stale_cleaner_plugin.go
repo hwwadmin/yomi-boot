@@ -5,10 +5,10 @@ package idempotencyplugin
 
 import (
 	"context"
-	"yomi-boot/config"
-	"yomi-boot/errors"
-	"yomi-boot/idempotency"
-	"yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/idempotency"
+	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // idempotencyStaleCleanerPlugin 幂等 Processing 超时清理插件

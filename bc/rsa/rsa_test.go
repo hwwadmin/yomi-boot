@@ -2,8 +2,8 @@ package rsa
 
 import (
 	"bytes"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"testing"
-	"yomi-boot/errors"
 )
 
 // TestOAEPAndSign 验证 OAEP 加解密及 PSS/PKCS1v15 签名验签

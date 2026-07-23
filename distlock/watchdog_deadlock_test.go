@@ -2,10 +2,10 @@ package distlock
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"testing"
 	"time"
-	"yomi-boot/errors"
-	"yomi-boot/redis/redistest"
 
 	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"

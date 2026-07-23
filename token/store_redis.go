@@ -8,12 +8,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"strconv"
 	"strings"
 	"time"
-	"yomi-boot/errors"
 
-	yomiredis "yomi-boot/redis"
+	yomiredis "gitee.com/hq_project/yomi-boot/redis"
 )
 
 var _ Store = (*RedisStore)(nil)

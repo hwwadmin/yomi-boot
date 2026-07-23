@@ -4,8 +4,8 @@
 package model
 
 import (
+	"gitee.com/hq_project/yomi-boot/db"
 	"time"
-	"yomi-boot/db"
 )
 
 // SysEventOutbox 映射 sys_event_outbox 发件箱表

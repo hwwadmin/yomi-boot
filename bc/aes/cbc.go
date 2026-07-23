@@ -3,8 +3,8 @@ package aes
 import (
 	stdaes "crypto/aes"
 	"crypto/cipher"
-	"yomi-boot/bc/random"
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/bc/random"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // CBC AES-CBC + PKCS7（兼容对接；无完整性保证）

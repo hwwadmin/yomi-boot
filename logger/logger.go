@@ -4,12 +4,12 @@
 package logger
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
 	"io"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
-	"yomi-boot/errors"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

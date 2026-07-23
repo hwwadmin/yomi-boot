@@ -4,10 +4,10 @@
 package consul
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
 	"net/http"
 	"strings"
 	"time"
-	"yomi-boot/errors"
 
 	"github.com/hashicorp/consul/api"
 )

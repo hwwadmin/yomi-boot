@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	stdrsa "crypto/rsa"
 	"crypto/sha256"
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // SignPSS 使用 PSS + SHA-256 签名消息摘要前的原始消息

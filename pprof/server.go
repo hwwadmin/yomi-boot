@@ -4,11 +4,11 @@
 package pprof
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 	"net"
 	"net/http"
 	"net/http/pprof"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
 )
 
 // MustStart 启动 pprof 服务，失败时 log + panic；进程退出时随进程自然关闭，无需显式释放

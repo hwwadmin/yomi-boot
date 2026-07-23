@@ -2,10 +2,10 @@ package rpc
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"net/http"
 	"testing"
 	"time"
-	"yomi-boot/errors"
 )
 
 // TestIsRetryableRPCError 验证可重试 RPC 错误判定

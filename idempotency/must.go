@@ -5,8 +5,8 @@ package idempotency
 
 import (
 	"context"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 )
 
 // MustStartStaleCleanerFromConfig 从应用配置创建并启动 Processing 超时清理

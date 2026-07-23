@@ -3,7 +3,7 @@ package aes
 import (
 	stdaes "crypto/aes"
 	"crypto/cipher"
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // ECB AES-ECB + PKCS7（仅遗留对接；新业务禁止）

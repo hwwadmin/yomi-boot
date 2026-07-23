@@ -4,7 +4,7 @@
 package db
 
 import (
-	"yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/logger"
 
 	"gorm.io/gorm"
 )

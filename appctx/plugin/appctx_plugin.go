@@ -4,9 +4,9 @@
 package appctxplugin
 
 import (
-	"yomi-boot/appctx"
-	"yomi-boot/config"
-	"yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // appCtxPlugin 应用上下文插件

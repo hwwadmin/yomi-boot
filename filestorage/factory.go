@@ -3,7 +3,7 @@
 // @author zwei
 package filestorage
 
-import "yomi-boot/errors"
+import "gitee.com/hq_project/yomi-boot/errors"
 
 // New 根据配置创建 FileStorage
 func New(cfg Config) (FileStorage, error) {

@@ -4,7 +4,7 @@
 package snowflake
 
 import (
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	bwmarrin "github.com/bwmarrin/snowflake"
 )

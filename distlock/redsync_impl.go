@@ -5,10 +5,10 @@ package distlock
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"sync"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/errors"
 
 	"github.com/go-redsync/redsync/v4"
 	goredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"

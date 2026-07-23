@@ -4,7 +4,7 @@
 
 ## 0. 文档信息
 - **文档名称**: Go文件命名规范
-- **描述**: 定义基于 yomi-boot 的业务工程中 BFF 与领域服务各层源文件命名规则，含 Saga Action/Compensate 成对命名。
+- **描述**: 定义基于 gitee.com/hq_project/yomi-boot 的业务工程中 BFF 与领域服务各层源文件命名规则，含 Saga Action/Compensate 成对命名。
 - **作者**: zwei
 - **创建日期**: 2026-06-17
 
@@ -14,7 +14,7 @@
 
 - **用途**：约束 BFF 与领域各层 `.go` 文件的标准命名，确保一致、可读、可检索。
 - **边界**：目录结构与分层职责见 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md)。
-- **适用对象**：`yomi-boot/` 本库，以及基于 yomi-boot 的业务工程可部署单元内业务与装配相关源文件（惯例目录示例：`services/{unit}/`）。
+- **适用对象**：`gitee.com/hq_project/yomi-boot/` 本库，以及基于 gitee.com/hq_project/yomi-boot 的业务工程可部署单元内业务与装配相关源文件（惯例目录示例：`services/{unit}/`）。
 
 ---
 
@@ -25,7 +25,7 @@
 - BFF：`internal/handler/`、`bff/`、`saga/`。
 - 领域：`internal/biz/handler/`、`usecase/`（平铺）、`domain/`、`repo/`。
 - 装配：各服务 `internal/bootstrap/server.go`。
-- `yomi-boot/` 包内文件按职责自行命名，须小写+下划线或 Go 惯例。
+- `gitee.com/hq_project/yomi-boot/` 包内文件按职责自行命名，须小写+下划线或 Go 惯例。
 
 ### 2.2 关联文档
 
@@ -57,7 +57,7 @@
 {module}_handler.go
 ```
 
-- 健康检查统一使用 `yomi-boot/handler.NewHealthHandler(consulPath, opsPath, appCtx)`，分别注册 Consul 探针与运维探针，在 bootstrap 注册。
+- 健康检查统一使用 `gitee.com/hq_project/yomi-boot/handler.NewHealthHandler(consulPath, opsPath, appCtx)`，分别注册 Consul 探针与运维探针，在 bootstrap 注册。
 - 结构体：`{Module}Handler`（**示例**：`ResourceHandler`）。
 - 一个模块一个 handler 文件，包含该模块对外全部接口方法。
 
@@ -89,7 +89,7 @@
 verify_handler.go
 ```
 
-- 健康检查见 §3.2（yomi-boot 公共实现）。
+- 健康检查见 §3.2（gitee.com/hq_project/yomi-boot 公共实现）。
 
 **DTM Saga 成对入口（二选一组织方式）：**
 
@@ -142,26 +142,26 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | Model | `{module}_model.go` | 同上 |
 | Mapper | `{module}_mapper.go` | 同上 |
 
-### 3.7 bootstrap / yomi-boot
+### 3.7 bootstrap / gitee.com/hq_project/yomi-boot
 
 | 文件 | 位置 | 说明 |
 | ---- | ---- | ---- |
 | `server.go` | 业务工程 `services/{unit}/internal/bootstrap/`（惯例示例） | 启动装配入口；`NewServer` 返回 `*runner.ServerBundle` |
 | `*_consumer_plugin.go` | 同上（按需） | Kafka 消费者自定义插件 |
-| `infra.go` | `yomi-boot/bootstrap/` | `MustInitInfra`、`Infra`、`Cleanup` |
-| `infra_options.go` | `yomi-boot/bootstrap/` | `InfraOptions`、`AddCustomPlugin` |
-| `infra_plugins.go` | `yomi-boot/bootstrap/` | 内置插件编排顺序 |
-| `server.go` | `yomi-boot/bootstrap/` | `MustBuildServer`、`DefaultMiddlewares` |
-| `plugin.go` / `host.go` | `yomi-boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host` |
-| `{组件}_plugin.go` | `yomi-boot/{lib}/plugin/` | 各库生命周期插件实现（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`） |
+| `infra.go` | `gitee.com/hq_project/yomi-boot/bootstrap/` | `MustInitInfra`、`Infra`、`Cleanup` |
+| `infra_options.go` | `gitee.com/hq_project/yomi-boot/bootstrap/` | `InfraOptions`、`AddCustomPlugin` |
+| `infra_plugins.go` | `gitee.com/hq_project/yomi-boot/bootstrap/` | 内置插件编排顺序 |
+| `server.go` | `gitee.com/hq_project/yomi-boot/bootstrap/` | `MustBuildServer`、`DefaultMiddlewares` |
+| `plugin.go` / `host.go` | `gitee.com/hq_project/yomi-boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host` |
+| `{组件}_plugin.go` | `gitee.com/hq_project/yomi-boot/{lib}/plugin/` | 各库生命周期插件实现（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`） |
 
-### 3.8 yomi-boot handler
+### 3.8 gitee.com/hq_project/yomi-boot handler
 
 ```text
-yomi-boot/handler/base_handler.go
+gitee.com/hq_project/yomi-boot/handler/base_handler.go
 ```
 
-- 业务 handler 通过 alias 引用：`platformhandler "yomi-boot/handler"`（模块路径以实际 `go.mod` 为准）。
+- 业务 handler 通过 alias 引用：`platformhandler "gitee.com/hq_project/yomi-boot/handler"`（模块路径以实际 `go.mod` 为准）。
 
 ### 3.9 命名对照总表
 

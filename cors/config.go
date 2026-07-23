@@ -3,7 +3,7 @@
 // @author zwei
 package cors
 
-import "yomi-boot/config"
+import "gitee.com/hq_project/yomi-boot/config"
 
 // SectionKey YAML 根 key
 const SectionKey = "cors"

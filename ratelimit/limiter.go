@@ -8,9 +8,9 @@ package ratelimit
 
 import (
 	"context"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
-	yomiredis "yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
+	yomiredis "gitee.com/hq_project/yomi-boot/redis"
 )
 
 // ErrRateLimited 请求触发限流

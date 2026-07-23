@@ -4,9 +4,9 @@
 package httprecordplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/httprecord"
-	"yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/httprecord"
+	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // httpRecordPlugin HTTP 访问记录插件

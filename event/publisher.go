@@ -5,14 +5,14 @@ package event
 
 import (
 	"context"
-	"yomi-boot/db"
-	"yomi-boot/errors"
-	"yomi-boot/event/cfg"
-	"yomi-boot/event/model"
-	"yomi-boot/event/repo"
-	"yomi-boot/logger"
-	"yomi-boot/shared/enums"
-	"yomi-boot/snowflake"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/event/cfg"
+	"gitee.com/hq_project/yomi-boot/event/model"
+	"gitee.com/hq_project/yomi-boot/event/repo"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/shared/enums"
+	"gitee.com/hq_project/yomi-boot/snowflake"
 )
 
 // Publisher 发件箱事件发布器

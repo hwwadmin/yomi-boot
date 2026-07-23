@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gitee.com/hq_project/yomi-boot/consul"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/shared"
+	"gitee.com/hq_project/yomi-boot/traceid"
 	"strings"
-	"yomi-boot/consul"
-	"yomi-boot/errors"
-	"yomi-boot/shared"
-	"yomi-boot/traceid"
 
 	"github.com/dtm-labs/client/dtmcli"
 )

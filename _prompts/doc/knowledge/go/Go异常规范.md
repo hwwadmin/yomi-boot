@@ -4,7 +4,7 @@
 
 ## 0. 文档信息
 - **文档名称**: Go异常规范
-- **描述**: 定义基于 yomi-boot 的业务工程中异常的创建、传播、处理与 Encoder 写出规范。
+- **描述**: 定义基于 gitee.com/hq_project/yomi-boot 的业务工程中异常的创建、传播、处理与 Encoder 写出规范。
 - **作者**: zwei
 - **创建日期**: 2026-06-27
 
@@ -14,7 +14,7 @@
 
 - **用途**：约束 Go 后端异常的定义方式、创建函数选择、分层传播规则与 Handler 层统一处理口径，确保异常可追溯、可响应、可排查。
 - **边界**：不覆盖分布式事务的幂等错误处理（见 [Go事务规范](./Go事务规范.md) §3.4）；不覆盖微服务间调用错误的信封解析（见 [微服务调用规范](../api/微服务调用规范.md) §3）；HTTP 出口编码适配见 [API编码适配规范](../api/API编码适配规范.md)。
-- **适用对象**：`yomi-boot/` 本库，以及基于 yomi-boot 的业务工程中涉及 error 创建、传播、处理与响应的 Go 代码。
+- **适用对象**：`gitee.com/hq_project/yomi-boot/` 本库，以及基于 gitee.com/hq_project/yomi-boot 的业务工程中涉及 error 创建、传播、处理与响应的 Go 代码。
 
 ---
 
@@ -22,11 +22,11 @@
 
 ### 2.1 适用范围
 
-- 适用于 `yomi-boot/errors` 系统级错误包（`errors.New`、`errors.Wrap`、`errors.Stack` 等）。
-- 适用于 `yomi-boot/errors.BizError`（可选，用于域错误携带 Code/Message）。
-- 适用于 `yomi-boot/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
-- 适用于 `yomi-boot/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
-- 不适用于 panic 恢复（见 `yomi-boot/bootstrap` 中间件链 Recovery）。
+- 适用于 `gitee.com/hq_project/yomi-boot/errors` 系统级错误包（`errors.New`、`errors.Wrap`、`errors.Stack` 等）。
+- 适用于 `gitee.com/hq_project/yomi-boot/errors.BizError`（可选，用于域错误携带 Code/Message）。
+- 适用于 `gitee.com/hq_project/yomi-boot/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
+- 适用于 `gitee.com/hq_project/yomi-boot/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
+- 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/bootstrap` 中间件链 Recovery）。
 
 ### 2.2 关联文档
 
@@ -46,14 +46,14 @@
 
 | 层级 | 包路径 | 用途 | 关键特征 |
 | ---- | ------ | ---- | -------- |
-| 系统级错误 | `yomi-boot/errors` | 非业务错误（基础设施、IO、序列化等），带调用栈 | 基于 `github.com/pkg/errors`；`New`/`Newf`/`Wrap`/`Sentinel` 拍栈 |
+| 系统级错误 | `gitee.com/hq_project/yomi-boot/errors` | 非业务错误（基础设施、IO、序列化等），带调用栈 | 基于 `github.com/pkg/errors`；`New`/`Newf`/`Wrap`/`Sentinel` 拍栈 |
 | 简单哨兵 | `shared/error` 或各库就近 | 框架/通用失败；`Error()` **即为线上 code** | 用 `errors.NewNoStack` 定义（无栈身份）；返回时 `errors.Sentinel` |
-| 业务异常（可选） | `yomi-boot/errors.BizError` | 域规则违背，需同时带 Code 与调试 Message | `NewBiz` / `NewBizf` / `WrapBiz`；按 Code 做 `errors.Is` |
+| 业务异常（可选） | `gitee.com/hq_project/yomi-boot/errors.BizError` | 域规则违背，需同时带 Code 与调试 Message | `NewBiz` / `NewBizf` / `WrapBiz`；按 Code 做 `errors.Is` |
 
-#### 3.1.1 系统级错误 `yomi-boot/errors`
+#### 3.1.1 系统级错误 `gitee.com/hq_project/yomi-boot/errors`
 
 ```go
-import "yomi-boot/errors"
+import "gitee.com/hq_project/yomi-boot/errors"
 
 func New(text string) error                          // 创建并拍栈（一次性错误）
 func Newf(format string, args ...any) error          // 格式化创建并拍栈
@@ -71,7 +71,7 @@ func Stack(err error) string
 #### 3.1.2 简单哨兵（推荐框架与通用错误）
 
 ```go
-// yomi-boot/shared/error — 仅跨库通用（无栈身份）
+// gitee.com/hq_project/yomi-boot/shared/error — 仅跨库通用（无栈身份）
 var ErrInternal = errors.NewNoStack("INTERNAL_ERROR") // 系统内部错误
 
 // 库私有：在使用处就近定义，禁止一个 errors.go 堆砌无关哨兵
@@ -82,12 +82,12 @@ var ErrTokenRequired = errors.NewNoStack("TOKEN_REQUIRED") // 缺少访问令牌
 return errors.Sentinel(ErrTokenRequired)
 ```
 
-- **通用**（多库共用）→ `yomi-boot/shared/error`。
+- **通用**（多库共用）→ `gitee.com/hq_project/yomi-boot/shared/error`。
 - **非通用** → 哪个库用就在哪个库定义；不要集中到无关包。
-- **权限类**（如 `PERMISSION_DENIED`）由**业务**定义，yomi-boot 不提供。
+- **权限类**（如 `PERMISSION_DENIED`）由**业务**定义，gitee.com/hq_project/yomi-boot 不提供。
 - **禁止**裸 `return ErrXxx`；中间层对已 `Sentinel`/`Wrap` 的 err 只透传，禁止再包。
 
-#### 3.1.3 业务异常 `yomi-boot/errors.BizError`（域错误可选）
+#### 3.1.3 业务异常 `gitee.com/hq_project/yomi-boot/errors.BizError`（域错误可选）
 
 ```go
 type BizError struct {
@@ -192,20 +192,20 @@ BindAndHandle / Handle / ...
 
 | 层级 | 示例 | 定义位置 |
 | ---- | ---- | -------- |
-| 系统通用 | `INTERNAL_ERROR`、`INVALID_BODY`、`INVALID_INPUT`、`REQUEST_TIMEOUT`、`REQUEST_BODY_TOO_LARGE` | `yomi-boot/shared/error` |
-| 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `yomi-boot/token` 就近 |
+| 系统通用 | `INTERNAL_ERROR`、`INVALID_BODY`、`INVALID_INPUT`、`REQUEST_TIMEOUT`、`REQUEST_BODY_TOO_LARGE` | `gitee.com/hq_project/yomi-boot/shared/error` |
+| 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `gitee.com/hq_project/yomi-boot/token` 就近 |
 | 限流 / 下游 | `RATE_LIMITED`、`DOWNSTREAM_ERROR` | 对应库就近 |
 | 业务域 | `USER_NOT_FOUND` 等 | 各服务 `bizerr` |
-| 权限域 | `PERMISSION_DENIED` 等 | **仅业务仓**，yomi-boot 不定义 |
+| 权限域 | `PERMISSION_DENIED` 等 | **仅业务仓**，gitee.com/hq_project/yomi-boot 不定义 |
 
 #### 3.4.2 定义位置
 
 | 内容 | 位置 |
 | ---- | ---- |
-| 跨库通用哨兵 | `yomi-boot/shared/error/error.go` |
+| 跨库通用哨兵 | `gitee.com/hq_project/yomi-boot/shared/error/error.go` |
 | 库私有哨兵 | 使用该错误的源文件内就近 `var` |
 | 服务域哨兵 | `services/{unit}/internal/biz/bizerr/` 或入口编排 `internal/bizerr/` |
-| `BizError` 类型 | `yomi-boot/errors/biz_error.go` |
+| `BizError` 类型 | `gitee.com/hq_project/yomi-boot/errors/biz_error.go` |
 
 ### 3.5 启动阶段异常（Fail Fast）
 
@@ -224,7 +224,7 @@ BindAndHandle / Handle / ...
 - [ ] 外来错误已用 `errors.Wrap` 附加调用栈
 - [ ] 包级哨兵用 `errors.NewNoStack` 定义，首次返回经 `errors.Sentinel`（禁止裸 `return ErrXxx`）
 - [ ] 框架/通用失败使用 `shared/error` 或库内哨兵，`Error()` 为 code
-- [ ] 域错误在业务 `bizerr`，未要求 yomi-boot 增加权限类哨兵
+- [ ] 域错误在业务 `bizerr`，未要求 gitee.com/hq_project/yomi-boot 增加权限类哨兵
 - [ ] Handler 统一经 `WriteBusinessError` → Encoder，未绕过 Encoder 手写业务响应（HTTP/JSON 形状由 Encoder 决定，见 [API编码适配规范](../api/API编码适配规范.md)）
 - [ ] `main` 已 `response.MustRegister`
 - [ ] `errors.Stack` 仅用于日志
@@ -235,7 +235,7 @@ BindAndHandle / Handle / ...
 ## 5. 禁止项
 
 - 禁止依赖已删除的 `response/code.go`、`FromBizCode`、`WriteError(code, msg)`。
-- 禁止在 yomi-boot 定义业务权限错误（如 `PERMISSION_DENIED`）。
+- 禁止在 gitee.com/hq_project/yomi-boot 定义业务权限错误（如 `PERMISSION_DENIED`）。
 - 禁止在无关包用一个 `errors.go` 堆砌多域哨兵；库私有错误就近定义。
 - 禁止用 `errors.New` 定义包级哨兵（钉死 init 栈）；须 `NewNoStack`。
 - 禁止裸 `return ErrXxx` / 对已 `Sentinel`/`Wrap` 的 err 再 `Sentinel`。

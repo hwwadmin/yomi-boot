@@ -2,9 +2,9 @@ package redis
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"testing"
 	"time"
-	"yomi-boot/redis/redistest"
 )
 
 // TestRedisHelper_OpsStr4SetAndGet 验证 String 写入与读取

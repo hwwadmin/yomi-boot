@@ -5,9 +5,9 @@ package distlock
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/errors"
 )
 
 // RunWithLock 获取锁后执行 fn，结束时自动 Unlock。

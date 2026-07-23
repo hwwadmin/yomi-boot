@@ -5,10 +5,10 @@ package config
 
 import (
 	"bytes"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"os"
 	"sort"
 	"strings"
-	"yomi-boot/errors"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"

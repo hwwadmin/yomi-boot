@@ -4,11 +4,11 @@
 package event
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/event/cfg"
 	"strings"
 	"time"
-	"yomi-boot/config"
-	"yomi-boot/errors"
-	"yomi-boot/event/cfg"
 )
 
 const (

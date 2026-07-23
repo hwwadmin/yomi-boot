@@ -1,9 +1,9 @@
 package filestorage
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
 	"testing"
 	"time"
-	"yomi-boot/errors"
 )
 
 // TestConfigValidate 验证 Config 构造时 provider 与必填项校验

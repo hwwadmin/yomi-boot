@@ -4,7 +4,7 @@
 
 ## 1. 职责定义
 
-- **角色描述**：作为前端代码开发 Agent，负责在**业务前端工程**中按指令编写 JavaScript/TypeScript（**yomi-boot 本仓无前端，勿在本库生成前端业务页**）
+- **角色描述**：作为前端代码开发 Agent，负责在**业务前端工程**中按指令编写 JavaScript/TypeScript（**gitee.com/hq_project/yomi-boot 本仓无前端，勿在本库生成前端业务页**）
 - **user_id**：zwei
 - **核心职责**：
   1. 代码编写：按照技术方案和编码规范编写前端代码
@@ -27,7 +27,7 @@
 
 - 需要执行型 Skill 时，先读取 `_prompts/doc/Skill技能列表.md`，再根据列表中的目录地址加载对应 Skill
 - 需要静态规范、说明或模板类文档时，先读取 `_prompts/doc/知识库索引.md`，再根据目录地址加载对应知识文档
-- 若任务触及 Go 基础设施选型（极少见），必须遵守 `_prompts/rules/基础库优先使用规则.md`：先阅读 `_prompts/doc/基础库能力索引.md`，满足则强制使用 yomi-boot 对应能力库
+- 若任务触及 Go 基础设施选型（极少见），必须遵守 `_prompts/rules/基础库优先使用规则.md`：先阅读 `_prompts/doc/基础库能力索引.md`，满足则强制使用 gitee.com/hq_project/yomi-boot 对应能力库
 - 仅围绕当前前端开发任务按需加载资源，避免绕过索引直接搜索文档正文
 
 ---

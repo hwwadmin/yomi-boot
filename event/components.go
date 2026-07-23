@@ -5,19 +5,19 @@ package event
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/event/cfg"
+	"gitee.com/hq_project/yomi-boot/event/outbox"
+	"gitee.com/hq_project/yomi-boot/event/repo"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/shared/enums"
+	"gitee.com/hq_project/yomi-boot/snowflake"
 	"io"
 	"time"
-	"yomi-boot/db"
-	"yomi-boot/distlock"
-	"yomi-boot/errors"
-	"yomi-boot/event/cfg"
-	"yomi-boot/event/outbox"
-	"yomi-boot/event/repo"
-	"yomi-boot/logger"
-	"yomi-boot/shared/enums"
-	"yomi-boot/snowflake"
 
-	yomikafka "yomi-boot/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 
 	"gorm.io/gorm"
 )

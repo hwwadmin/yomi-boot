@@ -3,13 +3,13 @@ package ratelimit
 import (
 	"context"
 	"errors"
+	yomiredis "gitee.com/hq_project/yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"sync/atomic"
 	"testing"
 	"time"
-	yomiredis "yomi-boot/redis"
-	"yomi-boot/redis/redistest"
 
-	booterrors "yomi-boot/errors"
+	booterrors "gitee.com/hq_project/yomi-boot/errors"
 )
 
 // stubRedis 仅实现 OpsRateLimit4Allow，用于策略单测

@@ -5,19 +5,19 @@ package bootstrap
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/cors"
+	"gitee.com/hq_project/yomi-boot/httprecord"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/ratelimit"
+	"gitee.com/hq_project/yomi-boot/router"
+	"gitee.com/hq_project/yomi-boot/token"
 	"os"
 	"path/filepath"
 	"testing"
-	"yomi-boot/appctx"
-	"yomi-boot/config"
-	"yomi-boot/cors"
-	"yomi-boot/httprecord"
-	"yomi-boot/logger"
-	"yomi-boot/ratelimit"
-	"yomi-boot/router"
-	"yomi-boot/token"
 
-	yomikafka "yomi-boot/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // ======================== mock 实现 ========================

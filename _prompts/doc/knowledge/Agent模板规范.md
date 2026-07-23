@@ -32,8 +32,8 @@
 | ---- | ------ | ---- |
 | `_prompts/doc/Skill技能列表.md` | Skill 装载入口 | Agent 需要引用执行型 Skill 时，应先通过技能列表定位可用 Skill |
 | `_prompts/doc/知识库索引.md` | 知识文档装载入口 | Agent 需要引用静态规范、说明或方案类文档时，应先通过知识库索引定位 |
-| `_prompts/rules/资源根目录规则.md` | `_prompts` 落点 | 约束 `_prompts` 一律解析为 yomi-boot 脚手架仓；业务仓只挂 commands |
-| `_prompts/rules/基础库优先使用规则.md` | 基础库复用 | 约束涉及 Go 基础设施时先读能力索引、核对源码，满足则强制使用 yomi-boot 库 |
+| `_prompts/rules/资源根目录规则.md` | `_prompts` 落点 | 约束 `_prompts` 一律解析为 gitee.com/hq_project/yomi-boot 脚手架仓；业务仓只挂 commands |
+| `_prompts/rules/基础库优先使用规则.md` | 基础库复用 | 约束涉及 Go 基础设施时先读能力索引、核对源码，满足则强制使用 gitee.com/hq_project/yomi-boot 库 |
 | `_prompts/rules/技能加载规则.md` | Skill 读取约束 | 约束 Agent 先查技能列表，再按需加载 Skill |
 | `_prompts/rules/知识库加载规则.md` | 知识检索约束 | 约束 Agent 先查知识库索引，再按需加载知识文档 |
 | `_prompts/doc/基础库能力索引.md` | 能力速查入口 | 各基础库职责简述与目录落位 |
@@ -89,7 +89,7 @@
 - **必须先阅读** `_prompts/rules/资源根目录规则.md`，再阅读 `_prompts/rules/` 下其余规则（含 `基础库优先使用规则.md`），然后执行任务。
 - 需要 Skill 时，先通过 `_prompts/doc/Skill技能列表.md` 装载。
 - 需要知识文档时，先通过 `_prompts/doc/知识库索引.md` 装载。
-- 涉及 Go 基础设施选型、设计或编码时，必须遵守 `基础库优先使用规则.md`：先读 `_prompts/doc/基础库能力索引.md`，有候选则读源码，满足则强制使用 yomi-boot 对应库。
+- 涉及 Go 基础设施选型、设计或编码时，必须遵守 `基础库优先使用规则.md`：先读 `_prompts/doc/基础库能力索引.md`，有候选则读源码，满足则强制使用 gitee.com/hq_project/yomi-boot 对应库。
 - 禁止脱离当前任务范围无关加载资源。
 
 规则章节应描述“如何装载和遵守约束”，而不是复制规则正文内容（含资源根定义，一律以 `资源根目录规则.md` 为准；基础库复用流程以 `基础库优先使用规则.md` 为准）。

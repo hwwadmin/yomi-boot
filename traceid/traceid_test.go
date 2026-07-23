@@ -2,10 +2,10 @@ package traceid
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/shared"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"yomi-boot/shared"
 
 	"github.com/gin-gonic/gin"
 )

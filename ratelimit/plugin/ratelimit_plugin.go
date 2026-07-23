@@ -4,9 +4,9 @@
 package ratelimitplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/plugin"
-	"yomi-boot/ratelimit"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/ratelimit"
 )
 
 // rateLimitPlugin 限流插件

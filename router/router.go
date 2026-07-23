@@ -4,7 +4,7 @@
 package router
 
 import (
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"github.com/gin-gonic/gin"
 )

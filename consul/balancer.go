@@ -2,10 +2,10 @@
 package consul
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
 	"math/rand"
 	"sync"
 	"time"
-	"yomi-boot/errors"
 )
 
 // ServiceInstance 表示一个可路由的服务实例

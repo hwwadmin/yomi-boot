@@ -4,10 +4,10 @@
 package redis
 
 import (
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
 
 	"github.com/redis/go-redis/v9"
 )

@@ -6,11 +6,11 @@ package cronjob
 import (
 	"context"
 	"fmt"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/distlock"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
 
 	"github.com/robfig/cron/v3"
 )

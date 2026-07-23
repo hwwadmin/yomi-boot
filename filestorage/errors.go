@@ -3,7 +3,7 @@
 // @author zwei
 package filestorage
 
-import "yomi-boot/errors"
+import "gitee.com/hq_project/yomi-boot/errors"
 
 var (
 	// ErrNotFound 对象不存在（GetObject / StatObject）

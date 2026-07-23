@@ -4,9 +4,9 @@
 package snowflakeplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/plugin"
-	"yomi-boot/snowflake"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/snowflake"
 )
 
 // snowflakePlugin 雪花 ID 插件

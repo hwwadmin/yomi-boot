@@ -5,12 +5,12 @@ package token
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
+	sharederr "gitee.com/hq_project/yomi-boot/shared/error"
 	"sort"
 	"strconv"
 	"time"
-	"yomi-boot/distlock"
-	"yomi-boot/errors"
-	sharederr "yomi-boot/shared/error"
 )
 
 // ErrTokenInvalid 令牌无效或已过期

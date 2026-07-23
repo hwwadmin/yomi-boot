@@ -5,18 +5,18 @@ package outbox
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/event/cfg"
+	"gitee.com/hq_project/yomi-boot/event/model"
+	"gitee.com/hq_project/yomi-boot/event/repo"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/roundrobin"
+	"gitee.com/hq_project/yomi-boot/snowflake"
 	"strings"
 	"time"
-	"yomi-boot/db"
-	"yomi-boot/distlock"
-	"yomi-boot/event/cfg"
-	"yomi-boot/event/model"
-	"yomi-boot/event/repo"
-	"yomi-boot/logger"
-	"yomi-boot/roundrobin"
-	"yomi-boot/snowflake"
 
-	yomikafka "yomi-boot/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 const dlqExhaustedErrorPrefix = "[EXHAUSTED] "

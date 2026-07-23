@@ -4,12 +4,12 @@
 package dtm
 
 import (
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/logger"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/logger"
 )
 
 const probeTimeout = 3 * time.Second

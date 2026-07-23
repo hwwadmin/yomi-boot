@@ -6,8 +6,8 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"sync"
-	"yomi-boot/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

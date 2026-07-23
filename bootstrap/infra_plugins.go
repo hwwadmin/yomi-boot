@@ -4,21 +4,21 @@
 package bootstrap
 
 import (
-	appctxplugin "yomi-boot/appctx/plugin"
-	consulplugin "yomi-boot/consul/plugin"
-	dbplugin "yomi-boot/db/plugin"
-	dtmplugin "yomi-boot/dtm/plugin"
-	eventplugin "yomi-boot/event/plugin"
-	httprecordplugin "yomi-boot/httprecord/plugin"
-	idempotencyplugin "yomi-boot/idempotency/plugin"
-	kafkaplugin "yomi-boot/kafka/plugin"
-	loggerplugin "yomi-boot/logger/plugin"
-	"yomi-boot/plugin"
-	pprofplugin "yomi-boot/pprof/plugin"
-	ratelimitplugin "yomi-boot/ratelimit/plugin"
-	redisplugin "yomi-boot/redis/plugin"
-	snowflakeplugin "yomi-boot/snowflake/plugin"
-	tokenplugin "yomi-boot/token/plugin"
+	appctxplugin "gitee.com/hq_project/yomi-boot/appctx/plugin"
+	consulplugin "gitee.com/hq_project/yomi-boot/consul/plugin"
+	dbplugin "gitee.com/hq_project/yomi-boot/db/plugin"
+	dtmplugin "gitee.com/hq_project/yomi-boot/dtm/plugin"
+	eventplugin "gitee.com/hq_project/yomi-boot/event/plugin"
+	httprecordplugin "gitee.com/hq_project/yomi-boot/httprecord/plugin"
+	idempotencyplugin "gitee.com/hq_project/yomi-boot/idempotency/plugin"
+	kafkaplugin "gitee.com/hq_project/yomi-boot/kafka/plugin"
+	loggerplugin "gitee.com/hq_project/yomi-boot/logger/plugin"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	pprofplugin "gitee.com/hq_project/yomi-boot/pprof/plugin"
+	ratelimitplugin "gitee.com/hq_project/yomi-boot/ratelimit/plugin"
+	redisplugin "gitee.com/hq_project/yomi-boot/redis/plugin"
+	snowflakeplugin "gitee.com/hq_project/yomi-boot/snowflake/plugin"
+	tokenplugin "gitee.com/hq_project/yomi-boot/token/plugin"
 )
 
 // buildInfraPlugins 按严格顺序返回全部基础设施插件

@@ -4,9 +4,9 @@
 package filestorage
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
 	"strings"
 	"time"
-	"yomi-boot/errors"
 )
 
 // Provider 对象存储提供者标识

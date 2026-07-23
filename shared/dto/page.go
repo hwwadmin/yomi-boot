@@ -3,7 +3,7 @@
 // @author zwei
 package dto
 
-import "yomi-boot/shared"
+import "gitee.com/hq_project/yomi-boot/shared"
 
 // PageInput 表示分页查询输入，嵌入 usecase 入参结构体使用
 type PageInput struct {

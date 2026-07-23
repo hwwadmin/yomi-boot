@@ -5,12 +5,12 @@ package kafka
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/worker"
 	"strings"
 	"time"
-	"yomi-boot/appctx"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
-	"yomi-boot/worker"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

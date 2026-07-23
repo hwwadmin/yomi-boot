@@ -4,15 +4,15 @@
 package config_test
 
 import (
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/bootstrap"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/router"
+	"gitee.com/hq_project/yomi-boot/snowflake"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"yomi-boot/appctx"
-	"yomi-boot/bootstrap"
-	"yomi-boot/config"
-	"yomi-boot/router"
-	"yomi-boot/snowflake"
 )
 
 // testInfraRegistry 返回配置加载单测用注册表

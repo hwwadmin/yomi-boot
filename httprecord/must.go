@@ -5,9 +5,9 @@ package httprecord
 
 import (
 	"context"
-	"yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/logger"
 
-	yomikafka "yomi-boot/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // MustStartKafkaRecordConsumer 启动 HTTP 访问记录 Kafka 消费者，失败时 log + panic

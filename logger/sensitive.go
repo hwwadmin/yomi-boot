@@ -8,9 +8,9 @@ package logger
 import (
 	"encoding/json"
 	"fmt"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"net/url"
 	"strings"
-	"yomi-boot/errors"
 )
 
 const (

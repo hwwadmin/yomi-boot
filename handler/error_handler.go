@@ -5,12 +5,12 @@ package handler
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/response"
+	sharederr "gitee.com/hq_project/yomi-boot/shared/error"
+	"gitee.com/hq_project/yomi-boot/utils/ginutil"
 	"net/http"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
-	"yomi-boot/response"
-	sharederr "yomi-boot/shared/error"
-	"yomi-boot/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

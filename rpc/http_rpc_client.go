@@ -8,12 +8,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/consul"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/traceid"
 	"io"
 	"net/http"
 	"strings"
-	"yomi-boot/consul"
-	"yomi-boot/errors"
-	"yomi-boot/traceid"
 )
 
 // ErrDownstream 下游服务异常

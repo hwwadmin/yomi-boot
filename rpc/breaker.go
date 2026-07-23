@@ -4,9 +4,9 @@
 package rpc
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
 	"sync"
 	"time"
-	"yomi-boot/errors"
 )
 
 // breakerState 熔断器状态

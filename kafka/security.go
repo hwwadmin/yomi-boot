@@ -6,9 +6,9 @@ package kafka
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"os"
 	"strings"
-	"yomi-boot/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"

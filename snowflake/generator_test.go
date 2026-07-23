@@ -1,8 +1,8 @@
 package snowflake
 
 import (
+	"gitee.com/hq_project/yomi-boot/snowflake/snowflaketest"
 	"testing"
-	"yomi-boot/snowflake/snowflaketest"
 )
 
 var _ Generator = (*snowflaketest.TestGenerator)(nil)

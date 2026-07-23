@@ -1,6 +1,6 @@
 // Package kafkatest 提供 Kafka 内存测试集群封装，本文件使用 franz-go 启动测试用内存 broker
 //
-// franz-go 仅允许在本文件（kafkatest 包）中使用。生产路径请使用 yomi-boot/kafka（基于 segmentio/kafka-go）。
+// franz-go 仅允许在本文件（kafkatest 包）中使用。生产路径请使用 gitee.com/hq_project/yomi-boot/kafka（基于 segmentio/kafka-go）。
 //
 // @author zwei
 package kafkatest

@@ -5,14 +5,14 @@ package token
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"sync"
 	"testing"
 	"time"
-	"yomi-boot/distlock"
-	"yomi-boot/errors"
-	"yomi-boot/redis/redistest"
 
-	yomiredis "yomi-boot/redis"
+	yomiredis "gitee.com/hq_project/yomi-boot/redis"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )

@@ -22,7 +22,7 @@
 
 ### 2.1 适用范围
 
-- 适用于经 `yomi-boot/handler` 写出的 HTTP 业务接口。
+- 适用于经 `gitee.com/hq_project/yomi-boot/handler` 写出的 HTTP 业务接口。
 - 适用于业务服务启动时对 `response.Encoder` 的显式注册。
 - **不**适用于 DTM Action/Compensate 回调、health 探活等明确走独立出口的路径。
 
@@ -94,7 +94,7 @@ func main() {
 | `MustReady()` | 启动路径断言已注册 |
 | `Enc()` | 取得全局 Encoder；未注册则 panic |
 
-yomi-boot 可提供预制实现（如 `response.DefaultEncoder`）供业务**显式选择**注册；**预制 ≠ 本规范定义的唯一契约**，也不得被理解为全站强制响应格式。
+gitee.com/hq_project/yomi-boot 可提供预制实现（如 `response.DefaultEncoder`）供业务**显式选择**注册；**预制 ≠ 本规范定义的唯一契约**，也不得被理解为全站强制响应格式。
 
 ### 3.4 handler 适配收口
 
@@ -110,7 +110,7 @@ yomi-boot 可提供预制实现（如 `response.DefaultEncoder`）供业务**显
 
 ### 3.5 与异常、前端的边界
 
-- **异常**：通用哨兵 `yomi-boot/shared/error`；库私有就近定义；域错误在业务 `bizerr`。详见 [Go异常规范](../go/Go异常规范.md)。
+- **异常**：通用哨兵 `gitee.com/hq_project/yomi-boot/shared/error`；库私有就近定义；域错误在业务 `bizerr`。详见 [Go异常规范](../go/Go异常规范.md)。
 - **前端**：只消费**该服务已注册 Encoder** 产出的实际 JSON；对接文档/OpenAPI 必须以该实现为准，不得把预制 Encoder 的字段抄成全公司唯一标准。
 - **观测 / 集成测试解析**：走 `Enc().Parse` / `IsSuccess`；实现须能解析本实现写出的 body，或明确 `ok=false`。微服务间读响应由 `rpc` 按对内信封自行解析，与本规范无关。
 

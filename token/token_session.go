@@ -5,8 +5,8 @@ package token
 
 import (
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/shared/dto"
 	"time"
-	"yomi-boot/shared/dto"
 )
 
 // TokenSession 表示令牌对应的会话快照

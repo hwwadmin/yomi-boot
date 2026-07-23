@@ -5,8 +5,8 @@ package config
 
 import (
 	"fmt"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"strings"
-	"yomi-boot/errors"
 )
 
 // Section 一段可注册配置

@@ -5,9 +5,9 @@ package idempotency
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"time"
-	"yomi-boot/db"
-	"yomi-boot/errors"
 
 	"gorm.io/gorm"
 )

@@ -4,9 +4,9 @@
 package idempotency
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"time"
-	"yomi-boot/config"
-	"yomi-boot/errors"
 )
 
 const (

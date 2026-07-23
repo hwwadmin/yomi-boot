@@ -5,9 +5,9 @@ package db
 
 import (
 	"fmt"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"regexp"
 	"strings"
-	"yomi-boot/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

@@ -11,15 +11,15 @@ package idempotency
 import (
 	"context"
 	"encoding/json"
+	"gitee.com/hq_project/yomi-boot/db"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/dtm"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
+	yomiredis "gitee.com/hq_project/yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/shared/enums"
+	"gitee.com/hq_project/yomi-boot/snowflake"
 	"time"
-	"yomi-boot/db"
-	"yomi-boot/distlock"
-	"yomi-boot/dtm"
-	"yomi-boot/errors"
-	"yomi-boot/logger"
-	yomiredis "yomi-boot/redis"
-	"yomi-boot/shared/enums"
-	"yomi-boot/snowflake"
 
 	"github.com/google/uuid"
 )

@@ -6,7 +6,7 @@ package dto
 import (
 	"bytes"
 	"encoding/json"
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // JSONInt64Slice 表示可同时接受字符串和数字元素的 int64 切片

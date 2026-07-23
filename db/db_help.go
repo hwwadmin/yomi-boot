@@ -4,10 +4,10 @@
 package db
 
 import (
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/shared"
+	"gitee.com/hq_project/yomi-boot/shared/enums"
 	"strings"
-	"yomi-boot/errors"
-	"yomi-boot/shared"
-	"yomi-boot/shared/enums"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"

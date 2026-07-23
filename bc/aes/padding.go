@@ -2,7 +2,7 @@ package aes
 
 import (
 	"bytes"
-	"yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // pkcs7Pad 按 PKCS7 填充到 blockSize 整数倍

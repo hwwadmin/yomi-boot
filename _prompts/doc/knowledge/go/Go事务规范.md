@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：约束领域 usecase 层事务边界、DTM barrier 下的本地子事务、以及 BFF 与领域在分布式写场景下的职责划分。
-- **边界**：Saga 编排见 [GoBFF规范](./GoBFF规范.md)；repository 事务感知见 [Go数据库规范](./Go数据库规范.md)；`TxExecutor` 实现位于 `yomi-boot/db`；**信封与业务幂等细则见 [微服务调用规范](../api/微服务调用规范.md) §3.4，本文不重复**。
+- **边界**：Saga 编排见 [GoBFF规范](./GoBFF规范.md)；repository 事务感知见 [Go数据库规范](./Go数据库规范.md)；`TxExecutor` 实现位于 `gitee.com/hq_project/yomi-boot/db`；**信封与业务幂等细则见 [微服务调用规范](../api/微服务调用规范.md) §3.4，本文不重复**。
 - **适用对象**：领域写 usecase、DTM 分支 Handler、BFF `saga/` 实现与评审。
 
 ---
@@ -30,7 +30,7 @@
 
 | 文档 | 关联点 |
 | ---- | ------ |
-| [Go架构规范](./Go架构规范.md) | DTM、yomi-boot/dtm |
+| [Go架构规范](./Go架构规范.md) | DTM、gitee.com/hq_project/yomi-boot/dtm |
 | [GoBFF规范](./GoBFF规范.md) | BFF 提交 Saga、payload 喂饱 |
 | [Go业务分层规范](./Go业务分层规范.md) | usecase/handler 分层 |
 | [Go数据库规范](./Go数据库规范.md) | repository 事务感知 |
@@ -54,8 +54,8 @@ DTM Server           调度各分支 Action / Compensate
 domain / repo        无感知 DTM
 ```
 
-- **默认方案**：DTM Saga + 各服务本地子事务（barrier 保证幂等）+ `yomi-boot/idempotency` 业务幂等。
-- **可选方案**：`yomi-boot/event` Outbox/Inbox（`event.publisher_enabled` / `event.consumer_enabled` 启用时）；当前领域服务默认未开启。
+- **默认方案**：DTM Saga + 各服务本地子事务（barrier 保证幂等）+ `gitee.com/hq_project/yomi-boot/idempotency` 业务幂等。
+- **可选方案**：`gitee.com/hq_project/yomi-boot/event` Outbox/Inbox（`event.publisher_enabled` / `event.consumer_enabled` 启用时）；当前领域服务默认未开启。
 
 ### 3.2 各层事务职责
 
@@ -69,7 +69,7 @@ domain / repo        无感知 DTM
 
 ### 3.3 本地事务（usecase 内部）
 
-- 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹，`TxRunner` 内部使用 `yomi-boot/db.TxExecutor` 管理 GORM 事务并配合 DTM barrier。
+- 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹，`TxRunner` 内部使用 `gitee.com/hq_project/yomi-boot/db.TxExecutor` 管理 GORM 事务并配合 DTM barrier。
 - 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `*dtm.TxRunner`（由 bootstrap 从 `infra.TxExecutor` 构造）。
 - 业务结果通过闭包变量捕获，不在事务闭包内组装 HTTP Output。
 - **上述事务边界仅用于 usecase 内部**；**禁止**据此在领域 handler 再暴露一条供 BFF 直调的非 Saga 写 HTTP 路由。
@@ -131,7 +131,7 @@ resourceClient.CreateResource(ctx, saga, payload)
 saga.Submit()
 ```
 
-- token 撤销等 BFF 本地副作用可作为独立 Saga 分支或 Saga 成功后同步调用 `yomi-boot/token`。
+- token 撤销等 BFF 本地副作用可作为独立 Saga 分支或 Saga 成功后同步调用 `gitee.com/hq_project/yomi-boot/token`。
 - BFF **不实现**领域状态恢复的补偿逻辑。
 
 ### 3.5 事务上下文传递
@@ -153,7 +153,7 @@ saga.Submit()
 
 ### 3.7 业务幂等与 DTM 分工
 
-业务幂等（`bizId`/`bizSubId`、`yomi-boot/idempotency`、`sys_biz`）与 DTM `gid`/barrier 的职责边界、执行顺序及禁止项，**一律以 [微服务调用规范](../api/微服务调用规范.md) §3.4、§5 为准**。
+业务幂等（`bizId`/`bizSubId`、`gitee.com/hq_project/yomi-boot/idempotency`、`sys_biz`）与 DTM `gid`/barrier 的职责边界、执行顺序及禁止项，**一律以 [微服务调用规范](../api/微服务调用规范.md) §3.4、§5 为准**。
 
 本文仅强调事务层要点：
 
@@ -177,7 +177,7 @@ saga.Submit()
 - [ ] Compensate 输入含 BFF 提供的快照字段
 - [ ] repository 通过 Context 感知事务，不自行管理事务
 - [ ] BFF saga 只编排，不实现领域补偿
-- [ ] 业务幂等与 `yomi-boot/idempotency` 符合 [微服务调用规范](../api/微服务调用规范.md) §3.4
+- [ ] 业务幂等与 `gitee.com/hq_project/yomi-boot/idempotency` 符合 [微服务调用规范](../api/微服务调用规范.md) §3.4
 
 ---
 

@@ -4,11 +4,11 @@
 package eventplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/errors"
-	"yomi-boot/event"
-	"yomi-boot/logger"
-	"yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/event"
+	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // eventPlugin 消息队列事件插件

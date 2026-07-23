@@ -4,9 +4,9 @@
 package pprofplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/plugin"
-	bootpprof "yomi-boot/pprof"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	bootpprof "gitee.com/hq_project/yomi-boot/pprof"
 )
 
 // pprofPlugin pprof 性能剖析插件

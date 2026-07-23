@@ -5,10 +5,10 @@ package kafkatest
 
 import (
 	"context"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/kafka"
 	"testing"
 	"time"
-	"yomi-boot/errors"
-	"yomi-boot/kafka"
 
 	kafkago "github.com/segmentio/kafka-go"
 )
@@ -138,7 +138,7 @@ func (b *MockBroker) Publish(ctx context.Context, topic string, msgs ...kafkago.
 	return nil
 }
 
-// KafkaConfig 返回可用于 yomi-boot kafka 组件的最小配置。
+// KafkaConfig 返回可用于 gitee.com/hq_project/yomi-boot kafka 组件的最小配置。
 func (b *MockBroker) KafkaConfig() kafka.Config {
 	return kafka.Config{
 		Brokers:             b.Brokers(),
@@ -194,7 +194,7 @@ func (b *MockBroker) NewReader(cfg kafkago.ReaderConfig) *kafkago.Reader {
 	return kafkago.NewReader(cfg)
 }
 
-// NewComponents 创建 yomi-boot kafka 组件并在测试结束时释放。
+// NewComponents 创建 gitee.com/hq_project/yomi-boot kafka 组件并在测试结束时释放。
 func NewComponents(t testing.TB, topics ...string) (*kafka.Components, *MockBroker) {
 	t.Helper()
 

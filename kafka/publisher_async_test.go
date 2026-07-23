@@ -6,9 +6,9 @@ package kafka
 import (
 	"context"
 	"errors"
+	"gitee.com/hq_project/yomi-boot/worker"
 	"testing"
 	"time"
-	"yomi-boot/worker"
 )
 
 // queueFullWorker 模拟工作池队列已满

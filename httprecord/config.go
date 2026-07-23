@@ -4,9 +4,9 @@
 package httprecord
 
 import (
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"strings"
-	"yomi-boot/config"
-	"yomi-boot/errors"
 )
 
 // HTTP 访问记录默认值

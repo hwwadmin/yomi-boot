@@ -3,7 +3,7 @@
 // @author zwei
 package filestorage
 
-import "yomi-boot/logger"
+import "gitee.com/hq_project/yomi-boot/logger"
 
 // MustNew 创建 FileStorage，失败时 log + panic
 func MustNew(cfg Config) FileStorage {

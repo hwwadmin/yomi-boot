@@ -4,10 +4,10 @@
 package consulplugin
 
 import (
-	"yomi-boot/config"
-	"yomi-boot/consul"
-	"yomi-boot/errors"
-	"yomi-boot/plugin"
+	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/consul"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // consulPlugin Consul 插件
