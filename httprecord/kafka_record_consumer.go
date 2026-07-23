@@ -10,14 +10,14 @@ import (
 	"yomi-boot/errors"
 	"yomi-boot/logger"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 // KafkaConsumerID 是 HTTP 访问记录 Kafka 消费者在 ConsumerManager 中的标识
 const KafkaConsumerID = "httprecord"
 
 // RecordHandler 是 HTTP 访问记录消费处理函数
-type RecordHandler func(ctx context.Context, record *HttpRecord) ytkafka.ConsumeResult
+type RecordHandler func(ctx context.Context, record *HttpRecord) yomikafka.ConsumeResult
 
 // KafkaRecordConsumerConfig 表示 HTTP 访问记录 Kafka 消费者参数
 type KafkaRecordConsumerConfig struct {
@@ -28,7 +28,7 @@ type KafkaRecordConsumerConfig struct {
 // StartKafkaRecordConsumer 启动 HTTP 访问记录 Kafka 消费者
 func StartKafkaRecordConsumer(
 	parentCtx context.Context,
-	consumer ytkafka.ConsumerService,
+	consumer yomikafka.ConsumerService,
 	id string,
 	cfg KafkaRecordConsumerConfig,
 	handler RecordHandler,
@@ -46,10 +46,10 @@ func StartKafkaRecordConsumer(
 		return errors.New("HTTP 访问记录消费组不能为空")
 	}
 
-	return consumer.Start(parentCtx, id, ytkafka.ConsumerConfig{
+	return consumer.Start(parentCtx, id, yomikafka.ConsumerConfig{
 		Topics:  cfg.Topics,
 		GroupID: cfg.GroupID,
-	}, func(ctx context.Context, msg ytkafka.Message) ytkafka.ConsumeResult {
+	}, func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		var wire wireRecord
 		if err := json.Unmarshal(msg.Value, &wire); err != nil {
 			logger.Warn(ctx, "HTTP 访问记录消息反序列化失败，已丢弃",
@@ -58,7 +58,7 @@ func StartKafkaRecordConsumer(
 				"partition", msg.Partition,
 				"offset", msg.Offset,
 			)
-			return ytkafka.AckDrop()
+			return yomikafka.AckDrop()
 		}
 
 		record := fromWireRecord(wire)
@@ -68,7 +68,7 @@ func StartKafkaRecordConsumer(
 				"partition", msg.Partition,
 				"offset", msg.Offset,
 			)
-			return ytkafka.AckDrop()
+			return yomikafka.AckDrop()
 		}
 
 		return handler(ctx, record)

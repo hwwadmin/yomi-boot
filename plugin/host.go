@@ -11,7 +11,7 @@ import (
 	"yomi-boot/distlock"
 	"yomi-boot/event"
 	"yomi-boot/httprecord"
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 	"yomi-boot/ratelimit"
 	yomiredis "yomi-boot/redis"
 	"yomi-boot/shared/enums"
@@ -35,9 +35,9 @@ type Host struct {
 	RedisService      yomiredis.RedisService
 	DistLockFactory   distlock.DistLockFactory
 	RateLimiter       ratelimit.LimitService
-	KafkaComponents   *ytkafka.Components
-	KafkaPublisher    ytkafka.PublisherService
-	KafkaConsumer     ytkafka.ConsumerService
+	KafkaComponents   *yomikafka.Components
+	KafkaPublisher    yomikafka.PublisherService
+	KafkaConsumer     yomikafka.ConsumerService
 	IDGenerator       snowflake.Generator
 	TokenService      token.TokenService
 	HttpRecordService httprecord.HttpRecordService

@@ -14,7 +14,7 @@ import (
 	"yomi-boot/filestorage"
 	"yomi-boot/httprecord"
 	"yomi-boot/idempotency"
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 	"yomi-boot/logger"
 	bootpprof "yomi-boot/pprof"
 	"yomi-boot/ratelimit"
@@ -33,7 +33,7 @@ func DefaultConfigRegistry() *config.Registry {
 			logger.ConfigSection(),
 			db.ConfigSection(),
 			redis.ConfigSection(),
-			ytkafka.ConfigSection(),
+			yomikafka.ConfigSection(),
 			token.ConfigSection(),
 			cors.ConfigSection(),
 			httprecord.ConfigSection(),

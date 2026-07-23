@@ -16,7 +16,7 @@ import (
 	"yomi-boot/logger"
 	"yomi-boot/snowflake"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 // Receiver 幂等消息队列事件接收器
@@ -59,23 +59,23 @@ const (
 const consumeLockUnlockTimeout = 5 * time.Second
 
 // WrapHandler 将业务处理函数包装为 Kafka 消费 handler
-func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) ytkafka.ConsumeHandler {
+func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yomikafka.ConsumeHandler {
 	if fn == nil {
-		return func(ctx context.Context, msg ytkafka.Message) ytkafka.ConsumeResult {
+		return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 			logger.Warn(ctx, "消息队列事件 action 未配置")
-			return ytkafka.Retry()
+			return yomikafka.Retry()
 		}
 	}
 
-	return func(ctx context.Context, msg ytkafka.Message) ytkafka.ConsumeResult {
+	return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		if len(msg.Value) == 0 {
 			logger.Warn(ctx, "消息队列事件为空，已被抛弃")
-			return ytkafka.AckDrop()
+			return yomikafka.AckDrop()
 		}
 
 		evt, ok := ParseAndValidate(msg.Value, true)
 		if !ok {
-			return ytkafka.AckDrop()
+			return yomikafka.AckDrop()
 		}
 
 		// 启用看门狗续期（默认 TTL 30s），覆盖长链路业务
@@ -84,23 +84,23 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yt
 		if err != nil {
 			logger.Error(ctx, "消息队列事件消费锁获取失败",
 				"eventId", evt.EventID, "topic", evt.Topic, "error", err)
-			return ytkafka.Retry()
+			return yomikafka.Retry()
 		}
 		if !held {
 			exists, existErr := r.inboxRepo.Exists(ctx, r.cfg.ServiceName, evt.EventID)
 			if existErr != nil {
 				logger.Error(ctx, "消息队列事件重复校验失败",
 					"eventId", evt.EventID, "topic", evt.Topic, "error", existErr)
-				return ytkafka.Retry()
+				return yomikafka.Retry()
 			}
 			if exists {
 				logger.Warn(ctx, "消息队列事件重复且已入 inbox",
 					"eventId", evt.EventID, "topic", evt.Topic)
-				return ytkafka.AckOK()
+				return yomikafka.AckOK()
 			}
 			logger.Warn(ctx, "消息队列事件正在处理中，暂不 ack",
 				"eventId", evt.EventID, "topic", evt.Topic)
-			return ytkafka.Retry()
+			return yomikafka.Retry()
 		}
 
 		defer func() {
@@ -153,18 +153,18 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yt
 		if txErr != nil {
 			logger.Error(ctx, "消息队列事件接收失败",
 				"eventId", evt.EventID, "topic", evt.Topic, "error", txErr)
-			return ytkafka.Retry()
+			return yomikafka.Retry()
 		}
 
 		switch result {
 		case receiveSuccess:
 			logger.Info(ctx, "消息队列事件接收成功", "eventId", evt.EventID, "topic", evt.Topic)
-			return ytkafka.AckOK()
+			return yomikafka.AckOK()
 		case receiveDuplicate:
 			logger.Warn(ctx, "消息队列事件重复", "eventId", evt.EventID, "topic", evt.Topic)
-			return ytkafka.AckOK()
+			return yomikafka.AckOK()
 		default:
-			return ytkafka.Retry()
+			return yomikafka.Retry()
 		}
 	}
 }

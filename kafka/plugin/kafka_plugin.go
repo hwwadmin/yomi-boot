@@ -5,14 +5,14 @@ package kafkaplugin
 
 import (
 	"yomi-boot/config"
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 	"yomi-boot/plugin"
 )
 
 // kafkaPlugin Kafka 插件
 type kafkaPlugin struct {
 	plugin.PluginState
-	components *ytkafka.Components
+	components *yomikafka.Components
 }
 
 const kafkaName = "kafka"
@@ -24,11 +24,11 @@ func NewKafka() plugin.Plugin {
 
 // Init 初始化 Kafka 组件并挂到 Host
 func (p *kafkaPlugin) Init(host *plugin.Host) {
-	cfg := config.MustSection[ytkafka.Config](host.Doc, ytkafka.SectionKey)
+	cfg := config.MustSection[yomikafka.Config](host.Doc, yomikafka.SectionKey)
 	if !cfg.EnabledOrDefault() {
 		return
 	}
-	components := ytkafka.MustNewComponents(*cfg)
+	components := yomikafka.MustNewComponents(*cfg)
 	p.components = components
 	host.KafkaComponents = components
 	host.KafkaPublisher = components.Publisher

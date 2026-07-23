@@ -11,7 +11,7 @@ import (
 	"yomi-boot/distlock"
 	"yomi-boot/event"
 	"yomi-boot/httprecord"
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 	"yomi-boot/plugin"
 	"yomi-boot/ratelimit"
 	yomiredis "yomi-boot/redis"
@@ -31,8 +31,8 @@ type Infra struct {
 	RedisService      yomiredis.RedisService       // Redis 访问服务，业务层经此访问 Redis
 	DistLockFactory   distlock.DistLockFactory     // 分布式锁工厂，基于 Redis 实现
 	RateLimiter       ratelimit.LimitService       // 调用式限流（依赖 RedisService；未启用时为 Noop）
-	KafkaPublisher    ytkafka.PublisherService     // Kafka 生产者
-	KafkaConsumer     ytkafka.ConsumerService      // Kafka 消费者
+	KafkaPublisher    yomikafka.PublisherService   // Kafka 生产者
+	KafkaConsumer     yomikafka.ConsumerService    // Kafka 消费者
 	IDGenerator       snowflake.Generator          // 雪花 ID 生成器
 	TokenService      token.TokenService           // 令牌服务（auth.enabled=true 时可用）
 	HttpRecordService httprecord.HttpRecordService // HTTP 访问记录服务

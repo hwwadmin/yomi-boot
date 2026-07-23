@@ -17,7 +17,7 @@ import (
 	"yomi-boot/router"
 	"yomi-boot/token"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 // ======================== mock 实现 ========================
@@ -51,12 +51,12 @@ var _ token.TokenService = (*mockTokenService)(nil)
 type mockKafkaPublisher struct{}
 
 // Publish 实现 Publish 接口（测试桩）
-func (m *mockKafkaPublisher) Publish(_ context.Context, _ ytkafka.PublishRequest) error {
+func (m *mockKafkaPublisher) Publish(_ context.Context, _ yomikafka.PublishRequest) error {
 	return nil
 }
 
 // PublishBatch 实现 PublishBatch 接口（测试桩）
-func (m *mockKafkaPublisher) PublishBatch(_ context.Context, _ []ytkafka.PublishRequest) error {
+func (m *mockKafkaPublisher) PublishBatch(_ context.Context, _ []yomikafka.PublishRequest) error {
 	return nil
 }
 
@@ -66,12 +66,12 @@ func (m *mockKafkaPublisher) PublishJSON(_ context.Context, _ string, _ string, 
 }
 
 // PublishAsync 实现 PublishAsync 接口（测试桩）
-func (m *mockKafkaPublisher) PublishAsync(_ context.Context, _ ytkafka.PublishRequest) error {
+func (m *mockKafkaPublisher) PublishAsync(_ context.Context, _ yomikafka.PublishRequest) error {
 	return nil
 }
 
 // PublishBatchAsync 实现 PublishBatchAsync 接口（测试桩）
-func (m *mockKafkaPublisher) PublishBatchAsync(_ context.Context, _ []ytkafka.PublishRequest) error {
+func (m *mockKafkaPublisher) PublishBatchAsync(_ context.Context, _ []yomikafka.PublishRequest) error {
 	return nil
 }
 
@@ -83,13 +83,13 @@ func (m *mockKafkaPublisher) PublishJSONAsync(_ context.Context, _ string, _ str
 // Close 实现 Close 接口（测试桩）
 func (m *mockKafkaPublisher) Close() error { return nil }
 
-var _ ytkafka.PublisherService = (*mockKafkaPublisher)(nil)
+var _ yomikafka.PublisherService = (*mockKafkaPublisher)(nil)
 
 // mockKafkaConsumer 用于测试的 Kafka 消费者实现
 type mockKafkaConsumer struct{}
 
 // Start 实现 Start 接口（测试桩）
-func (m *mockKafkaConsumer) Start(_ context.Context, _ string, _ ytkafka.ConsumerConfig, _ ytkafka.ConsumeHandler) error {
+func (m *mockKafkaConsumer) Start(_ context.Context, _ string, _ yomikafka.ConsumerConfig, _ yomikafka.ConsumeHandler) error {
 	return nil
 }
 
@@ -102,7 +102,7 @@ func (m *mockKafkaConsumer) StopAll() error { return nil }
 // Close 实现 Close 接口（测试桩）
 func (m *mockKafkaConsumer) Close() error { return nil }
 
-var _ ytkafka.ConsumerService = (*mockKafkaConsumer)(nil)
+var _ yomikafka.ConsumerService = (*mockKafkaConsumer)(nil)
 
 // middlewareTestRegistry 返回中间件单测用配置注册表
 func middlewareTestRegistry() *config.Registry {

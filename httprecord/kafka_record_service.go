@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"yomi-boot/logger"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 // KafkaHttpRecordService 通过 Kafka 异步发布 HTTP 访问记录
 type KafkaHttpRecordService struct {
-	publisher ytkafka.PublisherService
+	publisher yomikafka.PublisherService
 	topic     string
 }
 
@@ -21,7 +21,7 @@ var _ HttpRecordService = (*KafkaHttpRecordService)(nil)
 
 // NewKafkaHttpRecordService 创建 Kafka HTTP 访问记录服务
 // publisher 与 topic 为必填依赖，缺失时启动期 fail-fast
-func NewKafkaHttpRecordService(publisher ytkafka.PublisherService, topic string) *KafkaHttpRecordService {
+func NewKafkaHttpRecordService(publisher yomikafka.PublisherService, topic string) *KafkaHttpRecordService {
 	if publisher == nil {
 		panic("httprecord: NewKafkaHttpRecordService publisher 不能为 nil")
 	}
@@ -53,7 +53,7 @@ func (s *KafkaHttpRecordService) Handle(ctx context.Context, record *HttpRecord)
 		return
 	}
 
-	req := ytkafka.PublishRequest{
+	req := yomikafka.PublishRequest{
 		Topic: s.topic,
 		Value: payload,
 	}

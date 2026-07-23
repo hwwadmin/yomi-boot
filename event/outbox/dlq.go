@@ -16,7 +16,7 @@ import (
 	"yomi-boot/roundrobin"
 	"yomi-boot/snowflake"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 const dlqExhaustedErrorPrefix = "[EXHAUSTED] "
@@ -26,7 +26,7 @@ type DlqHandler struct {
 	cfg            cfg.Runtime
 	outboxRepo     *repo.OutboxRepo
 	dlqRepo        *repo.OutboxDlqRepo
-	kafkaPublisher ytkafka.PublisherService
+	kafkaPublisher yomikafka.PublisherService
 	txExecutor     db.TxExecutor
 	idGen          snowflake.Generator
 }
@@ -36,7 +36,7 @@ func NewDlqHandler(
 	runtime cfg.Runtime,
 	outboxRepo *repo.OutboxRepo,
 	dlqRepo *repo.OutboxDlqRepo,
-	kafkaPublisher ytkafka.PublisherService,
+	kafkaPublisher yomikafka.PublisherService,
 	txExecutor db.TxExecutor,
 	idGen snowflake.Generator,
 ) *DlqHandler {

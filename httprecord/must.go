@@ -7,13 +7,13 @@ import (
 	"context"
 	"yomi-boot/logger"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 // MustStartKafkaRecordConsumer 启动 HTTP 访问记录 Kafka 消费者，失败时 log + panic
 func MustStartKafkaRecordConsumer(
 	parentCtx context.Context,
-	consumer ytkafka.ConsumerService,
+	consumer yomikafka.ConsumerService,
 	id string,
 	cfg KafkaRecordConsumerConfig,
 	handler RecordHandler,

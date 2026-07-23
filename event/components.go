@@ -17,7 +17,7 @@ import (
 	"yomi-boot/shared/enums"
 	"yomi-boot/snowflake"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 
 	"gorm.io/gorm"
 )
@@ -26,7 +26,7 @@ import (
 type Deps struct {
 	DB              *gorm.DB
 	TxExecutor      db.TxExecutor
-	KafkaPublisher  ytkafka.PublisherService
+	KafkaPublisher  yomikafka.PublisherService
 	DistLockFactory distlock.DistLockFactory
 	IDGenerator     snowflake.Generator
 	DbType          enums.DbType
@@ -43,7 +43,7 @@ type Components struct {
 	outboxRepo     *repo.OutboxRepo
 	dlqHandler     *outbox.DlqHandler
 	processor      *outbox.Processor
-	kafkaPublisher ytkafka.PublisherService
+	kafkaPublisher yomikafka.PublisherService
 	txExecutor     db.TxExecutor
 	lockFactory    distlock.DistLockFactory
 

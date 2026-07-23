@@ -16,7 +16,7 @@ import (
 	"yomi-boot/logger"
 	"yomi-boot/worker"
 
-	ytkafka "yomi-boot/kafka"
+	yomikafka "yomi-boot/kafka"
 )
 
 const (
@@ -29,7 +29,7 @@ type Processor struct {
 	cfg            cfg.Runtime
 	outboxRepo     *repo.OutboxRepo
 	dlq            *DlqHandler
-	kafkaPublisher ytkafka.PublisherService
+	kafkaPublisher yomikafka.PublisherService
 	txExecutor     db.TxExecutor
 	worker         worker.WorkerService
 	closeMu        sync.Mutex // closeMu 保护 closed 并发调用
@@ -42,7 +42,7 @@ func NewProcessor(
 	runtime cfg.Runtime,
 	outboxRepo *repo.OutboxRepo,
 	dlq *DlqHandler,
-	kafkaPublisher ytkafka.PublisherService,
+	kafkaPublisher yomikafka.PublisherService,
 	txExecutor db.TxExecutor,
 	parentCtx context.Context,
 ) (*Processor, error) {
