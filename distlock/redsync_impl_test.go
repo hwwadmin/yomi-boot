@@ -2,9 +2,10 @@ package distlock
 
 import (
 	"context"
-	"gitee.com/hq_project/yomi-boot/errors"
 	"io"
 	"testing"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"github.com/go-redsync/redsync/v4"
 	"github.com/hashicorp/go-multierror"

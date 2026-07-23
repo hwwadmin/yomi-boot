@@ -2,12 +2,13 @@ package rpc
 
 import (
 	"context"
-	"gitee.com/hq_project/yomi-boot/errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // newTestRPCClient 构造带测试服务发现的 HTTP RPC 客户端

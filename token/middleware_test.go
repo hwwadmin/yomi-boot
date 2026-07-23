@@ -1,11 +1,12 @@
 package token_test
 
 import (
-	"gitee.com/hq_project/yomi-boot/response"
-	"gitee.com/hq_project/yomi-boot/token"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"gitee.com/hq_project/yomi-boot/response"
+	"gitee.com/hq_project/yomi-boot/token"
 
 	"github.com/gin-gonic/gin"
 )

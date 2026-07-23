@@ -6,12 +6,13 @@ package roundrobin
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
-	"math/rand/v2"
-	"time"
 )
 
 const (

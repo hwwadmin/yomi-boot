@@ -1,11 +1,12 @@
 package response
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"github.com/gin-gonic/gin"
 )

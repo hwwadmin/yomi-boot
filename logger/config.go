@@ -4,9 +4,10 @@
 package logger
 
 import (
+	"strings"
+
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/errors"
-	"strings"
 )
 
 // SectionKey YAML 根 key

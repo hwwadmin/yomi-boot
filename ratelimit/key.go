@@ -4,9 +4,10 @@
 package ratelimit
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
 	"strings"
 	"unicode"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 const maxRedisKeyLen = 256

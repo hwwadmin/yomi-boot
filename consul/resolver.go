@@ -4,8 +4,9 @@ package consul
 import (
 	"context"
 	"fmt"
-	"gitee.com/hq_project/yomi-boot/errors"
 	"strings"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"github.com/hashicorp/consul/api"
 )

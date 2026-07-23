@@ -6,11 +6,12 @@ package worker
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
-	"sync"
-	"time"
 )
 
 var _ WorkerService = (*channelWorker)(nil)

@@ -4,8 +4,9 @@
 package snowflaketest
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
 	"math/rand/v2"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	bwmarrin "github.com/bwmarrin/snowflake"
 )

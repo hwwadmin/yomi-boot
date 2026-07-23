@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"gitee.com/hq_project/yomi-boot/traceid"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/traceid"
 
 	"github.com/gin-gonic/gin"
 )

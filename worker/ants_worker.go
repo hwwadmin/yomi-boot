@@ -6,12 +6,13 @@ package worker
 import (
 	"context"
 	"fmt"
-	"gitee.com/hq_project/yomi-boot/appctx"
-	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/logger"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 
 	"github.com/panjf2000/ants/v2"
 )

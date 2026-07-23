@@ -6,9 +6,10 @@ package httprecord
 import (
 	"context"
 	"encoding/json"
+	"strings"
+
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
-	"strings"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )

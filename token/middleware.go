@@ -4,10 +4,11 @@
 package token
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/handler"
 	"path"
 	"strings"
+
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/handler"
 
 	"github.com/gin-gonic/gin"
 )

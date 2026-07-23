@@ -4,8 +4,9 @@
 package ratelimit
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // Rule 描述一次限流判定的窗口规则（由调用方按场景传入）

@@ -5,6 +5,10 @@ package outbox
 
 import (
 	"context"
+	"strings"
+	"sync"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/db"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/event/cfg"
@@ -12,9 +16,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/event/repo"
 	"gitee.com/hq_project/yomi-boot/logger"
 	"gitee.com/hq_project/yomi-boot/worker"
-	"strings"
-	"sync"
-	"time"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )

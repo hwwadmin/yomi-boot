@@ -6,9 +6,10 @@ package dto
 import (
 	"bytes"
 	"encoding/json"
-	"gitee.com/hq_project/yomi-boot/errors"
 	"strconv"
 	"strings"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // JSONInt64 表示可同时接受 JSON 字符串和数字的 int64 值

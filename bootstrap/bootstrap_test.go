@@ -5,6 +5,10 @@ package bootstrap
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/cors"
@@ -13,9 +17,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/ratelimit"
 	"gitee.com/hq_project/yomi-boot/router"
 	"gitee.com/hq_project/yomi-boot/token"
-	"os"
-	"path/filepath"
-	"testing"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )

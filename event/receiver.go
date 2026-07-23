@@ -5,6 +5,8 @@ package event
 
 import (
 	"context"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/db"
 	"gitee.com/hq_project/yomi-boot/distlock"
@@ -14,7 +16,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/event/repo"
 	"gitee.com/hq_project/yomi-boot/logger"
 	"gitee.com/hq_project/yomi-boot/snowflake"
-	"time"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )

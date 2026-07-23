@@ -6,12 +6,13 @@ package roundrobin
 import (
 	"context"
 	"errors"
-	"gitee.com/hq_project/yomi-boot/appctx"
-	"gitee.com/hq_project/yomi-boot/distlock"
-	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 )
 
 // TestConfig_validate 校验合法配置通过及各非法字段拒绝

@@ -5,6 +5,7 @@ package event
 
 import (
 	"context"
+
 	"gitee.com/hq_project/yomi-boot/logger"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"

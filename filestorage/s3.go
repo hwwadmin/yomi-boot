@@ -5,11 +5,12 @@ package filestorage
 
 import (
 	"context"
-	"gitee.com/hq_project/yomi-boot/appctx"
-	"gitee.com/hq_project/yomi-boot/errors"
 	"io"
 	"strings"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"

@@ -5,13 +5,14 @@ package outbox
 
 import (
 	"context"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/event/cfg"
 	"gitee.com/hq_project/yomi-boot/event/model"
 	"gitee.com/hq_project/yomi-boot/event/repo"
 	"gitee.com/hq_project/yomi-boot/logger"
 	"gitee.com/hq_project/yomi-boot/roundrobin"
-	"time"
 )
 
 // Fetcher 发件箱抓取器

@@ -4,6 +4,8 @@
 package bootstrap
 
 import (
+	"net/http"
+
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/cors"
 	"gitee.com/hq_project/yomi-boot/httprecord"
@@ -14,7 +16,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/runner"
 	"gitee.com/hq_project/yomi-boot/token"
 	"gitee.com/hq_project/yomi-boot/traceid"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )

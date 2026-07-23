@@ -6,11 +6,12 @@ package cronjob
 import (
 	"context"
 	"errors"
-	"gitee.com/hq_project/yomi-boot/distlock"
-	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 )
 
 // TestJob_validate 校验合法 Job 通过及各非法字段拒绝

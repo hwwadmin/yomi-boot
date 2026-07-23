@@ -5,8 +5,9 @@ package distlock
 
 import (
 	"context"
-	"gitee.com/hq_project/yomi-boot/appctx"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/appctx"
 )
 
 // watchdogInterval 返回看门狗续期间隔，默认 TTL/3

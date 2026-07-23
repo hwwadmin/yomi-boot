@@ -3,11 +3,12 @@ package ratelimit
 import (
 	"context"
 	"errors"
-	yomiredis "gitee.com/hq_project/yomi-boot/redis"
-	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	yomiredis "gitee.com/hq_project/yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
 
 	booterrors "gitee.com/hq_project/yomi-boot/errors"
 )

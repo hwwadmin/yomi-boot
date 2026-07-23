@@ -5,10 +5,11 @@ package kafkatest
 
 import (
 	"context"
-	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/kafka"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/kafka"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

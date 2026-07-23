@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 

@@ -1,8 +1,9 @@
 package passwd
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
 	"testing"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 // TestHashAndVerify 验证密码哈希与校验及错误密码返回 ErrMismatch

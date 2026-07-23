@@ -11,6 +11,8 @@ package idempotency
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/db"
 	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/dtm"
@@ -19,7 +21,6 @@ import (
 	yomiredis "gitee.com/hq_project/yomi-boot/redis"
 	"gitee.com/hq_project/yomi-boot/shared/enums"
 	"gitee.com/hq_project/yomi-boot/snowflake"
-	"time"
 
 	"github.com/google/uuid"
 )

@@ -5,6 +5,9 @@ package event
 
 import (
 	"context"
+	"io"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/db"
 	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -14,8 +17,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/logger"
 	"gitee.com/hq_project/yomi-boot/shared/enums"
 	"gitee.com/hq_project/yomi-boot/snowflake"
-	"io"
-	"time"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 

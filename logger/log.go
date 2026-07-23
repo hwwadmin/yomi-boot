@@ -6,9 +6,10 @@ package logger
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"gitee.com/hq_project/yomi-boot/shared"
 	"gitee.com/hq_project/yomi-boot/traceid"
-	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

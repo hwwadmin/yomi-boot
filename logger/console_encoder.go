@@ -4,10 +4,11 @@
 package logger
 
 import (
-	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/shared"
 	"strings"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/shared"
 
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
