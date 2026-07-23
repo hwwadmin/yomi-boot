@@ -5,11 +5,14 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 **当前底座已足够支撑绝大多数企业业务。** 默认按需裁剪（改 YAML `enabled` 等开关即可），不必一上来启用 Consul / Kafka / DTM 等分布式组件。
 
-架构与配置细则见 [Go架构规范](./_prompts/doc/knowledge/go/Go架构规范.md)、[Go配置规范](./_prompts/doc/knowledge/go/Go配置规范.md)。
+架构与配置细则见“_prompts”下相关文档，例如
+[基础库能力索引](./_prompts/doc/基础库能力索引.md)、
+[Go架构规范](./_prompts/doc/knowledge/go/Go架构规范.md)、
+[Go配置规范](./_prompts/doc/knowledge/go/Go配置规范.md)。
 
 ## 文档与 AI 工作流
 
-| 文档 | 用途                   |
-|------|----------------------|
-| [AI开发工作流说明.md](./AI开发工作流说明.md) | AI 工作流说明，主要是对于业务仓使用  |
-| [_prompts/doc/知识库索引.md](./_prompts/doc/知识库索引.md) | 规范索引（含库维护规范与业务消费者规范） |
+| 文档 | 用途                 |
+|------|--------------------|
+| [AI开发工作流说明.md](./AI开发工作流说明.md) | AI 工作流说明，主要是对于业务仓使用 |
+| [_prompts](./_prompts) | 文档目录               |
