@@ -1,0 +1,134 @@
+# Go配置规范
+
+---
+
+## 0. 文档信息
+- **文档名称**: Go配置规范
+- **描述**: 定义 yt-boot 配置加载抽象、段注册、严格根 key 策略、业务扩展约定，以及通过配置段 `enabled` 按需裁剪基础设施能力（支撑轻量单体至分布式微服务）。
+- **作者**: zwei
+- **创建日期**: 2026-07-18
+---
+
+## 1. 文档定位
+
+- **用途**：约束配置所有权、注册加载流程与扩展方式，避免业务配置污染 `yt-boot`；说明能力按需裁剪的配置入口。
+- **边界**：架构总览与部署形态见 [Go架构规范](./Go架构规范.md)；本文件是配置专题权威说明。
+- **适用对象**：`yt-boot/config`、`yt-boot/bootstrap`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
+
+---
+
+## 2. 设计目标
+
+1. **配置与能力同包**：boot 各子系统配置在对应能力目录（如 `db.Config`、`token.Config`）。
+2. **薄配置内核**：`yt-boot/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
+3. **主动注册**：`bootstrap.DefaultConfigRegistry()` 注册全部 boot 段；业务服务 `AddConfigSection` 追加。
+4. **Fail Fast**：加载与校验失败即 `Must*` panic。
+5. **未知根 key 严格失败**：YAML 根层未注册 key 一律拒绝。
+6. **按需裁剪**：各能力插件是否真正启动由配置段开关控制，不强制引入未用中间件。
+
+---
+
+## 3. 原则
+
+| # | 原则 |
+|---|------|
+| P1 | 谁实现能力，谁拥有配置类型与 Validate |
+| P2 | `yt-boot/config` 机制层；组装根在 `bootstrap` |
+| P3 | `yt-boot` 禁止承载无对应能力包的产品/领域配置 |
+| P4 | 业务配置由服务 `AddConfigSection`，推荐根 key 为 `biz` |
+| P5 | 注册显式、可测；禁止 `init()` 副作用注册 |
+| P6 | YAML 根 key 集合 ⊆ 注册表 key 集合（严格） |
+| P7 | 严格只约束根段；段内未知字段可忽略 |
+| P8 | 未使用的能力应关闭对应 `enabled`；切换部署形态优先改配置，不改 yt-boot 源码 |
+
+---
+
+## 4. 核心抽象
+
+| 类型/API | 职责 |
+|----------|------|
+| `Section` | `Key` / `Target` / `Validate(doc)` |
+| `SectionKey` | 各能力包导出的 YAML 根 key 常量；`NewSection` / `MustSection` 禁止魔法字符串 |
+| `Registry` | `Register` / `Has` / `Keys` |
+| `Document` | 已绑定段；`MustSection[T]` |
+| `NewSection` | 指向已有 target 的段工厂 |
+| `LoadDocument` / `MustLoadDocument` | 严格根 key → Bind → Validate |
+| `DefaultConfigRegistry` | bootstrap：注册全部能力包 `ConfigSection()` |
+| `InfraOptions.AddConfigSection` | 业务在默认 boot 段后追加 |
+| `Infra` | 运行时依赖聚合；配置统一经 `Doc` + `MustSection` 读取 |
+| `Infra.Doc` | 启动后可取 boot 段与自定义段 |
+
+### 4.1 加载流程
+
+```text
+读文件 → ExpandEnv → viper + AutomaticEnv
+→ 解析 YAML 根 key，与注册表做差集（非空则失败）
+→ 按注册顺序 UnmarshalKey
+→ Section.Validate(doc)
+→ 返回 Document；Host{Doc} → app 插件写 AppCtx → 各插件自取本段配置、跨库依赖取 Host 运行态 → Infra
+```
+
+### 4.2 未知根 key
+
+- **策略：严格失败**。
+- 文案：`配置存在未注册段: a, b`。
+- 仅检查 YAML **根层** key。
+
+---
+
+## 5. 业务扩展（用法）
+
+```go
+// services/{bff}/internal/config/biz.go
+opts.AddConfigSection(svcconfig.BizSection()) // key: biz
+infra := bootstrap.MustInitInfra(path, "YT_{BFF}", opts)
+biz := config.MustSection[svcconfig.BizConfig](infra.Doc, svcconfig.SectionKey)
+```
+
+YAML：
+
+```yaml
+biz:
+  perm:
+    unknown: deny
+    skip_permission_paths: [...]
+```
+
+---
+
+## 6. 能力按需裁剪（enabled）
+
+- yt-boot 各基础设施能力通过对应配置段启用；未启用则插件不启动（或写入 Noop），**不强制**引入 Consul / Kafka / DTM 等运行时依赖。
+- 插件在 `bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `yt-boot/bootstrap/infra_plugins.go`）。
+- 典型开关（以各配置段字段名为准）：
+  - `db.enabled`、`redis.enabled`、`auth.enabled`
+  - `consul.enabled`、`kafka.enabled`、`dtm.enabled`
+  - `event.publisher_enabled`、`event.consumer_enabled`
+  - `pprof.enabled`、`http_record.enabled`
+  - `idempotency.stale_cleaner_enabled` 等同类开关
+- 部署形态（轻量单体 / 大单体 / 分布式微服务）的推荐开关组合见 [Go架构规范](./Go架构规范.md) §3.1.0 与 §3.4.5。
+- **裁剪原则**：先关后开；业务未用到的中间件不要为了「对齐样板」而全部 `enabled: true`。切换形态优先改 YAML，不改 yt-boot 源码。
+
+---
+
+## 7. 明确不做什么
+
+- 不做配置热更新 / 远程配置中心。
+- 不做段内未知字段全局严格模式。
+- 不做包级 `init()` 全局注册表。
+- 不在 `yt-boot` 定义统一 `BusinessConfig` 接口。
+- 不做跨段 `CrossRule`；组合约束留给启动期依赖链 Fail Fast。
+- 配置校验禁止穿透库边界（如读取 `http.router_prefix` 校验本段 skip 路径）。
+
+---
+
+## 8. 决策记录
+
+| 决策 | 结论 |
+|------|------|
+| 扩展方式 | 主动注册（默认 boot + 服务追加） |
+| 业务根 key | 推荐 `biz` |
+| 校验 | 各段只校验本段规则；禁止 ConfigSection 闭包读取其他库配置 |
+| 未知根 key | **严格失败** |
+| 权限配置 | BFF `internal/config` 的 `biz.perm`，不进 yt-boot |
+| 能力裁剪 | 各插件读本段 `enabled`（及同类开关）；形态切换以配置为准 |

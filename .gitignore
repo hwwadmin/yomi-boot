@@ -1,0 +1,80 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+# temp ignore
+*.doc
+*.log
+*.cache
+*.diff
+*.patch
+*.tmp
+
+# AI workflow temporary documents
+/_task-doc/
+/_ipc-doc/
+
+# log ignore
+*catalina.home*/
+
+# loghub ignore
+**/logs/*
+/logs/*
+*.gz
+*.logs
+
+nul
+
+# IDE ignore
+.qoder/*
+.trae/*
+.vscode/*
+.github/*
+.codebuddy/*
+.codex/*
+.copilot-temp/*
+.opencode/*
+.cursor/*
+
+# go-dits
+*/dist/*
+*/bin/*
+
+# frontend
+**/node_modules/
+**/*.tsbuildinfo
+yt-view/dist/
+
+*.exe

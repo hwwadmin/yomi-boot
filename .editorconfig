@@ -1,0 +1,17 @@
+root = true
+
+[*]
+# 强制所有文件使用 UTF-8 编码
+charset = utf-8
+# 默认使用 LF 换行符（跨平台一致）
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Windows 脚本 / 工程文件需使用 CRLF
+[*.{bat,cmd,ps1,sln,vcxproj,props,targets,reg}]
+end_of_line = crlf
+
+# Markdown 保留行尾空格（用于换行）
+[*.md]
+trim_trailing_whitespace = false
