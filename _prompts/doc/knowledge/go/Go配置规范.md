@@ -81,7 +81,7 @@
 ```go
 // services/{bff}/internal/config/biz.go
 opts.AddConfigSection(svcconfig.BizSection()) // key: biz
-infra := bootstrap.MustInitInfra(path, "YT_{BFF}", opts)
+infra := bootstrap.MustInitInfra(path, "YOMI_{BFF}", opts)
 biz := config.MustSection[svcconfig.BizConfig](infra.Doc, svcconfig.SectionKey)
 ```
 

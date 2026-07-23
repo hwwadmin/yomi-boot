@@ -172,7 +172,7 @@ services/{domain}/
 | `{lib}/plugin` | 各库内置生命周期插件实现（如 `db/plugin`、`redis/plugin`；`tx` 挂在 `db/plugin`）；包名 `{lib}plugin` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
-| `traceid` | BFF 入站中间件生成/读取 `YT_TraceID` Header；出站 RPC 经 Header 传播 |
+| `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
 | `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
@@ -368,7 +368,7 @@ use (
 - 入口编排 handler 注册**相对路径**，完整 URL = `http.router_prefix` + 相对路径。
 - **入口编排对外主输入**：默认推荐 **POST + JSON Body**；允许 GET（CDN/SEO）。若 GET 仅用 Query 承载主输入，须在该接口契约中**显式约定**（非默认）。
 - 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。详见 [微服务调用规范](../api/微服务调用规范.md) §3.1.1。
-- 链路 ID 经 HTTP Header `YT_TraceID` 传播（`yomi-boot/traceid`），**不在** JSON Body 信封中传递。
+- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`yomi-boot/traceid`），**不在** JSON Body 信封中传递。
 - 微服务间请求/响应契约见 [微服务调用规范](../api/微服务调用规范.md) §3（权威）。
 - 对外出口编码适配见 [API编码适配规范](../api/API编码适配规范.md)（**不**规定 HTTP 方法；方法以本节约定为准）。
 - 路径中资源段使用**单数名词**，禁止无意义复数。
@@ -383,7 +383,7 @@ CORS → traceid → httprecord → AccessMiddleware → requestguard → Recove
 
 - **顺序约束**：`httprecord` 与文件 `AccessMiddleware` 必须位于 `requestguard` **外侧**。`requestguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
 - `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时直接放行。
-- `traceid` 中间件从 Header `YT_TraceID` 读取或生成 trace ID，写入 Context；出站 `yomi-boot/rpc` 自动回填 Header。
+- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `yomi-boot/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](../api/API编码适配规范.md)。
 - 领域**读**（微服务间）：对内信封与 HTTP 状态见 [微服务调用规范](../api/微服务调用规范.md) §3.3.1。
@@ -400,9 +400,9 @@ CORS → traceid → httprecord → AccessMiddleware → requestguard → Recove
 
 ### 3.9 配置约定
 
-环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`yomi-boot/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YT_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
+环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`yomi-boot/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
 
-`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YT_*:默认值}` 占位符；`yomi-boot/config.Load` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
+`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`yomi-boot/config.Load` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
 
 ```yaml
 # 入口编排 config/local.yml 示意
@@ -414,7 +414,7 @@ dtm:
   server: "http://localhost:36789/api/dtmsvr"
 
 auth:
-  store_prefix: "yt:token:{bff}"
+  store_prefix: "yomi:token:{bff}"
 
 redis: ...
 kafka: ...
@@ -453,7 +453,7 @@ kafka: ...
 - [ ] 分布式形态：领域进程无跨域 HTTP、无 token 中间件
 - [ ] 入口编排含 `handler/`、`bff/`、`saga/`（若属该服务类型）
 - [ ] 跨进程契约符合 [微服务调用规范](../api/微服务调用规范.md) §3（若启用）
-- [ ] 链路 ID 经 Header `YT_TraceID` 传播，非 Body 字段
+- [ ] 链路 ID 经 Header `X-Trace-ID` 传播，非 Body 字段
 - [ ] 启用 DTM 时 Action/Compensate 路由成对，补偿路由为正向路由 + `/compensate`
 - [ ] 业务分层符合 [Go业务分层规范](./Go业务分层规范.md)
 
@@ -465,7 +465,7 @@ kafka: ...
 - 禁止领域进程之间 HTTP 互调（分布式形态；单体进程内模块调用不受此限）。
 - 禁止把业务签发/校验策略放入 `yomi-boot/token`（yomi-boot 仅提供库；鉴权方在 config 中配置 `auth` 段）。
 - 禁止服务间默认使用 gRPC 等其他 RPC 协议替代 HTTP（分布式形态）。
-- 禁止在 JSON Body 中传递 `traceId`（统一使用 Header `YT_TraceID`）。
+- 禁止在 JSON Body 中传递 `traceId`（统一使用 Header `X-Trace-ID`）。
 - 禁止在领域 handler/usecase 中读取 token 或 `SessionFromContext`（分布式形态下的领域服务类型）。
 - 禁止在 `wireHandlers` 或 yomi-boot 内置插件中编写业务消费逻辑（应通过 `AddCustomPlugin` 注册）。
 - 禁止在 `internal/bootstrap/` 下存在 `wire/` 子目录或独立 `wire.go`。

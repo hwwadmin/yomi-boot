@@ -114,7 +114,7 @@ func NewSQL(t testing.TB, opts ...Option) (*sql.DB, *gorm.DB, func()) {
 func newBuilder(cfg *config) (*gmm.GMMBuilder, string) {
 	dbName := cfg.dbName
 	if dbName == "" {
-		dbName = "yt_test_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+		dbName = "yomi_test_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	}
 
 	builder := gmm.Builder(dbName)

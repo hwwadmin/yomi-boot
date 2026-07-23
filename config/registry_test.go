@@ -36,7 +36,7 @@ snowflake:
 unknown_biz:
   foo: 1
 `)
-	_, err := config.LoadDocument(path, "YT_TEST", testInfraRegistry())
+	_, err := config.LoadDocument(path, "YOMI_TEST", testInfraRegistry())
 	if err == nil {
 		t.Fatal("期望未注册根 key 失败")
 	}
@@ -56,7 +56,7 @@ http:
 snowflake:
   worker_id: 1
 `)
-	doc, err := config.LoadDocument(path, "YT_TEST", testInfraRegistry())
+	doc, err := config.LoadDocument(path, "YOMI_TEST", testInfraRegistry())
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
@@ -88,7 +88,7 @@ biz:
 	const bizSectionKey = "biz"
 	biz := &bizConfig{}
 	reg := testInfraRegistry().Register(config.NewSection(bizSectionKey, biz, nil))
-	doc, err := config.LoadDocument(path, "YT_TEST", reg)
+	doc, err := config.LoadDocument(path, "YOMI_TEST", reg)
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
@@ -110,11 +110,11 @@ func TestRegistry_DuplicateKeyPanics(t *testing.T) {
 
 // TestLoad_RealServiceYAML 验证加载真实 user-service local.yml（可选）
 func TestLoad_RealServiceYAML(t *testing.T) {
-	path := filepath.Join("..", "yt-backend", "services", "user-service", "config", "local.yml")
+	path := filepath.Join("..", "yomi-backend", "services", "user-service", "config", "local.yml")
 	if _, err := os.Stat(path); err != nil {
 		t.Skip("跳过：仓库相对路径下无 user-service local.yml")
 	}
-	doc, err := config.LoadDocument(path, "YT_USER", bootstrap.DefaultConfigRegistry())
+	doc, err := config.LoadDocument(path, "YOMI_USER", bootstrap.DefaultConfigRegistry())
 	if err != nil {
 		t.Fatalf("加载真实 YAML 失败: %v", err)
 	}

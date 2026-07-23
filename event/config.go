@@ -15,7 +15,7 @@ const (
 	// SectionKey YAML 根 key
 	SectionKey = "event"
 
-	defaultEventServiceName      = "yt-event"
+	defaultEventServiceName      = "yomi-event"
 	defaultEventFetchFrequencyMS = 1000
 	defaultEventFetchSize        = 5000
 	defaultEventSentThreadCount  = 2

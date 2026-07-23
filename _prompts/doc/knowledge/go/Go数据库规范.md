@@ -58,7 +58,7 @@
 #### 3.1.1 微服务数据库隔离与命名
 
 - **一服务一库**：每个可部署单元使用独立 MySQL 数据库，禁止跨单元共库、跨库 JOIN 或外键。
-- **命名规范**：`yt_go_{unit}`，其中 `{unit}` 为短名（领域单元可去掉 `-service` 后缀；入口编排保留 `-bff` 语义时用下划线），例如 `{domain-service}` → `yt_go_{domain}`，`{bff}` → `yt_go_{bff}`。
+- **命名规范**：`yomi_go_{unit}`，其中 `{unit}` 为短名（领域单元可去掉 `-service` 后缀；入口编排保留 `-bff` 语义时用下划线），例如 `{domain-service}` → `yomi_go_{domain}`，`{bff}` → `yomi_go_{bff}`。
 - **入口编排允许使用本进程独立库**：配置 `db` 段并初始化 GORM，仅承载本进程基础设施表（如事件收件箱）；**禁止**连接领域库或在编排库中建领域业务表。令牌 Store 与业务缓存仍用 **Redis**。
 - **初始化脚本**：各单元在 `services/{unit}/script/sql/` 维护 `00_database.sql`（建库）及本单元表；编排层事件收件箱可引用 `yomi-boot/event/sql/sys_event.sql` 中的 inbox 段；平台共享表（`sys_biz`/`sys_barrier`）按 [微服务调用规范](../api/微服务调用规范.md) §3.4.2 在领域写库场景执行。
 ### 3.2 GORM 查询方式

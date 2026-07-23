@@ -142,7 +142,7 @@ func (b *MockBroker) Publish(ctx context.Context, topic string, msgs ...kafkago.
 func (b *MockBroker) KafkaConfig() kafka.Config {
 	return kafka.Config{
 		Brokers:             b.Brokers(),
-		ClientID:            "yt-kafka-test",
+		ClientID:            "yomi-kafka-test",
 		DialTimeoutSeconds:  5,
 		RequiredAcks:        -1,
 		BatchSize:           1,

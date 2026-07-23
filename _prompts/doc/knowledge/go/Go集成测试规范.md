@@ -111,7 +111,7 @@ body, ok := testclient.Post(LoginURL(), "", bff.AdminLoginInput{
 
 ### 3.6 微服务调用
 
-- 领域集成测试打 `/internal/v1/...`，**POST + JSON**；链路 ID 经 Header `YT_TraceID` 传播（testclient 自动处理）。
+- 领域集成测试打 `/internal/v1/...`，**POST + JSON**；链路 ID 经 Header `X-Trace-ID` 传播（testclient 自动处理）。
 - 集成环境须已初始化目标领域库：执行 `services/{unit}/script/sql/` 下建库与业务表 DDL，并按 [微服务调用规范](../api/微服务调用规范.md) §3.4.2 在该库执行平台表 DDL（`sys_biz`、`sys_barrier`）。
 
 ---

@@ -60,52 +60,52 @@
 
 | 规则 | 说明 | 示例 |
 | ---- | ---- | ---- |
-| 使用冒号分隔 | 层级清晰，便于管理 | **示例** `yt:{domain}:info:{id}` |
-| 全部小写 | 避免大小写混淆 | **示例** `yt:{domain}:token` |
+| 使用冒号分隔 | 层级清晰，便于管理 | **示例** `yomi:{domain}:info:{id}` |
+| 全部小写 | 避免大小写混淆 | **示例** `yomi:{domain}:token` |
 | 禁用特殊字符 | 仅使用字母、数字、下划线、冒号 | 禁止空格、中文等 |
 | 长度限制 | Key 总长度不超过 256 字符 | - |
 
 #### 3.2.3 令牌会话 Key
 
-多入口时令牌会话以 `config/*.yml` 的 `auth.store_prefix` 为前缀，**按端配置**（**示例**：`yt:token:{endpoint}`）：
+多入口时令牌会话以 `config/*.yml` 的 `auth.store_prefix` 为前缀，**按端配置**（**示例**：`yomi:token:{endpoint}`）：
 
 | Key 模式 | 数据结构 | 说明 |
 | -------- | -------- | ---- |
 | `{store_prefix}:{token}` | String（JSON 会话快照） | 单个令牌会话，TTL 与会话有效期一致 |
 | `{store_prefix}:subject:{subjectId}:tokens` | Set（令牌值集合） | 主体维度令牌索引，便于按主体批量失效 |
 
-**示例**：`yt:token:{endpoint}:550e8400-e29b-41d4-a716-446655440000`、`yt:token:{endpoint}:subject:1945123456789012345:tokens`
+**示例**：`yomi:token:{endpoint}:550e8400-e29b-41d4-a716-446655440000`、`yomi:token:{endpoint}:subject:1945123456789012345:tokens`
 
 ### 3.3 数据结构选择
 
 #### 3.3.1 String
 
 - 适用场景：单对象缓存、验证码、会话标识、计数器。
-- 示例 Key：`yt:{domain}:info:{id}`
+- 示例 Key：`yomi:{domain}:info:{id}`
 - 值特征：单值文本、序列化快照或单一计数结果。
 
 #### 3.3.2 Hash
 
 - 适用场景：对象属性缓存、多字段聚合、购物车。
-- 示例 Key：`yt:{domain}:profile:{id}`
+- 示例 Key：`yomi:{domain}:profile:{id}`
 - 值特征：同一对象下多个稳定字段。
 
 #### 3.3.3 List
 
 - 适用场景：简单队列、最近记录、有限历史。
-- 示例 Key：`yt:{domain}:latest`
+- 示例 Key：`yomi:{domain}:latest`
 - 值特征：按顺序组织的一组元素。
 
 #### 3.3.4 Set
 
 - 适用场景：去重集合、标签集合、已读记录。
-- 示例 Key：`yt:{domain}:tags:{id}`
+- 示例 Key：`yomi:{domain}:tags:{id}`
 - 值特征：元素唯一、无序。
 
 #### 3.3.5 ZSet
 
 - 适用场景：排行榜、延时任务、按分值排序的数据。
-- 示例 Key：`yt:{domain}:rank:score`
+- 示例 Key：`yomi:{domain}:rank:score`
 - 值特征：元素唯一，并按分值排序。
 
 ### 3.4 缓存策略
@@ -153,7 +153,7 @@
 
 - 原子限流能力收口在 `yomi-boot/redis.RedisService.OpsRateLimit4Allow`（滑动窗口 ZSET + Lua，时钟用 Redis `TIME`）。
 - 业务侧经 `yomi-boot/ratelimit.LimitService.Allow/AllowN` 调用，**禁止**业务包直连 go-redis 或自建第二套 Redis 客户端。
-- Key 模式：`{key_prefix}:{scene}:{dim}:{id}`，默认前缀 `yt:rl`（见配置 `ratelimit.key_prefix`）；全小写、冒号分隔。
+- Key 模式：`{key_prefix}:{scene}:{dim}:{id}`，默认前缀 `yomi:rl`（见配置 `ratelimit.key_prefix`）；全小写、冒号分隔。
 - 限流维度由调用方决定（用户、接口、IP 等）；`Limit`/`Window` 由调用方 `Rule` 传入，不进全局 yml 逐场景配置。
 - 超限返回业务错误码 `RATE_LIMITED`；Redis 故障策略默认为 `fail_open`（配置 `ratelimit.redis_error_policy`）。
 - 启用 `ratelimit.enabled=true` 时必须同时启用 `redis.enabled=true`。

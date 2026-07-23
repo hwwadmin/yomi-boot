@@ -52,7 +52,7 @@ saga/        写操作（含单域），按 usecase 平铺，提交 DTM Saga
 
 **存储约束**：
 
-- BFF **允许**连接本服务独立 MySQL/PostgreSQL（配置 `db`、经 `yomi-boot` 初始化 GORM），用于基础设施表（如 `yomi-boot/event` 收件箱幂等），库名遵循一服务一库（`yt_go_{bff}`）。
+- BFF **允许**连接本服务独立 MySQL/PostgreSQL（配置 `db`、经 `yomi-boot` 初始化 GORM），用于基础设施表（如 `yomi-boot/event` 收件箱幂等），库名遵循一服务一库（`yomi_go_{bff}`）。
 - BFF **禁止**连接或访问**领域服务数据库**；禁止在 BFF 内建设领域业务表、领域 Repository 或跨库 JOIN。
 - 允许使用 **Redis** 作为令牌 Store 与业务缓存（经 `yomi-boot/redis.RedisService`）。
 
@@ -82,7 +82,7 @@ saga/        写操作（含单域），按 usecase 平铺，提交 DTM Saga
 | ---- | -------- |
 | `saga/` | **所有写唯一入口**：提交 DTM Saga；按微服务规范生成并写入信封 |
 | 领域 client | **读**：POST 封装；**写**：经 `dtm.AddSagaStep` 追加分支，禁止直调 Action URL |
-| 链路 | Header `YT_TraceID`（不在 Body） |
+| 链路 | Header `X-Trace-ID`（不在 Body） |
 
 - **禁止**领域 client 封装绕过 DTM 的领域写直调方法。
 - **禁止** `*Facade` / `Direct*` 在 DTM 未配置时回退直调；DTM 不可用则写操作失败。
@@ -208,7 +208,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 - **读**：`client.go` 中提供查询/验密等方法，封装 URL、Request/Response DTO、POST 调用。
 - **写**：提供 `CreateXxx(ctx, saga, payload)` 等方法，内部经 `dtm.AddSagaStep` 向 Saga 追加 Action/Compensate 分支；**不**直接 POST 领域写 URL。
 - **路径共享**：`url.go` 中的路径常量同时被领域 `handler/` 与领域 client 使用，确保路由一致。
-- 经 Consul 发现；全部 POST + JSON Body；链路 ID 经 Header `YT_TraceID` 传播。
+- 经 Consul 发现；全部 POST + JSON Body；链路 ID 经 Header `X-Trace-ID` 传播。
 
 ### 3.7 典型场景分工
 
@@ -254,7 +254,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 - 禁止 BFF 以 GET 调用领域服务。
 - 禁止 BFF 领域 client 直调领域写接口。
 - 禁止 `*Facade`、`*Direct*` 或 DTM 未配置时的写操作回退路径。
-- 禁止通过 JSON Body 向领域传递 `traceId`（统一使用 Header `YT_TraceID`）。
+- 禁止通过 JSON Body 向领域传递 `traceId`（统一使用 Header `X-Trace-ID`）。
 - 信封与幂等相关禁止项见 [微服务调用规范](../api/微服务调用规范.md) §5（不在此重复）。
 - 禁止在 `saga/` 或 `client/` 实现领域 Compensate 业务逻辑。
 - 禁止领域服务解析 BFF 令牌。

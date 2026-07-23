@@ -13,7 +13,7 @@ import (
 const (
 	defaultHTTPRecordMaxRequestBodySize  = 4096
 	defaultHTTPRecordMaxResponseBodySize = 4096
-	defaultHttpRecordKafkaTopic          = "yt.http.record"
+	defaultHttpRecordKafkaTopic          = "yomi.http.record"
 	defaultHttpRecordConsumerGroupID     = "httprecord-service"
 )
 

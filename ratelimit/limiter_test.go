@@ -31,7 +31,7 @@ func enabledCfg(policy string) Config {
 	enabled := true
 	return Config{
 		Enabled:          &enabled,
-		KeyPrefix:        "yt:rl",
+		KeyPrefix:        "yomi:rl",
 		RedisErrorPolicy: policy,
 	}
 }

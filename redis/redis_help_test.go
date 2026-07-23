@@ -14,7 +14,7 @@ func TestRedisHelper_OpsStr4SetAndGet(t *testing.T) {
 
 	helper := NewRedisHelper(client)
 	ctx := context.Background()
-	key := "yt:test:str"
+	key := "yomi:test:str"
 
 	if err := helper.OpsStr4Set(ctx, key, "hello", time.Minute); err != nil {
 		t.Fatalf("OpsStr4Set 失败: %v", err)
@@ -36,7 +36,7 @@ func TestRedisHelper_OpsKey4ExistsAndDelete(t *testing.T) {
 
 	helper := NewRedisHelper(client)
 	ctx := context.Background()
-	key := "yt:test:exists"
+	key := "yomi:test:exists"
 
 	if err := helper.OpsStr4SetNoTTL(ctx, key, "1"); err != nil {
 		t.Fatalf("OpsStr4SetNoTTL 失败: %v", err)
@@ -64,7 +64,7 @@ func TestRedisHelper_OpsSet4AddAndMembers(t *testing.T) {
 
 	helper := NewRedisHelper(client)
 	ctx := context.Background()
-	key := "yt:test:set"
+	key := "yomi:test:set"
 
 	if err := helper.OpsSet4Add(ctx, key, "a", "b"); err != nil {
 		t.Fatalf("OpsSet4Add 失败: %v", err)

@@ -75,6 +75,6 @@ nul
 # frontend
 **/node_modules/
 **/*.tsbuildinfo
-yt-view/dist/
+yomi-view/dist/
 
 *.exe

@@ -18,7 +18,7 @@ const (
 	// RedisErrorPolicyFailClosed Redis 故障时拒绝
 	RedisErrorPolicyFailClosed = "fail_closed"
 
-	defaultRateLimitKeyPrefix        = "yt:rl"
+	defaultRateLimitKeyPrefix        = "yomi:rl"
 	defaultRateLimitRedisErrorPolicy = RedisErrorPolicyFailOpen
 	maxRateLimitKeyPrefixLen         = 64
 )

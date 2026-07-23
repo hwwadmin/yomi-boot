@@ -151,7 +151,7 @@ ratelimit: {}
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("写临时配置失败: %v", err)
 	}
-	doc, err := config.LoadDocument(path, "YT_TEST", middlewareTestRegistry())
+	doc, err := config.LoadDocument(path, "YOMI_TEST", middlewareTestRegistry())
 	if err != nil {
 		t.Fatalf("加载临时配置失败: %v", err)
 	}

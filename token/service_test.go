@@ -38,7 +38,7 @@ func newTestService(t *testing.T, allowMultiLogin bool) (*Service, func()) {
 	service := NewService(NewUUIDGenerator(), store, Config{
 		TokenTTLMinutes: 30,
 		AllowMultiLogin: allowMultiLogin,
-		StorePrefix:     "yt:test:token",
+		StorePrefix:     "yomi:test:token",
 	}, lockFactory)
 
 	return service, cleanup
@@ -57,11 +57,11 @@ func TestRedisStore_TokenStoredAsHash(t *testing.T) {
 		ExpireAt: time.Now().Add(time.Minute),
 	}
 
-	if err := store.Save(ctx, "yt:test:token", plainToken, session, time.Minute); err != nil {
+	if err := store.Save(ctx, "yomi:test:token", plainToken, session, time.Minute); err != nil {
 		t.Fatalf("Save 失败: %v", err)
 	}
 
-	loaded, err := store.Load(ctx, "yt:test:token", plainToken)
+	loaded, err := store.Load(ctx, "yomi:test:token", plainToken)
 	if err != nil {
 		t.Fatalf("Load 失败: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestRedisStore_TokenStoredAsHash(t *testing.T) {
 		t.Fatalf("Load 未返回预期会话: %+v", loaded)
 	}
 
-	plainKey := "yt:test:token:" + plainToken
+	plainKey := "yomi:test:token:" + plainToken
 	exists, err := client.Exists(ctx, plainKey).Result()
 	if err != nil {
 		t.Fatalf("Exists 失败: %v", err)
@@ -78,7 +78,7 @@ func TestRedisStore_TokenStoredAsHash(t *testing.T) {
 		t.Fatalf("Redis 中不应存在明文令牌 key")
 	}
 
-	hashed, err := store.Load(ctx, "yt:test:token", store.hashToken(plainToken))
+	hashed, err := store.Load(ctx, "yomi:test:token", store.hashToken(plainToken))
 	if err != nil {
 		t.Fatalf("使用哈希值 Load 失败: %v", err)
 	}
@@ -100,11 +100,11 @@ func TestRedisStore_IndexSetHasTTL(t *testing.T) {
 		ExpireAt: time.Now().Add(ttl),
 	}
 
-	if err := store.Save(ctx, "yt:test:token", "token-a", session, ttl); err != nil {
+	if err := store.Save(ctx, "yomi:test:token", "token-a", session, ttl); err != nil {
 		t.Fatalf("Save 失败: %v", err)
 	}
 
-	indexKey, err := store.userTokensKey("yt:test:token", session.UserID)
+	indexKey, err := store.userTokensKey("yomi:test:token", session.UserID)
 	if err != nil {
 		t.Fatalf("userTokensKey 失败: %v", err)
 	}
@@ -228,11 +228,11 @@ func TestRedisStore_ListByUserIDFillsToken(t *testing.T) {
 		ExpireAt: time.Now().Add(time.Minute),
 	}
 
-	if err := store.Save(ctx, "yt:test:token", plainToken, session, time.Minute); err != nil {
+	if err := store.Save(ctx, "yomi:test:token", plainToken, session, time.Minute); err != nil {
 		t.Fatalf("Save 失败: %v", err)
 	}
 
-	tokens, err := store.ListByUserID(ctx, "yt:test:token", userID)
+	tokens, err := store.ListByUserID(ctx, "yomi:test:token", userID)
 	if err != nil {
 		t.Fatalf("ListByUserID 失败: %v", err)
 	}
