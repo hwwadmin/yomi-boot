@@ -5,14 +5,33 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 **当前底座已足够支撑绝大多数企业业务。** 默认按需裁剪（改 YAML `enabled` 等开关即可），不必一上来启用 Consul / Kafka / DTM 等分布式组件。
 
-架构与配置细则见“_prompts”下相关文档，例如
-[基础库能力索引](./_prompts/doc/基础库能力索引.md)、
-[Go架构规范](./_prompts/doc/knowledge/go/Go架构规范.md)、
-[Go配置规范](./_prompts/doc/knowledge/go/Go配置规范.md)。
+可通过 [https://gitee.com/hq_project/yomi-boot-template](https://gitee.com/hq_project/yomi-boot-template) 模板项目快速开始。
 
-## 文档与 AI 工作流
+# 仓库目录
 
-| 文档 | 用途                            |
-|------|-------------------------------|
-| [AI开发工作流说明.md](./AI开发工作流说明.md) | 基于SDD/TDD的AI 工作流说明，主要是对于业务仓使用 |
-| [_prompts](./_prompts) | 文档目录                          |
+| 路径 | 说明 |
+|------|------|
+| `bootstrap/`、`plugin/`、`config/`、`runner/`、`appctx/`、`banner/` | 生命周期与装配 |
+| `router/`、`handler/`、`response/`、`cors/`、`requestguard/`、`traceid/`、`httprecord/`、`logger/` | HTTP / 路由 / 协议适配 |
+| `db/`、`idempotency/`、`dtm/`、`event/` | 数据访问与事务 |
+| `redis/`、`distlock/`、`ratelimit/`、`roundrobin/`、`cronjob/`、`worker/`、`snowflake/` | 缓存、锁、限流与调度 |
+| `consul/`、`rpc/`、`kafka/` | 服务发现、RPC 与消息 |
+| `token/`、`bc/` | 安全、令牌与密码学 |
+| `filestorage/`、`pprof/` | 对象存储与可观测 |
+| `errors/`、`shared/`、`utils/`、`testclient/` | 错误、共享模型与工具 |
+| `_prompts/` | Agent / Skill / 知识库与规范文档 |
+| `LICENSE` | Apache License 2.0 全文 |
+
+能力职责与落位速查见 [基础库能力索引](./_prompts/doc/基础库能力索引.md)。
+
+
+# 来源与许可证
+
+| 项 | 说明 |
+|----|------|
+| 仓库 | [https://gitee.com/hq_project/yomi-boot](https://gitee.com/hq_project/yomi-boot) |
+| Go module | `gitee.com/hq_project/yomi-boot` |
+| 版权 | Copyright 2026 zwei |
+| 许可证 | [Apache License 2.0](./LICENSE) |
+
+本仓库以 Apache License 2.0 授权。使用、复制、修改与分发时请遵守该许可证条款；完整条文见根目录 [LICENSE](./LICENSE)。第三方依赖各自遵循其原许可证。
