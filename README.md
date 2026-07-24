@@ -7,7 +7,7 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 可通过 [https://gitee.com/hq_project/yomi-boot-template](https://gitee.com/hq_project/yomi-boot-template) 模板项目快速开始。
 
-# 仓库目录
+## 仓库目录
 
 | 路径 | 说明 |
 |------|------|
@@ -24,14 +24,6 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 能力职责与落位速查见 [基础库能力索引](./_prompts/doc/基础库能力索引.md)。
 
+## 许可证
 
-# 来源与许可证
-
-| 项 | 说明 |
-|----|------|
-| 仓库 | [https://gitee.com/hq_project/yomi-boot](https://gitee.com/hq_project/yomi-boot) |
-| Go module | `gitee.com/hq_project/yomi-boot` |
-| 版权 | Copyright 2026 zwei |
-| 许可证 | [Apache License 2.0](./LICENSE) |
-
-本仓库以 Apache License 2.0 授权。使用、复制、修改与分发时请遵守该许可证条款；完整条文见根目录 [LICENSE](./LICENSE)。第三方依赖各自遵循其原许可证。
+本项目采用 [Apache License 2.0](./LICENSE) 开源许可。
