@@ -1,4 +1,4 @@
-// Package filestorage 提供统一的文件/对象存储服务，支持 MinIO 与 AWS S3。
+// Package filestorage 提供统一的文件/对象存储服务，支持 MinIO、AWS S3 与阿里云 OSS。
 //
 // # 基本用法
 //
@@ -26,7 +26,7 @@
 //
 // # 实现隔离
 //
-// MinIO（minio.go）与 AWS S3（s3.go）完全独立实现，禁止共享业务逻辑。
+// MinIO（minio.go）、AWS S3（s3.go）与阿里云 OSS（alioss.go）完全独立实现，禁止共享业务逻辑。
 //
 // @author zwei
 package filestorage

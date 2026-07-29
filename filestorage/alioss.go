@@ -1,0 +1,233 @@
+// Package filestorage 基于 alibabacloud-oss-go-sdk-v2 的 FileStorage 实现。
+//
+// @author zwei
+package filestorage
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"gitee.com/hq_project/yomi-boot/appctx"
+	"gitee.com/hq_project/yomi-boot/errors"
+
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
+)
+
+var _ FileStorage = (*aliOSSStorage)(nil)
+
+// aliOSSStorage 是基于阿里云 OSS 的 FileStorage 实现
+type aliOSSStorage struct {
+	client           *oss.Client
+	maxPresignExpiry time.Duration
+}
+
+// newAliOSSStorage 根据配置创建阿里云 OSS 存储实现
+func newAliOSSStorage(cfg Config) (FileStorage, error) {
+	region := strings.TrimSpace(cfg.AliOSS.Region)
+	endpoint := strings.TrimSpace(cfg.AliOSS.Endpoint)
+
+	ossCfg := oss.LoadDefaultConfig().
+		WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			cfg.AliOSS.AccessKeyID,
+			cfg.AliOSS.SecretAccessKey,
+		)).
+		WithRegion(region)
+	if endpoint != "" {
+		ossCfg = ossCfg.WithEndpoint(endpoint)
+	}
+	if cfg.AliOSS.UsePathStyle {
+		ossCfg = ossCfg.WithUsePathStyle(true)
+	}
+
+	return &aliOSSStorage{
+		client:           oss.NewClient(ossCfg),
+		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
+	}, nil
+}
+
+// PutObject 上传对象
+func (s *aliOSSStorage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) error {
+	ctx = appctx.OrBackground(ctx)
+	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	if err != nil {
+		return err
+	}
+	if body == nil {
+		return errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+	}
+
+	putOpts := applyPutOptions(opts)
+	input := &oss.PutObjectRequest{
+		Bucket: oss.Ptr(bucket),
+		Key:    oss.Ptr(key),
+		Body:   body,
+	}
+	if putOpts.ContentType != "" {
+		input.ContentType = oss.Ptr(putOpts.ContentType)
+	}
+	if size >= 0 {
+		input.ContentLength = oss.Ptr(size)
+	}
+
+	_, err = s.client.PutObject(ctx, input)
+	if err != nil {
+		return errors.Wrap(err, "filestorage: AliOSS 上传对象失败")
+	}
+	return nil
+}
+
+// GetObject 下载对象
+func (s *aliOSSStorage) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, *ObjectMeta, error) {
+	ctx = appctx.OrBackground(ctx)
+	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	out, err := s.client.GetObject(ctx, &oss.GetObjectRequest{
+		Bucket: oss.Ptr(bucket),
+		Key:    oss.Ptr(key),
+	})
+	if err != nil {
+		return nil, nil, aliOSSMapError(err, "filestorage: AliOSS 下载对象失败")
+	}
+
+	return out.Body, aliOSSObjectMeta(out.ContentType, out.ContentLength, out.ETag, out.LastModified), nil
+}
+
+// DeleteObject 删除对象；不存在时幂等返回 nil
+func (s *aliOSSStorage) DeleteObject(ctx context.Context, bucket, key string) error {
+	ctx = appctx.OrBackground(ctx)
+	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.client.DeleteObject(ctx, &oss.DeleteObjectRequest{
+		Bucket: oss.Ptr(bucket),
+		Key:    oss.Ptr(key),
+	})
+	if err != nil {
+		if aliOSSIsNotFound(err) {
+			return nil
+		}
+		return errors.Wrap(err, "filestorage: AliOSS 删除对象失败")
+	}
+	return nil
+}
+
+// StatObject 查询对象元数据
+func (s *aliOSSStorage) StatObject(ctx context.Context, bucket, key string) (*ObjectMeta, error) {
+	ctx = appctx.OrBackground(ctx)
+	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := s.client.HeadObject(ctx, &oss.HeadObjectRequest{
+		Bucket: oss.Ptr(bucket),
+		Key:    oss.Ptr(key),
+	})
+	if err != nil {
+		return nil, aliOSSMapError(err, "filestorage: AliOSS 查询对象失败")
+	}
+
+	return aliOSSObjectMeta(out.ContentType, out.ContentLength, out.ETag, out.LastModified), nil
+}
+
+// Exists 判断对象是否存在
+func (s *aliOSSStorage) Exists(ctx context.Context, bucket, key string) (bool, error) {
+	_, err := s.StatObject(ctx, bucket, key)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return false, err
+}
+
+// PresignGet 生成只读预签名 URL
+func (s *aliOSSStorage) PresignGet(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
+	ctx = appctx.OrBackground(ctx)
+	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	if err != nil {
+		return "", err
+	}
+	if expiry <= 0 {
+		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 必须大于 0")
+	}
+	if expiry > s.maxPresignExpiry {
+		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 超过允许上限")
+	}
+
+	out, err := s.client.Presign(ctx, &oss.GetObjectRequest{
+		Bucket: oss.Ptr(bucket),
+		Key:    oss.Ptr(key),
+	}, oss.PresignExpires(expiry))
+	if err != nil {
+		return "", errors.Wrap(err, "filestorage: AliOSS 生成预签名 URL 失败")
+	}
+	return out.URL, nil
+}
+
+// aliOSSNormalizeBucketKey 规范化 bucket 和 key，去除首尾空格及 key 的前导 "/"，并校验非空
+func aliOSSNormalizeBucketKey(bucket, key string) (string, string, error) {
+	bucket = strings.TrimSpace(bucket)
+	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
+	if bucket == "" {
+		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: bucket 不能为空")
+	}
+	if key == "" {
+		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: key 不能为空")
+	}
+	return bucket, key, nil
+}
+
+// aliOSSObjectMeta 从 OSS 响应字段映射 ObjectMeta
+func aliOSSObjectMeta(contentType *string, contentLength int64, etag *string, lastModified *time.Time) *ObjectMeta {
+	meta := &ObjectMeta{}
+	if contentType != nil {
+		meta.ContentType = *contentType
+	}
+	if contentLength >= 0 {
+		meta.ContentLength = contentLength
+	}
+	if etag != nil {
+		meta.ETag = *etag
+	}
+	if lastModified != nil {
+		meta.LastModified = *lastModified
+	}
+	return meta
+}
+
+// aliOSSIsNotFound 判断阿里云 OSS 错误是否为对象不存在
+func aliOSSIsNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var se *oss.ServiceError
+	if errors.As(err, &se) {
+		if se.StatusCode == http.StatusNotFound {
+			return true
+		}
+		switch se.Code {
+		case "NoSuchKey", "NotFound", "NoSuchBucket":
+			return true
+		}
+	}
+	return false
+}
+
+// aliOSSMapError 将 AliOSS 错误映射为包内错误；NotFound 映射为 ErrNotFound，其余经 errors.Wrap 包装
+func aliOSSMapError(err error, message string) error {
+	if aliOSSIsNotFound(err) {
+		return errors.Sentinel(ErrNotFound)
+	}
+	return errors.Wrap(err, "%s", message)
+}

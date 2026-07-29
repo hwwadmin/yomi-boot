@@ -15,17 +15,19 @@ const (
 	// SectionKey YAML 根 key
 	SectionKey = "filestorage"
 
-	bootProviderMinIO = "minio"
-	bootProviderS3    = "s3"
+	bootProviderMinIO  = "minio"
+	bootProviderS3     = "s3"
+	bootProviderAliOSS = "alioss"
 )
 
 // BootConfig 表示对象存储访问配置（启动期 YAML 绑定）
 type BootConfig struct {
-	Enabled                 *bool           `mapstructure:"enabled"`                    // Enabled 是否启用；未配置默认 false
-	Provider                string          `mapstructure:"provider"`                   // Provider 是 minio 或 s3
-	MaxPresignExpirySeconds int             `mapstructure:"max_presign_expiry_seconds"` // MaxPresignExpirySeconds 预签名有效期上限（秒）；0 表示由实现默认
-	MinIO                   BootMinIOConfig `mapstructure:"minio"`                      // MinIO 是 MinIO 访问配置
-	S3                      BootS3Config    `mapstructure:"s3"`                         // S3 是 AWS S3 访问配置
+	Enabled                 *bool            `mapstructure:"enabled"`                    // Enabled 是否启用；未配置默认 false
+	Provider                string           `mapstructure:"provider"`                   // Provider 是 minio、s3 或 alioss
+	MaxPresignExpirySeconds int              `mapstructure:"max_presign_expiry_seconds"` // MaxPresignExpirySeconds 预签名有效期上限（秒）；0 表示由实现默认
+	MinIO                   BootMinIOConfig  `mapstructure:"minio"`                      // MinIO 是 MinIO 访问配置
+	S3                      BootS3Config     `mapstructure:"s3"`                         // S3 是 AWS S3 访问配置
+	AliOSS                  BootAliOSSConfig `mapstructure:"alioss"`                     // AliOSS 是阿里云 OSS 访问配置
 }
 
 // BootMinIOConfig MinIO 访问配置
@@ -43,6 +45,15 @@ type BootS3Config struct {
 	AccessKeyID     string `mapstructure:"access_key_id"`     // AccessKeyID 是访问密钥 ID
 	SecretAccessKey string `mapstructure:"secret_access_key"` // SecretAccessKey 是访问密钥
 	Endpoint        string `mapstructure:"endpoint"`          // Endpoint 是自定义端点；空表示官方 AWS
+	UsePathStyle    bool   `mapstructure:"use_path_style"`    // UsePathStyle 是否使用 path-style 寻址
+}
+
+// BootAliOSSConfig 阿里云 OSS 访问配置
+type BootAliOSSConfig struct {
+	Region          string `mapstructure:"region"`            // Region 是 OSS 区域，如 cn-hangzhou
+	AccessKeyID     string `mapstructure:"access_key_id"`     // AccessKeyID 是访问密钥 ID
+	SecretAccessKey string `mapstructure:"secret_access_key"` // SecretAccessKey 是访问密钥
+	Endpoint        string `mapstructure:"endpoint"`          // Endpoint 是自定义端点；空表示按 Region 使用官方域名
 	UsePathStyle    bool   `mapstructure:"use_path_style"`    // UsePathStyle 是否使用 path-style 寻址
 }
 
@@ -65,6 +76,8 @@ func (c BootConfig) Validate() error {
 		return c.MinIO.validate()
 	case bootProviderS3:
 		return c.S3.validate()
+	case bootProviderAliOSS:
+		return c.AliOSS.validate()
 	case "":
 		return errors.New("filestorage.provider 不能为空")
 	default:
@@ -100,6 +113,20 @@ func (c BootS3Config) validate() error {
 	return nil
 }
 
+// validate 校验 AliOSS 访问配置
+func (c BootAliOSSConfig) validate() error {
+	if strings.TrimSpace(c.Region) == "" {
+		return errors.New("filestorage.alioss.region 不能为空")
+	}
+	if strings.TrimSpace(c.AccessKeyID) == "" {
+		return errors.New("filestorage.alioss.access_key_id 不能为空")
+	}
+	if strings.TrimSpace(c.SecretAccessKey) == "" {
+		return errors.New("filestorage.alioss.secret_access_key 不能为空")
+	}
+	return nil
+}
+
 // ConfigSection 返回 filestorage 配置段
 func ConfigSection() config.Section {
 	return config.NewSection(SectionKey, &BootConfig{}, func(c *BootConfig, _ *config.Document) error {
@@ -125,6 +152,13 @@ func ConfigFrom(cfg BootConfig) Config {
 			SecretAccessKey: cfg.S3.SecretAccessKey,
 			Endpoint:        cfg.S3.Endpoint,
 			UsePathStyle:    cfg.S3.UsePathStyle,
+		},
+		AliOSS: AliOSSConfig{
+			Region:          cfg.AliOSS.Region,
+			AccessKeyID:     cfg.AliOSS.AccessKeyID,
+			SecretAccessKey: cfg.AliOSS.SecretAccessKey,
+			Endpoint:        cfg.AliOSS.Endpoint,
+			UsePathStyle:    cfg.AliOSS.UsePathStyle,
 		},
 	}
 	if cfg.MaxPresignExpirySeconds > 0 {

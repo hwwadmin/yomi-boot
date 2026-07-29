@@ -15,6 +15,8 @@ func New(cfg Config) (FileStorage, error) {
 		return newMinIOStorage(cfg)
 	case ProviderS3:
 		return newS3Storage(cfg)
+	case ProviderAliOSS:
+		return newAliOSSStorage(cfg)
 	default:
 		// validate 已覆盖，此处为防御
 		return nil, errors.Sentinel(ErrInvalidArgument)

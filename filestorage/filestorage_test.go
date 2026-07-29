@@ -46,6 +46,20 @@ func TestConfigValidate(t *testing.T) {
 			t.Fatal("expected error")
 		}
 	})
+
+	t.Run("alioss requires region", func(t *testing.T) {
+		t.Parallel()
+		_, err := New(Config{
+			Provider: ProviderAliOSS,
+			AliOSS: AliOSSConfig{
+				AccessKeyID:     "ak",
+				SecretAccessKey: "sk",
+			},
+		})
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }
 
 // TestNormalizeAndPresignArgs 验证 bucket/key 规范化与预签名参数校验
@@ -68,6 +82,10 @@ func TestNormalizeAndPresignArgs(t *testing.T) {
 	b, k, err = s3NormalizeBucketKey(" bucket ", "/a/b")
 	if err != nil || b != "bucket" || k != "a/b" {
 		t.Fatalf("s3 normalize: bucket=%q key=%q err=%v", b, k, err)
+	}
+	b, k, err = aliOSSNormalizeBucketKey(" bucket ", "/a/b")
+	if err != nil || b != "bucket" || k != "a/b" {
+		t.Fatalf("alioss normalize: bucket=%q key=%q err=%v", b, k, err)
 	}
 
 	store := &minioStorage{maxPresignExpiry: time.Hour}
