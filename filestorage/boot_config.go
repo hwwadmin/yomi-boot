@@ -24,6 +24,7 @@ const (
 type BootConfig struct {
 	Enabled                 *bool            `mapstructure:"enabled"`                    // Enabled 是否启用；未配置默认 false
 	Provider                string           `mapstructure:"provider"`                   // Provider 是 minio、s3 或 alioss
+	PublicBaseURL           string           `mapstructure:"public_base_url"`            // PublicBaseURL 是固定访问 URL 的全局基址（多桶共用）
 	MaxPresignExpirySeconds int              `mapstructure:"max_presign_expiry_seconds"` // MaxPresignExpirySeconds 预签名有效期上限（秒）；0 表示由实现默认
 	MinIO                   BootMinIOConfig  `mapstructure:"minio"`                      // MinIO 是 MinIO 访问配置
 	S3                      BootS3Config     `mapstructure:"s3"`                         // S3 是 AWS S3 访问配置
@@ -138,7 +139,8 @@ func ConfigSection() config.Section {
 func ConfigFrom(cfg BootConfig) Config {
 	provider := Provider(strings.ToLower(strings.TrimSpace(cfg.Provider)))
 	out := Config{
-		Provider: provider,
+		Provider:      provider,
+		PublicBaseURL: strings.TrimSpace(cfg.PublicBaseURL),
 		MinIO: MinIOConfig{
 			Endpoint:        cfg.MinIO.Endpoint,
 			AccessKeyID:     cfg.MinIO.AccessKeyID,

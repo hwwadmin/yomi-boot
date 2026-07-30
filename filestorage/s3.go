@@ -26,6 +26,7 @@ var _ FileStorage = (*s3Storage)(nil)
 type s3Storage struct {
 	client           *s3.Client
 	presigner        *s3.PresignClient
+	publicBaseURL    string
 	maxPresignExpiry time.Duration
 }
 
@@ -56,19 +57,20 @@ func newS3Storage(cfg Config) (FileStorage, error) {
 	return &s3Storage{
 		client:           client,
 		presigner:        s3.NewPresignClient(client),
+		publicBaseURL:    strings.TrimSpace(cfg.PublicBaseURL),
 		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
 	}, nil
 }
 
-// PutObject 上传对象
-func (s *s3Storage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) error {
+// PutObject 上传对象，成功返回可入库的逻辑 URI
+func (s *s3Storage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) (string, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := s3NormalizeBucketKey(bucket, key)
+	bucket, key, err := normalizeBucketKey(bucket, key)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if body == nil {
-		return errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+		return "", errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
 	}
 
 	putOpts := applyPutOptions(opts)
@@ -86,15 +88,15 @@ func (s *s3Storage) PutObject(ctx context.Context, bucket, key string, body io.R
 
 	_, err = s.client.PutObject(ctx, input)
 	if err != nil {
-		return errors.Wrap(err, "filestorage: S3 上传对象失败")
+		return "", errors.Wrap(err, "filestorage: S3 上传对象失败")
 	}
-	return nil
+	return JoinURI(bucket, key)
 }
 
 // GetObject 下载对象
-func (s *s3Storage) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, *ObjectMeta, error) {
+func (s *s3Storage) GetObject(ctx context.Context, uri string) (io.ReadCloser, *ObjectMeta, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := s3NormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -125,9 +127,9 @@ func (s *s3Storage) GetObject(ctx context.Context, bucket, key string) (io.ReadC
 }
 
 // DeleteObject 删除对象；不存在时幂等返回 nil
-func (s *s3Storage) DeleteObject(ctx context.Context, bucket, key string) error {
+func (s *s3Storage) DeleteObject(ctx context.Context, uri string) error {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := s3NormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return err
 	}
@@ -146,9 +148,9 @@ func (s *s3Storage) DeleteObject(ctx context.Context, bucket, key string) error 
 }
 
 // StatObject 查询对象元数据
-func (s *s3Storage) StatObject(ctx context.Context, bucket, key string) (*ObjectMeta, error) {
+func (s *s3Storage) StatObject(ctx context.Context, uri string) (*ObjectMeta, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := s3NormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +180,8 @@ func (s *s3Storage) StatObject(ctx context.Context, bucket, key string) (*Object
 }
 
 // Exists 判断对象是否存在
-func (s *s3Storage) Exists(ctx context.Context, bucket, key string) (bool, error) {
-	_, err := s.StatObject(ctx, bucket, key)
+func (s *s3Storage) Exists(ctx context.Context, uri string) (bool, error) {
+	_, err := s.StatObject(ctx, uri)
 	if err == nil {
 		return true, nil
 	}
@@ -189,10 +191,15 @@ func (s *s3Storage) Exists(ctx context.Context, bucket, key string) (bool, error
 	return false, err
 }
 
+// ObjectURL 返回对象的固定访问 URL
+func (s *s3Storage) ObjectURL(uri string) (string, error) {
+	return buildObjectURL(s.publicBaseURL, uri)
+}
+
 // PresignGet 生成只读预签名 URL
-func (s *s3Storage) PresignGet(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
+func (s *s3Storage) PresignGet(ctx context.Context, uri string, expiry time.Duration) (string, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := s3NormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return "", err
 	}
@@ -211,19 +218,6 @@ func (s *s3Storage) PresignGet(ctx context.Context, bucket, key string, expiry t
 		return "", errors.Wrap(err, "filestorage: S3 生成预签名 URL 失败")
 	}
 	return out.URL, nil
-}
-
-// s3NormalizeBucketKey 规范化 bucket 和 key，去除首尾空格及 key 的前导 "/"，并校验非空
-func s3NormalizeBucketKey(bucket, key string) (string, string, error) {
-	bucket = strings.TrimSpace(bucket)
-	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
-	if bucket == "" {
-		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: bucket 不能为空")
-	}
-	if key == "" {
-		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: key 不能为空")
-	}
-	return bucket, key, nil
 }
 
 // s3IsNotFound 判断 AWS S3 错误是否为对象不存在

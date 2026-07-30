@@ -24,6 +24,7 @@ const minioDefaultRegion = "us-east-1"
 // minioStorage 是基于 MinIO 的 FileStorage 实现
 type minioStorage struct {
 	client           *minio.Client
+	publicBaseURL    string
 	maxPresignExpiry time.Duration
 }
 
@@ -46,19 +47,20 @@ func newMinIOStorage(cfg Config) (FileStorage, error) {
 
 	return &minioStorage{
 		client:           client,
+		publicBaseURL:    strings.TrimSpace(cfg.PublicBaseURL),
 		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
 	}, nil
 }
 
-// PutObject 上传对象
-func (s *minioStorage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) error {
+// PutObject 上传对象，成功返回可入库的逻辑 URI
+func (s *minioStorage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) (string, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := minioNormalizeBucketKey(bucket, key)
+	bucket, key, err := normalizeBucketKey(bucket, key)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if body == nil {
-		return errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+		return "", errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
 	}
 
 	putOpts := applyPutOptions(opts)
@@ -69,15 +71,15 @@ func (s *minioStorage) PutObject(ctx context.Context, bucket, key string, body i
 
 	_, err = s.client.PutObject(ctx, bucket, key, body, size, objectOpts)
 	if err != nil {
-		return errors.Wrap(err, "filestorage: MinIO 上传对象失败")
+		return "", errors.Wrap(err, "filestorage: MinIO 上传对象失败")
 	}
-	return nil
+	return JoinURI(bucket, key)
 }
 
 // GetObject 下载对象
-func (s *minioStorage) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, *ObjectMeta, error) {
+func (s *minioStorage) GetObject(ctx context.Context, uri string) (io.ReadCloser, *ObjectMeta, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := minioNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,9 +104,9 @@ func (s *minioStorage) GetObject(ctx context.Context, bucket, key string) (io.Re
 }
 
 // DeleteObject 删除对象；不存在时幂等返回 nil
-func (s *minioStorage) DeleteObject(ctx context.Context, bucket, key string) error {
+func (s *minioStorage) DeleteObject(ctx context.Context, uri string) error {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := minioNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return err
 	}
@@ -120,9 +122,9 @@ func (s *minioStorage) DeleteObject(ctx context.Context, bucket, key string) err
 }
 
 // StatObject 查询对象元数据
-func (s *minioStorage) StatObject(ctx context.Context, bucket, key string) (*ObjectMeta, error) {
+func (s *minioStorage) StatObject(ctx context.Context, uri string) (*ObjectMeta, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := minioNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +143,8 @@ func (s *minioStorage) StatObject(ctx context.Context, bucket, key string) (*Obj
 }
 
 // Exists 判断对象是否存在
-func (s *minioStorage) Exists(ctx context.Context, bucket, key string) (bool, error) {
-	_, err := s.StatObject(ctx, bucket, key)
+func (s *minioStorage) Exists(ctx context.Context, uri string) (bool, error) {
+	_, err := s.StatObject(ctx, uri)
 	if err == nil {
 		return true, nil
 	}
@@ -152,10 +154,15 @@ func (s *minioStorage) Exists(ctx context.Context, bucket, key string) (bool, er
 	return false, err
 }
 
+// ObjectURL 返回对象的固定访问 URL
+func (s *minioStorage) ObjectURL(uri string) (string, error) {
+	return buildObjectURL(s.publicBaseURL, uri)
+}
+
 // PresignGet 生成只读预签名 URL
-func (s *minioStorage) PresignGet(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
+func (s *minioStorage) PresignGet(ctx context.Context, uri string, expiry time.Duration) (string, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := minioNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return "", err
 	}
@@ -171,19 +178,6 @@ func (s *minioStorage) PresignGet(ctx context.Context, bucket, key string, expir
 		return "", errors.Wrap(err, "filestorage: MinIO 生成预签名 URL 失败")
 	}
 	return u.String(), nil
-}
-
-// minioNormalizeBucketKey 规范化 bucket 和 key，去除首尾空格及 key 的前导 "/"，并校验非空
-func minioNormalizeBucketKey(bucket, key string) (string, string, error) {
-	bucket = strings.TrimSpace(bucket)
-	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
-	if bucket == "" {
-		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: bucket 不能为空")
-	}
-	if key == "" {
-		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: key 不能为空")
-	}
-	return bucket, key, nil
 }
 
 // minioIsNotFound 判断 MinIO 错误是否为对象不存在

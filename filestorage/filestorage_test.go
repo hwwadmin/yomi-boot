@@ -62,39 +62,106 @@ func TestConfigValidate(t *testing.T) {
 	})
 }
 
-// TestNormalizeAndPresignArgs 验证 bucket/key 规范化与预签名参数校验
-func TestNormalizeAndPresignArgs(t *testing.T) {
+// TestJoinAndParseURI 验证逻辑 URI 拼装与解析
+func TestJoinAndParseURI(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := minioNormalizeBucketKey("", "k")
-	if !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("bucket empty: got %v", err)
-	}
-	_, _, err = s3NormalizeBucketKey("b", "")
-	if !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("key empty: got %v", err)
+	uri, err := JoinURI(" avatars ", "/u/1.png")
+	if err != nil || uri != "avatars/u/1.png" {
+		t.Fatalf("JoinURI: uri=%q err=%v", uri, err)
 	}
 
-	b, k, err := minioNormalizeBucketKey(" bucket ", "/a/b")
-	if err != nil || b != "bucket" || k != "a/b" {
-		t.Fatalf("minio normalize: bucket=%q key=%q err=%v", b, k, err)
+	b, k, err := ParseURI("avatars/u/1.png")
+	if err != nil || b != "avatars" || k != "u/1.png" {
+		t.Fatalf("ParseURI: bucket=%q key=%q err=%v", b, k, err)
 	}
-	b, k, err = s3NormalizeBucketKey(" bucket ", "/a/b")
-	if err != nil || b != "bucket" || k != "a/b" {
-		t.Fatalf("s3 normalize: bucket=%q key=%q err=%v", b, k, err)
+
+	b, k, err = ParseURI("/avatars/u/1.png")
+	if err != nil || b != "avatars" || k != "u/1.png" {
+		t.Fatalf("ParseURI leading slash: bucket=%q key=%q err=%v", b, k, err)
 	}
-	b, k, err = aliOSSNormalizeBucketKey(" bucket ", "/a/b")
-	if err != nil || b != "bucket" || k != "a/b" {
-		t.Fatalf("alioss normalize: bucket=%q key=%q err=%v", b, k, err)
+
+	_, err = JoinURI("", "k")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("empty bucket: got %v", err)
 	}
+	_, err = JoinURI("b", "")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("empty key: got %v", err)
+	}
+	_, err = JoinURI("a/b", "k")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("bucket with slash: got %v", err)
+	}
+	_, _, err = ParseURI("")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("empty uri: got %v", err)
+	}
+	_, _, err = ParseURI("nobucket")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("uri without slash: got %v", err)
+	}
+	_, _, err = ParseURI("bucket/")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("uri empty key: got %v", err)
+	}
+}
+
+// TestObjectURL 验证固定访问 URL 拼装
+func TestObjectURL(t *testing.T) {
+	t.Parallel()
+
+	store := &minioStorage{publicBaseURL: "https://cdn.example.com/"}
+	got, err := store.ObjectURL("avatars/u/1.png")
+	if err != nil || got != "https://cdn.example.com/avatars/u/1.png" {
+		t.Fatalf("ObjectURL: got=%q err=%v", got, err)
+	}
+
+	_, err = store.ObjectURL("bad")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("invalid uri: got %v", err)
+	}
+
+	store = &minioStorage{publicBaseURL: ""}
+	_, err = store.ObjectURL("avatars/u/1.png")
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("missing base: got %v", err)
+	}
+}
+
+// TestPresignArgs 验证预签名参数与 uri 校验
+func TestPresignArgs(t *testing.T) {
+	t.Parallel()
 
 	store := &minioStorage{maxPresignExpiry: time.Hour}
-	_, err = store.PresignGet(t.Context(), "b", "k", 0)
+	_, err := store.PresignGet(t.Context(), "b/k", 0)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expiry<=0: got %v", err)
 	}
-	_, err = store.PresignGet(t.Context(), "b", "k", 2*time.Hour)
+	_, err = store.PresignGet(t.Context(), "b/k", 2*time.Hour)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expiry too large: got %v", err)
+	}
+	_, err = store.PresignGet(t.Context(), "bad", time.Minute)
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("invalid uri: got %v", err)
+	}
+}
+
+// TestConfigFromPublicBaseURL 验证 BootConfig 映射 PublicBaseURL
+func TestConfigFromPublicBaseURL(t *testing.T) {
+	t.Parallel()
+
+	cfg := ConfigFrom(BootConfig{
+		Provider:      "minio",
+		PublicBaseURL: " https://cdn.example.com/ ",
+		MinIO: BootMinIOConfig{
+			Endpoint:        "127.0.0.1:9000",
+			AccessKeyID:     "ak",
+			SecretAccessKey: "sk",
+		},
+	})
+	if cfg.PublicBaseURL != "https://cdn.example.com/" {
+		t.Fatalf("PublicBaseURL: got %q", cfg.PublicBaseURL)
 	}
 }

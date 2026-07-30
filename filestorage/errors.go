@@ -9,6 +9,6 @@ var (
 	// ErrNotFound 对象不存在（GetObject / StatObject）
 	ErrNotFound = errors.NewNoStack("filestorage: 对象不存在")
 
-	// ErrInvalidArgument 参数无效（空 bucket/key、expiry 非法等）
+	// ErrInvalidArgument 参数无效（空 bucket/key/uri、expiry 非法、public_base_url 未配置等）
 	ErrInvalidArgument = errors.NewNoStack("filestorage: 参数无效")
 )

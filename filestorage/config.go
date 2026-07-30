@@ -27,6 +27,7 @@ const (
 // Config 创建 FileStorage 的构造配置
 type Config struct {
 	Provider         Provider      // Provider 是存储实现标识
+	PublicBaseURL    string        // PublicBaseURL 是固定访问 URL 的全局基址（多桶共用）；ObjectURL 依赖此项
 	MaxPresignExpiry time.Duration // MaxPresignExpiry 是预签名有效期上限；0 表示使用默认 7 天
 	MinIO            MinIOConfig   // MinIO 是 MinIO 访问配置（Provider=minio 时必填）
 	S3               S3Config      // S3 是 AWS S3 访问配置（Provider=s3 时必填）

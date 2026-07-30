@@ -22,6 +22,7 @@ var _ FileStorage = (*aliOSSStorage)(nil)
 // aliOSSStorage 是基于阿里云 OSS 的 FileStorage 实现
 type aliOSSStorage struct {
 	client           *oss.Client
+	publicBaseURL    string
 	maxPresignExpiry time.Duration
 }
 
@@ -45,19 +46,20 @@ func newAliOSSStorage(cfg Config) (FileStorage, error) {
 
 	return &aliOSSStorage{
 		client:           oss.NewClient(ossCfg),
+		publicBaseURL:    strings.TrimSpace(cfg.PublicBaseURL),
 		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
 	}, nil
 }
 
-// PutObject 上传对象
-func (s *aliOSSStorage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) error {
+// PutObject 上传对象，成功返回可入库的逻辑 URI
+func (s *aliOSSStorage) PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) (string, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	bucket, key, err := normalizeBucketKey(bucket, key)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if body == nil {
-		return errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+		return "", errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
 	}
 
 	putOpts := applyPutOptions(opts)
@@ -75,15 +77,15 @@ func (s *aliOSSStorage) PutObject(ctx context.Context, bucket, key string, body 
 
 	_, err = s.client.PutObject(ctx, input)
 	if err != nil {
-		return errors.Wrap(err, "filestorage: AliOSS 上传对象失败")
+		return "", errors.Wrap(err, "filestorage: AliOSS 上传对象失败")
 	}
-	return nil
+	return JoinURI(bucket, key)
 }
 
 // GetObject 下载对象
-func (s *aliOSSStorage) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, *ObjectMeta, error) {
+func (s *aliOSSStorage) GetObject(ctx context.Context, uri string) (io.ReadCloser, *ObjectMeta, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -100,9 +102,9 @@ func (s *aliOSSStorage) GetObject(ctx context.Context, bucket, key string) (io.R
 }
 
 // DeleteObject 删除对象；不存在时幂等返回 nil
-func (s *aliOSSStorage) DeleteObject(ctx context.Context, bucket, key string) error {
+func (s *aliOSSStorage) DeleteObject(ctx context.Context, uri string) error {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return err
 	}
@@ -121,9 +123,9 @@ func (s *aliOSSStorage) DeleteObject(ctx context.Context, bucket, key string) er
 }
 
 // StatObject 查询对象元数据
-func (s *aliOSSStorage) StatObject(ctx context.Context, bucket, key string) (*ObjectMeta, error) {
+func (s *aliOSSStorage) StatObject(ctx context.Context, uri string) (*ObjectMeta, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +142,8 @@ func (s *aliOSSStorage) StatObject(ctx context.Context, bucket, key string) (*Ob
 }
 
 // Exists 判断对象是否存在
-func (s *aliOSSStorage) Exists(ctx context.Context, bucket, key string) (bool, error) {
-	_, err := s.StatObject(ctx, bucket, key)
+func (s *aliOSSStorage) Exists(ctx context.Context, uri string) (bool, error) {
+	_, err := s.StatObject(ctx, uri)
 	if err == nil {
 		return true, nil
 	}
@@ -151,10 +153,15 @@ func (s *aliOSSStorage) Exists(ctx context.Context, bucket, key string) (bool, e
 	return false, err
 }
 
+// ObjectURL 返回对象的固定访问 URL
+func (s *aliOSSStorage) ObjectURL(uri string) (string, error) {
+	return buildObjectURL(s.publicBaseURL, uri)
+}
+
 // PresignGet 生成只读预签名 URL
-func (s *aliOSSStorage) PresignGet(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
+func (s *aliOSSStorage) PresignGet(ctx context.Context, uri string, expiry time.Duration) (string, error) {
 	ctx = appctx.OrBackground(ctx)
-	bucket, key, err := aliOSSNormalizeBucketKey(bucket, key)
+	bucket, key, err := ParseURI(uri)
 	if err != nil {
 		return "", err
 	}
@@ -173,19 +180,6 @@ func (s *aliOSSStorage) PresignGet(ctx context.Context, bucket, key string, expi
 		return "", errors.Wrap(err, "filestorage: AliOSS 生成预签名 URL 失败")
 	}
 	return out.URL, nil
-}
-
-// aliOSSNormalizeBucketKey 规范化 bucket 和 key，去除首尾空格及 key 的前导 "/"，并校验非空
-func aliOSSNormalizeBucketKey(bucket, key string) (string, string, error) {
-	bucket = strings.TrimSpace(bucket)
-	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
-	if bucket == "" {
-		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: bucket 不能为空")
-	}
-	if key == "" {
-		return "", "", errors.Wrap(ErrInvalidArgument, "filestorage: key 不能为空")
-	}
-	return bucket, key, nil
 }
 
 // aliOSSObjectMeta 从 OSS 响应字段映射 ObjectMeta
