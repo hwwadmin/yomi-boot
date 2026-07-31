@@ -30,6 +30,7 @@ type Config struct {
 	Params                 string       `mapstructure:"params"`                     // Params 是 DSN 追加参数
 	MaxOpenConns           int          `mapstructure:"max_open_conns"`             // MaxOpenConns 是最大连接数
 	MaxIdleConns           int          `mapstructure:"max_idle_conns"`             // MaxIdleConns 是最大空闲连接数
+	MinIdleConns           int          `mapstructure:"min_idle_conns"`             // MinIdleConns 是最小空闲连接数，0不预热不保活，须<=max_idle_conns
 	ConnMaxLifetimeMinutes int          `mapstructure:"conn_max_lifetime_minutes"`  // ConnMaxLifetimeMinutes 是连接最大存活分钟数
 	ConnMaxIdleTimeMinutes int          `mapstructure:"conn_max_idle_time_minutes"` // ConnMaxIdleTimeMinutes 是空闲连接最大存活分钟数
 	SlowThresholdMs        *int         `mapstructure:"slow_threshold_ms"`          // SlowThresholdMs 慢 SQL 阈值(毫秒)，未配置默认500，0关闭
@@ -76,6 +77,15 @@ func (c Config) Validate() error {
 	}
 	if c.MaxIdleConns <= 0 {
 		return errors.New("db.max_idle_conns 必须大于 0")
+	}
+	if c.MinIdleConns < 0 {
+		return errors.New("db.min_idle_conns 不能小于 0")
+	}
+	if c.MinIdleConns > c.MaxIdleConns {
+		return errors.New("db.min_idle_conns 不能大于 db.max_idle_conns")
+	}
+	if c.MinIdleConns > c.MaxOpenConns {
+		return errors.New("db.min_idle_conns 不能大于 db.max_open_conns")
 	}
 	if c.ConnMaxLifetimeMinutes <= 0 {
 		return errors.New("db.conn_max_lifetime_minutes 必须大于 0")

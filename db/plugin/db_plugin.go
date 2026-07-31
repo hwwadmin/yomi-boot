@@ -12,6 +12,7 @@ import (
 // dbPlugin 数据库插件
 type dbPlugin struct {
 	plugin.PluginState
+	stopIdle func()
 }
 
 const dbName = "db"
@@ -28,12 +29,16 @@ func (p *dbPlugin) Init(host *plugin.Host) {
 		return
 	}
 	host.DbType = cfg.Type
-	host.DB = db.MustOpen(*cfg)
+	host.DB, p.stopIdle = db.MustOpen(*cfg)
 	p.SetStarted()
 }
 
-// Close 关闭数据库连接资源
+// Close 停止空闲保活并关闭数据库连接资源
 func (p *dbPlugin) Close(host *plugin.Host) {
+	if p.stopIdle != nil {
+		p.stopIdle()
+		p.stopIdle = nil
+	}
 	if host.DB == nil {
 		return
 	}

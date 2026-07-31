@@ -4,6 +4,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -19,16 +20,17 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// Open 根据配置初始化 DB 连接；调用方应确保 cfg 已通过 Validate
-func Open(cfg Config) (*gorm.DB, error) {
+// Open 根据配置初始化 DB 连接；调用方应确保 cfg 已通过 Validate。
+// 当 min_idle_conns>0 时会预热并启动保活，返回的 stop 须在关闭 DB 前调用（无保活时为 nil）。
+func Open(cfg Config) (*gorm.DB, func(), error) {
 	return open(cfg)
 }
 
-// open 假定 cfg 已通过语义校验，仅处理连接与连接池配置
-func open(cfg Config) (*gorm.DB, error) {
+// open 假定 cfg 已通过语义校验，仅处理连接、连接池、预热与保活
+func open(cfg Config) (*gorm.DB, func(), error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
-		return nil, errors.Wrap(err, "生成DSN失败")
+		return nil, nil, errors.Wrap(err, "生成DSN失败")
 	}
 
 	var dialector gorm.Dialector
@@ -38,34 +40,53 @@ func open(cfg Config) (*gorm.DB, error) {
 	case enums.Postgres:
 		dialector = postgres.Open(dsn)
 	default:
-		return nil, errors.Newf("不支持的数据库类型: %s", cfg.Type)
+		return nil, nil, errors.Newf("不支持的数据库类型: %s", cfg.Type)
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: newGormLogger(cfg),
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "初始化数据库连接失败")
+		return nil, nil, errors.Wrap(err, "初始化数据库连接失败")
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, errors.Wrap(err, "获取底层 sql.DB 失败")
+		return nil, nil, errors.Wrap(err, "获取底层 sql.DB 失败")
 	}
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeMinutes) * time.Minute)
-	sqlDB.SetConnMaxIdleTime(time.Duration(cfg.ConnMaxIdleTimeMinutes) * time.Minute)
+	idleTimeout := time.Duration(cfg.ConnMaxIdleTimeMinutes) * time.Minute
+	sqlDB.SetConnMaxIdleTime(idleTimeout)
+
+	var stop func()
+	if cfg.MinIdleConns > 0 {
+		warmCtx, cancel := context.WithTimeout(context.Background(), idleWarmTimeout)
+		err = warmIdle(warmCtx, sqlDB, cfg.MinIdleConns)
+		cancel()
+		if err != nil {
+			_ = sqlDB.Close()
+			return nil, nil, err
+		}
+		keeper := startIdleKeeper(sqlDB, cfg.MinIdleConns, maintainInterval(idleTimeout))
+		if keeper != nil {
+			stop = keeper.Stop
+		}
+	}
 
 	logger.InfoWithoutCtx(
 		"初始化数据库链接成功",
 		"type", string(cfg.Type),
 		"addr", cfg.Host+":"+fmt.Sprint(cfg.Port),
 		"db", cfg.Database,
+		"max_open_conns", cfg.MaxOpenConns,
+		"max_idle_conns", cfg.MaxIdleConns,
+		"min_idle_conns", cfg.MinIdleConns,
 		"slow_threshold_ms", cfg.SlowThreshold().Milliseconds(),
 	)
 
-	return db, nil
+	return db, stop, nil
 }
 
 // newGormLogger 按配置构建 GORM logger（慢 SQL 阈值可配）
