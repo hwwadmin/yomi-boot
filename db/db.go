@@ -5,6 +5,8 @@ package db
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -40,7 +42,7 @@ func open(cfg Config) (*gorm.DB, error) {
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
+		Logger: newGormLogger(cfg),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "初始化数据库连接失败")
@@ -60,9 +62,23 @@ func open(cfg Config) (*gorm.DB, error) {
 		"type", string(cfg.Type),
 		"addr", cfg.Host+":"+fmt.Sprint(cfg.Port),
 		"db", cfg.Database,
+		"slow_threshold_ms", cfg.SlowThreshold().Milliseconds(),
 	)
 
 	return db, nil
+}
+
+// newGormLogger 按配置构建 GORM logger（慢 SQL 阈值可配）
+func newGormLogger(cfg Config) gormlogger.Interface {
+	return gormlogger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		gormlogger.Config{
+			SlowThreshold:             cfg.SlowThreshold(),
+			LogLevel:                  gormlogger.Warn,
+			IgnoreRecordNotFoundError: false,
+			Colorful:                  true,
+		},
+	)
 }
 
 // buildDSN 根据不同数据库类型返回对应格式的连接串

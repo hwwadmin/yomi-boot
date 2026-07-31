@@ -5,6 +5,7 @@ package db
 
 import (
 	"strings"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -13,6 +14,9 @@ import (
 
 // SectionKey YAML 根 key
 const SectionKey = "db"
+
+// DefaultSlowThresholdMs 未配置 slow_threshold_ms 时的默认慢 SQL 阈值
+const DefaultSlowThresholdMs = 500
 
 // Config 表示数据库访问配置
 type Config struct {
@@ -28,11 +32,23 @@ type Config struct {
 	MaxIdleConns           int          `mapstructure:"max_idle_conns"`             // MaxIdleConns 是最大空闲连接数
 	ConnMaxLifetimeMinutes int          `mapstructure:"conn_max_lifetime_minutes"`  // ConnMaxLifetimeMinutes 是连接最大存活分钟数
 	ConnMaxIdleTimeMinutes int          `mapstructure:"conn_max_idle_time_minutes"` // ConnMaxIdleTimeMinutes 是空闲连接最大存活分钟数
+	SlowThresholdMs        *int         `mapstructure:"slow_threshold_ms"`          // SlowThresholdMs 慢 SQL 阈值(毫秒)，未配置默认500，0关闭
 }
 
 // EnabledOrDefault 返回是否启用数据库，未配置默认 false
 func (c Config) EnabledOrDefault() bool {
 	return config.BoolOrDefault(c.Enabled)
+}
+
+// SlowThreshold 返回 GORM 慢 SQL 阈值；未配置默认 500ms，配置为 0 时关闭慢 SQL 日志
+func (c Config) SlowThreshold() time.Duration {
+	if c.SlowThresholdMs == nil {
+		return time.Duration(DefaultSlowThresholdMs) * time.Millisecond
+	}
+	if *c.SlowThresholdMs == 0 {
+		return 0
+	}
+	return time.Duration(*c.SlowThresholdMs) * time.Millisecond
 }
 
 // Validate 校验数据库配置语义（仅 enabled=true 时校验）
@@ -66,6 +82,9 @@ func (c Config) Validate() error {
 	}
 	if c.ConnMaxIdleTimeMinutes <= 0 {
 		return errors.New("db.conn_max_idle_time_minutes 必须大于 0")
+	}
+	if c.SlowThresholdMs != nil && *c.SlowThresholdMs < 0 {
+		return errors.New("db.slow_threshold_ms 不能小于 0")
 	}
 	return nil
 }
