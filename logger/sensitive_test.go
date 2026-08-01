@@ -70,6 +70,21 @@ func TestSensitive_ApplyKVAndJSON(t *testing.T) {
 	}
 }
 
+// TestSensitive_ApplyJSON_PreservesLargeIntegers 验证脱敏不丢失超过 float64 精确范围的整数
+func TestSensitive_ApplyJSON_PreservesLargeIntegers(t *testing.T) {
+	s, err := NewSensitive(SensitiveMatchContains, []string{"password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s.ApplyJSON(`{"id":1891234567890123456,"password":"x"}`)
+	if !strings.Contains(got, `"id":1891234567890123456`) {
+		t.Fatalf("large integer precision lost: %s", got)
+	}
+	if !strings.Contains(got, `"password":"[REDACTED]"`) {
+		t.Fatalf("password not redacted: %s", got)
+	}
+}
+
 // TestSensitive_ApplyQuery 验证 query string 参数脱敏
 func TestSensitive_ApplyQuery(t *testing.T) {
 	s, err := NewSensitive(SensitiveMatchContains, []string{"token"})

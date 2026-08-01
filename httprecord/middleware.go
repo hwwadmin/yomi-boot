@@ -307,8 +307,11 @@ func maskJSONString(raw string) string {
 		return raw
 	}
 
+	// UseNumber 避免大整数（如雪花 ID）经 float64 往返时精度丢失
+	decoder := json.NewDecoder(strings.NewReader(trimmed))
+	decoder.UseNumber()
 	var payload any
-	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+	if err := decoder.Decode(&payload); err != nil {
 		return raw
 	}
 
