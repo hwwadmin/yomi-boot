@@ -15,6 +15,7 @@ const (
 	defaultHTTPRecordMaxRequestBodySize  = 4096
 	defaultHTTPRecordMaxResponseBodySize = 4096
 	defaultHttpRecordKafkaTopic          = "yomi.http.record"
+	defaultHttpRecordStream              = "yomi.http.record"
 	defaultHttpRecordConsumerGroupID     = "httprecord-service"
 	defaultHttpRecordProvider            = ProviderMemory
 	defaultMemoryQueueSize               = 1024
@@ -23,20 +24,21 @@ const (
 
 // HttpRecordService 实现提供商标识
 const (
-	ProviderKafka  = "kafka"  // ProviderKafka 通过 Kafka 异步发布
-	ProviderMemory = "memory" // ProviderMemory 通过进程内内存队列异步处理
+	ProviderKafka       = "kafka"        // ProviderKafka 通过 Kafka 异步发布
+	ProviderMemory      = "memory"       // ProviderMemory 通过进程内内存队列异步处理
+	ProviderRedisStream = "redis_stream" // ProviderRedisStream 通过 Redis Stream 异步发布
 )
 
 // SectionKey YAML 根 key
 const SectionKey = "http_record"
 
-// ConsumerConfig 表示 HTTP 访问记录 Kafka 消费者配置
+// ConsumerConfig 表示 HTTP 访问记录消费者配置（Kafka / Redis Stream 共用 group_id）
 type ConsumerConfig struct {
-	Enabled *bool  `mapstructure:"enabled"`  // Enabled 是否启用 Kafka 消费者，未配置默认 false
+	Enabled *bool  `mapstructure:"enabled"`  // Enabled 是否启用消费者，未配置默认 false
 	GroupID string `mapstructure:"group_id"` // GroupID 是消费组标识
 }
 
-// EnabledOrDefault 返回是否启用 Kafka 消费者，未配置默认 false
+// EnabledOrDefault 返回是否启用消费者，未配置默认 false
 func (c ConsumerConfig) EnabledOrDefault() bool {
 	return config.BoolOrDefault(c.Enabled)
 }
@@ -50,8 +52,9 @@ type MemoryConfig struct {
 // Config 表示 HTTP 访问记录采集配置（默认关闭，与文件 access 日志无关）
 type Config struct {
 	Enabled             *bool          `mapstructure:"enabled"`                // Enabled 是否启用 HTTP 访问记录，未配置默认 false
-	Provider            string         `mapstructure:"provider"`               // Provider 是实现提供商：kafka 或 memory
+	Provider            string         `mapstructure:"provider"`               // Provider 是实现提供商：kafka、memory 或 redis_stream
 	KafkaTopic          string         `mapstructure:"kafka_topic"`            // KafkaTopic 是 Kafka 发布/订阅主题
+	Stream              string         `mapstructure:"stream"`                 // Stream 是 Redis Stream 逻辑名（provider=redis_stream）
 	SkipPaths           []string       `mapstructure:"skip_paths"`             // SkipPaths 是不进行记录采集的接口路径列表
 	MaxRequestBodySize  int            `mapstructure:"max_request_body_size"`  // MaxRequestBodySize 是请求体记录最大字节数
 	MaxResponseBodySize int            `mapstructure:"max_response_body_size"` // MaxResponseBodySize 是响应体记录最大字节数
@@ -59,7 +62,7 @@ type Config struct {
 	RecordResponseBody  bool           `mapstructure:"record_response_body"`   // RecordResponseBody 是否记录响应体
 	MaskSensitive       bool           `mapstructure:"mask_sensitive"`         // MaskSensitive 是否对敏感字段脱敏
 	Memory              MemoryConfig   `mapstructure:"memory"`                 // Memory 是内存队列配置（provider=memory）
-	Consumer            ConsumerConfig `mapstructure:"consumer"`               // Consumer 是 Kafka 消费者配置
+	Consumer            ConsumerConfig `mapstructure:"consumer"`               // Consumer 是消费者配置
 }
 
 // EnabledOrDefault 返回是否启用 HTTP 访问记录，未配置默认 false
@@ -67,7 +70,7 @@ func (c Config) EnabledOrDefault() bool {
 	return config.BoolOrDefault(c.Enabled)
 }
 
-// ProviderOrDefault 返回实现提供商，未配置时默认 kafka
+// ProviderOrDefault 返回实现提供商，未配置时默认 memory
 func (c Config) ProviderOrDefault() string {
 	if provider := strings.ToLower(strings.TrimSpace(c.Provider)); provider != "" {
 		return provider
@@ -86,7 +89,7 @@ func (c Config) Validate() error {
 		return nil
 	}
 	switch c.ProviderOrDefault() {
-	case ProviderKafka, ProviderMemory:
+	case ProviderKafka, ProviderMemory, ProviderRedisStream:
 	default:
 		return errors.Newf("http_record.provider 不支持: %s", c.Provider)
 	}
@@ -105,6 +108,14 @@ func (c Config) KafkaTopicOrDefault() string {
 		return topic
 	}
 	return defaultHttpRecordKafkaTopic
+}
+
+// StreamOrDefault 返回 Redis Stream 逻辑名，未配置时使用默认值
+func (c Config) StreamOrDefault() string {
+	if stream := strings.TrimSpace(c.Stream); stream != "" {
+		return stream
+	}
+	return defaultHttpRecordStream
 }
 
 // GroupIDOrDefault 返回消费组标识

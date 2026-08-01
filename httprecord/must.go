@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/redisstream"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
@@ -34,6 +35,20 @@ func MustStartMemoryRecordConsumer(
 ) {
 	if err := StartMemoryRecordConsumer(parentCtx, svc, cfg, handler); err != nil {
 		logger.ErrorWithoutCtx("HTTP 访问记录内存消费者启动失败", "error", err)
+		panic(err)
+	}
+}
+
+// MustStartRedisStreamRecordConsumer 启动 HTTP 访问记录 Redis Stream 消费者，失败时 log + panic
+func MustStartRedisStreamRecordConsumer(
+	parentCtx context.Context,
+	consumer redisstream.ConsumerService,
+	id string,
+	cfg RedisStreamRecordConsumerConfig,
+	handler RecordHandler,
+) {
+	if err := StartRedisStreamRecordConsumer(parentCtx, consumer, id, cfg, handler); err != nil {
+		logger.ErrorWithoutCtx("HTTP 访问记录 Redis Stream 消费者启动失败", "error", err)
 		panic(err)
 	}
 }

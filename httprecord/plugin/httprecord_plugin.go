@@ -22,7 +22,7 @@ func NewHttpRecord() plugin.Plugin {
 	return &httpRecordPlugin{PluginState: plugin.NewPluginState(httpRecordName)}
 }
 
-// Init 装配 HttpRecordService：默认 Nop；enabled 时按 provider 分发 kafka / memory
+// Init 装配 HttpRecordService：默认 Nop；enabled 时按 provider 分发 kafka / memory / redis_stream
 func (p *httpRecordPlugin) Init(host *plugin.Host) {
 	cfg := config.MustSection[httprecord.Config](host.Doc, httprecord.SectionKey)
 	if !cfg.EnabledOrDefault() {
@@ -44,6 +44,14 @@ func (p *httpRecordPlugin) Init(host *plugin.Host) {
 		svc := httprecord.NewMemoryHttpRecordService(cfg.Memory.QueueSizeOrDefault())
 		p.memorySvc = svc
 		host.HttpRecordService = svc
+	case httprecord.ProviderRedisStream:
+		if host.RedisStreamPublisher == nil {
+			panic("http_record.enabled=true 且 provider=redis_stream 但 RedisStreamPublisher 未初始化")
+		}
+		host.HttpRecordService = httprecord.NewRedisStreamHttpRecordService(
+			host.RedisStreamPublisher,
+			cfg.StreamOrDefault(),
+		)
 	default:
 		panic("http_record.provider 不支持: " + cfg.ProviderOrDefault())
 	}
