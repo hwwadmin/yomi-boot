@@ -368,6 +368,7 @@ func TestConsumer_StopTimeoutWhenHandlerBlocks(t *testing.T) {
 
 	ctx := context.Background()
 	started := make(chan struct{})
+	release := make(chan struct{})
 	err = components.Consumer.Start(ctx, "c-block", GroupConfig{
 		Stream:   "block",
 		Group:    "g-block",
@@ -375,7 +376,8 @@ func TestConsumer_StopTimeoutWhenHandlerBlocks(t *testing.T) {
 		Start:    "0",
 	}, func(_ context.Context, _ Entry) HandleResult {
 		close(started)
-		select {} // 故意不响应 ctx，模拟阻塞 I/O
+		<-release // 故意不响应 ctx，模拟阻塞 I/O
+		return HandleAck
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -395,6 +397,39 @@ func TestConsumer_StopTimeoutWhenHandlerBlocks(t *testing.T) {
 	}
 	if elapsed := time.Since(begin); elapsed > time.Second {
 		t.Fatalf("Stop took too long: %v", elapsed)
+	}
+
+	// Stop 超时后同 id 不可再 Start（orphan 仍存活）
+	err = components.Consumer.Start(ctx, "c-block", GroupConfig{
+		Stream:   "block",
+		Group:    "g-block",
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		return HandleAck
+	})
+	if err == nil {
+		t.Fatal("expected Start to fail while orphan consumer still running")
+	}
+
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err = components.Consumer.Start(ctx, "c-block", GroupConfig{
+			Stream:   "block",
+			Group:    "g-block",
+			Consumer: "w2",
+			Start:    "0",
+		}, func(_ context.Context, _ Entry) HandleResult {
+			return HandleAck
+		})
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected Start to succeed after orphan exits, last err=%v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

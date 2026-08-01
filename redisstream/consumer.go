@@ -41,7 +41,7 @@ type deadMeta struct {
 type ConsumerService interface {
 	// Start 同步确保消费组可用后启动消费循环；建组失败或管理器已 Close 时返回 error，同一 id 不可重复注册
 	Start(parentCtx context.Context, id string, cfg GroupConfig, handler Handler) error
-	// Stop 停止并移除指定消费者；等待退出受 stop_timeout 限制，超时后不再阻塞
+	// Stop 停止并移除指定消费者；等待退出受 stop_timeout 限制，超时后登记 orphan 并返回（同 id 不可再 Start 直至协程退出）
 	Stop(id string) error
 	// StopAll 停止全部消费者
 	StopAll() error
@@ -54,8 +54,9 @@ type ConsumerManager struct {
 	client      *redisv9.Client           // client 是底层 Redis 客户端
 	runtime     RuntimeConfig             // runtime 是运行时默认参数
 	stopTimeout time.Duration             // stopTimeout 是 Stop 等待协程退出的超时
-	mu          sync.Mutex                // mu 保护 entries 与 closed
-	entries     map[string]*consumerEntry // entries 是按标识管理的消费者实例
+	mu          sync.Mutex                // mu 保护 entries、orphans 与 closed
+	entries     map[string]*consumerEntry // entries 是按标识管理的活跃消费者
+	orphans     map[string]*consumerEntry // orphans 是 Stop 超时后仍存活、禁止同 id 再 Start 的协程
 	closed      bool                      // closed 标记 Close 之后禁止再 Start
 }
 
@@ -82,6 +83,7 @@ func NewConsumerManager(client *redisv9.Client, runtime RuntimeConfig) *Consumer
 		runtime:     runtime,
 		stopTimeout: stopTimeout,
 		entries:     make(map[string]*consumerEntry),
+		orphans:     make(map[string]*consumerEntry),
 	}
 }
 
@@ -108,6 +110,14 @@ func (m *ConsumerManager) Start(
 		m.mu.Unlock()
 		return errors.New("redisstream: ConsumerManager 已关闭")
 	}
+	if _, exists := m.entries[id]; exists {
+		m.mu.Unlock()
+		return errors.Newf("redisstream: 消费者已存在: %s", id)
+	}
+	if _, exists := m.orphans[id]; exists {
+		m.mu.Unlock()
+		return errors.Newf("redisstream: 消费者仍在停止中（上次 Stop 超时，协程尚未退出）: %s", id)
+	}
 	m.mu.Unlock()
 
 	c := &consumer{
@@ -127,6 +137,10 @@ func (m *ConsumerManager) Start(
 	if _, exists := m.entries[id]; exists {
 		m.mu.Unlock()
 		return errors.Newf("redisstream: 消费者已存在: %s", id)
+	}
+	if _, exists := m.orphans[id]; exists {
+		m.mu.Unlock()
+		return errors.Newf("redisstream: 消费者仍在停止中（上次 Stop 超时，协程尚未退出）: %s", id)
 	}
 	ctx, cancel := appctx.WithCancel(parentCtx)
 	entry := &consumerEntry{cancel: cancel, done: make(chan struct{}), ctx: ctx}
@@ -148,7 +162,8 @@ func (m *ConsumerManager) Start(
 	return nil
 }
 
-// Stop 停止指定消费者；等待退出超时后打 Warn 并返回，避免 handler 不响应取消时永久挂起
+// Stop 停止指定消费者；等待退出超时后登记为 orphan 并返回，避免 handler 不响应取消时永久挂起。
+// 超时后同 id 不可再 Start，直至旧协程退出（finish 清理 orphan）。
 func (m *ConsumerManager) Stop(id string) error {
 	m.mu.Lock()
 	entry, ok := m.entries[id]
@@ -166,7 +181,15 @@ func (m *ConsumerManager) Stop(id string) error {
 	case <-entry.done:
 		return nil
 	case <-timer.C:
-		logger.Warn(entry.ctx, "Redis Stream 消费者停止超时，放弃等待（未确认消息可由 PEL/XAUTOCLAIM 再投递）",
+		m.mu.Lock()
+		select {
+		case <-entry.done:
+			// 超时临界点协程已退出，无需占用 orphan
+		default:
+			m.orphans[id] = entry
+		}
+		m.mu.Unlock()
+		logger.Error(entry.ctx, "Redis Stream 消费者停止超时，协程仍存活；同 id 禁止再 Start 直至退出",
 			"consumer_id", id,
 			"timeout", m.stopTimeout,
 		)
@@ -204,12 +227,15 @@ func (m *ConsumerManager) Close() error {
 	return m.StopAll()
 }
 
-// finish 在消费者协程退出时清理登记信息并关闭 done
+// finish 在消费者协程退出时清理 entries/orphans 登记并关闭 done
 func (m *ConsumerManager) finish(id string, entry *consumerEntry) {
 	defer close(entry.done)
 	m.mu.Lock()
 	if current, ok := m.entries[id]; ok && current == entry {
 		delete(m.entries, id)
+	}
+	if current, ok := m.orphans[id]; ok && current == entry {
+		delete(m.orphans, id)
 	}
 	m.mu.Unlock()
 }
@@ -315,6 +341,7 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 	}()
 	defer wg.Wait()
 
+	delay := jitterDelay(consumerRetryInitialDelay)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -332,15 +359,22 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 				return err
 			}
 			if errors.Is(err, redisv9.Nil) {
+				// 阻塞超时无消息说明 Redis 仍可用，重置退避
+				delay = jitterDelay(consumerRetryInitialDelay)
 				continue
 			}
-			logger.Warn(ctx, "Redis Stream XREADGROUP 失败，准备重试", "error", err)
-			if waitErr := waitForRetry(ctx, jitterDelay(consumerRetryInitialDelay)); waitErr != nil {
+			logger.Warn(ctx, "Redis Stream XREADGROUP 失败，准备重试",
+				"error", err,
+				"retry_after", delay,
+			)
+			if waitErr := waitForRetry(ctx, delay); waitErr != nil {
 				return waitErr
 			}
+			delay = nextRetryDelay(delay)
 			continue
 		}
 
+		delay = jitterDelay(consumerRetryInitialDelay)
 		for _, stream := range streams {
 			if err := c.processMessages(ctx, handler, stream.Messages, &processMu); err != nil {
 				return err
