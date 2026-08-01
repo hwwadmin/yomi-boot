@@ -246,21 +246,25 @@ type consumer struct {
 	cfg     resolvedGroupConfig // cfg 是已解析的订阅参数
 }
 
-// run 阻塞执行消费与 PEL 回收循环（消费组已在 Start 阶段创建）
+// run 阻塞执行消费循环，并启动独立 claim 协程回收 PEL。
+// 读循环与 claim 循环通过 processMu 串行化 handler，避免并发进入业务；
+// claim 不被 XREADGROUP 阻塞拖死（handler 内长时间占用锁时本实例 claim 仍会推迟）。
 func (c *consumer) run(ctx context.Context, handler Handler) error {
-	claimTicker := time.NewTicker(c.cfg.claimInterval)
-	defer claimTicker.Stop()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	// 启动时先尝试回收一次悬挂消息
-	c.claimPending(ctx, handler)
+	var processMu sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.claimLoop(ctx, handler, &processMu)
+	}()
+	defer wg.Wait()
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-claimTicker.C:
-			c.claimPending(ctx, handler)
-		default:
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		streams, err := c.client.XReadGroup(ctx, &redisv9.XReadGroupArgs{
@@ -291,10 +295,35 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 					ID:     msg.ID,
 					Values: stringifyValues(msg.Values),
 				}
-				if err := c.processEntry(ctx, handler, entry); err != nil {
+				processMu.Lock()
+				err := c.processEntry(ctx, handler, entry)
+				processMu.Unlock()
+				if err != nil {
 					return err
 				}
 			}
+		}
+	}
+}
+
+// claimLoop 独立周期执行 XAUTOCLAIM；与读循环共享 processMu 保证 handler 串行
+func (c *consumer) claimLoop(ctx context.Context, handler Handler, processMu *sync.Mutex) {
+	ticker := time.NewTicker(c.cfg.claimInterval)
+	defer ticker.Stop()
+
+	claimOnce := func() {
+		processMu.Lock()
+		defer processMu.Unlock()
+		c.claimPending(ctx, handler)
+	}
+
+	claimOnce()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			claimOnce()
 		}
 	}
 }
