@@ -12,8 +12,8 @@ import (
 
 // Components 聚合 Redis Stream 发布者与消费者管理器
 type Components struct {
-	Publisher PublisherService
-	Consumer  ConsumerService
+	Publisher PublisherService // Publisher 是消息发布者
+	Consumer  ConsumerService  // Consumer 是消费者管理器
 }
 
 // NewComponents 基于已有 Redis 客户端创建组件；不关闭 client

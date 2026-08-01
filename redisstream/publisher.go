@@ -28,11 +28,11 @@ type PublisherService interface {
 
 // Publisher 封装 Redis Stream 发布
 type Publisher struct {
-	client        *redisv9.Client
-	keyPrefix     string
-	defaultMaxLen int64
-	closeMu       sync.Mutex
-	closed        bool
+	client        *redisv9.Client // client 是底层 Redis 客户端
+	keyPrefix     string          // keyPrefix 拼在逻辑 stream 名之前
+	defaultMaxLen int64           // defaultMaxLen 是默认近似裁剪长度，0 表示不裁剪
+	closeMu       sync.Mutex      // closeMu 保护 closed 并发访问
+	closed        bool            // closed 标记是否已关闭
 }
 
 var _ PublisherService = (*Publisher)(nil)
@@ -106,6 +106,7 @@ func (p *Publisher) Close() error {
 	return nil
 }
 
+// ensureOpen 检查发布者是否仍可使用
 func (p *Publisher) ensureOpen() error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
@@ -115,10 +116,12 @@ func (p *Publisher) ensureOpen() error {
 	return nil
 }
 
+// streamKey 将逻辑 stream 名转换为带前缀的 Redis key
 func (p *Publisher) streamKey(stream string) string {
 	return p.keyPrefix + stream
 }
 
+// toInterfaceMap 将 string map 转为 XADD 所需的 any map
 func toInterfaceMap(values map[string]string) map[string]any {
 	out := make(map[string]any, len(values))
 	for k, v := range values {

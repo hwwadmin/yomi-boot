@@ -43,19 +43,19 @@ type ConsumerService interface {
 
 // ConsumerManager 管理多个消费组订阅
 type ConsumerManager struct {
-	client  *redisv9.Client
-	runtime RuntimeConfig
-	mu      sync.Mutex
-	entries map[string]*consumerEntry
+	client  *redisv9.Client           // client 是底层 Redis 客户端
+	runtime RuntimeConfig             // runtime 是运行时默认参数
+	mu      sync.Mutex                // mu 保护 entries 并发访问
+	entries map[string]*consumerEntry // entries 是按标识管理的消费者实例
 }
 
 var _ ConsumerService = (*ConsumerManager)(nil)
 
 // consumerEntry 表示一个受管消费者的运行态
 type consumerEntry struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	ctx    context.Context
+	cancel context.CancelFunc // cancel 用于停止消费循环
+	done   chan struct{}      // done 在消费者退出后关闭
+	ctx    context.Context    // ctx 是消费者独立运行上下文
 }
 
 // NewConsumerManager 创建消费者管理器
@@ -159,6 +159,7 @@ func (m *ConsumerManager) Close() error {
 	return m.StopAll()
 }
 
+// finish 在消费者协程退出时清理登记信息并关闭 done
 func (m *ConsumerManager) finish(id string, entry *consumerEntry) {
 	defer close(entry.done)
 	m.mu.Lock()
@@ -168,6 +169,7 @@ func (m *ConsumerManager) finish(id string, entry *consumerEntry) {
 	m.mu.Unlock()
 }
 
+// resolveGroupConfig 校验并解析消费组参数，补齐全局默认值
 func (m *ConsumerManager) resolveGroupConfig(cfg GroupConfig) (resolvedGroupConfig, error) {
 	stream := strings.TrimSpace(cfg.Stream)
 	group := strings.TrimSpace(cfg.Group)
@@ -225,23 +227,23 @@ func (m *ConsumerManager) resolveGroupConfig(cfg GroupConfig) (resolvedGroupConf
 
 // resolvedGroupConfig 是已解析的消费组运行参数
 type resolvedGroupConfig struct {
-	logicalStream string
-	streamKey     string
-	group         string
-	consumer      string
-	start         string
-	count         int64
-	block         time.Duration
-	claimMinIdle  time.Duration
-	claimInterval time.Duration
-	deadStreamKey string
+	logicalStream string        // logicalStream 是逻辑 stream 名
+	streamKey     string        // streamKey 是带前缀的 Redis key
+	group         string        // group 是消费组名
+	consumer      string        // consumer 是本实例消费者名
+	start         string        // start 是建组起始 id
+	count         int64         // count 是单次拉取条数
+	block         time.Duration // block 是 XREADGROUP 阻塞时长
+	claimMinIdle  time.Duration // claimMinIdle 是 PEL 认领最小空闲
+	claimInterval time.Duration // claimInterval 是 PEL 回收周期
+	deadStreamKey string        // deadStreamKey 是死信 stream 的 Redis key
 }
 
 // consumer 表示单个消费组订阅的运行实例
 type consumer struct {
-	client  *redisv9.Client
-	runtime RuntimeConfig
-	cfg     resolvedGroupConfig
+	client  *redisv9.Client     // client 是底层 Redis 客户端
+	runtime RuntimeConfig       // runtime 是运行时默认参数
+	cfg     resolvedGroupConfig // cfg 是已解析的订阅参数
 }
 
 // run 阻塞执行消费与 PEL 回收循环（消费组已在 Start 阶段创建）
@@ -309,6 +311,7 @@ func (c *consumer) ensureGroup(ctx context.Context) error {
 	return errors.Wrap(err, "创建消费组失败 stream=%s group=%s", c.cfg.logicalStream, c.cfg.group)
 }
 
+// claimPending 通过 XAUTOCLAIM 回收空闲过久的 PEL 消息并交给 handler
 func (c *consumer) claimPending(ctx context.Context, handler Handler) {
 	start := "0-0"
 	for {
@@ -382,6 +385,7 @@ func (c *consumer) processEntry(ctx context.Context, handler Handler, entry Entr
 	}
 }
 
+// ackWithRetry 提交 XACK，瞬时失败时按指数退避重试直至成功或上下文结束
 func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
 	delay := jitterDelay(consumerRetryInitialDelay)
 	for {
@@ -400,6 +404,7 @@ func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
 	}
 }
 
+// moveToDead 将消息写入死信 stream，并附带原始 id 与来源 stream 元数据
 func (c *consumer) moveToDead(ctx context.Context, entry Entry) error {
 	values := make(map[string]any, len(entry.Values)+2)
 	for k, v := range entry.Values {
@@ -422,6 +427,7 @@ func (c *consumer) moveToDead(ctx context.Context, entry Entry) error {
 	return nil
 }
 
+// invokeHandler 调用消费 handler 并捕获 panic，按 HandleRetry 处理
 func invokeHandler(ctx context.Context, handler Handler, entry Entry) (result HandleResult) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -436,6 +442,7 @@ func invokeHandler(ctx context.Context, handler Handler, entry Entry) (result Ha
 	return handler(ctx, entry)
 }
 
+// stringifyValues 将 Redis 返回的字段值统一转为 string map
 func stringifyValues(values map[string]any) map[string]string {
 	out := make(map[string]string, len(values))
 	for k, v := range values {
@@ -444,6 +451,7 @@ func stringifyValues(values map[string]any) map[string]string {
 	return out
 }
 
+// valueToString 将单个字段值转为字符串
 func valueToString(v any) string {
 	switch t := v.(type) {
 	case string:
@@ -455,6 +463,7 @@ func valueToString(v any) string {
 	}
 }
 
+// isBusyGroup 判断错误是否表示消费组已存在
 func isBusyGroup(err error) bool {
 	if err == nil {
 		return false
@@ -462,6 +471,7 @@ func isBusyGroup(err error) bool {
 	return strings.Contains(err.Error(), "BUSYGROUP")
 }
 
+// waitForRetry 等待退避时长，上下文取消时立即返回
 func waitForRetry(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -473,11 +483,13 @@ func waitForRetry(ctx context.Context, delay time.Duration) error {
 	}
 }
 
+// jitterDelay 为基准退避时长加上抖动
 func jitterDelay(base time.Duration) time.Duration {
 	n := consumerRetryJitterMin + rand.IntN(consumerRetryJitterMax-consumerRetryJitterMin+1)
 	return base * time.Duration(n) / time.Duration(consumerRetryJitterDenom)
 }
 
+// nextRetryDelay 计算下一次指数退避时长并加抖动
 func nextRetryDelay(current time.Duration) time.Duration {
 	next := current * 2
 	if next > consumerRetryMaxDelay {

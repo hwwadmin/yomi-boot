@@ -12,9 +12,10 @@ import (
 // redisStreamPlugin Redis Stream 生命周期插件
 type redisStreamPlugin struct {
 	plugin.PluginState
-	components *redisstream.Components
+	components *redisstream.Components // components 供 Close 时释放
 }
 
+// redisStreamName 是插件在生命周期中的名称
 const redisStreamName = "redisstream"
 
 // NewRedisStream 创建 Redis Stream 生命周期插件
