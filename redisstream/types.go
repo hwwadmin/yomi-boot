@@ -11,6 +11,9 @@ import (
 // PayloadField 是 AddBytes / AddJSON 写入 Stream 的默认字段名
 const PayloadField = "payload"
 
+// DeadMetaField 是死信消息中存放框架元数据的独立字段名（JSON），避免覆盖业务字段
+const DeadMetaField = "__rs_meta"
+
 // Entry 表示一条已读取的 Stream 消息
 type Entry struct {
 	Stream string            // Stream 是逻辑 stream 名（不含 key_prefix）

@@ -5,6 +5,7 @@ package redisstream
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -25,9 +26,13 @@ const (
 	consumerRetryJitterMin    = 8
 	consumerRetryJitterMax    = 12
 	consumerRetryJitterDenom  = 10
-	deadOriginalIDField       = "_original_id"
-	deadStreamField           = "_dead_from"
 )
+
+// deadMeta 是写入死信独立 meta 字段的 JSON 结构
+type deadMeta struct {
+	OriginalID string `json:"original_id"` // OriginalID 是原 stream 中的 entry id
+	Stream     string `json:"stream"`      // Stream 是逻辑 stream 名
+}
 
 // ConsumerService 表示 Redis Stream 消费者管理能力
 type ConsumerService interface {
@@ -433,14 +438,20 @@ func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
 	}
 }
 
-// moveToDead 将消息写入死信 stream，并附带原始 id 与来源 stream 元数据
+// moveToDead 将消息写入死信 stream；框架元数据写入独立字段 DeadMetaField，不覆盖业务字段
 func (c *consumer) moveToDead(ctx context.Context, entry Entry) error {
-	values := make(map[string]any, len(entry.Values)+2)
+	values := make(map[string]any, len(entry.Values)+1)
 	for k, v := range entry.Values {
 		values[k] = v
 	}
-	values[deadOriginalIDField] = entry.ID
-	values[deadStreamField] = entry.Stream
+	metaRaw, err := json.Marshal(deadMeta{
+		OriginalID: entry.ID,
+		Stream:     entry.Stream,
+	})
+	if err != nil {
+		return errors.Wrap(err, "序列化死信 meta 失败")
+	}
+	values[DeadMetaField] = string(metaRaw)
 
 	args := &redisv9.XAddArgs{
 		Stream: c.cfg.deadStreamKey,

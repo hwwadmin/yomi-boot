@@ -5,6 +5,7 @@ package redisstream
 
 import (
 	"context"
+	"encoding/json"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -207,8 +208,13 @@ func TestConsumer_Dead(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := components.Publisher.AddBytes(ctx, "orders", []byte("bad")); err != nil {
-		t.Fatalf("AddBytes: %v", err)
+	// 业务字段与旧版扁平 meta 名冲突时仍应保留业务值
+	if _, err := components.Publisher.Add(ctx, "orders", map[string]string{
+		PayloadField:   "bad",
+		"_original_id": "biz-keep",
+		"_dead_from":   "biz-keep",
+	}); err != nil {
+		t.Fatalf("Add: %v", err)
 	}
 
 	select {
@@ -221,6 +227,24 @@ func TestConsumer_Dead(t *testing.T) {
 	for {
 		msgs, err := client.XRange(ctx, "orders.dead", "-", "+").Result()
 		if err == nil && len(msgs) >= 1 {
+			msg := msgs[0]
+			if got, _ := msg.Values["_original_id"].(string); got != "biz-keep" {
+				t.Fatalf("_original_id overwritten: %q", got)
+			}
+			if got, _ := msg.Values["_dead_from"].(string); got != "biz-keep" {
+				t.Fatalf("_dead_from overwritten: %q", got)
+			}
+			metaRaw, _ := msg.Values[DeadMetaField].(string)
+			if metaRaw == "" {
+				t.Fatal("expected DeadMetaField in dead message")
+			}
+			var meta deadMeta
+			if err := json.Unmarshal([]byte(metaRaw), &meta); err != nil {
+				t.Fatalf("unmarshal meta: %v", err)
+			}
+			if meta.Stream != "orders" || meta.OriginalID == "" {
+				t.Fatalf("unexpected meta: %+v", meta)
+			}
 			return
 		}
 		if time.Now().After(deadline) {
