@@ -69,4 +69,5 @@ type RuntimeConfig struct {
 	Count         int64         // Count 是单次拉取默认条数
 	ClaimMinIdle  time.Duration // ClaimMinIdle 是 PEL 认领默认最小空闲
 	ClaimInterval time.Duration // ClaimInterval 是 PEL 回收默认周期
+	StopTimeout   time.Duration // StopTimeout 是 Stop/Close 等待消费协程退出的超时
 }

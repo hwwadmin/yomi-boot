@@ -254,6 +254,56 @@ func TestConsumer_Dead(t *testing.T) {
 	}
 }
 
+func TestConsumer_StopTimeoutWhenHandlerBlocks(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	zero := int64(0)
+	enabled := true
+	components, err := NewComponents(Config{
+		Enabled:         &enabled,
+		DefaultMaxLen:   &zero,
+		BlockMS:         100,
+		ClaimIntervalMS: 60_000,
+		StopTimeoutMS:   100,
+	}, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+
+	ctx := context.Background()
+	started := make(chan struct{})
+	err = components.Consumer.Start(ctx, "c-block", GroupConfig{
+		Stream:   "block",
+		Group:    "g-block",
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		close(started)
+		select {} // 故意不响应 ctx，模拟阻塞 I/O
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if _, err := components.Publisher.AddBytes(ctx, "block", []byte("x")); err != nil {
+		t.Fatalf("AddBytes: %v", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for handler start")
+	}
+
+	begin := time.Now()
+	if err := components.Consumer.Stop("c-block"); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if elapsed := time.Since(begin); elapsed > time.Second {
+		t.Fatalf("Stop took too long: %v", elapsed)
+	}
+}
+
 func TestConsumer_StartFailsAfterClose(t *testing.T) {
 	t.Parallel()
 	client, cleanup := redistest.NewClient(t)

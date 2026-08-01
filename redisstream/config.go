@@ -31,6 +31,7 @@ const (
 	defaultClaimMinIdleMS  = 60000
 	defaultClaimIntervalMS = 30000
 	defaultMaxLen          = 100000
+	defaultStopTimeoutMS   = 30000
 )
 
 // Config 表示 Redis Stream 能力配置
@@ -42,6 +43,7 @@ type Config struct {
 	Count           int64  `mapstructure:"count"`             // Count 是单次拉取条数，0 表示使用默认值
 	ClaimMinIdleMS  int    `mapstructure:"claim_min_idle_ms"` // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值；过小会加大多实例重复投递概率
 	ClaimIntervalMS int    `mapstructure:"claim_interval_ms"` // ClaimIntervalMS 是 PEL 回收周期毫秒，0 表示使用默认值
+	StopTimeoutMS   int    `mapstructure:"stop_timeout_ms"`   // StopTimeoutMS 是 Stop/Close 等待消费协程退出的超时毫秒，0 表示使用默认值
 }
 
 // EnabledOrDefault 返回是否启用，未配置默认 false
@@ -68,6 +70,9 @@ func (c Config) Validate() error {
 	}
 	if c.ClaimIntervalMS < 0 {
 		return errors.New("redis_stream.claim_interval_ms 不能小于 0")
+	}
+	if c.StopTimeoutMS < 0 {
+		return errors.New("redis_stream.stop_timeout_ms 不能小于 0")
 	}
 	return nil
 }
@@ -116,6 +121,15 @@ func (c Config) ClaimInterval() time.Duration {
 	ms := c.ClaimIntervalMS
 	if ms <= 0 {
 		ms = defaultClaimIntervalMS
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// StopTimeout 返回 Stop/Close 等待消费协程退出的超时
+func (c Config) StopTimeout() time.Duration {
+	ms := c.StopTimeoutMS
+	if ms <= 0 {
+		ms = defaultStopTimeoutMS
 	}
 	return time.Duration(ms) * time.Millisecond
 }

@@ -64,5 +64,6 @@ func toRuntimeConfig(cfg Config) RuntimeConfig {
 		Count:         cfg.CountOrDefault(),
 		ClaimMinIdle:  cfg.ClaimMinIdle(),
 		ClaimInterval: cfg.ClaimInterval(),
+		StopTimeout:   cfg.StopTimeout(),
 	}
 }

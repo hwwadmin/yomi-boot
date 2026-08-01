@@ -38,7 +38,7 @@ type deadMeta struct {
 type ConsumerService interface {
 	// Start 同步确保消费组可用后启动消费循环；建组失败或管理器已 Close 时返回 error，同一 id 不可重复注册
 	Start(parentCtx context.Context, id string, cfg GroupConfig, handler Handler) error
-	// Stop 停止并移除指定消费者
+	// Stop 停止并移除指定消费者；等待退出受 stop_timeout 限制，超时后不再阻塞
 	Stop(id string) error
 	// StopAll 停止全部消费者
 	StopAll() error
@@ -48,11 +48,12 @@ type ConsumerService interface {
 
 // ConsumerManager 管理多个消费组订阅
 type ConsumerManager struct {
-	client  *redisv9.Client           // client 是底层 Redis 客户端
-	runtime RuntimeConfig             // runtime 是运行时默认参数
-	mu      sync.Mutex                // mu 保护 entries 与 closed
-	entries map[string]*consumerEntry // entries 是按标识管理的消费者实例
-	closed  bool                      // closed 标记 Close 之后禁止再 Start
+	client      *redisv9.Client           // client 是底层 Redis 客户端
+	runtime     RuntimeConfig             // runtime 是运行时默认参数
+	stopTimeout time.Duration             // stopTimeout 是 Stop 等待协程退出的超时
+	mu          sync.Mutex                // mu 保护 entries 与 closed
+	entries     map[string]*consumerEntry // entries 是按标识管理的消费者实例
+	closed      bool                      // closed 标记 Close 之后禁止再 Start
 }
 
 var _ ConsumerService = (*ConsumerManager)(nil)
@@ -69,10 +70,15 @@ func NewConsumerManager(client *redisv9.Client, runtime RuntimeConfig) *Consumer
 	if client == nil {
 		panic("redisstream: NewConsumerManager client 不能为 nil")
 	}
+	stopTimeout := runtime.StopTimeout
+	if stopTimeout <= 0 {
+		stopTimeout = time.Duration(defaultStopTimeoutMS) * time.Millisecond
+	}
 	return &ConsumerManager{
-		client:  client,
-		runtime: runtime,
-		entries: make(map[string]*consumerEntry),
+		client:      client,
+		runtime:     runtime,
+		stopTimeout: stopTimeout,
+		entries:     make(map[string]*consumerEntry),
 	}
 }
 
@@ -137,7 +143,7 @@ func (m *ConsumerManager) Start(
 	return nil
 }
 
-// Stop 停止指定消费者
+// Stop 停止指定消费者；等待退出超时后打 Warn 并返回，避免 handler 不响应取消时永久挂起
 func (m *ConsumerManager) Stop(id string) error {
 	m.mu.Lock()
 	entry, ok := m.entries[id]
@@ -149,8 +155,18 @@ func (m *ConsumerManager) Stop(id string) error {
 	m.mu.Unlock()
 
 	entry.cancel()
-	<-entry.done
-	return nil
+	timer := time.NewTimer(m.stopTimeout)
+	defer timer.Stop()
+	select {
+	case <-entry.done:
+		return nil
+	case <-timer.C:
+		logger.Warn(entry.ctx, "Redis Stream 消费者停止超时，放弃等待（未确认消息可由 PEL/XAUTOCLAIM 再投递）",
+			"consumer_id", id,
+			"timeout", m.stopTimeout,
+		)
+		return nil
+	}
 }
 
 // StopAll 停止全部消费者
