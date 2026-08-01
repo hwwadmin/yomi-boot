@@ -254,6 +254,42 @@ func TestConsumer_Dead(t *testing.T) {
 	}
 }
 
+func TestConsumer_StartFailsAfterClose(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	zero := int64(0)
+	enabled := true
+	components, err := NewComponents(Config{
+		Enabled:       &enabled,
+		DefaultMaxLen: &zero,
+		BlockMS:       100,
+	}, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+
+	if err := components.Consumer.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := components.Consumer.Close(); err != nil {
+		t.Fatalf("Close idempotent: %v", err)
+	}
+
+	err = components.Consumer.Start(context.Background(), "after-close", GroupConfig{
+		Stream:   "s",
+		Group:    "g",
+		Consumer: "w",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		return HandleAck
+	})
+	if err == nil {
+		t.Fatal("expected Start to fail after Close")
+	}
+}
+
 func TestConsumer_StartFailsWhenRedisUnavailable(t *testing.T) {
 	t.Parallel()
 	client, cleanup := redistest.NewClient(t)

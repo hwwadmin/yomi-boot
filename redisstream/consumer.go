@@ -36,13 +36,13 @@ type deadMeta struct {
 
 // ConsumerService 表示 Redis Stream 消费者管理能力
 type ConsumerService interface {
-	// Start 同步确保消费组可用后启动消费循环；建组失败返回 error，同一 id 不可重复注册
+	// Start 同步确保消费组可用后启动消费循环；建组失败或管理器已 Close 时返回 error，同一 id 不可重复注册
 	Start(parentCtx context.Context, id string, cfg GroupConfig, handler Handler) error
 	// Stop 停止并移除指定消费者
 	Stop(id string) error
 	// StopAll 停止全部消费者
 	StopAll() error
-	// Close 停止全部消费者
+	// Close 停止全部消费者并标记管理器已关闭；之后 Start 将返回 error
 	Close() error
 }
 
@@ -50,8 +50,9 @@ type ConsumerService interface {
 type ConsumerManager struct {
 	client  *redisv9.Client           // client 是底层 Redis 客户端
 	runtime RuntimeConfig             // runtime 是运行时默认参数
-	mu      sync.Mutex                // mu 保护 entries 并发访问
+	mu      sync.Mutex                // mu 保护 entries 与 closed
 	entries map[string]*consumerEntry // entries 是按标识管理的消费者实例
+	closed  bool                      // closed 标记 Close 之后禁止再 Start
 }
 
 var _ ConsumerService = (*ConsumerManager)(nil)
@@ -93,6 +94,13 @@ func (m *ConsumerManager) Start(
 		return err
 	}
 
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return errors.New("redisstream: ConsumerManager 已关闭")
+	}
+	m.mu.Unlock()
+
 	c := &consumer{
 		client:  m.client,
 		runtime: m.runtime,
@@ -103,6 +111,10 @@ func (m *ConsumerManager) Start(
 	}
 
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return errors.New("redisstream: ConsumerManager 已关闭")
+	}
 	if _, exists := m.entries[id]; exists {
 		m.mu.Unlock()
 		return errors.Newf("redisstream: 消费者已存在: %s", id)
@@ -159,8 +171,15 @@ func (m *ConsumerManager) StopAll() error {
 	return joined
 }
 
-// Close 停止全部消费者
+// Close 停止全部消费者并标记已关闭；幂等，之后 Start 将失败
 func (m *ConsumerManager) Close() error {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
+	m.closed = true
+	m.mu.Unlock()
 	return m.StopAll()
 }
 
