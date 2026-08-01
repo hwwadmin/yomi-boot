@@ -263,6 +263,15 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(ctx, "Redis Stream claimLoop goroutine panic",
+					"stream", c.cfg.logicalStream,
+					"group", c.cfg.group,
+					"panic", r,
+				)
+			}
+		}()
 		c.claimLoop(ctx, handler, &processMu)
 	}()
 	defer wg.Wait()
@@ -317,6 +326,15 @@ func (c *consumer) claimLoop(ctx context.Context, handler Handler, processMu *sy
 	defer ticker.Stop()
 
 	claimOnce := func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(ctx, "Redis Stream claim 执行 panic",
+					"stream", c.cfg.logicalStream,
+					"group", c.cfg.group,
+					"panic", r,
+				)
+			}
+		}()
 		processMu.Lock()
 		defer processMu.Unlock()
 		c.claimPending(ctx, handler)
