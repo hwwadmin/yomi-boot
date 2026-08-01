@@ -3,6 +3,9 @@
 // 本包独立于 kafka 与 RedisService：仅依赖 go-redis 的 *redis.Client，
 // 由业务按需启用，不作为统一消息门面。
 //
+// 消费契约：每条投递只调用一次 Handler；是否当场重试或阻塞由业务在 Handler 内自行决定。
+// HandleRetry 表示不 XACK、留在 PEL 并继续拉取后续消息，再投递依赖 XAUTOCLAIM。
+//
 // @author zwei
 package redisstream
 
@@ -28,14 +31,13 @@ const (
 
 // Config 表示 Redis Stream 能力配置
 type Config struct {
-	Enabled           *bool  `mapstructure:"enabled"`             // Enabled 是否启用，未配置默认 false
-	KeyPrefix         string `mapstructure:"key_prefix"`          // KeyPrefix 拼在 stream 名之前
-	DefaultMaxLen     *int64 `mapstructure:"default_maxlen"`      // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
-	BlockMS           int    `mapstructure:"block_ms"`            // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
-	Count             int64  `mapstructure:"count"`               // Count 是单次拉取条数，0 表示使用默认值
-	ClaimMinIdleMS    int    `mapstructure:"claim_min_idle_ms"`   // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值
-	ClaimIntervalMS   int    `mapstructure:"claim_interval_ms"`   // ClaimIntervalMS 是 PEL 回收周期毫秒，0 表示使用默认值
-	MaxHandlerRetries *int   `mapstructure:"max_handler_retries"` // MaxHandlerRetries 是 handler 返回 Retry 时的最大重试次数；nil 默认 -1（无限）
+	Enabled         *bool  `mapstructure:"enabled"`           // Enabled 是否启用，未配置默认 false
+	KeyPrefix       string `mapstructure:"key_prefix"`        // KeyPrefix 拼在 stream 名之前
+	DefaultMaxLen   *int64 `mapstructure:"default_maxlen"`    // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
+	BlockMS         int    `mapstructure:"block_ms"`          // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
+	Count           int64  `mapstructure:"count"`             // Count 是单次拉取条数，0 表示使用默认值
+	ClaimMinIdleMS  int    `mapstructure:"claim_min_idle_ms"` // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值
+	ClaimIntervalMS int    `mapstructure:"claim_interval_ms"` // ClaimIntervalMS 是 PEL 回收周期毫秒，0 表示使用默认值
 }
 
 // EnabledOrDefault 返回是否启用，未配置默认 false
@@ -62,9 +64,6 @@ func (c Config) Validate() error {
 	}
 	if c.ClaimIntervalMS < 0 {
 		return errors.New("redis_stream.claim_interval_ms 不能小于 0")
-	}
-	if c.MaxHandlerRetries != nil && *c.MaxHandlerRetries < -1 {
-		return errors.New("redis_stream.max_handler_retries 不能小于 -1")
 	}
 	return nil
 }
@@ -115,14 +114,6 @@ func (c Config) ClaimInterval() time.Duration {
 		ms = defaultClaimIntervalMS
 	}
 	return time.Duration(ms) * time.Millisecond
-}
-
-// MaxHandlerRetriesOrDefault 返回 handler 最大重试次数，默认 -1（无限）
-func (c Config) MaxHandlerRetriesOrDefault() int {
-	if c.MaxHandlerRetries == nil {
-		return -1
-	}
-	return *c.MaxHandlerRetries
 }
 
 // ConfigSection 返回 redis_stream 配置段

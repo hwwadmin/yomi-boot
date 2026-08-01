@@ -22,15 +22,13 @@ func TestConsumer_AckFlow(t *testing.T) {
 
 	zero := int64(0)
 	enabled := true
-	retries := 3
 	cfg := Config{
-		Enabled:           &enabled,
-		DefaultMaxLen:     &zero,
-		BlockMS:           200,
-		Count:             10,
-		ClaimMinIdleMS:    1000,
-		ClaimIntervalMS:   500,
-		MaxHandlerRetries: &retries,
+		Enabled:         &enabled,
+		DefaultMaxLen:   &zero,
+		BlockMS:         200,
+		Count:           10,
+		ClaimMinIdleMS:  1000,
+		ClaimIntervalMS: 500,
 	}
 	components, err := NewComponents(cfg, client)
 	if err != nil {
@@ -91,22 +89,100 @@ func TestConsumer_AckFlow(t *testing.T) {
 	}
 }
 
-func TestConsumer_DeadAndRetryLimit(t *testing.T) {
+func TestConsumer_RetryLeavesPELAndContinues(t *testing.T) {
 	t.Parallel()
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
 
 	zero := int64(0)
 	enabled := true
-	retries := 0
 	cfg := Config{
-		Enabled:           &enabled,
-		DefaultMaxLen:     &zero,
-		BlockMS:           100,
-		Count:             10,
-		ClaimMinIdleMS:    5000,
-		ClaimIntervalMS:   5000,
-		MaxHandlerRetries: &retries,
+		Enabled:         &enabled,
+		DefaultMaxLen:   &zero,
+		BlockMS:         100,
+		Count:           10,
+		ClaimMinIdleMS:  5000,
+		ClaimIntervalMS: 5000,
+	}
+	components, err := NewComponents(cfg, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var retrySeen atomic.Bool
+	secondDone := make(chan struct{})
+	err = components.Consumer.Start(ctx, "c-retry", GroupConfig{
+		Stream:   "orders",
+		Group:    "g-retry",
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, entry Entry) HandleResult {
+		switch string(entry.Payload()) {
+		case "first":
+			retrySeen.Store(true)
+			return HandleRetry
+		case "second":
+			close(secondDone)
+			return HandleAck
+		default:
+			return HandleDead
+		}
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := components.Publisher.AddBytes(ctx, "orders", []byte("first")); err != nil {
+		t.Fatalf("AddBytes first: %v", err)
+	}
+	if _, err := components.Publisher.AddBytes(ctx, "orders", []byte("second")); err != nil {
+		t.Fatalf("AddBytes second: %v", err)
+	}
+
+	select {
+	case <-secondDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for second message; Retry should not block consumer")
+	}
+	if !retrySeen.Load() {
+		t.Fatal("expected first message to be handled with Retry")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := client.XPending(ctx, "orders", "g-retry").Result()
+		if err == nil && pending.Count >= 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			count := int64(-1)
+			if err == nil {
+				count = pending.Count
+			}
+			t.Fatalf("expected first message to remain in PEL, err=%v count=%d", err, count)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestConsumer_Dead(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	zero := int64(0)
+	enabled := true
+	cfg := Config{
+		Enabled:         &enabled,
+		DefaultMaxLen:   &zero,
+		BlockMS:         100,
+		Count:           10,
+		ClaimMinIdleMS:  5000,
+		ClaimIntervalMS: 5000,
 	}
 	components, err := NewComponents(cfg, client)
 	if err != nil {
@@ -124,12 +200,8 @@ func TestConsumer_DeadAndRetryLimit(t *testing.T) {
 		Consumer: "w1",
 		Start:    "0",
 	}, func(_ context.Context, _ Entry) HandleResult {
-		select {
-		case <-done:
-		default:
-			close(done)
-		}
-		return HandleRetry
+		close(done)
+		return HandleDead
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)

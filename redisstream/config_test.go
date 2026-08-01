@@ -41,7 +41,4 @@ func TestConfigDefaults(t *testing.T) {
 	if cfg.CountOrDefault() != defaultCount {
 		t.Fatalf("CountOrDefault=%d want %d", cfg.CountOrDefault(), defaultCount)
 	}
-	if cfg.MaxHandlerRetriesOrDefault() != -1 {
-		t.Fatalf("MaxHandlerRetriesOrDefault=%d want -1", cfg.MaxHandlerRetriesOrDefault())
-	}
 }

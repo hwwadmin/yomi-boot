@@ -51,6 +51,7 @@ type ConsumerManager struct {
 
 var _ ConsumerService = (*ConsumerManager)(nil)
 
+// consumerEntry 表示一个受管消费者的运行态
 type consumerEntry struct {
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -200,54 +201,47 @@ func (m *ConsumerManager) resolveGroupConfig(cfg GroupConfig) (resolvedGroupConf
 		claimInterval = m.runtime.ClaimInterval
 	}
 
-	maxRetries := m.runtime.MaxHandlerRetries
-	if cfg.MaxHandlerRetries != nil {
-		maxRetries = *cfg.MaxHandlerRetries
-	}
-	if maxRetries < -1 {
-		return resolvedGroupConfig{}, errors.New("redisstream: max_handler_retries 不能小于 -1")
-	}
-
 	deadStream := strings.TrimSpace(cfg.DeadStream)
 	if deadStream == "" {
 		deadStream = stream + ".dead"
 	}
 
 	return resolvedGroupConfig{
-		logicalStream:     stream,
-		streamKey:         m.runtime.KeyPrefix + stream,
-		group:             group,
-		consumer:          consumerName,
-		start:             start,
-		count:             count,
-		block:             block,
-		claimMinIdle:      claimMinIdle,
-		claimInterval:     claimInterval,
-		deadStreamKey:     m.runtime.KeyPrefix + deadStream,
-		maxHandlerRetries: maxRetries,
+		logicalStream: stream,
+		streamKey:     m.runtime.KeyPrefix + stream,
+		group:         group,
+		consumer:      consumerName,
+		start:         start,
+		count:         count,
+		block:         block,
+		claimMinIdle:  claimMinIdle,
+		claimInterval: claimInterval,
+		deadStreamKey: m.runtime.KeyPrefix + deadStream,
 	}, nil
 }
 
+// resolvedGroupConfig 是已解析的消费组运行参数
 type resolvedGroupConfig struct {
-	logicalStream     string
-	streamKey         string
-	group             string
-	consumer          string
-	start             string
-	count             int64
-	block             time.Duration
-	claimMinIdle      time.Duration
-	claimInterval     time.Duration
-	deadStreamKey     string
-	maxHandlerRetries int
+	logicalStream string
+	streamKey     string
+	group         string
+	consumer      string
+	start         string
+	count         int64
+	block         time.Duration
+	claimMinIdle  time.Duration
+	claimInterval time.Duration
+	deadStreamKey string
 }
 
+// consumer 表示单个消费组订阅的运行实例
 type consumer struct {
 	client  *redisv9.Client
 	runtime RuntimeConfig
 	cfg     resolvedGroupConfig
 }
 
+// run 阻塞执行消费与 PEL 回收循环
 func (c *consumer) run(ctx context.Context, handler Handler) error {
 	if err := c.ensureGroup(ctx); err != nil {
 		logger.Error(ctx, "创建 Redis Stream 消费组失败",
@@ -361,72 +355,35 @@ func (c *consumer) claimPending(ctx context.Context, handler Handler) {
 	}
 }
 
+// processEntry 对单条投递调用一次 Handler，并按结果收尾；不代业务做进程内重试循环
 func (c *consumer) processEntry(ctx context.Context, handler Handler, entry Entry) error {
-	retries := 0
-	delay := jitterDelay(consumerRetryInitialDelay)
-	for {
-		result := invokeHandler(ctx, handler, entry)
-		switch result {
-		case HandleAck:
-			return c.ackWithRetry(ctx, entry.ID)
-		case HandleDead:
-			if err := c.moveToDead(ctx, entry); err != nil {
-				logger.Error(ctx, "写入 Redis Stream dead 失败，保留在 PEL 并重试",
-					"stream", entry.Stream,
-					"id", entry.ID,
-					"error", err,
-				)
-				if waitErr := waitForRetry(ctx, delay); waitErr != nil {
-					return waitErr
-				}
-				delay = nextRetryDelay(delay)
-				continue
-			}
-			return c.ackWithRetry(ctx, entry.ID)
-		case HandleRetry:
-			if c.cfg.maxHandlerRetries >= 0 && retries >= c.cfg.maxHandlerRetries {
-				logger.Error(ctx, "Redis Stream 消费重试超限，转入 dead",
-					"stream", entry.Stream,
-					"id", entry.ID,
-					"retries", retries,
-					"max_retries", c.cfg.maxHandlerRetries,
-				)
-				if err := c.moveToDead(ctx, entry); err != nil {
-					logger.Error(ctx, "写入 Redis Stream dead 失败，保留在 PEL 并重试",
-						"stream", entry.Stream,
-						"id", entry.ID,
-						"error", err,
-					)
-					if waitErr := waitForRetry(ctx, delay); waitErr != nil {
-						return waitErr
-					}
-					delay = nextRetryDelay(delay)
-					continue
-				}
-				return c.ackWithRetry(ctx, entry.ID)
-			}
-			logger.Warn(ctx, "Redis Stream 消费将重试",
+	result := invokeHandler(ctx, handler, entry)
+	switch result {
+	case HandleAck:
+		return c.ackWithRetry(ctx, entry.ID)
+	case HandleDead:
+		if err := c.moveToDead(ctx, entry); err != nil {
+			logger.Error(ctx, "写入 Redis Stream dead 失败，保留在 PEL",
 				"stream", entry.Stream,
 				"id", entry.ID,
-				"retries", retries,
+				"error", err,
 			)
-			retries++
-			if err := waitForRetry(ctx, delay); err != nil {
-				return err
-			}
-			delay = nextRetryDelay(delay)
-		default:
-			logger.Warn(ctx, "Redis Stream 未知 HandleResult，按 Retry 处理",
-				"stream", entry.Stream,
-				"id", entry.ID,
-				"result", result,
-			)
-			retries++
-			if err := waitForRetry(ctx, delay); err != nil {
-				return err
-			}
-			delay = nextRetryDelay(delay)
+			return nil
 		}
+		return c.ackWithRetry(ctx, entry.ID)
+	case HandleRetry:
+		logger.Warn(ctx, "Redis Stream 消费返回 Retry，保留在 PEL 并继续",
+			"stream", entry.Stream,
+			"id", entry.ID,
+		)
+		return nil
+	default:
+		logger.Warn(ctx, "Redis Stream 未知 HandleResult，按 Retry 保留在 PEL 并继续",
+			"stream", entry.Stream,
+			"id", entry.ID,
+			"result", result,
+		)
+		return nil
 	}
 }
 

@@ -55,14 +55,14 @@ func (c *Components) Close() error {
 	return joined
 }
 
+// toRuntimeConfig 将配置转换为运行时默认参数
 func toRuntimeConfig(cfg Config) RuntimeConfig {
 	return RuntimeConfig{
-		KeyPrefix:         cfg.KeyPrefixOrDefault(),
-		DefaultMaxLen:     cfg.DefaultMaxLenOrDefault(),
-		Block:             cfg.Block(),
-		Count:             cfg.CountOrDefault(),
-		ClaimMinIdle:      cfg.ClaimMinIdle(),
-		ClaimInterval:     cfg.ClaimInterval(),
-		MaxHandlerRetries: cfg.MaxHandlerRetriesOrDefault(),
+		KeyPrefix:     cfg.KeyPrefixOrDefault(),
+		DefaultMaxLen: cfg.DefaultMaxLenOrDefault(),
+		Block:         cfg.Block(),
+		Count:         cfg.CountOrDefault(),
+		ClaimMinIdle:  cfg.ClaimMinIdle(),
+		ClaimInterval: cfg.ClaimInterval(),
 	}
 }
