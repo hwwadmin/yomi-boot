@@ -33,7 +33,7 @@ func NewRedisStreamHttpRecordService(publisher redisstream.PublisherService, str
 	}
 }
 
-// Handle 将访问记录异步发布到 Redis Stream（goroutine + XADD，尽快返回）
+// Handle 将访问记录异步发布到 Redis Stream（复用发布工作池，尽快返回）
 func (s *RedisStreamHttpRecordService) Handle(ctx context.Context, record *HttpRecord) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -46,21 +46,11 @@ func (s *RedisStreamHttpRecordService) Handle(ctx context.Context, record *HttpR
 	}
 
 	wire := toWireRecord(record)
-	stream := s.stream
-	publisher := s.publisher
-	publishCtx := context.WithoutCancel(ctx)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Warn(publishCtx, "HTTP 访问记录 Redis Stream 异步发布 panic", "panic", r)
-			}
-		}()
-		if _, err := publisher.AddJSON(publishCtx, stream, wire); err != nil {
-			logger.Warn(publishCtx, "HTTP 访问记录 Redis Stream 发布失败",
-				"error", err,
-				"stream", stream,
-				"traceId", wire.TraceID,
-			)
-		}
-	}()
+	if err := s.publisher.AddJSONAsync(ctx, s.stream, wire); err != nil {
+		logger.Warn(ctx, "HTTP 访问记录 Redis Stream 发布失败",
+			"error", err,
+			"stream", s.stream,
+			"traceId", wire.TraceID,
+		)
+	}
 }

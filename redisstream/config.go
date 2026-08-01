@@ -27,24 +27,35 @@ const SectionKey = "redis_stream"
 
 // 默认运行参数
 const (
-	defaultBlockMS         = 2000
-	defaultCount           = 16
-	defaultClaimMinIdleMS  = 60000
-	defaultClaimIntervalMS = 30000
-	defaultMaxLen          = 100000
-	defaultStopTimeoutMS   = 30000
+	defaultBlockMS            = 2000
+	defaultCount              = 16
+	defaultClaimMinIdleMS     = 60000
+	defaultClaimIntervalMS    = 30000
+	defaultMaxLen             = 100000
+	defaultStopTimeoutMS      = 30000
+	defaultPublishWorkerNum   = 4
+	defaultPublishWorkerSize  = 256
+	defaultPublishSendTimeout = 3 * time.Second
 )
+
+// PublishWorkerConfig 表示 Redis Stream 异步发布专用工作池配置
+type PublishWorkerConfig struct {
+	WorkNum              int `mapstructure:"work_num"`               // WorkNum 是并发 worker 数，0 表示使用默认值
+	Size                 int `mapstructure:"size"`                   // Size 是任务队列容量，0 表示使用默认值
+	SubmitTimeoutSeconds int `mapstructure:"submit_timeout_seconds"` // SubmitTimeoutSeconds 是入队等待超时秒数，0 表示使用 worker 默认值
+}
 
 // Config 表示 Redis Stream 能力配置
 type Config struct {
-	Enabled         *bool  `mapstructure:"enabled"`           // Enabled 是否启用，未配置默认 false
-	KeyPrefix       string `mapstructure:"key_prefix"`        // KeyPrefix 拼在逻辑 stream 名之前（直接拼接）；非空时建议以 ':' 结尾，如 "rs:" → "rs:orders"
-	DefaultMaxLen   *int64 `mapstructure:"default_maxlen"`    // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
-	BlockMS         int    `mapstructure:"block_ms"`          // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
-	Count           int64  `mapstructure:"count"`             // Count 是单次拉取条数，0 表示使用默认值
-	ClaimMinIdleMS  int    `mapstructure:"claim_min_idle_ms"` // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值；过小会加大多实例重复投递概率
-	ClaimIntervalMS int    `mapstructure:"claim_interval_ms"` // ClaimIntervalMS 是 PEL 回收周期毫秒，0 表示使用默认值
-	StopTimeoutMS   int    `mapstructure:"stop_timeout_ms"`   // StopTimeoutMS 是 Stop/Close 等待消费协程退出的超时毫秒，0 表示使用默认值
+	Enabled         *bool               `mapstructure:"enabled"`           // Enabled 是否启用，未配置默认 false
+	KeyPrefix       string              `mapstructure:"key_prefix"`        // KeyPrefix 拼在逻辑 stream 名之前（直接拼接）；非空时建议以 ':' 结尾，如 "rs:" → "rs:orders"
+	DefaultMaxLen   *int64              `mapstructure:"default_maxlen"`    // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
+	BlockMS         int                 `mapstructure:"block_ms"`          // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
+	Count           int64               `mapstructure:"count"`             // Count 是单次拉取条数，0 表示使用默认值
+	ClaimMinIdleMS  int                 `mapstructure:"claim_min_idle_ms"` // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值；过小会加大多实例重复投递概率
+	ClaimIntervalMS int                 `mapstructure:"claim_interval_ms"` // ClaimIntervalMS 是 PEL 回收周期毫秒，0 表示使用默认值
+	StopTimeoutMS   int                 `mapstructure:"stop_timeout_ms"`   // StopTimeoutMS 是 Stop/Close 等待消费协程退出的超时毫秒，0 表示使用默认值
+	PublishWorker   PublishWorkerConfig `mapstructure:"publish_worker"`    // PublishWorker 是异步发布工作池配置
 }
 
 // EnabledOrDefault 返回是否启用，未配置默认 false
@@ -75,12 +86,29 @@ func (c Config) Validate() error {
 	if c.StopTimeoutMS < 0 {
 		return errors.New("redis_stream.stop_timeout_ms 不能小于 0")
 	}
+	if err := c.PublishWorker.Validate(); err != nil {
+		return err
+	}
 	prefix := strings.TrimSpace(c.KeyPrefix)
 	if prefix != "" && !strings.HasSuffix(prefix, ":") {
 		logger.WarnWithoutCtx(
 			"redis_stream.key_prefix 建议以 ':' 结尾，否则会与 stream 名直接粘连",
 			"key_prefix", prefix,
 		)
+	}
+	return nil
+}
+
+// Validate 校验 Redis Stream 异步发布工作池配置
+func (c PublishWorkerConfig) Validate() error {
+	if c.WorkNum < 0 {
+		return errors.New("redis_stream.publish_worker.work_num 不能小于 0")
+	}
+	if c.Size < 0 {
+		return errors.New("redis_stream.publish_worker.size 不能小于 0")
+	}
+	if c.SubmitTimeoutSeconds < 0 {
+		return errors.New("redis_stream.publish_worker.submit_timeout_seconds 不能小于 0")
 	}
 	return nil
 }

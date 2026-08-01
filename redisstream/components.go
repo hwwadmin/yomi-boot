@@ -4,8 +4,12 @@
 package redisstream
 
 import (
+	"context"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/worker"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )
@@ -26,18 +30,51 @@ func NewComponents(cfg Config, client *redisv9.Client) (*Components, error) {
 	}
 
 	runtime := toRuntimeConfig(cfg)
+	syncPublisher := NewPublisher(client, runtime)
+
+	publishWorkerCfg := buildPublishWorkerConfig(cfg.PublishWorker)
+	publishWorker, err := worker.NewWorker(publishWorkerCfg, context.Background())
+	if err != nil {
+		_ = syncPublisher.Close()
+		return nil, err
+	}
+	publishWorker.Start()
+
 	logger.InfoWithoutCtx(
 		"初始化 Redis Stream 组件成功",
 		"key_prefix", runtime.KeyPrefix,
 		"default_maxlen", runtime.DefaultMaxLen,
 		"block_ms", runtime.Block.Milliseconds(),
 		"count", runtime.Count,
+		"publish_worker_num", publishWorkerCfg.WorkNum,
+		"publish_worker_size", publishWorkerCfg.Size,
 	)
 
 	return &Components{
-		Publisher: NewPublisher(client, runtime),
+		Publisher: NewAsyncPublisher(syncPublisher, publishWorker, defaultPublishSendTimeout),
 		Consumer:  NewConsumerManager(client, runtime),
 	}, nil
+}
+
+// buildPublishWorkerConfig 将 Redis Stream 异步发布工作池配置转换为 worker 配置
+func buildPublishWorkerConfig(cfg PublishWorkerConfig) worker.WorkConfig {
+	workNum := cfg.WorkNum
+	if workNum <= 0 {
+		workNum = defaultPublishWorkerNum
+	}
+	size := cfg.Size
+	if size <= 0 {
+		size = defaultPublishWorkerSize
+	}
+	workCfg := worker.WorkConfig{
+		Name:    "redisstream.publish",
+		WorkNum: workNum,
+		Size:    size,
+	}
+	if cfg.SubmitTimeoutSeconds > 0 {
+		workCfg.SubmitTimeout = time.Duration(cfg.SubmitTimeoutSeconds) * time.Second
+	}
+	return workCfg
 }
 
 // Close 停止消费者并关闭发布者；不关闭底层 Redis client

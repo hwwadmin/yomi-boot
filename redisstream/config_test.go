@@ -42,3 +42,17 @@ func TestConfigDefaults(t *testing.T) {
 		t.Fatalf("CountOrDefault=%d want %d", cfg.CountOrDefault(), defaultCount)
 	}
 }
+
+func TestPublishWorkerConfigValidate(t *testing.T) {
+	t.Parallel()
+	enabled := true
+	cfg := Config{
+		Enabled: &enabled,
+		PublishWorker: PublishWorkerConfig{
+			WorkNum: -1,
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for negative publish_worker.work_num")
+	}
+}

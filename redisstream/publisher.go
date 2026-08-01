@@ -22,6 +22,12 @@ type PublisherService interface {
 	AddBytes(ctx context.Context, stream string, payload []byte) (id string, err error)
 	// AddJSON 将对象序列化为 JSON 后写入默认字段并追加
 	AddJSON(ctx context.Context, stream string, value any) (id string, err error)
+	// AddAsync 异步入队发布；成功表示任务已进入工作池，不代表 Redis 已确认
+	AddAsync(ctx context.Context, stream string, values map[string]string) error
+	// AddBytesAsync 异步入队字节载荷发布
+	AddBytesAsync(ctx context.Context, stream string, payload []byte) error
+	// AddJSONAsync 序列化 JSON 后异步入队发布
+	AddJSONAsync(ctx context.Context, stream string, value any) error
 	// Close 释放发布侧资源（当前为幂等空操作，保留对称关闭语义）
 	Close() error
 }
@@ -96,6 +102,24 @@ func (p *Publisher) AddJSON(ctx context.Context, stream string, value any) (stri
 		return "", errors.Wrap(err, "序列化 Redis Stream 消息失败")
 	}
 	return p.AddBytes(ctx, stream, raw)
+}
+
+// AddAsync 异步入队发布；无工作池时退化为同步 Add
+func (p *Publisher) AddAsync(ctx context.Context, stream string, values map[string]string) error {
+	_, err := p.Add(ctx, stream, values)
+	return err
+}
+
+// AddBytesAsync 异步入队字节载荷发布；无工作池时退化为同步 AddBytes
+func (p *Publisher) AddBytesAsync(ctx context.Context, stream string, payload []byte) error {
+	_, err := p.AddBytes(ctx, stream, payload)
+	return err
+}
+
+// AddJSONAsync 序列化 JSON 后异步入队发布；无工作池时退化为同步 AddJSON
+func (p *Publisher) AddJSONAsync(ctx context.Context, stream string, value any) error {
+	_, err := p.AddJSON(ctx, stream, value)
+	return err
 }
 
 // Close 幂等关闭发布者
