@@ -17,7 +17,7 @@ import (
 // KafkaConsumerID 是 HTTP 访问记录 Kafka 消费者在 ConsumerManager 中的标识
 const KafkaConsumerID = "httprecord"
 
-// RecordHandler 是 HTTP 访问记录消费处理函数
+// RecordHandler 是 HTTP 访问记录消费处理函数（Kafka / 内存队列共用）
 type RecordHandler func(ctx context.Context, record *HttpRecord) yomikafka.ConsumeResult
 
 // KafkaRecordConsumerConfig 表示 HTTP 访问记录 Kafka 消费者参数

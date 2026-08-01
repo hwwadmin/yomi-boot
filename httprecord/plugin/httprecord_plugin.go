@@ -12,6 +12,7 @@ import (
 // httpRecordPlugin HTTP 访问记录插件
 type httpRecordPlugin struct {
 	plugin.PluginState
+	memorySvc *httprecord.MemoryHttpRecordService
 }
 
 const httpRecordName = "httprecord"
@@ -21,7 +22,7 @@ func NewHttpRecord() plugin.Plugin {
 	return &httpRecordPlugin{PluginState: plugin.NewPluginState(httpRecordName)}
 }
 
-// Init 装配 HttpRecordService：默认 Nop；enabled 时必须已有 KafkaPublisher
+// Init 装配 HttpRecordService：默认 Nop；enabled 时按 provider 分发 kafka / memory
 func (p *httpRecordPlugin) Init(host *plugin.Host) {
 	cfg := config.MustSection[httprecord.Config](host.Doc, httprecord.SectionKey)
 	if !cfg.EnabledOrDefault() {
@@ -29,15 +30,31 @@ func (p *httpRecordPlugin) Init(host *plugin.Host) {
 		p.SetStarted()
 		return
 	}
-	if host.KafkaPublisher == nil {
-		panic("http_record.enabled=true 但 KafkaPublisher 未初始化")
+
+	switch cfg.ProviderOrDefault() {
+	case httprecord.ProviderKafka:
+		if host.KafkaPublisher == nil {
+			panic("http_record.enabled=true 且 provider=kafka 但 KafkaPublisher 未初始化")
+		}
+		host.HttpRecordService = httprecord.NewKafkaHttpRecordService(
+			host.KafkaPublisher,
+			cfg.KafkaTopicOrDefault(),
+		)
+	case httprecord.ProviderMemory:
+		svc := httprecord.NewMemoryHttpRecordService(cfg.Memory.QueueSizeOrDefault())
+		p.memorySvc = svc
+		host.HttpRecordService = svc
+	default:
+		panic("http_record.provider 不支持: " + cfg.ProviderOrDefault())
 	}
-	host.HttpRecordService = httprecord.NewKafkaHttpRecordService(
-		host.KafkaPublisher,
-		cfg.KafkaTopicOrDefault(),
-	)
 	p.SetStarted()
 }
 
-// Close 无额外资源需释放
-func (p *httpRecordPlugin) Close(_ *plugin.Host) {}
+// Close 关闭内存队列服务（若有）；不等待排空
+func (p *httpRecordPlugin) Close(_ *plugin.Host) {
+	if p.memorySvc == nil {
+		return
+	}
+	p.memorySvc.Close()
+	p.memorySvc = nil
+}

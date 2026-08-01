@@ -44,7 +44,7 @@ import (
 // 10. dtm         — 写入 DtmServer；enabled 时探活
 // 11. idempotency — stale_cleaner_enabled=true 时启动
 // 12. token       — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
-// 13. httprecord  — http_record.enabled=true 时装配 Kafka 服务，否则 Nop（默认关；文件 access 由 logger.AccessMiddleware 负责）
+// 13. httprecord  — http_record.enabled=true 时按 provider 装配 kafka/memory 服务，否则 Nop（默认关；文件 access 由 logger.AccessMiddleware 负责）
 // 14. consul      — consul.enabled=true 时启动
 // 15. event       — publisher_enabled / consumer_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
 // 16. custom      — InfraOptions.AddCustomPlugin 注册的服务自定义插件

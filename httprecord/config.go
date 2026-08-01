@@ -16,6 +16,15 @@ const (
 	defaultHTTPRecordMaxResponseBodySize = 4096
 	defaultHttpRecordKafkaTopic          = "yomi.http.record"
 	defaultHttpRecordConsumerGroupID     = "httprecord-service"
+	defaultHttpRecordProvider            = ProviderMemory
+	defaultMemoryQueueSize               = 1024
+	defaultMemoryWorkers                 = 2
+)
+
+// HttpRecordService 实现提供商标识
+const (
+	ProviderKafka  = "kafka"  // ProviderKafka 通过 Kafka 异步发布
+	ProviderMemory = "memory" // ProviderMemory 通过进程内内存队列异步处理
 )
 
 // SectionKey YAML 根 key
@@ -32,9 +41,16 @@ func (c ConsumerConfig) EnabledOrDefault() bool {
 	return config.BoolOrDefault(c.Enabled)
 }
 
-// Config 表示 HTTP 访问记录采集配置（Kafka 审计入库；默认关闭，与文件 access 日志无关）
+// MemoryConfig 表示进程内内存队列配置（provider=memory 时生效）
+type MemoryConfig struct {
+	QueueSize int `mapstructure:"queue_size"` // QueueSize 是内存队列缓冲容量
+	Workers   int `mapstructure:"workers"`    // Workers 是内存消费协程数（供消费端点读取）
+}
+
+// Config 表示 HTTP 访问记录采集配置（默认关闭，与文件 access 日志无关）
 type Config struct {
 	Enabled             *bool          `mapstructure:"enabled"`                // Enabled 是否启用 HTTP 访问记录，未配置默认 false
+	Provider            string         `mapstructure:"provider"`               // Provider 是实现提供商：kafka 或 memory
 	KafkaTopic          string         `mapstructure:"kafka_topic"`            // KafkaTopic 是 Kafka 发布/订阅主题
 	SkipPaths           []string       `mapstructure:"skip_paths"`             // SkipPaths 是不进行记录采集的接口路径列表
 	MaxRequestBodySize  int            `mapstructure:"max_request_body_size"`  // MaxRequestBodySize 是请求体记录最大字节数
@@ -42,6 +58,7 @@ type Config struct {
 	RecordRequestBody   bool           `mapstructure:"record_request_body"`    // RecordRequestBody 是否记录请求体
 	RecordResponseBody  bool           `mapstructure:"record_response_body"`   // RecordResponseBody 是否记录响应体
 	MaskSensitive       bool           `mapstructure:"mask_sensitive"`         // MaskSensitive 是否对敏感字段脱敏
+	Memory              MemoryConfig   `mapstructure:"memory"`                 // Memory 是内存队列配置（provider=memory）
 	Consumer            ConsumerConfig `mapstructure:"consumer"`               // Consumer 是 Kafka 消费者配置
 }
 
@@ -50,12 +67,34 @@ func (c Config) EnabledOrDefault() bool {
 	return config.BoolOrDefault(c.Enabled)
 }
 
+// ProviderOrDefault 返回实现提供商，未配置时默认 kafka
+func (c Config) ProviderOrDefault() string {
+	if provider := strings.ToLower(strings.TrimSpace(c.Provider)); provider != "" {
+		return provider
+	}
+	return defaultHttpRecordProvider
+}
+
 // Validate 校验 HTTP 访问记录配置本段语义
 func (c Config) Validate() error {
 	for _, skipPath := range c.SkipPaths {
 		if skipPath != strings.TrimSpace(skipPath) {
 			return errors.New("http_record.skip_paths 不能含首尾空格")
 		}
+	}
+	if !c.EnabledOrDefault() {
+		return nil
+	}
+	switch c.ProviderOrDefault() {
+	case ProviderKafka, ProviderMemory:
+	default:
+		return errors.Newf("http_record.provider 不支持: %s", c.Provider)
+	}
+	if c.Memory.QueueSize < 0 {
+		return errors.New("http_record.memory.queue_size 不能小于 0")
+	}
+	if c.Memory.Workers < 0 {
+		return errors.New("http_record.memory.workers 不能小于 0")
 	}
 	return nil
 }
@@ -74,6 +113,22 @@ func (c ConsumerConfig) GroupIDOrDefault() string {
 		return groupID
 	}
 	return defaultHttpRecordConsumerGroupID
+}
+
+// QueueSizeOrDefault 返回内存队列缓冲容量
+func (c MemoryConfig) QueueSizeOrDefault() int {
+	if c.QueueSize <= 0 {
+		return defaultMemoryQueueSize
+	}
+	return c.QueueSize
+}
+
+// WorkersOrDefault 返回内存消费协程数
+func (c MemoryConfig) WorkersOrDefault() int {
+	if c.Workers <= 0 {
+		return defaultMemoryWorkers
+	}
+	return c.Workers
 }
 
 // MaxRequestBodySizeOrDefault 返回请求体记录最大字节数
