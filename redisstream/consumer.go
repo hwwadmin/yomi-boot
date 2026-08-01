@@ -140,7 +140,9 @@ func (m *ConsumerManager) Start(
 				logger.Error(entry.ctx, "Redis Stream 消费者 goroutine panic", "consumer_id", id, "panic", r)
 			}
 		}()
-		_ = c.run(entry.ctx, handler)
+		if err := c.run(entry.ctx, handler); err != nil {
+			logger.Warn(entry.ctx, "Redis Stream 消费者退出", "consumer_id", id, "error", err)
+		}
 	}()
 
 	return nil
@@ -340,15 +342,8 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 		}
 
 		for _, stream := range streams {
-			for _, msg := range stream.Messages {
-				entry := Entry{
-					Stream: c.cfg.logicalStream,
-					ID:     msg.ID,
-					Values: stringifyValues(msg.Values),
-				}
-				if err := c.dispatchEntry(ctx, handler, entry, &processMu); err != nil {
-					return err
-				}
+			if err := c.processMessages(ctx, handler, stream.Messages, &processMu); err != nil {
+				return err
 			}
 		}
 	}
@@ -421,15 +416,8 @@ func (c *consumer) claimPending(ctx context.Context, handler Handler, processMu 
 			}
 			return
 		}
-		for _, msg := range messages {
-			entry := Entry{
-				Stream: c.cfg.logicalStream,
-				ID:     msg.ID,
-				Values: stringifyValues(msg.Values),
-			}
-			if err := c.dispatchEntry(ctx, handler, entry, processMu); err != nil {
-				return
-			}
+		if err := c.processMessages(ctx, handler, messages, processMu); err != nil {
+			return
 		}
 		if next == "0-0" || len(messages) == 0 {
 			return
@@ -438,24 +426,44 @@ func (c *consumer) claimPending(ctx context.Context, handler Handler, processMu 
 	}
 }
 
-// dispatchEntry 在锁内调用 Handler，锁外按结果做 dead/XACK 等收尾
-func (c *consumer) dispatchEntry(
+// processMessages 串行调用 Handler，收集本批待确认 ID，结束后一次批量 XACK。
+// HandleDead 先 moveToDead 再纳入 ack 批次，保证死信写入早于确认。
+func (c *consumer) processMessages(
 	ctx context.Context,
 	handler Handler,
-	entry Entry,
+	messages []redisv9.XMessage,
 	processMu *sync.Mutex,
 ) error {
-	processMu.Lock()
-	result := invokeHandler(ctx, handler, entry)
-	processMu.Unlock()
-	return c.applyHandleResult(ctx, entry, result)
+	if len(messages) == 0 {
+		return nil
+	}
+	ackIDs := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		entry := Entry{
+			Stream: c.cfg.logicalStream,
+			ID:     msg.ID,
+			Values: stringifyValues(msg.Values),
+		}
+		processMu.Lock()
+		result := invokeHandler(ctx, handler, entry)
+		processMu.Unlock()
+
+		shouldAck, err := c.finalizeHandleResult(ctx, entry, result)
+		if err != nil {
+			return err
+		}
+		if shouldAck {
+			ackIDs = append(ackIDs, entry.ID)
+		}
+	}
+	return c.ackWithRetry(ctx, ackIDs...)
 }
 
-// applyHandleResult 按 Handler 返回值执行 Redis 侧收尾（不持有 processMu）
-func (c *consumer) applyHandleResult(ctx context.Context, entry Entry, result HandleResult) error {
+// finalizeHandleResult 按 Handler 返回值做非 XACK 收尾，返回是否应纳入本批确认
+func (c *consumer) finalizeHandleResult(ctx context.Context, entry Entry, result HandleResult) (bool, error) {
 	switch result {
 	case HandleAck:
-		return c.ackWithRetry(ctx, entry.ID)
+		return true, nil
 	case HandleDead:
 		if err := c.moveToDead(ctx, entry); err != nil {
 			logger.Error(ctx, "写入 Redis Stream dead 失败，保留在 PEL",
@@ -463,30 +471,33 @@ func (c *consumer) applyHandleResult(ctx context.Context, entry Entry, result Ha
 				"id", entry.ID,
 				"error", err,
 			)
-			return nil
+			return false, nil
 		}
-		return c.ackWithRetry(ctx, entry.ID)
+		return true, nil
 	case HandleRetry:
 		logger.Warn(ctx, "Redis Stream 消费返回 Retry，保留在 PEL 并继续",
 			"stream", entry.Stream,
 			"id", entry.ID,
 		)
-		return nil
+		return false, nil
 	default:
 		logger.Warn(ctx, "Redis Stream 未知 HandleResult，按 Retry 保留在 PEL 并继续",
 			"stream", entry.Stream,
 			"id", entry.ID,
 			"result", result,
 		)
-		return nil
+		return false, nil
 	}
 }
 
-// ackWithRetry 提交 XACK；瞬时失败有限次退避重试，超限或不可恢复错误则放弃并留 PEL
-func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
+// ackWithRetry 批量提交 XACK；瞬时失败有限次退避重试，超限或不可恢复错误则放弃并留 PEL
+func (c *consumer) ackWithRetry(ctx context.Context, ids ...string) error {
+	if len(ids) == 0 {
+		return nil
+	}
 	delay := jitterDelay(ackRetryInitialDelay)
 	for attempt := 1; attempt <= ackRetryMaxAttempts; attempt++ {
-		err := c.client.XAck(ctx, c.cfg.streamKey, c.cfg.group, id).Err()
+		err := c.client.XAck(ctx, c.cfg.streamKey, c.cfg.group, ids...).Err()
 		if err == nil {
 			return nil
 		}
@@ -495,21 +506,21 @@ func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
 		}
 		if isUnrecoverableStreamError(err) {
 			logger.Error(ctx, "Redis Stream XACK 不可恢复失败，保留在 PEL",
-				"id", id,
+				"ids", ids,
 				"error", err,
 			)
 			return nil
 		}
 		if attempt >= ackRetryMaxAttempts {
 			logger.Error(ctx, "Redis Stream XACK 重试超限，保留在 PEL",
-				"id", id,
+				"ids", ids,
 				"attempts", attempt,
 				"error", err,
 			)
 			return nil
 		}
 		logger.Warn(ctx, "Redis Stream XACK 失败，准备重试",
-			"id", id,
+			"ids", ids,
 			"attempt", attempt,
 			"error", err,
 		)

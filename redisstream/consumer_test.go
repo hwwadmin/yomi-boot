@@ -254,6 +254,77 @@ func TestConsumer_Dead(t *testing.T) {
 	}
 }
 
+func TestConsumer_BatchAckClearsPending(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	zero := int64(0)
+	enabled := true
+	cfg := Config{
+		Enabled:         &enabled,
+		DefaultMaxLen:   &zero,
+		BlockMS:         100,
+		Count:           10,
+		ClaimMinIdleMS:  5000,
+		ClaimIntervalMS: 5000,
+	}
+	components, err := NewComponents(cfg, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const n = 5
+	var got atomic.Int32
+	done := make(chan struct{})
+	err = components.Consumer.Start(ctx, "c-batch", GroupConfig{
+		Stream:   "batch",
+		Group:    "g-batch",
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		if got.Add(1) == n {
+			close(done)
+		}
+		return HandleAck
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	for i := 0; i < n; i++ {
+		if _, err := components.Publisher.AddBytes(ctx, "batch", []byte("m")); err != nil {
+			t.Fatalf("AddBytes: %v", err)
+		}
+	}
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for batch consume")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := client.XPending(ctx, "batch", "g-batch").Result()
+		if err == nil && pending.Count == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			count := int64(-1)
+			if err == nil {
+				count = pending.Count
+			}
+			t.Fatalf("batch pending not cleared, err=%v count=%d", err, count)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestAckWithRetry_GivesUpWhenRedisUnavailable(t *testing.T) {
 	t.Parallel()
 	client, cleanup := redistest.NewClient(t)
