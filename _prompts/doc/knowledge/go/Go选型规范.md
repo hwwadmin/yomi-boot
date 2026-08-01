@@ -4,7 +4,7 @@
 
 ## 0. 文档信息
 - **文档名称**: Go选型规范
-- **描述**: 定义基于 gitee.com/hq_project/yomi-boot 的 Go 后端默认技术栈基线，覆盖 HTTP、Consul、DTM、配置、日志、数据库、缓存与依赖注入等基础技术决策。
+- **描述**: 定义基于 gitee.com/hq_project/yomi-boot 的 Go 后端横切默认栈与可选能力选型，覆盖 HTTP、Consul、DTM、配置、日志、数据库、缓存、消息能力与依赖注入等技术决策。
 - **作者**: zwei
 - **创建日期**: 2026-05-28
 
@@ -12,7 +12,7 @@
 
 ## 1. 文档定位
 
-- **用途**：作为**基于 gitee.com/hq_project/yomi-boot 的业务工程** Go 后端技术选型基线，统一 HTTP、配置、日志、持久化、缓存、消息、性能剖析、测试和依赖注入等基础技术决策。
+- **用途**：作为**基于 gitee.com/hq_project/yomi-boot 的业务工程** Go 后端技术选型参考；yomi-boot 是能力库，业务按需取用。横切默认栈（HTTP/配置/日志/ORM 等）保持单一；消息等可选能力可并存多种实现。
 - **边界**：不替代模块目录划分、数据库表结构和 API 出口编码适配等专题规范；相关内容应分别参考对应知识文档。
 - **适用对象**：基于 gitee.com/hq_project/yomi-boot 的 Go 后端可部署单元、基础设施适配代码、技术预研和代码评审场景。
 
@@ -37,7 +37,7 @@
 
 - 新建 Go 服务前，先阅读“选型原则”和“默认技术栈总览”，先确定默认栈，再决定是否需要少量例外。
 - 设计 HTTP 服务时，重点阅读“HTTP 服务”“配置”“日志与性能剖析”章节。
-- 设计数据访问、消息适配和外部调用时，重点阅读“数据库与缓存”“外部调用、序列化与消息”“不作为默认选型的技术”章节，避免误引入第二套 ORM 和大框架。
+- 设计数据访问、消息与外部调用时，重点阅读“数据库与缓存”“外部调用、序列化与消息能力”“不作为默认选型的技术”章节；横切栈避免第二套 ORM/Web/配置库，消息能力按场景选用 boot 已提供的包。
 
 ---
 
@@ -65,7 +65,8 @@
 
 #### 3.1.4 低魔法与低耦合
 
-- 不默认引入第二套 ORM、第二套 Web 框架、第二套配置库——每种能力只保留一个默认选型。
+- 不默认引入第二套 ORM、第二套 Web 框架、第二套配置库、第二套日志入口——这些横切能力各保留一个默认选型。
+- 消息等可选基础设施能力由 yomi-boot 提供多种独立包（如 `kafka`、`redisstream`），业务按场景启用，不强制单一实现。
 - gorm 的 tag 映射属于 ORM 必要的声明式元数据，不视为过度魔法。
 - 选型的基础库应保持可替换，不因选型锁死架构。
 
@@ -82,8 +83,10 @@
 | 数据库 | MySQL | 社区成熟、生态稳定、事务与索引能力完整，适合作为默认关系型数据库 | PostgreSQL、SQLite 等作为默认数据库基线 |
 | SQL 访问 | `gorm.io/gorm` + `gorm.io/driver/mysql` | 社区最广泛使用的 Go ORM，提供模型映射、自动迁移、链式查询、事务、预加载等完善能力 | `sqlx`、`xorm` 等作为默认持久化方案 |
 | 本地事务控制 | `gorm.io/gorm` 的 `Transaction` 方法 | 与默认 SQL 访问栈保持一致，闭包式事务边界清晰，自动回滚 | 额外事务管理框架或隐藏式事务装饰器 |
-| Redis | `github.com/redis/go-redis/v9` | 事实标准客户端，能力完整，社区稳定 | 二次包装缓存框架作为默认选型 |
-| MQ | Kafka + `github.com/segmentio/kafka-go` | Kafka 生态成熟，适合事件流、异步解耦和消费组模型；`kafka-go` 轻量直接、易于与当前分层整合 | RabbitMQ、NATS、Pulsar 作为默认 MQ 基线 |
+| Redis | `github.com/redis/go-redis/v9`（经 `redis/` 封装常用 KV 操作） | 事实标准客户端，能力完整，社区稳定 | 二次包装缓存框架作为默认选型 |
+| Kafka 消息 | `kafka/` + `github.com/segmentio/kafka-go` | 跨服务事件流、较长留存/回放等场景按需启用 | 业务直依赖其它 Kafka 客户端 |
+| Redis Stream 消息 | `redisstream/` + `go-redis` | 同 Redis 运维面的轻量 Stream 队列，按需启用；不耦合 `RedisService` | 业务直写 XADD/XREADGROUP 散落各处 |
+| 可靠领域事件 | `event/`（Outbox/Inbox） | DB 侧可靠投递；当前传输侧接 Kafka，按需启用 | 用消息中间件替代本地事务边界 |
 | 分布式锁 | `github.com/go-redsync/redsync/v4`（经 `gitee.com/hq_project/yomi-boot/distlock` 封装） | 基于 Redis 的分布式锁，支持看门狗、超时、可选 Key 命名空间 | 其他分布式锁实现 |
 | 业务日历定时任务 | `github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/cronjob` 封装） | cron 表达式触发 + distlock 集群互斥；与 runner/`ctx` 同生命周期 | 业务模块直接依赖 `robfig/cron`；用 `roundrobin` 冒充日历任务 |
 | HTTP RPC | `gitee.com/hq_project/yomi-boot/rpc`（`gitee.com/hq_project/yomi-boot/rpc` 包） | 轻量 HTTP RPC 读封装：Consul 发现、JSON 信封、传输层短退避重试与 per-service 熔断；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
@@ -138,15 +141,19 @@
 - Redis 默认选型：`github.com/redis/go-redis/v9`。
 - 不作为默认：PostgreSQL（数据库引擎）；`sqlx`、`xorm`（SQL 访问）；额外事务框架。
 
-#### 3.3.5 外部调用、服务发现与分布式事务
+#### 3.3.5 外部调用、服务发现、分布式事务与消息能力
 
 - **服务间通信**：HTTP/HTTPS only；BFF 经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，基于 `gitee.com/hq_project/yomi-boot/rpc`）调用领域服务，**默认不使用 gRPC**。
 - HTTP Client：`gitee.com/hq_project/yomi-boot/rpc` 封装 POST JSON + Consul 发现；由领域 client 使用，信封口径见 [微服务调用规范](../api/微服务调用规范.md) §3.2。
 - JSON：`encoding/json`（标准库）。
 - **服务注册发现**：Consul；各服务启动注册，BFF 按服务名发现下游。
 - **分布式事务**：DTM Saga；BFF 提交 Saga，领域服务在 barrier 下执行本地子事务。
-- MQ：Kafka + `github.com/segmentio/kafka-go` 保留在 `gitee.com/hq_project/yomi-boot/kafka/` 作为可选基础设施，**非默认业务通信方式**；单元测试通过 `gitee.com/hq_project/yomi-boot/kafka/kafkatest` 封装（底层 `franz-go/kfake` 启动内存 broker），**franz-go 不得进入生产代码路径**。
-- 不作为默认：`resty`（HTTP Client）；`jsoniter`/`sonic`（JSON）；gRPC 服务间调用；Outbox/Inbox 事件驱动分布式事务。
+- **消息能力**（均为可选，按配置启用，互不替代）：
+  - `gitee.com/hq_project/yomi-boot/kafka/`：Kafka 发布/消费；测试用 `kafka/kafkatest`（底层 `franz-go/kfake`），**franz-go 不得进入生产代码路径**。
+  - `gitee.com/hq_project/yomi-boot/redisstream/`：Redis Stream 发布/消费组；复用 `RedisClient`，不耦合 `RedisService`。
+  - `gitee.com/hq_project/yomi-boot/event/`：Outbox/Inbox 可靠领域事件（当前传输侧接 Kafka）。
+- 服务间默认同步通信仍是 HTTP；异步是否启用、选用哪种消息能力由业务场景决定。
+- 不作为默认：`resty`（HTTP Client）；`jsoniter`/`sonic`（JSON）；gRPC 服务间调用；用 Outbox/Inbox 替代 DTM Saga 作为跨域写默认方案；在 boot 已提供能力之外再引入 RabbitMQ/NATS/Pulsar 等客户端而不经评审。
 
 #### 3.3.6 测试与质量工具
 
@@ -185,7 +192,7 @@
 | `sqlx` / `xorm` | 多套 SQL 访问库并存会增加维护成本，gorm 已满足项目需求 |
 | 第二套配置库 | 与 `viper` 并存会让配置来源、优先级和解码口径失控，增加排障成本 |
 | `log/slog` / `logrus` | 与默认 `zap` 日志栈并存会造成输出格式、调用点和级别控制口径不一致 |
-| 第二套 MQ 基线 | 默认 MQ 为 Kafka；并存 RabbitMQ、NATS、Pulsar 等消息模型会提高系统复杂度和运维成本 |
+| 未封装的第三消息中间件客户端 | yomi-boot 已提供 `kafka` / `redisstream` 等可选消息能力；再引入 RabbitMQ、NATS、Pulsar 等客户端会扩大运维与心智成本，须评审 |
 | `resty` | 与标准库 HTTP Client 能力重复，默认收益不足以覆盖额外抽象层 |
 | `fx` / `dig` / `github.com/google/wire` | 依赖注入链条更隐蔽；组合根已收口在各服务 `internal/bootstrap/server.go` |
 | 大范围 tag 校验框架 | 容易把核心校验逻辑埋进 tag 和反射，削弱规则可读性和可调试性 |
@@ -218,7 +225,8 @@
 
 - 禁止引入全家桶式 Go Web 框架（同时绑死路由、配置、日志、ORM 和生命周期）。
 - 禁止把数据库引擎选型和 SQL 访问方案混写为同一概念，导致技术栈边界失真。
-- 禁止在默认栈之外再叠加第二套 Web 框架、第二套 ORM、第二套配置库、第二套 MQ 基线或第二套日志入口。
+- 禁止在横切默认栈之外再叠加第二套 Web 框架、第二套 ORM、第二套配置库或第二套日志入口。
+- 禁止在未评审的情况下绕过 yomi-boot 已提供的消息能力包，直接引入 RabbitMQ/NATS/Pulsar 等第三套消息客户端。
 - 禁止引入反射式 DI 框架（`fx`/`dig`/`github.com/google/wire`）作为默认依赖注入方案；依赖注入统一使用各服务 `internal/bootstrap/server.go` 手写组合根。
 - 禁止将 gRPC 作为 BFF 与领域服务之间的默认通信协议。
 - 禁止引入 Outbox/Inbox 或 2PC/TCC 替代 DTM Saga 作为默认可分布式事务方案。

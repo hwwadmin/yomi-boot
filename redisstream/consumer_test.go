@@ -1,0 +1,233 @@
+// Package redisstream 消费单测
+//
+// @author zwei
+package redisstream
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"gitee.com/hq_project/yomi-boot/redis/redistest"
+
+	"github.com/alicebob/miniredis/v2"
+	redisv9 "github.com/redis/go-redis/v9"
+)
+
+func TestConsumer_AckFlow(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	zero := int64(0)
+	enabled := true
+	retries := 3
+	cfg := Config{
+		Enabled:           &enabled,
+		DefaultMaxLen:     &zero,
+		BlockMS:           200,
+		Count:             10,
+		ClaimMinIdleMS:    1000,
+		ClaimIntervalMS:   500,
+		MaxHandlerRetries: &retries,
+	}
+	components, err := NewComponents(cfg, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var got atomic.Int32
+	done := make(chan struct{})
+	err = components.Consumer.Start(ctx, "c1", GroupConfig{
+		Stream:   "demo",
+		Group:    "g1",
+		Consumer: "worker-1",
+		Start:    "0",
+	}, func(_ context.Context, entry Entry) HandleResult {
+		if string(entry.Payload()) != "hello" {
+			t.Errorf("payload=%q", entry.Payload())
+			return HandleDead
+		}
+		got.Add(1)
+		close(done)
+		return HandleAck
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := components.Publisher.AddBytes(ctx, "demo", []byte("hello")); err != nil {
+		t.Fatalf("AddBytes: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for consume")
+	}
+	if got.Load() != 1 {
+		t.Fatalf("got=%d want 1", got.Load())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := client.XPending(ctx, "demo", "g1").Result()
+		if err == nil && pending.Count == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			count := int64(-1)
+			if err == nil {
+				count = pending.Count
+			}
+			t.Fatalf("pending not cleared, err=%v count=%d", err, count)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestConsumer_DeadAndRetryLimit(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	zero := int64(0)
+	enabled := true
+	retries := 0
+	cfg := Config{
+		Enabled:           &enabled,
+		DefaultMaxLen:     &zero,
+		BlockMS:           100,
+		Count:             10,
+		ClaimMinIdleMS:    5000,
+		ClaimIntervalMS:   5000,
+		MaxHandlerRetries: &retries,
+	}
+	components, err := NewComponents(cfg, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	err = components.Consumer.Start(ctx, "c-dead", GroupConfig{
+		Stream:   "orders",
+		Group:    "g-dead",
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		select {
+		case <-done:
+		default:
+			close(done)
+		}
+		return HandleRetry
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := components.Publisher.AddBytes(ctx, "orders", []byte("bad")); err != nil {
+		t.Fatalf("AddBytes: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for handler")
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		msgs, err := client.XRange(ctx, "orders.dead", "-", "+").Result()
+		if err == nil && len(msgs) >= 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("dead stream empty, err=%v", err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestConsumer_ClaimPending(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	stream := "claim-demo"
+	group := "g-claim"
+	if err := client.XGroupCreateMkStream(ctx, stream, group, "0").Err(); err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	id, err := client.XAdd(ctx, &redisv9.XAddArgs{
+		Stream: stream,
+		Values: map[string]any{PayloadField: "x"},
+	}).Result()
+	if err != nil {
+		t.Fatalf("XAdd: %v", err)
+	}
+	_, err = client.XReadGroup(ctx, &redisv9.XReadGroupArgs{
+		Group:    group,
+		Consumer: "old-worker",
+		Streams:  []string{stream, ">"},
+		Count:    1,
+	}).Result()
+	if err != nil {
+		t.Fatalf("XReadGroup: %v", err)
+	}
+	mr.FastForward(2 * time.Second)
+
+	zero := int64(0)
+	enabled := true
+	cfg := Config{
+		Enabled:         &enabled,
+		DefaultMaxLen:   &zero,
+		BlockMS:         100,
+		Count:           10,
+		ClaimMinIdleMS:  1,
+		ClaimIntervalMS: 50,
+	}
+	components, err := NewComponents(cfg, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan string, 1)
+	err = components.Consumer.Start(runCtx, "claimer", GroupConfig{
+		Stream:       stream,
+		Group:        group,
+		Consumer:     "new-worker",
+		Start:        "0",
+		ClaimMinIdle: time.Millisecond,
+	}, func(_ context.Context, entry Entry) HandleResult {
+		done <- entry.ID
+		return HandleAck
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	select {
+	case got := <-done:
+		if got != id {
+			t.Fatalf("claimed id=%s want %s", got, id)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for claim")
+	}
+}

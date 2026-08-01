@@ -19,6 +19,7 @@ import (
 	bootpprof "gitee.com/hq_project/yomi-boot/pprof"
 	"gitee.com/hq_project/yomi-boot/ratelimit"
 	"gitee.com/hq_project/yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/redisstream"
 	"gitee.com/hq_project/yomi-boot/router"
 	"gitee.com/hq_project/yomi-boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/token"
@@ -34,6 +35,7 @@ func DefaultConfigRegistry() *config.Registry {
 			db.ConfigSection(),
 			redis.ConfigSection(),
 			yomikafka.ConfigSection(),
+			redisstream.ConfigSection(),
 			token.ConfigSection(),
 			cors.ConfigSection(),
 			httprecord.ConfigSection(),

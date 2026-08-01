@@ -24,9 +24,9 @@
 
 - 适用于 `gitee.com/hq_project/yomi-boot/`：可复用基础设施库；各能力插件统一编排，**是否真正启动以配置段 `enabled`（及同类开关）为准**，可按需裁剪。
 - 适用于基于 gitee.com/hq_project/yomi-boot 的多种部署形态（详见 §3.1.0、§3.4.5）：
-  - **轻量单体**：单进程、单库；通常只开 `db`（及按需 `redis`/`auth`），关闭 `consul`/`kafka`/`dtm`/`event` 等。
+  - **轻量单体**：单进程、单库；通常只开 `db`（及按需 `redis`/`auth`），关闭 `consul`/`kafka`/`redis_stream`/`dtm`/`event` 等。
   - **大单体 / 模块化单体**：单部署单元内多业务模块分层；仍用同一套 bootstrap/插件，按模块边界组织代码，不必拆多进程。
-  - **分布式微服务**：多进程按服务类型独立部署；开 `consul`/`rpc`，跨域写按需开 `dtm`，异步按需开 `kafka`/`event`。
+  - **分布式微服务**：多进程按服务类型独立部署；开 `consul`/`rpc`，跨域写按需开 `dtm`，异步按需开 `kafka` / `redis_stream` / `event`。
 - 适用于基于 gitee.com/hq_project/yomi-boot 组装的业务工程（独立 `go.mod`，经标准 `require` 引用 `gitee.com/hq_project/yomi-boot`；本地可用 `go.work` 联调）：具体服务名与业务域随产品演进，**以服务类型为准，不以某一仓库清单为准**。
 - Consul / HTTP RPC / DTM 等为**分布式路径**能力，非 gitee.com/hq_project/yomi-boot 强制依赖。
 - 不适用于前端工程（前端规范仅作消费者参考，本库仓无前端代码）。
@@ -66,7 +66,7 @@
 - 插件在 `bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `infra_plugins.go` 与各 `{lib}/plugin`）。
 - 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见 [Go配置规范](./Go配置规范.md)「能力按需裁剪」与本文 §3.4.5。
 - 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 gitee.com/hq_project/yomi-boot 的唯一用法。
-- 单体形态下：可无 Consul/DTM/Kafka；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
+- 单体形态下：可无 Consul/DTM/Kafka/Redis Stream；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
 
 #### 3.1.1 gitee.com/hq_project/yomi-boot + 业务工程
 
@@ -82,9 +82,9 @@
 
 | 服务类型 | 职责 | gitee.com/hq_project/yomi-boot 典型启用 |
 | -------- | ---- | ---------------- |
-| **入口编排（BFF）** | 对外 API、鉴权、跨域读聚合、跨域写编排（Saga） | `auth`/`token`、按需 `db`/`redis`/`consul`/`dtm`/`kafka`/`event` |
+| **入口编排（BFF）** | 对外 API、鉴权、跨域读聚合、跨域写编排（Saga） | `auth`/`token`、按需 `db`/`redis`/`consul`/`dtm`/`kafka`/`redis_stream`/`event` |
 | **领域** | 单一业务边界内的读写与本地事务；对外提供内部 API | `db`、按需 `redis`（幂等/锁）、`consul`；通常关 `auth` |
-| **基础设施消费者（可选）** | 消费 MQ/平台事件并持久化，或提供对内查询 | `kafka` + `AddCustomPlugin`；按需 `db` |
+| **基础设施消费者（可选）** | 消费平台/异步消息并持久化，或提供对内查询 | `kafka` 或 `redisstream` + `AddCustomPlugin`；按需 `db` |
 
 - 同一进程可合并多种服务类型（单体）：例如入口 + 多领域模块共进程，跨模块走内存依赖。
 - 分布式形态下通常一进程一主服务类型；具体叫什么、拆几个，由业务决定。
@@ -97,7 +97,7 @@
 
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
-- `gitee.com/hq_project/yomi-boot/` 提供 config、plugin（生命周期框架）、各库 `*/plugin` 内置生命周期实现、logger、db、redis、router、runner、consul、dtm、rpc、distlock、errors、traceid、token、kafka、httprecord、snowflake、**pprof**、**idempotency**、**ratelimit**、**bc**、**event**、**roundrobin**、**cronjob**、**appctx**、**banner**、**worker**、**testclient** 等能力；**上述能力按配置按需启用**，并非每个进程都必须全部启动。
+- `gitee.com/hq_project/yomi-boot/` 提供 config、plugin（生命周期框架）、各库 `*/plugin` 内置生命周期实现、logger、db、redis、router、runner、consul、dtm、rpc、distlock、errors、traceid、token、kafka、**redisstream**、httprecord、snowflake、**pprof**、**idempotency**、**ratelimit**、**bc**、**event**、**roundrobin**、**cronjob**、**appctx**、**banner**、**worker**、**testclient** 等能力；**上述能力按配置按需启用**，并非每个进程都必须全部启动。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/ratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -150,7 +150,7 @@ services/{domain}/
 ├── script/sql/
 ├── test/
 └── internal/
-    ├── bootstrap/                     # server.go；Kafka 消费另增 *_consumer_plugin.go
+    ├── bootstrap/                     # server.go；消息消费另增 *_consumer_plugin.go
     └── biz/
         ├── handler/
         ├── usecase/
@@ -159,9 +159,9 @@ services/{domain}/
         └── bizerr/
 ```
 
-#### 3.2.3 带 MQ 消费者的领域变体
+#### 3.2.3 带消息消费者的领域变体
 
-在 §3.2.2 基础上，于 `internal/bootstrap/` 增加自定义消费者插件（经 `AddCustomPlugin` 注册）。gitee.com/hq_project/yomi-boot 只提供消费端点能力（如 `httprecord.StartKafkaRecordConsumer`），**业务消费逻辑留在可部署单元内**。
+在 §3.2.2 基础上，于 `internal/bootstrap/` 增加自定义消费者插件（经 `AddCustomPlugin` 注册）。gitee.com/hq_project/yomi-boot 只提供消费端点能力（如 `httprecord.StartKafkaRecordConsumer` 或 `RedisStreamConsumer.Start`），**业务消费逻辑留在可部署单元内**。
 
 ### 3.3 gitee.com/hq_project/yomi-boot 模块职责
 
@@ -193,6 +193,7 @@ services/{domain}/
 | `bc/aes` | AES-GCM（推荐）/ CBC；ECB 不推荐 |
 | `bc/rsa` | RSA PEM、OAEP 加解密、PSS/PKCS1v15 签名 |
 | `kafka` | 生产者 `PublisherService`、消费者 `ConsumerService`、`kafkatest` 测试封装 |
+| `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
 | `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |
 | `rpc` | HTTP RPC 读客户端（Consul 发现 + POST JSON）；轻量重试（退避）+ 按下游服务熔断；跨域写走 DTM，不在此叠加写重试 |
 | `distlock` | 基于 Redsync 的分布式锁、看门狗 |
@@ -247,7 +248,7 @@ cmd/main.go
 
 #### 3.4.3 bootstrap 约定
 
-- 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要 Kafka 等消费者时另增 `*_consumer_plugin.go`。
+- 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要消息消费者时另增 `*_consumer_plugin.go`。
 - `server.go` 内的 `NewServer(configPath string) *runner.ServerBundle` 手写组合根，通过 `wireHandlers(infra)` 显式 `NewXxx` 构造依赖链。
 - `main.go` 只调用 `runner.Run`；`internal/bootstrap/server.go` 只组装与 wiring。
 - `MustBuildServer` 返回的 `runner.ServerBundle.Cleanup` 绑定 `infra.Cleanup()`，停机时先 HTTP `Shutdown`，再逆序执行插件 `Close`。
@@ -278,41 +279,44 @@ type myConsumerPlugin struct {
 
 | 序号 | 插件 | 启动条件 |
 | ---- | ---- | -------- |
-| 1 | logger | 始终 |
-| 2 | pprof | `pprof.enabled=true` 时启动（默认 false） |
-| 3 | db | `db.enabled=true` |
-| 4 | redis | `redis.enabled=true` |
-| 5 | kafka | `kafka.enabled=true` |
-| 6 | snowflake | 始终 |
-| 7 | tx | `host.DB` 存在 |
-| 8 | dtm | `dtm.enabled=true`（探活，失败仅 warn） |
-| 9 | idempotency | `idempotency.stale_cleaner_enabled=true` |
-| 10 | token | `auth.enabled=true` |
-| 11 | httprecord | 始终注册采集实现（middleware 受 `http_record.enabled` 控制） |
-| 12 | consul | `consul.enabled=true` |
-| 13 | event | `publisher_enabled` / `consumer_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 14 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer + Event.Receiver；Close 时先于 event 停止） |
+| 1 | app | 始终（写入 `Host.AppCtx`） |
+| 2 | logger | 始终 |
+| 3 | pprof | `pprof.enabled=true` 时启动（默认 false） |
+| 4 | db | `db.enabled=true` |
+| 5 | redis | `redis.enabled=true` |
+| 6 | ratelimit | 始终写入 RateLimiter（未启用时为 Noop） |
+| 7 | kafka | `kafka.enabled=true` |
+| 8 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
+| 9 | snowflake | 始终 |
+| 10 | tx | `host.DB` 存在 |
+| 11 | dtm | 写入 DtmServer；`dtm.enabled=true` 时探活 |
+| 12 | idempotency | `idempotency.stale_cleaner_enabled=true` |
+| 13 | token | `auth.enabled=true` |
+| 14 | httprecord | `http_record.enabled=true` 时按 provider 装配，否则 Nop |
+| 15 | consul | `consul.enabled=true` |
+| 16 | event | `publisher_enabled` / `consumer_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
+| 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 
 | 需优雅 Close | noop / 尽力 |
 | ------------ | ----------- |
-| event、kafka、logger、consul、idempotency stale cleaner | db、redis、snowflake、tx、token、httprecord（发布端）、dtm、pprof |
-| 服务自定义插件（如 Stop Kafka consumer） | — |
+| event、kafka、redisstream、logger、consul、idempotency stale cleaner | db、redis、snowflake、tx、token、httprecord（发布端）、dtm、pprof |
+| 服务自定义插件（如 Stop 消息消费者） | — |
 
-**Kafka 等消费者自定义插件约定**：
+**消息消费者自定义插件约定**：
 
 - gitee.com/hq_project/yomi-boot 消费端点（如 `httprecord.StartKafkaRecordConsumer`）只负责参数校验、反序列化、委托业务 `Handler`。
-- 业务 handler、是否启用、`consumer_id` / `group_id` 等由**可部署单元内**自定义插件实现。
+- 业务 handler、是否启用、消费者标识 / 组名等由**可部署单元内**自定义插件实现（可使用 `KafkaConsumer` 或 `RedisStreamConsumer`）。
 - 通过 `opts.AddCustomPlugin(...)` 插入启动流程，**禁止**在 `wireHandlers` 或 gitee.com/hq_project/yomi-boot 内置插件中硬编码业务消费逻辑。
 
 #### 3.4.5 Infra 组件按需启用
 
 | 服务类型 | 典型做法 | 说明 |
 | -------- | -------- | ---- |
-| 入口编排（BFF） | `InfraOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
-| 领域 | `InfraOptions{}`；YAML 开 db，按需 redis/kafka/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
-| 带 MQ 消费的领域 | 上栏 + `AddCustomPlugin(消费者插件)` | 消费启停由自定义插件与配置控制 |
+| 入口编排（BFF） | `InfraOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
+| 领域 | `InfraOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
+| 带消息消费的领域 | 上栏 + `AddCustomPlugin(消费者插件)` | 消费启停由自定义插件与配置控制 |
 
 各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`auth.enabled`、`event.publisher_enabled` / `event.consumer_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
 
@@ -320,11 +324,11 @@ type myConsumerPlugin struct {
 
 | 形态 | 建议启用 | 建议关闭 / 暂缓 |
 | ---- | -------- | --------------- |
-| 轻量单体 | `db`；按需 `redis`、`auth`、`pprof` | `consul`、`kafka`、`dtm`、`event`、`http_record` |
-| 大单体 | 上栏 + 按需 `redis` 幂等/锁、`cronjob` | 无跨进程时不必开 `consul`/`dtm`；MQ 有需求再开 `kafka` |
-| 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `auth`；跨域写开 `dtm`；异步按需 `kafka`/`event` | 按服务类型裁剪（领域通常关 `auth`） |
+| 轻量单体 | `db`；按需 `redis`、`auth`、`pprof` | `consul`、`kafka`、`redis_stream`、`dtm`、`event`、`http_record` |
+| 大单体 | 上栏 + 按需 `redis` 幂等/锁、`cronjob` | 无跨进程时不必开 `consul`/`dtm`；异步消息有需求再开 `kafka` 或 `redis_stream` |
+| 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `auth`；跨域写开 `dtm`；异步按需 `kafka`/`redis_stream`/`event` | 按服务类型裁剪（领域通常关 `auth`） |
 
-说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.enabled`、`dtm.enabled`、`event.publisher_enabled` / `event.consumer_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
+说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.publisher_enabled` / `event.consumer_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
 
 ### 3.5 业务工程依赖 gitee.com/hq_project/yomi-boot
 
@@ -430,10 +434,10 @@ kafka: ...
 
 - [ ] 业务可部署单元经标准 `require gitee.com/hq_project/yomi-boot`（本地可用 `go.work` / `replace`）引用本库；`import` 为 `gitee.com/hq_project/yomi-boot/...`
 - [ ] `gitee.com/hq_project/yomi-boot` 不依赖任何业务可部署单元代码
-- [ ] 每个可部署单元 `internal/bootstrap/` 以 `server.go` 为装配入口；MQ 消费者插件单独文件
+- [ ] 每个可部署单元 `internal/bootstrap/` 以 `server.go` 为装配入口；消息消费者插件单独文件
 - [ ] 启动链路使用 `MustInitInfra` / `MustBuildServer` / `runner.Run`；启动失败 Fail Fast（panic）
 - [ ] 未使用的基础设施能力已在 YAML 中关闭对应 `enabled`
-- [ ] MQ/平台消费的业务逻辑在可部署单元自定义插件中实现；gitee.com/hq_project/yomi-boot 仅提供消费端点
+- [ ] 消息/平台消费的业务逻辑在可部署单元自定义插件中实现；gitee.com/hq_project/yomi-boot 仅提供消费端点
 - [ ] 分布式形态：领域进程无跨域 HTTP、无 token 中间件
 - [ ] 入口编排含 `handler/`、`bff/`、`saga/`（若属该服务类型）
 - [ ] 跨进程契约符合 [微服务调用规范](../api/微服务调用规范.md) §3（若启用）

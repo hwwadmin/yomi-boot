@@ -98,11 +98,11 @@ biz:
 
 ## 6. 能力按需裁剪（enabled）
 
-- gitee.com/hq_project/yomi-boot 各基础设施能力通过对应配置段启用；未启用则插件不启动（或写入 Noop），**不强制**引入 Consul / Kafka / DTM 等运行时依赖。
+- gitee.com/hq_project/yomi-boot 各基础设施能力通过对应配置段启用；未启用则插件不启动（或写入 Noop），**不强制**引入 Consul / Kafka / Redis Stream / DTM 等运行时依赖。
 - 插件在 `bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `gitee.com/hq_project/yomi-boot/bootstrap/infra_plugins.go`）。
 - 典型开关（以各配置段字段名为准）：
   - `db.enabled`、`redis.enabled`、`auth.enabled`
-  - `consul.enabled`、`kafka.enabled`、`dtm.enabled`
+  - `consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`
   - `event.publisher_enabled`、`event.consumer_enabled`
   - `pprof.enabled`、`http_record.enabled`
   - `idempotency.stale_cleaner_enabled` 等同类开关

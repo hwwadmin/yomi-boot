@@ -17,6 +17,7 @@ import (
 	pprofplugin "gitee.com/hq_project/yomi-boot/pprof/plugin"
 	ratelimitplugin "gitee.com/hq_project/yomi-boot/ratelimit/plugin"
 	redisplugin "gitee.com/hq_project/yomi-boot/redis/plugin"
+	redisstreamplugin "gitee.com/hq_project/yomi-boot/redisstream/plugin"
 	snowflakeplugin "gitee.com/hq_project/yomi-boot/snowflake/plugin"
 	tokenplugin "gitee.com/hq_project/yomi-boot/token/plugin"
 )
@@ -35,19 +36,21 @@ import (
 //  2. logger      — 始终启动（依赖 AppCtx）
 //  3. pprof       — pprof.enabled=true 时启动（默认 false）
 //  4. db          — db.enabled=true 时启动（写入 Host.DbType）
-//  5. redis       — redis.enabled=true 时启动
-//  6. ratelimit   — 始终写入 RateLimiter（未启用时为 Noop；启用时依赖 RedisService）
-//  7. kafka       — kafka.enabled=true 时启动
-//  8. snowflake   — 始终启动
-//  9. tx          — host.DB 存在时启动
+//  5. redis        — redis.enabled=true 时启动
+//  6. ratelimit    — 始终写入 RateLimiter（未启用时为 Noop；启用时依赖 RedisService）
+//  7. kafka        — kafka.enabled=true 时启动
+//  8. redisstream  — redis_stream.enabled=true 时启动（依赖 RedisClient）
+//  9. snowflake    — 始终启动
 //
-// 10. dtm         — 写入 DtmServer；enabled 时探活
-// 11. idempotency — stale_cleaner_enabled=true 时启动
-// 12. token       — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
-// 13. httprecord  — http_record.enabled=true 时按 provider 装配 kafka/memory 服务，否则 Nop（默认关；文件 access 由 logger.AccessMiddleware 负责）
-// 14. consul      — consul.enabled=true 时启动
-// 15. event       — publisher_enabled / consumer_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
-// 16. custom      — InfraOptions.AddCustomPlugin 注册的服务自定义插件
+// 10. tx           — host.DB 存在时启动
+//
+// 11. dtm          — 写入 DtmServer；enabled 时探活
+// 12. idempotency  — stale_cleaner_enabled=true 时启动
+// 13. token        — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
+// 14. httprecord   — http_record.enabled=true 时按 provider 装配 kafka/memory 服务，否则 Nop（默认关；文件 access 由 logger.AccessMiddleware 负责）
+// 15. consul       — consul.enabled=true 时启动
+// 16. event        — publisher_enabled / consumer_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
+// 17. custom       — InfraOptions.AddCustomPlugin 注册的服务自定义插件
 //
 // # 非插件（由 MustInitInfra 直接处理，不在此列表）
 //
@@ -63,6 +66,7 @@ func buildInfraPlugins(opts InfraOptions) []plugin.Plugin {
 		redisplugin.NewRedis(),
 		ratelimitplugin.NewRateLimit(),
 		kafkaplugin.NewKafka(),
+		redisstreamplugin.NewRedisStream(),
 		snowflakeplugin.NewSnowflake(),
 		dbplugin.NewTx(),
 		dtmplugin.NewDtm(),

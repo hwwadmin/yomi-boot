@@ -15,6 +15,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/plugin"
 	"gitee.com/hq_project/yomi-boot/ratelimit"
 	yomiredis "gitee.com/hq_project/yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/redisstream"
 	"gitee.com/hq_project/yomi-boot/shared/enums"
 	"gitee.com/hq_project/yomi-boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/token"
@@ -26,21 +27,23 @@ import (
 type Infra struct {
 	Doc *config.Document // 已绑定配置文档（含自定义段）
 
-	DB                *gorm.DB                     // 业务数据库连接
-	DbType            enums.DbType                 // 数据库类型（db 插件写入）
-	RedisService      yomiredis.RedisService       // Redis 访问服务，业务层经此访问 Redis
-	DistLockFactory   distlock.DistLockFactory     // 分布式锁工厂，基于 Redis 实现
-	RateLimiter       ratelimit.LimitService       // 调用式限流（依赖 RedisService；未启用时为 Noop）
-	KafkaPublisher    yomikafka.PublisherService   // Kafka 生产者
-	KafkaConsumer     yomikafka.ConsumerService    // Kafka 消费者
-	IDGenerator       snowflake.Generator          // 雪花 ID 生成器
-	TokenService      token.TokenService           // 令牌服务（auth.enabled=true 时可用）
-	HttpRecordService httprecord.HttpRecordService // HTTP 访问记录服务
-	TxExecutor        db.TxExecutor                // 事务执行器
-	AppCtx            appctx.AppCtx                // 应用上下文（名称、环境、版本）
-	ConsulClient      *consul.Client               // Consul 客户端
-	DtmServer         string                       // DTM 服务端地址
-	EventComponents   *event.Components            // 消息队列事件组件
+	DB                   *gorm.DB                     // 业务数据库连接
+	DbType               enums.DbType                 // 数据库类型（db 插件写入）
+	RedisService         yomiredis.RedisService       // Redis 访问服务，业务层经此访问 Redis
+	DistLockFactory      distlock.DistLockFactory     // 分布式锁工厂，基于 Redis 实现
+	RateLimiter          ratelimit.LimitService       // 调用式限流（依赖 RedisService；未启用时为 Noop）
+	KafkaPublisher       yomikafka.PublisherService   // Kafka 生产者
+	KafkaConsumer        yomikafka.ConsumerService    // Kafka 消费者
+	RedisStreamPublisher redisstream.PublisherService // Redis Stream 发布者
+	RedisStreamConsumer  redisstream.ConsumerService  // Redis Stream 消费者
+	IDGenerator          snowflake.Generator          // 雪花 ID 生成器
+	TokenService         token.TokenService           // 令牌服务（auth.enabled=true 时可用）
+	HttpRecordService    httprecord.HttpRecordService // HTTP 访问记录服务
+	TxExecutor           db.TxExecutor                // 事务执行器
+	AppCtx               appctx.AppCtx                // 应用上下文（名称、环境、版本）
+	ConsulClient         *consul.Client               // Consul 客户端
+	DtmServer            string                       // DTM 服务端地址
+	EventComponents      *event.Components            // 可靠领域事件组件（Outbox/Inbox）
 
 	runtime *plugin.Runtime // 插件运行时，供 Cleanup 逆序释放资源
 }
@@ -72,22 +75,24 @@ func (infra *Infra) Cleanup() {
 func newInfra(doc *config.Document, rt *plugin.Runtime) *Infra {
 	host := rt.Host
 	return &Infra{
-		Doc:               doc,
-		DB:                host.DB,
-		DbType:            host.DbType,
-		RedisService:      host.RedisService,
-		DistLockFactory:   host.DistLockFactory,
-		RateLimiter:       host.RateLimiter,
-		KafkaPublisher:    host.KafkaPublisher,
-		KafkaConsumer:     host.KafkaConsumer,
-		IDGenerator:       host.IDGenerator,
-		TokenService:      host.TokenService,
-		HttpRecordService: host.HttpRecordService,
-		TxExecutor:        host.TxExecutor,
-		AppCtx:            host.AppCtx,
-		ConsulClient:      host.ConsulClient,
-		DtmServer:         host.DtmServer,
-		EventComponents:   host.EventComponents,
-		runtime:           rt,
+		Doc:                  doc,
+		DB:                   host.DB,
+		DbType:               host.DbType,
+		RedisService:         host.RedisService,
+		DistLockFactory:      host.DistLockFactory,
+		RateLimiter:          host.RateLimiter,
+		KafkaPublisher:       host.KafkaPublisher,
+		KafkaConsumer:        host.KafkaConsumer,
+		RedisStreamPublisher: host.RedisStreamPublisher,
+		RedisStreamConsumer:  host.RedisStreamConsumer,
+		IDGenerator:          host.IDGenerator,
+		TokenService:         host.TokenService,
+		HttpRecordService:    host.HttpRecordService,
+		TxExecutor:           host.TxExecutor,
+		AppCtx:               host.AppCtx,
+		ConsulClient:         host.ConsulClient,
+		DtmServer:            host.DtmServer,
+		EventComponents:      host.EventComponents,
+		runtime:              rt,
 	}
 }

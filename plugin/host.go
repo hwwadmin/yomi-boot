@@ -14,6 +14,7 @@ import (
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 	"gitee.com/hq_project/yomi-boot/ratelimit"
 	yomiredis "gitee.com/hq_project/yomi-boot/redis"
+	"gitee.com/hq_project/yomi-boot/redisstream"
 	"gitee.com/hq_project/yomi-boot/shared/enums"
 	"gitee.com/hq_project/yomi-boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/token"
@@ -30,20 +31,23 @@ type Host struct {
 	AppCtx appctx.AppCtx // 由 app 插件写入
 	DbType enums.DbType  // 由 db 插件写入（db 未启用时为零值）
 
-	DB                *gorm.DB
-	RedisClient       *redisv9.Client
-	RedisService      yomiredis.RedisService
-	DistLockFactory   distlock.DistLockFactory
-	RateLimiter       ratelimit.LimitService
-	KafkaComponents   *yomikafka.Components
-	KafkaPublisher    yomikafka.PublisherService
-	KafkaConsumer     yomikafka.ConsumerService
-	IDGenerator       snowflake.Generator
-	TokenService      token.TokenService
-	HttpRecordService httprecord.HttpRecordService
-	TxExecutor        db.TxExecutor
-	ConsulClient      *consul.Client
-	ConsulServiceID   string
-	DtmServer         string
-	EventComponents   *event.Components
+	DB                    *gorm.DB
+	RedisClient           *redisv9.Client
+	RedisService          yomiredis.RedisService
+	DistLockFactory       distlock.DistLockFactory
+	RateLimiter           ratelimit.LimitService
+	KafkaComponents       *yomikafka.Components
+	KafkaPublisher        yomikafka.PublisherService
+	KafkaConsumer         yomikafka.ConsumerService
+	RedisStreamComponents *redisstream.Components
+	RedisStreamPublisher  redisstream.PublisherService
+	RedisStreamConsumer   redisstream.ConsumerService
+	IDGenerator           snowflake.Generator
+	TokenService          token.TokenService
+	HttpRecordService     httprecord.HttpRecordService
+	TxExecutor            db.TxExecutor
+	ConsulClient          *consul.Client
+	ConsulServiceID       string
+	DtmServer             string
+	EventComponents       *event.Components
 }
