@@ -230,6 +230,70 @@ func TestConsumer_Dead(t *testing.T) {
 	}
 }
 
+func TestConsumer_StartFailsWhenRedisUnavailable(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	cleanup() // 关闭底层连接，使后续命令失败
+
+	zero := int64(0)
+	enabled := true
+	components, err := NewComponents(Config{
+		Enabled:       &enabled,
+		DefaultMaxLen: &zero,
+	}, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	err = components.Consumer.Start(context.Background(), "c-fail", GroupConfig{
+		Stream:   "s",
+		Group:    "g",
+		Consumer: "w",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		return HandleAck
+	})
+	if err == nil {
+		t.Fatal("expected Start to fail when Redis unavailable")
+	}
+}
+
+func TestConsumer_StartSucceedsWhenGroupExists(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	if err := client.XGroupCreateMkStream(ctx, "exists", "g1", "0").Err(); err != nil {
+		t.Fatalf("precreate group: %v", err)
+	}
+
+	zero := int64(0)
+	enabled := true
+	components, err := NewComponents(Config{
+		Enabled:       &enabled,
+		DefaultMaxLen: &zero,
+		BlockMS:       100,
+	}, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	err = components.Consumer.Start(ctx, "c-exists", GroupConfig{
+		Stream:   "exists",
+		Group:    "g1",
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, _ Entry) HandleResult {
+		return HandleAck
+	})
+	if err != nil {
+		t.Fatalf("Start with existing group: %v", err)
+	}
+}
+
 func TestConsumer_ClaimPending(t *testing.T) {
 	t.Parallel()
 	mr := miniredis.RunT(t)

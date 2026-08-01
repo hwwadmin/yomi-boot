@@ -31,7 +31,7 @@ const (
 
 // ConsumerService 表示 Redis Stream 消费者管理能力
 type ConsumerService interface {
-	// Start 启动消费循环；同一 id 不可重复注册
+	// Start 同步确保消费组可用后启动消费循环；建组失败返回 error，同一 id 不可重复注册
 	Start(parentCtx context.Context, id string, cfg GroupConfig, handler Handler) error
 	// Stop 停止并移除指定消费者
 	Stop(id string) error
@@ -70,7 +70,7 @@ func NewConsumerManager(client *redisv9.Client, runtime RuntimeConfig) *Consumer
 	}
 }
 
-// Start 启动消费者
+// Start 启动消费者；同步创建消费组，失败时返回 error 且不启动消费循环
 func (m *ConsumerManager) Start(
 	parentCtx context.Context,
 	id string,
@@ -80,16 +80,24 @@ func (m *ConsumerManager) Start(
 	if handler == nil {
 		return errors.New("redisstream: 消费处理函数不能为空")
 	}
+	if strings.TrimSpace(id) == "" {
+		return errors.New("redisstream: 消费者标识不能为空")
+	}
 	resolved, err := m.resolveGroupConfig(cfg)
 	if err != nil {
 		return err
 	}
 
-	m.mu.Lock()
-	if strings.TrimSpace(id) == "" {
-		m.mu.Unlock()
-		return errors.New("redisstream: 消费者标识不能为空")
+	c := &consumer{
+		client:  m.client,
+		runtime: m.runtime,
+		cfg:     resolved,
 	}
+	if err := c.ensureGroup(parentCtx); err != nil {
+		return err
+	}
+
+	m.mu.Lock()
 	if _, exists := m.entries[id]; exists {
 		m.mu.Unlock()
 		return errors.Newf("redisstream: 消费者已存在: %s", id)
@@ -106,11 +114,6 @@ func (m *ConsumerManager) Start(
 				logger.Error(entry.ctx, "Redis Stream 消费者 goroutine panic", "consumer_id", id, "panic", r)
 			}
 		}()
-		c := &consumer{
-			client:  m.client,
-			runtime: m.runtime,
-			cfg:     resolved,
-		}
 		_ = c.run(entry.ctx, handler)
 	}()
 
@@ -241,17 +244,8 @@ type consumer struct {
 	cfg     resolvedGroupConfig
 }
 
-// run 阻塞执行消费与 PEL 回收循环
+// run 阻塞执行消费与 PEL 回收循环（消费组已在 Start 阶段创建）
 func (c *consumer) run(ctx context.Context, handler Handler) error {
-	if err := c.ensureGroup(ctx); err != nil {
-		logger.Error(ctx, "创建 Redis Stream 消费组失败",
-			"stream", c.cfg.logicalStream,
-			"group", c.cfg.group,
-			"error", err,
-		)
-		return err
-	}
-
 	claimTicker := time.NewTicker(c.cfg.claimInterval)
 	defer claimTicker.Stop()
 
@@ -303,6 +297,7 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 	}
 }
 
+// ensureGroup 创建消费组（MKSTREAM）；组已存在时忽略 BUSYGROUP
 func (c *consumer) ensureGroup(ctx context.Context) error {
 	err := c.client.XGroupCreateMkStream(ctx, c.cfg.streamKey, c.cfg.group, c.cfg.start).Err()
 	if err == nil {
@@ -311,7 +306,7 @@ func (c *consumer) ensureGroup(ctx context.Context) error {
 	if isBusyGroup(err) {
 		return nil
 	}
-	return errors.Wrap(err, "XGROUP CREATE 失败")
+	return errors.Wrap(err, "创建消费组失败 stream=%s group=%s", c.cfg.logicalStream, c.cfg.group)
 }
 
 func (c *consumer) claimPending(ctx context.Context, handler Handler) {
