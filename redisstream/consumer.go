@@ -26,6 +26,9 @@ const (
 	consumerRetryJitterMin    = 8
 	consumerRetryJitterMax    = 12
 	consumerRetryJitterDenom  = 10
+	ackRetryMaxAttempts       = 5 // ackRetryMaxAttempts 是 XACK 最大尝试次数（含首次），超限留 PEL
+	ackRetryInitialDelay      = 100 * time.Millisecond
+	ackRetryMaxDelay          = 1 * time.Second // ack 退避上限，避免读循环被长时间拖住
 )
 
 // deadMeta 是写入死信独立 meta 字段的 JSON 结构
@@ -287,8 +290,7 @@ type consumer struct {
 }
 
 // run 阻塞执行消费循环，并启动独立 claim 协程回收 PEL。
-// 读循环与 claim 循环通过 processMu 串行化 handler，避免并发进入业务；
-// claim 不被 XREADGROUP 阻塞拖死（handler 内长时间占用锁时本实例 claim 仍会推迟）。
+// processMu 仅串行化 Handler 调用；XACK/dead 等 Redis 收尾在锁外执行，避免故障退避拖死 claim。
 func (c *consumer) run(ctx context.Context, handler Handler) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -344,10 +346,7 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 					ID:     msg.ID,
 					Values: stringifyValues(msg.Values),
 				}
-				processMu.Lock()
-				err := c.processEntry(ctx, handler, entry)
-				processMu.Unlock()
-				if err != nil {
+				if err := c.dispatchEntry(ctx, handler, entry, &processMu); err != nil {
 					return err
 				}
 			}
@@ -370,9 +369,7 @@ func (c *consumer) claimLoop(ctx context.Context, handler Handler, processMu *sy
 				)
 			}
 		}()
-		processMu.Lock()
-		defer processMu.Unlock()
-		c.claimPending(ctx, handler)
+		c.claimPending(ctx, handler, processMu)
 	}
 
 	claimOnce()
@@ -398,8 +395,9 @@ func (c *consumer) ensureGroup(ctx context.Context) error {
 	return errors.Wrap(err, "创建消费组失败 stream=%s group=%s", c.cfg.logicalStream, c.cfg.group)
 }
 
-// claimPending 通过 XAUTOCLAIM 回收空闲过久的 PEL 消息并交给 handler
-func (c *consumer) claimPending(ctx context.Context, handler Handler) {
+// claimPending 通过 XAUTOCLAIM 回收空闲过久的 PEL 消息并交给 handler；
+// 仅在调用 Handler 时持有 processMu，XACK 等 Redis 收尾在锁外执行
+func (c *consumer) claimPending(ctx context.Context, handler Handler, processMu *sync.Mutex) {
 	start := "0-0"
 	for {
 		if ctx.Err() != nil {
@@ -429,7 +427,7 @@ func (c *consumer) claimPending(ctx context.Context, handler Handler) {
 				ID:     msg.ID,
 				Values: stringifyValues(msg.Values),
 			}
-			if err := c.processEntry(ctx, handler, entry); err != nil {
+			if err := c.dispatchEntry(ctx, handler, entry, processMu); err != nil {
 				return
 			}
 		}
@@ -440,9 +438,21 @@ func (c *consumer) claimPending(ctx context.Context, handler Handler) {
 	}
 }
 
-// processEntry 对单条投递调用一次 Handler，并按结果收尾；不代业务做进程内重试循环
-func (c *consumer) processEntry(ctx context.Context, handler Handler, entry Entry) error {
+// dispatchEntry 在锁内调用 Handler，锁外按结果做 dead/XACK 等收尾
+func (c *consumer) dispatchEntry(
+	ctx context.Context,
+	handler Handler,
+	entry Entry,
+	processMu *sync.Mutex,
+) error {
+	processMu.Lock()
 	result := invokeHandler(ctx, handler, entry)
+	processMu.Unlock()
+	return c.applyHandleResult(ctx, entry, result)
+}
+
+// applyHandleResult 按 Handler 返回值执行 Redis 侧收尾（不持有 processMu）
+func (c *consumer) applyHandleResult(ctx context.Context, entry Entry, result HandleResult) error {
 	switch result {
 	case HandleAck:
 		return c.ackWithRetry(ctx, entry.ID)
@@ -472,10 +482,10 @@ func (c *consumer) processEntry(ctx context.Context, handler Handler, entry Entr
 	}
 }
 
-// ackWithRetry 提交 XACK，瞬时失败时按指数退避重试直至成功或上下文结束
+// ackWithRetry 提交 XACK；瞬时失败有限次退避重试，超限或不可恢复错误则放弃并留 PEL
 func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
-	delay := jitterDelay(consumerRetryInitialDelay)
-	for {
+	delay := jitterDelay(ackRetryInitialDelay)
+	for attempt := 1; attempt <= ackRetryMaxAttempts; attempt++ {
 		err := c.client.XAck(ctx, c.cfg.streamKey, c.cfg.group, id).Err()
 		if err == nil {
 			return nil
@@ -483,12 +493,53 @@ func (c *consumer) ackWithRetry(ctx context.Context, id string) error {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
-		logger.Warn(ctx, "Redis Stream XACK 失败，准备重试", "id", id, "error", err)
+		if isUnrecoverableStreamError(err) {
+			logger.Error(ctx, "Redis Stream XACK 不可恢复失败，保留在 PEL",
+				"id", id,
+				"error", err,
+			)
+			return nil
+		}
+		if attempt >= ackRetryMaxAttempts {
+			logger.Error(ctx, "Redis Stream XACK 重试超限，保留在 PEL",
+				"id", id,
+				"attempts", attempt,
+				"error", err,
+			)
+			return nil
+		}
+		logger.Warn(ctx, "Redis Stream XACK 失败，准备重试",
+			"id", id,
+			"attempt", attempt,
+			"error", err,
+		)
 		if waitErr := waitForRetry(ctx, delay); waitErr != nil {
 			return waitErr
 		}
-		delay = nextRetryDelay(delay)
+		delay = nextAckRetryDelay(delay)
 	}
+	return nil
+}
+
+// isUnrecoverableStreamError 判断是否为不宜继续重试的 Stream 错误
+func isUnrecoverableStreamError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, redisv9.ErrClosed) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "NOGROUP") || strings.Contains(msg, "WRONGTYPE")
+}
+
+// nextAckRetryDelay 计算 XACK 专用退避（上限低于读循环重试）
+func nextAckRetryDelay(current time.Duration) time.Duration {
+	next := current * 2
+	if next > ackRetryMaxDelay {
+		next = ackRetryMaxDelay
+	}
+	return jitterDelay(next)
 }
 
 // moveToDead 将消息写入死信 stream；框架元数据写入独立字段 DeadMetaField，不覆盖业务字段

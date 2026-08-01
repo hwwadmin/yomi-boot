@@ -254,6 +254,29 @@ func TestConsumer_Dead(t *testing.T) {
 	}
 }
 
+func TestAckWithRetry_GivesUpWhenRedisUnavailable(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	cleanup()
+
+	c := &consumer{
+		client: client,
+		cfg: resolvedGroupConfig{
+			streamKey: "s",
+			group:     "g",
+		},
+	}
+	begin := time.Now()
+	err := c.ackWithRetry(context.Background(), "1-0")
+	if err != nil {
+		t.Fatalf("ackWithRetry: %v", err)
+	}
+	// client closed 视为不可恢复，应立即放弃
+	if elapsed := time.Since(begin); elapsed > time.Second {
+		t.Fatalf("ackWithRetry took too long: %v", elapsed)
+	}
+}
+
 func TestConsumer_StopTimeoutWhenHandlerBlocks(t *testing.T) {
 	t.Parallel()
 	client, cleanup := redistest.NewClient(t)
