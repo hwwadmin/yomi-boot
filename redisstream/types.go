@@ -33,14 +33,16 @@ func (e Entry) Payload() []byte {
 // HandleResult 表示消费处理结果
 type HandleResult int
 
-// 消费处理结果：框架对每条投递只调用一次 Handler，是否当场重试/阻塞由业务在 Handler 内决定
+// 消费处理结果：框架对每条投递只调用一次 Handler，是否当场重试/阻塞由业务在 Handler 内决定。
+// 整体为至少一次投递，重复消费时业务须幂等。
 const (
 	HandleAck   HandleResult = iota // 处理成功，XACK
-	HandleRetry                     // 不 XACK，留在 PEL，继续拉取后续消息；再投递依赖 XAUTOCLAIM
+	HandleRetry                     // 不 XACK，留在 PEL，继续拉取后续消息；再投递依赖 XAUTOCLAIM（可能被其它实例并发处理）
 	HandleDead                      // 不可恢复：写入 dead stream 后 XACK
 )
 
-// Handler 消费处理函数；框架不代为进程内重试，业务可在函数内循环后再返回结果
+// Handler 消费处理函数；框架不代为进程内重试，业务可在函数内循环后再返回结果。
+// 须按至少一次语义编写，自行保证幂等。
 type Handler func(ctx context.Context, entry Entry) HandleResult
 
 // GroupConfig 表示单个消费组订阅参数
@@ -51,7 +53,7 @@ type GroupConfig struct {
 	Start         string        // Start 是建组起始 id，空则 "$"（仅新消息）；常用 "0" 从头
 	Count         int64         // Count 是单次拉取条数，0 使用全局默认
 	Block         time.Duration // Block 是 XREADGROUP 阻塞时长，0 使用全局默认
-	ClaimMinIdle  time.Duration // ClaimMinIdle 是 PEL 认领最小空闲，0 使用全局默认
+	ClaimMinIdle  time.Duration // ClaimMinIdle 是 PEL 认领最小空闲，0 使用全局默认；过小会加大多实例重复投递概率
 	ClaimInterval time.Duration // ClaimInterval 是 PEL 回收周期，0 使用全局默认
 	DeadStream    string        // DeadStream 是死信 stream 逻辑名，空则 "{Stream}.dead"
 }

@@ -3,6 +3,10 @@
 // 本包独立于 kafka 与 RedisService：仅依赖 go-redis 的 *redis.Client，
 // 由业务按需启用，不作为统一消息门面。
 //
+// 投递语义为至少一次（at-least-once），不保证恰好一次：HandleRetry 未 XACK 的消息
+// 会留在 PEL，空闲超过 claim_min_idle 后可被同组其它实例 XAUTOCLAIM 再次投递，
+// 从而出现并发或重复处理。业务 Handler 必须自行保证幂等。
+//
 // 消费契约：每条投递只调用一次 Handler；是否当场重试或阻塞由业务在 Handler 内自行决定。
 // HandleRetry 表示不 XACK、留在 PEL 并继续拉取后续消息，再投递依赖 XAUTOCLAIM。
 //
@@ -36,7 +40,7 @@ type Config struct {
 	DefaultMaxLen   *int64 `mapstructure:"default_maxlen"`    // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
 	BlockMS         int    `mapstructure:"block_ms"`          // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
 	Count           int64  `mapstructure:"count"`             // Count 是单次拉取条数，0 表示使用默认值
-	ClaimMinIdleMS  int    `mapstructure:"claim_min_idle_ms"` // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值
+	ClaimMinIdleMS  int    `mapstructure:"claim_min_idle_ms"` // ClaimMinIdleMS 是 PEL 认领最小空闲毫秒，0 表示使用默认值；过小会加大多实例重复投递概率
 	ClaimIntervalMS int    `mapstructure:"claim_interval_ms"` // ClaimIntervalMS 是 PEL 回收周期毫秒，0 表示使用默认值
 }
 
