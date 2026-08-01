@@ -19,6 +19,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 )
 
 // SectionKey YAML 根 key
@@ -37,7 +38,7 @@ const (
 // Config 表示 Redis Stream 能力配置
 type Config struct {
 	Enabled         *bool  `mapstructure:"enabled"`           // Enabled 是否启用，未配置默认 false
-	KeyPrefix       string `mapstructure:"key_prefix"`        // KeyPrefix 拼在 stream 名之前
+	KeyPrefix       string `mapstructure:"key_prefix"`        // KeyPrefix 拼在逻辑 stream 名之前（直接拼接）；非空时建议以 ':' 结尾，如 "rs:" → "rs:orders"
 	DefaultMaxLen   *int64 `mapstructure:"default_maxlen"`    // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
 	BlockMS         int    `mapstructure:"block_ms"`          // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
 	Count           int64  `mapstructure:"count"`             // Count 是单次拉取条数，0 表示使用默认值
@@ -74,10 +75,17 @@ func (c Config) Validate() error {
 	if c.StopTimeoutMS < 0 {
 		return errors.New("redis_stream.stop_timeout_ms 不能小于 0")
 	}
+	prefix := strings.TrimSpace(c.KeyPrefix)
+	if prefix != "" && !strings.HasSuffix(prefix, ":") {
+		logger.WarnWithoutCtx(
+			"redis_stream.key_prefix 建议以 ':' 结尾，否则会与 stream 名直接粘连",
+			"key_prefix", prefix,
+		)
+	}
 	return nil
 }
 
-// KeyPrefixOrDefault 返回规范化后的 key 前缀
+// KeyPrefixOrDefault 返回规范化后的 key 前缀（不做自动补 ':'，由配置自行带分隔符）
 func (c Config) KeyPrefixOrDefault() string {
 	return strings.TrimSpace(c.KeyPrefix)
 }

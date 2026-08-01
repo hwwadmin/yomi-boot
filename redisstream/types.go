@@ -52,7 +52,7 @@ type Handler func(ctx context.Context, entry Entry) HandleResult
 type GroupConfig struct {
 	Stream        string        // Stream 是逻辑 stream 名
 	Group         string        // Group 是消费组名
-	Consumer      string        // Consumer 是本实例消费者名
+	Consumer      string        // Consumer 是本实例消费者名；同一 group 下各实例必须唯一（建议 hostname+进程号）
 	Start         string        // Start 是建组起始 id，空则 "$"（仅新消息）；常用 "0" 从头
 	Count         int64         // Count 是单次拉取条数，0 使用全局默认
 	Block         time.Duration // Block 是 XREADGROUP 阻塞时长，0 使用全局默认
@@ -63,7 +63,7 @@ type GroupConfig struct {
 
 // RuntimeConfig 表示组件运行时默认参数（由 Config 转换）
 type RuntimeConfig struct {
-	KeyPrefix     string        // KeyPrefix 是 stream key 前缀
+	KeyPrefix     string        // KeyPrefix 是 stream key 前缀（与逻辑名直接拼接；非空时宜以 ':' 结尾）
 	DefaultMaxLen int64         // DefaultMaxLen 是发布/死信默认近似裁剪长度，0 表示不裁剪
 	Block         time.Duration // Block 是 XREADGROUP 默认阻塞时长
 	Count         int64         // Count 是单次拉取默认条数

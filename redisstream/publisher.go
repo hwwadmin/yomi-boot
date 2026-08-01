@@ -116,7 +116,7 @@ func (p *Publisher) ensureOpen() error {
 	return nil
 }
 
-// streamKey 将逻辑 stream 名转换为带前缀的 Redis key
+// streamKey 将逻辑 stream 名转换为带前缀的 Redis key（前缀与逻辑名直接拼接，前缀宜自带 ':'）
 func (p *Publisher) streamKey(stream string) string {
 	return p.keyPrefix + stream
 }
