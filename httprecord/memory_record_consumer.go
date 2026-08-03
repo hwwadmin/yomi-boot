@@ -9,8 +9,6 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
-
-	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // MemoryRecordConsumerConfig 表示 HTTP 访问记录内存消费者参数
@@ -115,7 +113,7 @@ func invokeMemoryRecordHandler(
 	}()
 
 	result := handler(ctx, record)
-	if result.Status == yomikafka.ConsumeStatusRetry {
+	if result.Status == RecordHandleRetry {
 		logger.Warn(ctx, "HTTP 访问记录内存消费返回 Retry，已丢弃",
 			"worker", workerIndex,
 			"traceId", record.TraceID,

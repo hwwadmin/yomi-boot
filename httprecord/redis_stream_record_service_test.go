@@ -8,8 +8,6 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/redis/redistest"
 	"gitee.com/hq_project/yomi-boot/redisstream"
-
-	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // TestRedisStreamHttpRecordService_Handle 验证异步写入 Redis Stream
@@ -84,9 +82,9 @@ func TestStartRedisStreamRecordConsumer(t *testing.T) {
 		Stream:   stream,
 		Group:    "httprecord-test",
 		Consumer: "c1",
-	}, func(_ context.Context, record *HttpRecord) yomikafka.ConsumeResult {
+	}, func(_ context.Context, record *HttpRecord) RecordHandleResult {
 		got <- record.TraceID
-		return yomikafka.AckOK()
+		return HandleOK()
 	})
 	if err != nil {
 		t.Fatalf("StartRedisStreamRecordConsumer: %v", err)
@@ -105,24 +103,24 @@ func TestStartRedisStreamRecordConsumer(t *testing.T) {
 	}
 }
 
-// TestMapRecordHandlerResult 验证 Kafka ConsumeResult 到 Redis Stream HandleResult 的映射
-func TestMapRecordHandlerResult(t *testing.T) {
+// TestMapRecordHandlerResultToRedisStream 验证 RecordHandleResult 到 Redis Stream HandleResult 的映射
+func TestMapRecordHandlerResultToRedisStream(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name string
-		in   yomikafka.ConsumeResult
+		in   RecordHandleResult
 		want redisstream.HandleResult
 	}{
-		{name: "ok", in: yomikafka.AckOK(), want: redisstream.HandleAck},
-		{name: "retry", in: yomikafka.Retry(), want: redisstream.HandleRetry},
-		{name: "drop", in: yomikafka.AckDrop(), want: redisstream.HandleDead},
+		{name: "ok", in: HandleOK(), want: redisstream.HandleAck},
+		{name: "retry", in: HandleRetry(), want: redisstream.HandleRetry},
+		{name: "drop", in: HandleDrop(), want: redisstream.HandleDead},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := mapRecordHandlerResult(tc.in); got != tc.want {
-				t.Fatalf("mapRecordHandlerResult() = %v, want %v", got, tc.want)
+			if got := mapRecordHandlerResultToRedisStream(tc.in); got != tc.want {
+				t.Fatalf("mapRecordHandlerResultToRedisStream() = %v, want %v", got, tc.want)
 			}
 		})
 	}

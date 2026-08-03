@@ -17,9 +17,6 @@ import (
 // KafkaConsumerID 是 HTTP 访问记录 Kafka 消费者在 ConsumerManager 中的标识
 const KafkaConsumerID = "httprecord"
 
-// RecordHandler 是 HTTP 访问记录消费处理函数（Kafka / 内存队列 / Redis Stream 共用）
-type RecordHandler func(ctx context.Context, record *HttpRecord) yomikafka.ConsumeResult
-
 // KafkaRecordConsumerConfig 表示 HTTP 访问记录 Kafka 消费者参数
 type KafkaRecordConsumerConfig struct {
 	Topics  []string // Topics 是订阅主题列表
@@ -72,6 +69,20 @@ func StartKafkaRecordConsumer(
 			return yomikafka.AckDrop()
 		}
 
-		return handler(ctx, record)
+		return mapRecordHandlerResultToKafka(handler(ctx, record))
 	})
+}
+
+// mapRecordHandlerResultToKafka 将共用 RecordHandleResult 映射为 Kafka ConsumeResult
+func mapRecordHandlerResultToKafka(result RecordHandleResult) yomikafka.ConsumeResult {
+	switch result.Status {
+	case RecordHandleOK:
+		return yomikafka.AckOK()
+	case RecordHandleRetry:
+		return yomikafka.Retry()
+	case RecordHandleDrop:
+		return yomikafka.AckDrop()
+	default:
+		return yomikafka.AckDrop()
+	}
 }

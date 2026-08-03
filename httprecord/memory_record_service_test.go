@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // TestMemoryHttpRecordService_QueueFullDrops 验证队列满时 Handle 不阻塞并丢弃
@@ -46,12 +44,12 @@ func TestStartMemoryRecordConsumer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := StartMemoryRecordConsumer(ctx, svc, MemoryRecordConsumerConfig{Workers: 2}, func(_ context.Context, record *HttpRecord) yomikafka.ConsumeResult {
+	err := StartMemoryRecordConsumer(ctx, svc, MemoryRecordConsumerConfig{Workers: 2}, func(_ context.Context, record *HttpRecord) RecordHandleResult {
 		if record.TraceID == "ok" {
 			got.Add(1)
 			wg.Done()
 		}
-		return yomikafka.AckOK()
+		return HandleOK()
 	})
 	if err != nil {
 		t.Fatalf("StartMemoryRecordConsumer() error = %v", err)
@@ -84,8 +82,8 @@ func TestStartMemoryRecordConsumer_DuplicateStart(t *testing.T) {
 	defer svc.Close()
 
 	ctx := context.Background()
-	handler := func(_ context.Context, _ *HttpRecord) yomikafka.ConsumeResult {
-		return yomikafka.AckOK()
+	handler := func(_ context.Context, _ *HttpRecord) RecordHandleResult {
+		return HandleOK()
 	}
 	if err := StartMemoryRecordConsumer(ctx, svc, MemoryRecordConsumerConfig{Workers: 1}, handler); err != nil {
 		t.Fatalf("first StartMemoryRecordConsumer() error = %v", err)

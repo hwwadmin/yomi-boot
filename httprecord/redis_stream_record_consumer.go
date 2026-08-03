@@ -11,8 +11,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
 	"gitee.com/hq_project/yomi-boot/redisstream"
-
-	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
 // RedisStreamConsumerID 是 HTTP 访问记录 Redis Stream 消费者在 ConsumerManager 中的标识
@@ -82,18 +80,18 @@ func StartRedisStreamRecordConsumer(
 			return redisstream.HandleDead
 		}
 
-		return mapRecordHandlerResult(handler(ctx, record))
+		return mapRecordHandlerResultToRedisStream(handler(ctx, record))
 	})
 }
 
-// mapRecordHandlerResult 将共用 RecordHandler 结果映射为 Redis Stream HandleResult
-func mapRecordHandlerResult(result yomikafka.ConsumeResult) redisstream.HandleResult {
+// mapRecordHandlerResultToRedisStream 将共用 RecordHandleResult 映射为 Redis Stream HandleResult
+func mapRecordHandlerResultToRedisStream(result RecordHandleResult) redisstream.HandleResult {
 	switch result.Status {
-	case yomikafka.ConsumeStatusOK:
+	case RecordHandleOK:
 		return redisstream.HandleAck
-	case yomikafka.ConsumeStatusRetry:
+	case RecordHandleRetry:
 		return redisstream.HandleRetry
-	case yomikafka.ConsumeStatusDrop:
+	case RecordHandleDrop:
 		return redisstream.HandleDead
 	default:
 		return redisstream.HandleDead

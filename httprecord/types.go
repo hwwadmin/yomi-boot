@@ -3,7 +3,10 @@
 // @author zwei
 package httprecord
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // HttpRecord 表示一次 HTTP 请求的访问记录快照
 // 由中间件在请求结束后组装，并传递给 HttpRecordService 处理
@@ -33,3 +36,37 @@ type HttpRecord struct {
 	RequestBodyTruncated  bool   // RequestBodyTruncated 表示请求体是否因超出限制被截断
 	ResponseBodyTruncated bool   // ResponseBodyTruncated 表示响应体是否因超出限制被截断
 }
+
+// RecordHandleStatus 表示访问记录业务处理结果状态
+type RecordHandleStatus int
+
+// 访问记录业务处理结果状态码（传输无关）
+const (
+	RecordHandleOK    RecordHandleStatus = iota // 处理成功
+	RecordHandleRetry                           // 可重试失败
+	RecordHandleDrop                            // 不可恢复，丢弃
+)
+
+// RecordHandleResult 表示访问记录业务处理结果
+// 由各传输层（Kafka / Redis Stream / 内存队列）映射为对应 ack 语义
+type RecordHandleResult struct {
+	Status RecordHandleStatus // Status 是处理结果
+}
+
+// HandleOK 返回处理成功结果
+func HandleOK() RecordHandleResult {
+	return RecordHandleResult{Status: RecordHandleOK}
+}
+
+// HandleRetry 返回可重试失败结果
+func HandleRetry() RecordHandleResult {
+	return RecordHandleResult{Status: RecordHandleRetry}
+}
+
+// HandleDrop 返回不可恢复、应丢弃的结果
+func HandleDrop() RecordHandleResult {
+	return RecordHandleResult{Status: RecordHandleDrop}
+}
+
+// RecordHandler 是 HTTP 访问记录消费处理函数（Kafka / 内存队列 / Redis Stream 共用）
+type RecordHandler func(ctx context.Context, record *HttpRecord) RecordHandleResult
