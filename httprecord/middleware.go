@@ -20,6 +20,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/token"
 	"gitee.com/hq_project/yomi-boot/traceid"
 	"gitee.com/hq_project/yomi-boot/utils/ginutil"
+	"gitee.com/hq_project/yomi-boot/utils/httputil"
 
 	"github.com/gin-gonic/gin"
 )
@@ -207,13 +208,14 @@ func readRequestBodyForRecord(r *http.Request, maxSize int) (string, bool) {
 		return "", false
 	}
 
-	recorded, err := io.ReadAll(io.LimitReader(r.Body, int64(maxSize)+1))
+	original := r.Body
+	recorded, err := io.ReadAll(io.LimitReader(original, int64(maxSize)+1))
 	if err != nil {
-		r.Body = io.NopCloser(bytes.NewReader(nil))
+		_ = original.Close()
+		r.Body = http.NoBody
 		return "", false
 	}
-
-	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(recorded), r.Body))
+	httputil.ReplayRequestBody(r, original, recorded, maxSize)
 
 	if len(recorded) == 0 {
 		return "", false

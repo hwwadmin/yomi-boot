@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/utils/httputil"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -61,13 +63,15 @@ func captureRequestBody(r *http.Request, cfg AccessConfig, sens *Sensitive) body
 	if maxSize <= 0 {
 		maxSize = 8192
 	}
-	recorded, err := io.ReadAll(io.LimitReader(r.Body, int64(maxSize)+1))
+	original := r.Body
+	recorded, err := io.ReadAll(io.LimitReader(original, int64(maxSize)+1))
 	if err != nil {
-		r.Body = io.NopCloser(bytes.NewReader(nil))
+		_ = original.Close()
+		r.Body = http.NoBody
 		out.OmittedReason = omitCaptureFailed
 		return out
 	}
-	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(recorded), r.Body))
+	httputil.ReplayRequestBody(r, original, recorded, maxSize)
 	if len(recorded) == 0 {
 		return out
 	}
