@@ -2,7 +2,7 @@
 description:基于spec文档开始落地代码
 ---
 
-1. 先阅读 `_prompts/rules/资源根目录规则.md`，再基于 `_prompts/agent/leader-agent.md` 完成代码开发任务。
+1. **定位 `_prompts`（强制，不可跳过）**：先查当前项目根目录下的 `_prompts/`；若不存在，再查当前项目依赖的外部库 `yomi-boot`（`gitee.com/hq_project/yomi-boot`）包下的 `_prompts/`。两处均查不到则**终止执行**并说明原因。定位成功后阅读 `_prompts/rules/资源根目录规则.md`，再基于 `_prompts/agent/leader-agent.md` 完成代码开发任务。
 
 2. 阅读指定的需求显化文档和产品需求文档（当前业务工程内路径，如 `_feat-doc/`、`_doc/`）
 

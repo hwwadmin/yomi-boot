@@ -2,7 +2,7 @@
 description:生成测试用例与产品验收文档（可选）
 ---
 
-1. 先阅读 `_prompts/rules/资源根目录规则.md`，再基于 `_prompts/agent/quality-agent.md` 开始生成质量文档。
+1. **定位 `_prompts`（强制，不可跳过）**：先查当前项目根目录下的 `_prompts/`；若不存在，再查当前项目依赖的外部库 `yomi-boot`（`gitee.com/hq_project/yomi-boot`）包下的 `_prompts/`。两处均查不到则**终止执行**并说明原因。定位成功后阅读 `_prompts/rules/资源根目录规则.md`，再基于 `_prompts/agent/quality-agent.md` 开始生成质量文档。
 
 2. 阅读用户指定的需求显化文档（当前业务工程路径，如 `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md`）；若提供或可定位产品需求文档，一并阅读 `_doc/*-prd.md`。
 
