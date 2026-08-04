@@ -58,15 +58,15 @@ build/
 nul
 
 # IDE ignore
-.qoder/*
-.trae/*
-.vscode/*
-.github/*
-.codebuddy/*
-.codex/*
-.copilot-temp/*
-.opencode/*
-.cursor/*
+.qoder
+.trae
+.vscode
+.github
+.codebuddy
+.codex
+.copilot-temp
+.opencode
+.cursor
 
 # go-dits
 */dist/*
