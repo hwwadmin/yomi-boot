@@ -268,6 +268,35 @@ func TestTick_cancelsTaskOnLockLost(t *testing.T) {
 	}
 }
 
+// TestShouldStopOnTickError 仅调度 ctx 结束时才应停机
+func TestShouldStopOnTickError(t *testing.T) {
+	alive := context.Background()
+	if shouldStopOnTickError(alive, context.DeadlineExceeded) {
+		t.Fatal("DeadlineExceeded with alive ctx must not stop scheduler")
+	}
+	if shouldStopOnTickError(alive, context.Canceled) {
+		t.Fatal("Canceled error with alive ctx must not stop scheduler")
+	}
+	if shouldStopOnTickError(alive, errors.New("redis down")) {
+		t.Fatal("generic error with alive ctx must not stop via shouldStop")
+	}
+	if shouldStopOnTickError(alive, nil) {
+		t.Fatal("nil error must not stop")
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !shouldStopOnTickError(canceled, context.Canceled) {
+		t.Fatal("canceled ctx must stop scheduler")
+	}
+	if !shouldStopOnTickError(canceled, context.DeadlineExceeded) {
+		t.Fatal("deadline with canceled ctx must stop scheduler")
+	}
+	if !shouldStopOnTickError(canceled, errors.New("other")) {
+		t.Fatal("any tick error after ctx done must stop")
+	}
+}
+
 // TestBackoffDuration 校验指数退避时长及 maxBackoff 上限
 func TestBackoffDuration(t *testing.T) {
 	if BackoffDuration(1) != time.Second {

@@ -62,7 +62,7 @@ func validateStartArgs(cfg Config, task Task, factory distlock.DistLockFactory) 
 	return nil
 }
 
-// runLoop 轮询主循环：抢锁、执行任务、jitter 或退避，直至 ctx 取消
+// runLoop 轮询主循环：抢锁、执行任务、jitter 或退避，直至调度 ctx 取消
 func runLoop(ctx context.Context, cfg Config, task Task, factory distlock.DistLockFactory) error {
 	logger.Info(ctx, fmt.Sprintf("RoundRobin[%s] task started.", cfg.Name))
 
@@ -75,9 +75,11 @@ func runLoop(ctx context.Context, cfg Config, task Task, factory distlock.DistLo
 
 		executed, err := tick(ctx, cfg, task, factory)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// 仅当调度 ctx 本身已结束时停机。tick/Unlock 冒泡的 DeadlineExceeded
+			//（如 Redis 解锁超时）不得当作永久退出，否则解析引擎会假死而 HTTP 仍存活。
+			if shouldStopOnTickError(ctx, err) {
 				logger.Info(ctx, fmt.Sprintf("RoundRobin[%s] task stopped.", cfg.Name))
-				return err
+				return ctx.Err()
 			}
 			consecutiveErrors++
 			backoff := BackoffDuration(consecutiveErrors)
@@ -109,6 +111,13 @@ func runLoop(ctx context.Context, cfg Config, task Task, factory distlock.DistLo
 			}
 		}
 	}
+}
+
+// shouldStopOnTickError 判断 tick 错误是否意味着调度应退出。
+// 仅当调度 ctx 已结束时返回 true；Redis Unlock/TryLock 冒出的
+// DeadlineExceeded/Canceled（ctx 仍存活）必须继续轮询。
+func shouldStopOnTickError(ctx context.Context, err error) bool {
+	return err != nil && ctx.Err() != nil
 }
 
 // tick 执行一轮抢锁与任务调度；executed 表示是否成功持执行锁完成任务
@@ -150,13 +159,15 @@ func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockF
 		return false, nil
 	}
 
-	// panic 时仍须释放执行锁并停止看门狗，否则 goroutine 崩溃且锁无法释放
+	// panic 时仍须释放执行锁并停止看门狗，否则 goroutine 崩溃且锁无法释放。
+	// Unlock 瞬时失败（含 BackgroundWithTimeout 的 DeadlineExceeded）只打日志、不冒泡：
+	// 任务可能已成功，锁随 TTL 过期即可；冒泡曾导致 runLoop 误把 DeadlineExceeded 当停机信号。
 	defer func() {
 		unlockCtx, cancel := appctx.BackgroundWithTimeout(5 * time.Second)
 		defer cancel()
 		unlockErr := execLock.Unlock(unlockCtx)
-		if unlockErr != nil && !errors.Is(unlockErr, distlock.ErrLockNotHeld) && err == nil {
-			err = unlockErr
+		if unlockErr != nil && !errors.Is(unlockErr, distlock.ErrLockNotHeld) {
+			logger.Error(ctx, fmt.Sprintf("RoundRobin[%s] unlock failed", cfg.Name), "error", unlockErr)
 		}
 	}()
 
@@ -164,7 +175,7 @@ func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockF
 	runCtx, stop := distlock.BindHeldContext(ctx, execLock)
 	defer stop()
 	runTaskSafely(runCtx, cfg.Name, task)
-	return true, err
+	return true, nil
 }
 
 // runTaskSafely 执行任务并 recover panic，避免未捕获 panic 导致进程退出
