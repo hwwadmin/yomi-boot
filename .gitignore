@@ -67,6 +67,7 @@ nul
 .copilot-temp
 .opencode
 .cursor
+.dsh
 
 # go-dits
 */dist/*
