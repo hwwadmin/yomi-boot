@@ -80,6 +80,62 @@ func TestReadRequestBodyForRecord_Truncate(t *testing.T) {
 	}
 }
 
+// TestReadRequestBodyForRecord_UTF8Boundary 验证按字节上限截断时回退到合法 UTF-8 边界
+func TestReadRequestBodyForRecord_UTF8Boundary(t *testing.T) {
+	raw := []byte("报错") // 报=3 字节，错=E9 94 99
+	original := io.NopCloser(bytes.NewReader(raw))
+	req := httptest.NewRequest(http.MethodPost, "/api", original)
+	req.Body = original
+
+	got, truncated := readRequestBodyForRecord(req, 5)
+	if !truncated {
+		t.Fatal("want truncated")
+	}
+	want := "报" + truncatedSuffix
+	if got != want {
+		t.Fatalf("record got %q want %q", got, want)
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, raw) {
+		t.Fatalf("handler body got %q want %q", body, raw)
+	}
+}
+
+// TestReadRequestBodyForRecord_Unlimited 验证 maxSize<0 时采集完整请求体且不截断
+func TestReadRequestBodyForRecord_Unlimited(t *testing.T) {
+	raw := bytes.Repeat([]byte("中"), 3000)
+	closed := false
+	original := &closeProbe{
+		Reader: bytes.NewReader(raw),
+		onClose: func() {
+			closed = true
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api", original)
+	req.Body = original
+
+	got, truncated := readRequestBodyForRecord(req, -1)
+	if truncated {
+		t.Fatal("unlimited should not truncate")
+	}
+	if got != string(raw) {
+		t.Fatalf("record len=%d want %d", len(got), len(raw))
+	}
+	if !closed {
+		t.Fatal("original should be closed after full consume")
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, raw) {
+		t.Fatalf("restored body len=%d want=%d", len(body), len(raw))
+	}
+}
+
 type closeProbe struct {
 	io.Reader
 	onClose func()

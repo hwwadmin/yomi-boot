@@ -8,6 +8,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/utils/utf8util"
 )
 
 // HTTP 访问记录默认值
@@ -56,8 +57,8 @@ type Config struct {
 	KafkaTopic          string         `mapstructure:"kafka_topic"`            // KafkaTopic 是 Kafka 发布/订阅主题
 	Stream              string         `mapstructure:"stream"`                 // Stream 是 Redis Stream 逻辑名（provider=redis_stream）
 	SkipPaths           []string       `mapstructure:"skip_paths"`             // SkipPaths 是不进行记录采集的接口路径列表
-	MaxRequestBodySize  int            `mapstructure:"max_request_body_size"`  // MaxRequestBodySize 是请求体记录最大字节数
-	MaxResponseBodySize int            `mapstructure:"max_response_body_size"` // MaxResponseBodySize 是响应体记录最大字节数
+	MaxRequestBodySize  *int           `mapstructure:"max_request_body_size"`  // MaxRequestBodySize 是请求体记录最大字节数；nil 默认 4096，0 表示不截断
+	MaxResponseBodySize *int           `mapstructure:"max_response_body_size"` // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 4096，0 表示不截断
 	RecordRequestBody   bool           `mapstructure:"record_request_body"`    // RecordRequestBody 是否记录请求体
 	RecordResponseBody  bool           `mapstructure:"record_response_body"`   // RecordResponseBody 是否记录响应体
 	MaskSensitive       bool           `mapstructure:"mask_sensitive"`         // MaskSensitive 是否对敏感字段脱敏
@@ -84,6 +85,12 @@ func (c Config) Validate() error {
 		if skipPath != strings.TrimSpace(skipPath) {
 			return errors.New("http_record.skip_paths 不能含首尾空格")
 		}
+	}
+	if c.MaxRequestBodySize != nil && *c.MaxRequestBodySize < 0 {
+		return errors.New("http_record.max_request_body_size 不能小于 0")
+	}
+	if c.MaxResponseBodySize != nil && *c.MaxResponseBodySize < 0 {
+		return errors.New("http_record.max_response_body_size 不能小于 0")
 	}
 	if !c.EnabledOrDefault() {
 		return nil
@@ -142,20 +149,25 @@ func (c MemoryConfig) WorkersOrDefault() int {
 	return c.Workers
 }
 
-// MaxRequestBodySizeOrDefault 返回请求体记录最大字节数
+// MaxRequestBodySizeOrDefault 返回请求体记录最大字节数；未配置用默认值，显式 0 表示不截断
 func (c Config) MaxRequestBodySizeOrDefault() int {
-	if c.MaxRequestBodySize <= 0 {
-		return defaultHTTPRecordMaxRequestBodySize
-	}
-	return c.MaxRequestBodySize
+	return resolveBodySizeLimit(c.MaxRequestBodySize, defaultHTTPRecordMaxRequestBodySize)
 }
 
-// MaxResponseBodySizeOrDefault 返回响应体记录最大字节数
+// MaxResponseBodySizeOrDefault 返回响应体记录最大字节数；未配置用默认值，显式 0 表示不截断
 func (c Config) MaxResponseBodySizeOrDefault() int {
-	if c.MaxResponseBodySize <= 0 {
-		return defaultHTTPRecordMaxResponseBodySize
+	return resolveBodySizeLimit(c.MaxResponseBodySize, defaultHTTPRecordMaxResponseBodySize)
+}
+
+// resolveBodySizeLimit 将接入方配置解析为采集上限：nil 用默认值，0 为 utf8util.Unlimited
+func resolveBodySizeLimit(configured *int, defaultSize int) int {
+	if configured == nil {
+		return defaultSize
 	}
-	return c.MaxResponseBodySize
+	if *configured == 0 {
+		return utf8util.Unlimited
+	}
+	return *configured
 }
 
 // ConfigSection 返回 http_record 配置段

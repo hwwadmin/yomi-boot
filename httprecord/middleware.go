@@ -21,6 +21,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/traceid"
 	"gitee.com/hq_project/yomi-boot/utils/ginutil"
 	"gitee.com/hq_project/yomi-boot/utils/httputil"
+	"gitee.com/hq_project/yomi-boot/utils/utf8util"
 
 	"github.com/gin-gonic/gin"
 )
@@ -164,7 +165,7 @@ func (m *Middleware) buildRecord(
 	}
 
 	if m.cfg.RecordResponseBody {
-		responseBody := blw.body.String()
+		responseBody := blw.recordedBody()
 		if m.cfg.MaskSensitive && responseBody != "" {
 			responseBody = maskJSONString(responseBody)
 		}
@@ -202,36 +203,48 @@ func normalizePath(requestPath string) string {
 }
 
 // readRequestBodyForRecord 读取并还原请求体，返回用于记录输出的内容与是否截断标记
-// 仅读取 maxSize+1 字节用于判断是否截断，避免将超大请求体全量载入内存
+// maxSize == utf8util.Unlimited 时读取完整 body；否则仅读取 maxSize+1 字节用于判断是否截断
 func readRequestBodyForRecord(r *http.Request, maxSize int) (string, bool) {
-	if r == nil || r.Body == nil || maxSize <= 0 {
+	if r == nil || r.Body == nil {
+		return "", false
+	}
+	if maxSize == 0 {
 		return "", false
 	}
 
 	original := r.Body
-	recorded, err := io.ReadAll(io.LimitReader(original, int64(maxSize)+1))
+	var recorded []byte
+	var err error
+	replayMax := maxSize
+	if maxSize < 0 {
+		recorded, err = io.ReadAll(original)
+		replayMax = len(recorded)
+	} else {
+		recorded, err = io.ReadAll(io.LimitReader(original, int64(maxSize)+1))
+	}
 	if err != nil {
 		_ = original.Close()
 		r.Body = http.NoBody
 		return "", false
 	}
-	httputil.ReplayRequestBody(r, original, recorded, maxSize)
+	httputil.ReplayRequestBody(r, original, recorded, replayMax)
 
 	if len(recorded) == 0 {
 		return "", false
 	}
-	if len(recorded) <= maxSize {
-		return string(recorded), false
-	}
 
-	return string(recorded[:maxSize]) + truncatedSuffix, true
+	cut, truncated := utf8util.Cut(recorded, maxSize)
+	if truncated {
+		return string(cut) + truncatedSuffix, true
+	}
+	return string(cut), false
 }
 
 // bodyRecordWriter 包装 gin.ResponseWriter，在写回客户端的同时采集响应体
 type bodyRecordWriter struct {
 	gin.ResponseWriter
 	body      bytes.Buffer // body 是已采集的响应体内容
-	maxSize   int          // maxSize 是响应体记录最大采集字节数
+	maxSize   int          // maxSize 是响应体记录最大采集字节数；<0 表示不截断
 	truncated bool         // truncated 表示响应体是否因超出限制被截断
 }
 
@@ -255,9 +268,16 @@ func (w *bodyRecordWriter) WriteString(s string) (int, error) {
 	return w.ResponseWriter.WriteString(s)
 }
 
-// capture 按 maxSize 限制采集响应体片段
+// capture 按 maxSize 限制采集响应体片段；maxSize < 0 表示不截断
 func (w *bodyRecordWriter) capture(b []byte) {
-	if w.maxSize <= 0 || w.truncated {
+	if w.truncated {
+		return
+	}
+	if w.maxSize < 0 {
+		_, _ = w.body.Write(b)
+		return
+	}
+	if w.maxSize == 0 {
 		return
 	}
 
@@ -274,6 +294,15 @@ func (w *bodyRecordWriter) capture(b []byte) {
 	}
 
 	_, _ = w.body.Write(b)
+}
+
+// recordedBody 返回已采集响应体的合法 UTF-8 快照（超限时回退到字符边界）
+func (w *bodyRecordWriter) recordedBody() string {
+	if w == nil || w.maxSize == 0 {
+		return ""
+	}
+	cut, _ := utf8util.Cut(w.body.Bytes(), w.maxSize)
+	return string(cut)
 }
 
 // collectRequestHeaders 收集请求头，并按需对敏感头脱敏
