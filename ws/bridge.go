@@ -17,8 +17,9 @@ type serverBridge struct {
 	handler ServerHandler
 	hub     *wsbase.Hub
 
-	mu  sync.Mutex
-	ids map[wsbase.Conn]string // conn → connID，供 OnClose 使用
+	mu      sync.Mutex
+	ids     map[wsbase.Conn]string // conn → connID，供 OnClose 使用
+	closing bool                   // closing 为 true 时拒绝新登记，与 Register 同锁
 }
 
 // newServerBridge 创建服务端桥接
@@ -33,14 +34,29 @@ func newServerBridge(h ServerHandler, hub *wsbase.Hub) *serverBridge {
 	}
 }
 
-// OnOpen 生成 ConnID、登记 Hub 并回调业务
+// beginClose 标记关闭中；与 OnOpen 登记同锁，避免 Close 后仍 Register
+func (b *serverBridge) beginClose() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.closing = true
+	b.mu.Unlock()
+}
+
+// OnOpen 生成 ConnID、登记 Hub 并回调业务；关闭中则立即断开且不登记
 func (b *serverBridge) OnOpen(conn wsbase.Conn) {
 	connID := uuid.NewString()
+	b.mu.Lock()
+	if b.closing {
+		b.mu.Unlock()
+		_ = conn.Close(wsbase.CloseGoingAway, "server closing")
+		return
+	}
 	if conn.Session() != nil {
 		conn.Session().Store(sessionConnIDKey, connID)
 	}
 	b.hub.Register(connID, conn)
-	b.mu.Lock()
 	b.ids[conn] = connID
 	b.mu.Unlock()
 	b.handler.OnConnect(&sessionContext{
@@ -88,7 +104,8 @@ var _ wsbase.Handler = (*serverBridge)(nil)
 
 // clientBridge 客户端桥接：单连接事件转发，无 ConnID
 type clientBridge struct {
-	handler ClientHandler
+	handler  ClientHandler
+	onDetach func(wsbase.Conn) // onDetach 在 OnClose 时通知门面清空连接引用
 
 	mu   sync.Mutex
 	conn wsbase.Conn
@@ -124,9 +141,12 @@ func (b *clientBridge) OnOpen(conn wsbase.Conn) {
 	b.handler.OnConnect(&peerContext{ctx: context.Background(), conn: conn})
 }
 
-// OnClose 回调业务 OnDisconnect
+// OnClose 回调业务 OnDisconnect，并通知门面断开当前连接引用
 func (b *clientBridge) OnClose(conn wsbase.Conn, err error) {
 	b.clearConn(conn)
+	if b.onDetach != nil {
+		b.onDetach(conn)
+	}
 	b.handler.OnDisconnect(err)
 }
 

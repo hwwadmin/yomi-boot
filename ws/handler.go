@@ -47,13 +47,15 @@ func (h DefaultServerHandler) OnDisconnect(connID string, err error) {
 	logger.InfoWithoutCtx("ws: 服务端连接已结束", "conn_id", connID, "error", err)
 }
 
-// OnMessage 关闭原始消息后交 Processor；无法识别的类型直接丢弃
+// OnMessage 关闭原始消息后交 Processor；无法识别的类型直接丢弃；Processor 错误记日志
 func (h DefaultServerHandler) OnMessage(ctx SessionContext, msg wsbase.Message) {
 	p, ok := takePayload(msg)
 	if !ok || h.Processor == nil {
 		return
 	}
-	_ = h.Processor.OnPayload(ctx, p)
+	if err := h.Processor.OnPayload(ctx, p); err != nil {
+		logger.Error(ctx.Context(), "ws: Processor.OnPayload 失败", "conn_id", ctx.ConnID(), "error", err)
+	}
 }
 
 // DefaultClientHandler 是默认客户端 Handler（语义同 DefaultServerHandler）
@@ -71,13 +73,15 @@ func (h DefaultClientHandler) OnDisconnect(err error) {
 	logger.InfoWithoutCtx("ws: 客户端连接已结束", "error", err)
 }
 
-// OnMessage 关闭原始消息后交 Processor；无法识别的类型直接丢弃
+// OnMessage 关闭原始消息后交 Processor；无法识别的类型直接丢弃；Processor 错误记日志
 func (h DefaultClientHandler) OnMessage(ctx PeerContext, msg wsbase.Message) {
 	p, ok := takePayload(msg)
 	if !ok || h.Processor == nil {
 		return
 	}
-	_ = h.Processor.OnPayload(ctx, p)
+	if err := h.Processor.OnPayload(ctx, p); err != nil {
+		logger.Error(ctx.Context(), "ws: Processor.OnPayload 失败", "error", err)
+	}
 }
 
 // NopServerHandler 空服务端 Handler（丢弃消息）

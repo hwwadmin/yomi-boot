@@ -30,6 +30,7 @@ const (
 	CloseMessageTooBig           CloseCode = 1009
 	CloseMandatoryExtension      CloseCode = 1010
 	CloseInternalServerErr       CloseCode = 1011
+	CloseTryAgainLater           CloseCode = 1013 // CloseTryAgainLater 服务端过载/达连接上限，客户端可稍后重试
 	CloseTLSHandshake            CloseCode = 1015
 )
 

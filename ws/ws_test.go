@@ -401,3 +401,89 @@ func waitDone(t *testing.T, ch <-chan struct{}, msg string) {
 		t.Fatal(msg)
 	}
 }
+
+// TestClientConnectedClearsOnPeerClose 服务端关闭会话后客户端 Connected 应变为 false
+func TestClientConnectedClearsOnPeerClose(t *testing.T) {
+	t.Log("[用例] 对端断开后 Connected 应清空")
+
+	srvProc := newChatServerProcessor()
+	cliProc := newChatClientProcessor()
+	pair := startPairAsync(t, srvProc, cliProc)
+
+	if !pair.cli.Connected() {
+		t.Fatal("连通后 Connected 应为 true")
+	}
+
+	t.Log("[流程] 服务端 Close（停听并 CloseAll）")
+	if err := pair.srv.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(testWait)
+	for time.Now().Before(deadline) {
+		if !pair.cli.Connected() {
+			t.Log("[断言] Connected 已变为 false")
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("对端关闭后 Connected 仍为 true")
+}
+
+// TestServerCloseLeavesHubEmpty Close 后 Hub 应为空，并发拨号不得再登记
+func TestServerCloseLeavesHubEmpty(t *testing.T) {
+	t.Log("[用例] Close 后 Len=0，关闭窗口内新连接不入 Hub")
+
+	srvCtx, srvCancel := context.WithCancel(context.Background())
+	defer srvCancel()
+
+	srv, err := NewServer(ServerConfig{
+		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0", Name: "close-hub"},
+		Processor:    newChatServerProcessor(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.Start(srvCtx); err != nil {
+		t.Fatal(err)
+	}
+	addr, err := srv.ListenAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "ws://" + addr.String() + "/"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cli, err := NewClient(ClientConfig{
+				ClientConfig: wsbase.ClientConfig{Name: "close-racer"},
+				Processor:    newChatClientProcessor(),
+			})
+			if err != nil {
+				return
+			}
+			_ = cli.Connect(context.Background(), url)
+			_ = cli.Close(CloseNormalClosure, "done")
+		}()
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	t.Log("[流程] Close 与并发 Connect 交错")
+	if err := srv.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+
+	deadline := time.Now().Add(testWait)
+	for time.Now().Before(deadline) {
+		if srv.Len() == 0 {
+			t.Log("[断言] Close 后 Hub 为空")
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("Close 后 Len=%d，期望 0", srv.Len())
+}

@@ -5,6 +5,7 @@ package wsbase
 
 import (
 	"crypto/tls"
+	"net"
 	"net/http"
 	"time"
 
@@ -31,6 +32,9 @@ const (
 
 	// DefaultMaxConnLifetimeJitter 默认存活时间波动半宽，用于打散同时到期
 	DefaultMaxConnLifetimeJitter = 30 * time.Second
+
+	// DefaultHandshakeTimeout 默认握手超时（读入站请求 + 写出升级响应；与 gws 默认一致）
+	DefaultHandshakeTimeout = 5 * time.Second
 )
 
 // Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout /
@@ -50,7 +54,7 @@ type ServerConfig struct {
 
 	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 用 gws 默认
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
-	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 用 gws 默认
+	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时（含读 HTTP 请求与升级写出）；0 表示 DefaultHandshakeTimeout
 
 	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultHeartbeatInterval；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
@@ -65,6 +69,9 @@ type ServerConfig struct {
 	// nil 表示 DefaultMaxConnLifetimeJitter（30s）；显式 0 表示不波动。
 	// 两者 resolve 后均 >0 时要求 Jitter < Lifetime
 	MaxConnLifetimeJitter *time.Duration
+
+	// MaxConnections 同时在线连接上限；0 表示不限制；超过时握手成功后立即以 CloseTryAgainLater 断开
+	MaxConnections int
 
 	TLSConfig *tls.Config                                 // TLSConfig 供 StartTLS 合并（证书仍由 StartTLS 参数加载）
 	Authorize func(r *http.Request, session Session) bool // Authorize 握手鉴权；nil 表示放行
@@ -87,12 +94,20 @@ func (c ServerConfig) Validate() error {
 	if err := validateMaxConnLifetime(c.MaxConnLifetime, c.MaxConnLifetimeJitter); err != nil {
 		return err
 	}
+	if c.MaxConnections < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxConnections 不能为负数")
+	}
 	return nil
 }
 
 // ResolvedWriteMaxPayloadSize 返回生效的单条可写上限
 func (c ServerConfig) ResolvedWriteMaxPayloadSize() int {
 	return resolveWriteMaxPayloadSize(c.WriteMaxPayloadSize)
+}
+
+// ResolvedHandshakeTimeout 返回生效的握手超时
+func (c ServerConfig) ResolvedHandshakeTimeout() time.Duration {
+	return resolveHandshakeTimeout(c.HandshakeTimeout)
 }
 
 // ResolvedHeartbeat 返回生效的心跳间隔与超时
@@ -115,7 +130,7 @@ type ClientConfig struct {
 
 	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 用 gws 默认
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
-	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 用 gws 默认
+	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时（拨号+升级）；0 表示 DefaultHandshakeTimeout
 
 	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultHeartbeatInterval；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
@@ -125,7 +140,7 @@ type ClientConfig struct {
 	RequestHeader http.Header // RequestHeader 握手额外请求头（如鉴权）
 	TLSConfig     *tls.Config // TLSConfig wss 时可选 TLS 配置
 
-	// NewDialer 自定义拨号（代理等）；nil 使用默认
+	// NewDialer 自定义拨号（代理等）；nil 使用带超时的默认 net.Dialer
 	NewDialer func() (gws.Dialer, error)
 
 	// CustomizeGWS 在填充完常用字段后回调，用于未封装的 gws.ClientOption
@@ -146,6 +161,11 @@ func (c ClientConfig) Validate() error {
 // ResolvedWriteMaxPayloadSize 返回生效的单条可写上限
 func (c ClientConfig) ResolvedWriteMaxPayloadSize() int {
 	return resolveWriteMaxPayloadSize(c.WriteMaxPayloadSize)
+}
+
+// ResolvedHandshakeTimeout 返回生效的握手超时
+func (c ClientConfig) ResolvedHandshakeTimeout() time.Duration {
+	return resolveHandshakeTimeout(c.HandshakeTimeout)
 }
 
 // ResolvedHeartbeat 返回生效的心跳间隔与超时
@@ -170,6 +190,14 @@ func resolveWriteMaxPayloadSize(n int) int {
 		return DefaultWriteMaxPayloadSize
 	}
 	return n
+}
+
+// resolveHandshakeTimeout 将 0/未设置解析为 DefaultHandshakeTimeout
+func resolveHandshakeTimeout(d time.Duration) time.Duration {
+	if d <= 0 {
+		return DefaultHandshakeTimeout
+	}
+	return d
 }
 
 // resolveHeartbeat 解析心跳：nil→默认；显式 0 保留为关闭对应能力
@@ -242,7 +270,7 @@ func (c ServerConfig) toGWSOption() *gws.ServerOption {
 		CheckUtf8Enabled:    c.CheckUTF8,
 		ReadMaxPayloadSize:  c.ReadMaxPayloadSize,
 		WriteMaxPayloadSize: c.ResolvedWriteMaxPayloadSize(),
-		HandshakeTimeout:    c.HandshakeTimeout,
+		HandshakeTimeout:    c.ResolvedHandshakeTimeout(),
 		TlsConfig:           c.TLSConfig,
 		Recovery:            gws.Recovery,
 	}
@@ -257,8 +285,11 @@ func (c ServerConfig) toGWSOption() *gws.ServerOption {
 	return opt
 }
 
-// toGWSOption 映射为 gws.ClientOption
-func (c ClientConfig) toGWSOption(addr string) *gws.ClientOption {
+// toGWSOption 映射为 gws.ClientOption；handshakeTimeout 为已 resolve 的生效值
+func (c ClientConfig) toGWSOption(addr string, handshakeTimeout time.Duration) *gws.ClientOption {
+	if handshakeTimeout <= 0 {
+		handshakeTimeout = c.ResolvedHandshakeTimeout()
+	}
 	opt := &gws.ClientOption{
 		Addr:                addr,
 		PermessageDeflate:   gws.PermessageDeflate{Enabled: c.CompressEnabled},
@@ -266,11 +297,16 @@ func (c ClientConfig) toGWSOption(addr string) *gws.ClientOption {
 		CheckUtf8Enabled:    c.CheckUTF8,
 		ReadMaxPayloadSize:  c.ReadMaxPayloadSize,
 		WriteMaxPayloadSize: c.ResolvedWriteMaxPayloadSize(),
-		HandshakeTimeout:    c.HandshakeTimeout,
+		HandshakeTimeout:    handshakeTimeout,
 		RequestHeader:       c.RequestHeader,
 		TlsConfig:           c.TLSConfig,
 		NewDialer:           c.NewDialer,
 		Recovery:            gws.Recovery,
+	}
+	if opt.NewDialer == nil {
+		opt.NewDialer = func() (gws.Dialer, error) {
+			return &net.Dialer{Timeout: handshakeTimeout}, nil
+		}
 	}
 	if c.CustomizeGWS != nil {
 		c.CustomizeGWS(opt)

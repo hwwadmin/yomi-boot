@@ -49,6 +49,11 @@
 // 由嵌入的 wsbase.ServerConfig 的 MaxConnLifetime、MaxConnLifetimeJitter 控制：
 // nil 分别为 24h 与 30s；显式 0 表示不限制 / 不波动。到期服务端主动断开，流量不续命。
 //
+// # 连接数上限（仅 Server）
+//
+// 由嵌入的 wsbase.ServerConfig.MaxConnections 控制：0 不限制；>0 为同时在线上限，
+// 超额连接握手后以 CloseTryAgainLater 断开。
+//
 // # Client
 //
 // 一个 Client 实例对应至多一条连接；Connect 自动 Dial 并 Serve。

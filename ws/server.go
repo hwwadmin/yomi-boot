@@ -71,18 +71,22 @@ func (s *server) Start(ctx context.Context) error {
 	return s.raw.Start(ctx)
 }
 
-// Close 关闭全部会话并停听
+// Close 先标记关闭（拒绝新登记），再停听，最后 CloseAll 踢掉已登记会话
 func (s *server) Close(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	if s.bridge != nil {
+		s.bridge.beginClose()
+	}
+	var closeErr error
+	if s.raw != nil {
+		closeErr = s.raw.Close(ctx)
+	}
 	if s.hub != nil {
 		s.hub.CloseAll(wsbase.CloseGoingAway, "server closing")
 	}
-	if s.raw != nil {
-		return s.raw.Close(ctx)
-	}
-	return nil
+	return closeErr
 }
 
 // Send 向指定 ConnID 按类型发送
@@ -163,6 +167,7 @@ func (s *server) ListenAddr() (net.Addr, error) {
 	return s.raw.ListenAddr()
 }
 
+// mustConn 按 ConnID 取连接；缺失时返回 ErrUnknownPeer
 func (s *server) mustConn(connID string) (wsbase.Conn, error) {
 	if s == nil {
 		return nil, errors.Sentinel(ErrInvalidArgument)

@@ -416,6 +416,94 @@ func TestServerConfigValidate(t *testing.T) {
 		t.Fatalf("默认可写上限=%d, want %d", got, DefaultWriteMaxPayloadSize)
 	}
 	t.Logf("[断言] 合法配置通过，默认 WriteMaxPayloadSize=%d", DefaultWriteMaxPayloadSize)
+	if err := (ServerConfig{Addr: ":0", MaxConnections: -1}).Validate(); err == nil {
+		t.Fatal("负 MaxConnections 应失败")
+	}
+	if err := (ServerConfig{Addr: ":0", MaxConnections: 0}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (ServerConfig{Addr: ":0", MaxConnections: 10}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("[断言] MaxConnections 0/正数通过，负数失败")
+}
+
+// TestMaxConnectionsRejectsExtra 上限为 1 时第二条连接握手后应被断开
+func TestMaxConnectionsRejectsExtra(t *testing.T) {
+	t.Log("[用例] MaxConnections=1 拒绝超额连接")
+	zero := Duration(0)
+	env := startServerAndClient(t,
+		ServerConfig{
+			MaxConnections:        1,
+			HeartbeatInterval:     zero,
+			HeartbeatTimeout:      zero,
+			MaxConnLifetime:       zero,
+			MaxConnLifetimeJitter: zero,
+		},
+		ClientConfig{
+			HeartbeatInterval: zero,
+			HeartbeatTimeout:  zero,
+		},
+	)
+	defer env.close()
+
+	deadline := time.Now().Add(testWait)
+	for time.Now().Before(deadline) {
+		if env.srv.ActiveConns() == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if env.srv.ActiveConns() != 1 {
+		t.Fatalf("首连 ActiveConns=%d want 1", env.srv.ActiveConns())
+	}
+
+	extraOpen := make(chan struct{}, 1)
+	extraClose := make(chan struct{}, 1)
+	extraHandler := &testHandler{
+		onOpen: func(Conn) {
+			select {
+			case extraOpen <- struct{}{}:
+			default:
+			}
+		},
+		onClose: func(Conn, error) {
+			select {
+			case extraClose <- struct{}{}:
+			default:
+			}
+		},
+	}
+	cli, err := NewClient(extraHandler, ClientConfig{
+		HeartbeatInterval: zero,
+		HeartbeatTimeout:  zero,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, _, err := cli.Dial(context.Background(), env.wsURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go conn.Serve()
+
+	select {
+	case <-extraClose:
+		t.Log("[断言] 超额连接已被服务端断开")
+	case <-time.After(testWait):
+		t.Fatal("等待超额连接关闭超时")
+	}
+	_ = conn.Close(CloseNormalClosure, "cleanup")
+
+	deadline = time.Now().Add(testWait)
+	for time.Now().Before(deadline) {
+		if env.srv.ActiveConns() == 1 {
+			t.Logf("[断言] 首连仍占槽 ActiveConns=%d", env.srv.ActiveConns())
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("首连应保留槽 ActiveConns=%d", env.srv.ActiveConns())
 }
 
 // testHandler 可注入回调的测试 Handler

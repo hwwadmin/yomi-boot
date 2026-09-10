@@ -43,12 +43,16 @@ func NewClient(cfg ClientConfig) (Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	cli := &client{}
 	bridge := newClientBridge(cfg.resolveHandler())
+	bridge.onDetach = cli.detachConn
 	raw, err := wsbase.NewClient(bridge, cfg.ClientConfig)
 	if err != nil {
 		return nil, err
 	}
-	return &client{raw: raw, bridge: bridge}, nil
+	cli.raw = raw
+	cli.bridge = bridge
+	return cli, nil
 }
 
 // Connect 建立连接并启动读循环
@@ -135,6 +139,19 @@ func (c *client) Underlying() *wsbase.Client {
 	return c.raw
 }
 
+// detachConn 在对端断开时按连接身份清空当前引用
+func (c *client) detachConn(conn wsbase.Conn) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn == conn {
+		c.conn = nil
+	}
+}
+
+// mustConn 取当前连接；未连接时返回 ErrNotConnected
 func (c *client) mustConn() (wsbase.Conn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -18,6 +18,11 @@ import (
 	"github.com/lxzan/gws"
 )
 
+const (
+	acceptBackoffMin = 5 * time.Millisecond
+	acceptBackoffMax = time.Second
+)
+
 // Server 是独立端口的 WebSocket 服务实例；可 New 多个
 type Server struct {
 	name      string        // name 是实例名
@@ -25,13 +30,16 @@ type Server struct {
 	upgrader  *gws.Upgrader // upgrader 负责握手升级
 	tlsConfig *tls.Config   // tlsConfig 供 StartTLS 合并证书
 
+	handshakeTimeout      time.Duration // handshakeTimeout 已 resolve 的握手超时
 	maxConnLifetime       time.Duration // maxConnLifetime 已 resolve 的通道最大存活；0 表示不限制
 	maxConnLifetimeJitter time.Duration // maxConnLifetimeJitter 已 resolve 的波动半宽
+	maxConnections        int64         // maxConnections 在线上限；0 表示不限制
 
-	listener net.Listener // listener 是当前监听器；关闭后由 serveLoop 持有局部引用
-	mu       sync.Mutex   // mu 保护 listener
-	closed   atomic.Bool  // closed 表示已关闭
-	started  atomic.Bool  // started 表示已启动
+	listener    net.Listener // listener 是当前监听器；关闭后由 serveLoop 持有局部引用
+	mu          sync.Mutex   // mu 保护 listener
+	closed      atomic.Bool  // closed 表示已关闭
+	started     atomic.Bool  // started 表示已启动
+	activeConns atomic.Int64 // activeConns 当前已占槽的在线连接数
 }
 
 // NewServer 根据配置创建 Server；调用 Start / StartTLS 后开始接受连接
@@ -48,8 +56,10 @@ func NewServer(h Handler, cfg ServerConfig) (*Server, error) {
 		addr:                  cfg.Addr,
 		upgrader:              upgrader,
 		tlsConfig:             cfg.TLSConfig,
+		handshakeTimeout:      cfg.ResolvedHandshakeTimeout(),
 		maxConnLifetime:       lifetime,
 		maxConnLifetimeJitter: jitter,
+		maxConnections:        int64(cfg.MaxConnections),
 	}, nil
 }
 
@@ -141,20 +151,33 @@ func (s *Server) start(ctx context.Context, useTLS bool, certFile, keyFile strin
 
 // serveLoop 在 ln 上接受连接；须传入局部 listener，避免 Close 置空字段后空指针
 func (s *Server) serveLoop(ln net.Listener) {
+	var tempDelay time.Duration
 	for {
 		netConn, err := ln.Accept()
 		if err != nil {
-			if s.closed.Load() {
+			if s.closed.Load() || errors.Is(err, net.ErrClosed) {
 				return
 			}
+			if tempDelay == 0 {
+				tempDelay = acceptBackoffMin
+			} else {
+				tempDelay *= 2
+			}
+			if tempDelay > acceptBackoffMax {
+				tempDelay = acceptBackoffMax
+			}
+			time.Sleep(tempDelay)
 			continue
 		}
+		tempDelay = 0
 		go s.handleConn(netConn)
 	}
 }
 
 // handleConn 完成握手并阻塞运行该连接的读循环
 func (s *Server) handleConn(netConn net.Conn) {
+	deadline := time.Now().Add(s.handshakeTimeout)
+	_ = netConn.SetDeadline(deadline)
 	br := bufio.NewReader(netConn)
 	req, err := http.ReadRequest(br)
 	if err != nil {
@@ -166,10 +189,52 @@ func (s *Server) handleConn(netConn net.Conn) {
 		_ = netConn.Close()
 		return
 	}
-	// 服务端在本 goroutine 跑读循环；Conn.Serve 因 sync.Once 可再调但不会重复
+	// 升级成功后清除握手 deadline，交由心跳接管 ReadDeadline
+	_ = netConn.SetDeadline(time.Time{})
 	conn := connFromGWS(socket)
+	// 关闭过程中已 Accept 的握手：不进入读循环，避免上层再登记会话
+	if s.closed.Load() {
+		_ = conn.Close(CloseGoingAway, "server closing")
+		return
+	}
+	if !s.tryAcquireConn() {
+		_ = conn.Close(CloseTryAgainLater, "max connections exceeded")
+		return
+	}
+	defer s.releaseConn()
 	startMaxConnLifetime(conn, s.maxConnLifetime, s.maxConnLifetimeJitter)
+	// 服务端在本 goroutine 跑读循环；Conn.Serve 因 sync.Once 可再调但不会重复
 	conn.Serve()
+}
+
+// ActiveConns 返回当前已占槽的在线连接数
+func (s *Server) ActiveConns() int {
+	if s == nil {
+		return 0
+	}
+	return int(s.activeConns.Load())
+}
+
+// tryAcquireConn 尝试占一个连接槽；MaxConnections==0 时不限制但仍计数
+func (s *Server) tryAcquireConn() bool {
+	if s.maxConnections <= 0 {
+		s.activeConns.Add(1)
+		return true
+	}
+	for {
+		n := s.activeConns.Load()
+		if n >= s.maxConnections {
+			return false
+		}
+		if s.activeConns.CompareAndSwap(n, n+1) {
+			return true
+		}
+	}
+}
+
+// releaseConn 释放一个连接槽
+func (s *Server) releaseConn() {
+	s.activeConns.Add(-1)
 }
 
 // Close 停止监听；已建立连接需业务侧 Close 或对端断开

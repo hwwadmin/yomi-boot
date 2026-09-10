@@ -34,6 +34,7 @@ const (
 	CloseMessageTooBig           = wsbase.CloseMessageTooBig
 	CloseMandatoryExtension      = wsbase.CloseMandatoryExtension
 	CloseInternalServerErr       = wsbase.CloseInternalServerErr
+	CloseTryAgainLater           = wsbase.CloseTryAgainLater
 	CloseTLSHandshake            = wsbase.CloseTLSHandshake
 
 	DefaultWriteMaxPayloadSize = wsbase.DefaultWriteMaxPayloadSize
@@ -41,6 +42,7 @@ const (
 
 	DefaultHeartbeatInterval = wsbase.DefaultHeartbeatInterval
 	DefaultHeartbeatTimeout  = wsbase.DefaultHeartbeatTimeout
+	DefaultHandshakeTimeout  = wsbase.DefaultHandshakeTimeout
 )
 
 // Duration 返回 d 的指针，便于配置 Heartbeat* 与 MaxConnLifetime* 等 *time.Duration 字段

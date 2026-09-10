@@ -42,6 +42,14 @@
 // 从握手成功起算墙钟时间，流量不续命。实际断开时刻为基准加减波动的均匀随机，
 // 到期后服务端以 CloseGoingAway 主动断开。ClientConfig 无此配置。
 //
+// # 连接数上限（仅 Server）
+//
+// ServerConfig.MaxConnections 控制同时在线连接数：
+//
+//   - 0：不限制（默认）
+//   - >0：握手成功后占槽；超过上限则以 CloseTryAgainLater 立即断开
+//   - 负数：Validate 失败
+//
 // # 高级门面
 //
 // 若希望业务不直接面对 Conn/Serve/Hub，请使用上层包 gitee.com/hq_project/yomi-boot/ws。
