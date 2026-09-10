@@ -1,11 +1,11 @@
-// Package app 定义门面配置
+// Package wsapp 定义门面配置
 //
 // @author zwei
-package app
+package wsapp
 
 import "gitee.com/hq_project/yomi-boot/ws"
 
-const sessionConnIDKey = "__yomi_ws_app_conn_id__"
+const sessionConnIDKey = "__yomi_wsapp_conn_id__"
 
 // ServerConfig 高级入站服务配置
 type ServerConfig struct {

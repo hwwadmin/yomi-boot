@@ -1,7 +1,7 @@
-// Package app 将业务 Handler 桥接为 ws.Handler
+// Package wsapp 将业务 Handler 桥接为 ws.Handler
 //
 // @author zwei
-package app
+package wsapp
 
 import (
 	"context"

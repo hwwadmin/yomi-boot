@@ -1,7 +1,7 @@
-// Package app 的 Server/Client 门面联调测试
+// Package wsapp 的 Server/Client 门面联调测试
 //
 // @author zwei
-package app
+package wsapp
 
 import (
 	"bytes"

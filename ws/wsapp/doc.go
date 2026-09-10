@@ -1,4 +1,4 @@
-// Package app 提供基于 ws 原语的高级会话门面：业务收发与连接启停，不直接管理
+// Package wsapp 提供基于 ws 原语的高级会话门面：业务收发与连接启停，不直接管理
 // Conn / Serve / Hub；底层能力经逃生舱按需使用。
 //
 // # 与 ws 的关系
@@ -17,4 +17,4 @@
 // 再次 Connect 会先关闭旧连接再建立新连接。
 //
 // @author zwei
-package app
+package wsapp

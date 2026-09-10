@@ -20,7 +20,7 @@
 //
 // # 高级门面
 //
-// 若希望业务不直接面对 Conn/Serve/Hub，请使用子包 gitee.com/hq_project/yomi-boot/ws/app。
+// 若希望业务不直接面对 Conn/Serve/Hub，请使用子包 gitee.com/hq_project/yomi-boot/ws/wsapp。
 // 其中 ConnID 仅服务端自动生成；业务鉴权应在连通后用报文完成，不属 ws 传输层。
 //
 // # 读模型

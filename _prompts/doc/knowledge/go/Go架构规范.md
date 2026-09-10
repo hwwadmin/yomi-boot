@@ -197,7 +197,7 @@ services/{domain}/
 | `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |
 | `rpc` | HTTP RPC 读客户端（Consul 发现 + POST JSON）；轻量重试（退避）+ 按下游服务熔断；跨域写走 DTM，不在此叠加写重试 |
 | `ws` | WebSocket 能力库（gws）：独立端口 `Server`、出站 `Client`、共用 `Conn`/`Handler`、可配置分片 `WriteReader`、`Native()`；无 yml/默认插件，业务按需多实例构造 |
-| `ws/app` | WebSocket 高级会话门面：服务端自动生成 ConnID、内置 Hub、按 ConnID 推送、Client 单连接 `Connect`；业务鉴权走连通后报文；组装 `ws` 不改原语 |
+| `ws/wsapp` | WebSocket 高级会话门面：服务端自动生成 ConnID、内置 Hub、按 ConnID 推送、Client 单连接 `Connect`；业务鉴权走连通后报文；组装 `ws` 不改原语 |
 | `distlock` | 基于 Redsync 的分布式锁、看门狗 |
 | `errors` | 系统级错误包装与 `BizError` 业务异常类型 |
 | `response` | `Encoder` 接口、显式 `MustRegister`；可提供预制实现供业务显式选用（预制 ≠ 强制契约） |

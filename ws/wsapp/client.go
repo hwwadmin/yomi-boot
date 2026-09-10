@@ -1,7 +1,7 @@
-// Package app 实现高级出站 Client 门面（单连接，无 ConnID 概念）
+// Package wsapp 实现高级出站 Client 门面（单连接，无 ConnID 概念）
 //
 // @author zwei
-package app
+package wsapp
 
 import (
 	"context"

@@ -1,7 +1,7 @@
-// Package app 定义业务 Handler 与会话 Context（服务端含 ConnID，客户端不含）
+// Package wsapp 定义业务 Handler 与会话 Context（服务端含 ConnID，客户端不含）
 //
 // @author zwei
-package app
+package wsapp
 
 import (
 	"context"

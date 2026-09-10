@@ -1,7 +1,7 @@
-// Package app 实现高级入站 Server 门面
+// Package wsapp 实现高级入站 Server 门面
 //
 // @author zwei
-package app
+package wsapp
 
 import (
 	"context"
