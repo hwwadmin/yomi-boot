@@ -1,4 +1,4 @@
-// Package ws 的配置与分片单元测试
+// Package ws 的 Server/Client 联调测试
 //
 // @author zwei
 package ws
@@ -6,14 +6,348 @@ package ws
 import (
 	"bytes"
 	"context"
-	"io"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
 
-// TestServerConfigValidate 校验 Addr/ChunkSize 边界
+const testWait = 2 * time.Second
+
+// testEnv 表示已启动的 Server 与已连上的 Client 连接
+type testEnv struct {
+	t          *testing.T
+	srv        *Server
+	client     *Client
+	clientConn Conn
+	serverConn Conn // 服务端侧连接，由 srv OnOpen 捕获
+	cancel     context.CancelFunc
+
+	serverOpen  chan Conn
+	clientOpen  chan Conn
+	serverMsgs  chan []byte
+	clientMsgs  chan []byte
+	serverClose chan struct{}
+	clientClose chan struct{}
+}
+
+// startServerAndClient 打开独立端口 Server，并用 Client Dial 连上；调用方负责 env.close()
+func startServerAndClient(t *testing.T, srvCfg ServerConfig, cliCfg ClientConfig) *testEnv {
+	t.Helper()
+	if srvCfg.Addr == "" {
+		srvCfg.Addr = "127.0.0.1:0"
+	}
+
+	env := &testEnv{
+		t:           t,
+		serverOpen:  make(chan Conn, 1),
+		clientOpen:  make(chan Conn, 1),
+		serverMsgs:  make(chan []byte, 64),
+		clientMsgs:  make(chan []byte, 64),
+		serverClose: make(chan struct{}, 1),
+		clientClose: make(chan struct{}, 1),
+	}
+
+	srvHandler := &testHandler{
+		onOpen: func(c Conn) {
+			select {
+			case env.serverOpen <- c:
+			default:
+			}
+		},
+		onMessage: func(_ Conn, msg Message) {
+			defer msg.Close()
+			cp := append([]byte(nil), msg.Bytes()...)
+			select {
+			case env.serverMsgs <- cp:
+			default:
+				t.Error("serverMsgs 通道已满")
+			}
+		},
+		onClose: func(Conn, error) {
+			select {
+			case env.serverClose <- struct{}{}:
+			default:
+			}
+		},
+	}
+	cliHandler := &testHandler{
+		onOpen: func(c Conn) {
+			select {
+			case env.clientOpen <- c:
+			default:
+			}
+		},
+		onMessage: func(_ Conn, msg Message) {
+			defer msg.Close()
+			cp := append([]byte(nil), msg.Bytes()...)
+			select {
+			case env.clientMsgs <- cp:
+			default:
+				t.Error("clientMsgs 通道已满")
+			}
+		},
+		onClose: func(Conn, error) {
+			select {
+			case env.clientClose <- struct{}{}:
+			default:
+			}
+		},
+	}
+
+	srv, err := NewServer(srvHandler, srvCfg)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	env.cancel = cancel
+	if err := srv.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Server.Start: %v", err)
+	}
+	env.srv = srv
+
+	addr, err := srv.ListenAddr()
+	if err != nil {
+		env.close()
+		t.Fatalf("ListenAddr: %v", err)
+	}
+
+	cli, err := NewClient(cliHandler, cliCfg)
+	if err != nil {
+		env.close()
+		t.Fatalf("NewClient: %v", err)
+	}
+	env.client = cli
+
+	conn, _, err := cli.Dial(context.Background(), "ws://"+addr.String()+"/")
+	if err != nil {
+		env.close()
+		t.Fatalf("Client.Dial: %v", err)
+	}
+	env.clientConn = conn
+	go conn.Serve()
+
+	select {
+	case env.serverConn = <-env.serverOpen:
+	case <-time.After(testWait):
+		env.close()
+		t.Fatal("等待服务端 OnOpen 超时")
+	}
+	select {
+	case <-env.clientOpen:
+	case <-time.After(testWait):
+		env.close()
+		t.Fatal("等待客户端 OnOpen 超时")
+	}
+	return env
+}
+
+// close 关闭客户端连接与 Server
+func (env *testEnv) close() {
+	if env.clientConn != nil {
+		_ = env.clientConn.Close(CloseNormalClosure, "test done")
+	}
+	if env.cancel != nil {
+		env.cancel()
+	}
+	if env.srv != nil {
+		_ = env.srv.Close(context.Background())
+	}
+}
+
+// waitServerMsg 等待服务端收到一条消息
+func (env *testEnv) waitServerMsg() []byte {
+	env.t.Helper()
+	select {
+	case b := <-env.serverMsgs:
+		return b
+	case <-time.After(testWait):
+		env.t.Fatal("等待服务端消息超时")
+		return nil
+	}
+}
+
+// waitClientMsg 等待客户端收到一条消息
+func (env *testEnv) waitClientMsg() []byte {
+	env.t.Helper()
+	select {
+	case b := <-env.clientMsgs:
+		return b
+	case <-time.After(testWait):
+		env.t.Fatal("等待客户端消息超时")
+		return nil
+	}
+}
+
+// TestServerAndClientConnect 基本用例：启动 Server，Client 拨号连上，双方 OnOpen
+func TestServerAndClientConnect(t *testing.T) {
+	env := startServerAndClient(t, ServerConfig{Name: "srv"}, ClientConfig{Name: "cli"})
+	defer env.close()
+
+	if env.srv.Name() != "srv" {
+		t.Fatalf("Server.Name=%q", env.srv.Name())
+	}
+	if env.client.Name() != "cli" {
+		t.Fatalf("Client.Name=%q", env.client.Name())
+	}
+	if env.serverConn == nil || env.clientConn == nil {
+		t.Fatal("两侧连接均应非空")
+	}
+	if env.clientConn.RemoteAddr() == nil || env.serverConn.RemoteAddr() == nil {
+		t.Fatal("RemoteAddr 不应为 nil")
+	}
+}
+
+// TestServerClientTextEcho 客户端发文本，服务端收到后再回写，客户端收到
+func TestServerClientTextEcho(t *testing.T) {
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
+	defer env.close()
+
+	want := []byte("hello-ws")
+	if err := env.clientConn.WriteText(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	got := env.waitServerMsg()
+	if !bytes.Equal(got, want) {
+		t.Fatalf("服务端收到=%q, want %q", got, want)
+	}
+
+	reply := []byte("pong-text")
+	if err := env.serverConn.WriteText(context.Background(), reply); err != nil {
+		t.Fatal(err)
+	}
+	got = env.waitClientMsg()
+	if !bytes.Equal(got, reply) {
+		t.Fatalf("客户端收到=%q, want %q", got, reply)
+	}
+}
+
+// TestServerClientBinaryEcho 客户端发二进制，服务端收到后再回写
+func TestServerClientBinaryEcho(t *testing.T) {
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
+	defer env.close()
+
+	want := []byte{0x00, 0x01, 0xff, 0xfe}
+	if err := env.clientConn.WriteBinary(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	got := env.waitServerMsg()
+	if !bytes.Equal(got, want) {
+		t.Fatalf("服务端收到=%v, want %v", got, want)
+	}
+
+	if err := env.serverConn.WriteBinary(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	got = env.waitClientMsg()
+	if !bytes.Equal(got, want) {
+		t.Fatalf("客户端收到=%v, want %v", got, want)
+	}
+}
+
+// TestServerClientChunkedUpload 客户端按可配置分片上传，服务端按片接收
+func TestServerClientChunkedUpload(t *testing.T) {
+	const chunk = 4
+	env := startServerAndClient(t,
+		ServerConfig{ChunkSize: chunk},
+		ClientConfig{ChunkSize: chunk},
+	)
+	defer env.close()
+
+	payload := []byte("abcdefghijkl") // 12 → 3 片
+	if err := env.clientConn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
+		t.Fatal(err)
+	}
+
+	var parts [][]byte
+	for i := 0; i < 3; i++ {
+		parts = append(parts, env.waitServerMsg())
+	}
+	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
+		t.Fatalf("拼接=%q, want %q", joined, payload)
+	}
+	for i, p := range parts {
+		if len(p) != chunk {
+			t.Fatalf("分片[%d] len=%d, want %d", i, len(p), chunk)
+		}
+	}
+}
+
+// TestServerClientChunkedDownload 服务端按分片下发，客户端按片接收
+func TestServerClientChunkedDownload(t *testing.T) {
+	const chunk = 5
+	env := startServerAndClient(t,
+		ServerConfig{ChunkSize: chunk},
+		ClientConfig{ChunkSize: chunk},
+	)
+	defer env.close()
+
+	payload := []byte("0123456789") // 10 → 2 片
+	if err := env.serverConn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
+		t.Fatal(err)
+	}
+
+	var parts [][]byte
+	for i := 0; i < 2; i++ {
+		parts = append(parts, env.waitClientMsg())
+	}
+	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
+		t.Fatalf("拼接=%q, want %q", joined, payload)
+	}
+}
+
+// TestServerClientWriteReaderCanceledContext 已取消 ctx 时客户端 WriteReader 失败
+func TestServerClientWriteReaderCanceledContext(t *testing.T) {
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
+	defer env.close()
+
+	writeCtx, writeCancel := context.WithCancel(context.Background())
+	writeCancel()
+	err := env.clientConn.WriteReader(writeCtx, OpcodeBinary, strings.NewReader(strings.Repeat("x", 1024)), WithChunkSize(64))
+	if err == nil {
+		t.Fatal("已取消 ctx 应返回错误")
+	}
+}
+
+// TestServerClientNative 验证连上后 Native 逃生舱可用
+func TestServerClientNative(t *testing.T) {
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
+	defer env.close()
+
+	n, ok := env.clientConn.(NativeConn)
+	if !ok || n.Native() == nil {
+		t.Fatal("客户端 Conn 应支持 Native()")
+	}
+	n2, ok := env.serverConn.(NativeConn)
+	if !ok || n2.Native() == nil {
+		t.Fatal("服务端 Conn 应支持 Native()")
+	}
+	if env.srv.NativeUpgrader() == nil {
+		t.Fatal("NativeUpgrader 不应为 nil")
+	}
+}
+
+// TestServerClientHub 连上后将服务端连接注册进 Hub 并可取出
+func TestServerClientHub(t *testing.T) {
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
+	defer env.close()
+
+	hub := NewHub()
+	hub.Register("u1", env.serverConn)
+	got, ok := hub.Get("u1")
+	if !ok || got != env.serverConn {
+		t.Fatal("Hub.Get 失败")
+	}
+	if hub.Len() != 1 {
+		t.Fatalf("Len=%d", hub.Len())
+	}
+	hub.Unregister("u1", env.serverConn)
+	if hub.Len() != 0 {
+		t.Fatal("Unregister 后应为空")
+	}
+}
+
+// TestServerConfigValidate 校验 Addr/ChunkSize 边界（无网络）
 func TestServerConfigValidate(t *testing.T) {
 	if err := (ServerConfig{}).Validate(); err == nil {
 		t.Fatal("空 Addr 应失败")
@@ -32,199 +366,12 @@ func TestServerConfigValidate(t *testing.T) {
 	}
 }
 
-// TestEchoAndChunkedUpload 验证独立端口分片上传与按片接收
-func TestEchoAndChunkedUpload(t *testing.T) {
-	var (
-		mu       sync.Mutex
-		received [][]byte
-		openCh   = make(chan struct{}, 1)
-		doneCh   = make(chan struct{}, 1)
-	)
-
-	srvHandler := &testHandler{
-		onOpen: func(Conn) {
-			select {
-			case openCh <- struct{}{}:
-			default:
-			}
-		},
-		onMessage: func(_ Conn, msg Message) {
-			defer msg.Close()
-			cp := append([]byte(nil), msg.Bytes()...)
-			mu.Lock()
-			received = append(received, cp)
-			n := len(received)
-			mu.Unlock()
-			if n == 3 {
-				select {
-				case doneCh <- struct{}{}:
-				default:
-				}
-			}
-		},
-	}
-
-	srv, err := NewServer(srvHandler, ServerConfig{Name: "test", Addr: "127.0.0.1:0", ChunkSize: 4})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	defer srv.Close(context.Background())
-
-	addr, err := srv.ListenAddr()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cli, err := NewClient(NopHandler{}, ClientConfig{Name: "c", ChunkSize: 4})
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, _, err := cli.Dial(context.Background(), "ws://"+addr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(CloseNormalClosure, "")
-	go conn.Serve()
-
-	select {
-	case <-openCh:
-	case <-time.After(2 * time.Second):
-		t.Fatal("等待 OnOpen 超时")
-	}
-
-	payload := []byte("abcdefghijkl") // 12 bytes → 3 chunks of 4
-	if err := conn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(4)); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case <-doneCh:
-	case <-time.After(2 * time.Second):
-		t.Fatal("等待分片收齐超时")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(received) != 3 {
-		t.Fatalf("收到分片数=%d, want 3", len(received))
-	}
-	joined := bytes.Join(received, nil)
-	if !bytes.Equal(joined, payload) {
-		t.Fatalf("拼接结果=%q, want %q", joined, payload)
-	}
-	for i, part := range received {
-		if len(part) != 4 {
-			t.Fatalf("分片[%d] len=%d, want 4", i, len(part))
-		}
-	}
-}
-
-// TestWriteReaderRespectsContext 验证已取消 ctx 时 WriteReader 立即失败
-func TestWriteReaderRespectsContext(t *testing.T) {
-	srv, err := NewServer(NopHandler{}, ServerConfig{Addr: "127.0.0.1:0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	defer srv.Close(context.Background())
-
-	addr, err := srv.ListenAddr()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cli, err := NewClient(NopHandler{}, ClientConfig{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, _, err := cli.Dial(context.Background(), "ws://"+addr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(CloseNormalClosure, "")
-	go conn.Serve()
-
-	writeCtx, writeCancel := context.WithCancel(context.Background())
-	writeCancel()
-	err = conn.WriteReader(writeCtx, OpcodeBinary, strings.NewReader(strings.Repeat("x", 1024)), WithChunkSize(64))
-	if err == nil {
-		t.Fatal("已取消 ctx 应返回错误")
-	}
-}
-
-// TestWriteReaderRejectsNilReader 验证 nil Reader 被拒绝
-func TestWriteReaderRejectsNilReader(t *testing.T) {
-	c := &connImpl{chunkSize: DefaultChunkSize}
-	err := c.WriteReader(context.Background(), OpcodeBinary, nil)
-	if err == nil {
-		t.Fatal("nil reader 应失败")
-	}
-}
-
-// TestHubRegisterGet 验证 Hub 注册与按身份卸载
-func TestHubRegisterGet(t *testing.T) {
-	h := NewHub()
-	c := &connImpl{}
-	h.Register("u1", c)
-	got, ok := h.Get("u1")
-	if !ok || got != c {
-		t.Fatal("Get 失败")
-	}
-	h.Unregister("u1", c)
-	if h.Len() != 0 {
-		t.Fatal("Unregister 后 Len 应为 0")
-	}
-}
-
-// TestNativeEscape 验证 Native 逃生舱可用
-func TestNativeEscape(t *testing.T) {
-	srv, err := NewServer(NopHandler{}, ServerConfig{Addr: "127.0.0.1:0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	defer srv.Close(context.Background())
-	addr, err := srv.ListenAddr()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cli, err := NewClient(NopHandler{}, ClientConfig{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, _, err := cli.Dial(context.Background(), "ws://"+addr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(CloseNormalClosure, "")
-
-	n, ok := conn.(NativeConn)
-	if !ok || n.Native() == nil {
-		t.Fatal("应能 Native() 拿到 *gws.Conn")
-	}
-	if srv.NativeUpgrader() == nil {
-		t.Fatal("NativeUpgrader 不应为 nil")
-	}
-}
-
 // testHandler 可注入回调的测试 Handler
 type testHandler struct {
 	NopHandler
 	onOpen    func(Conn)
 	onMessage func(Conn, Message)
+	onClose   func(Conn, error)
 }
 
 // OnOpen 转发到注入回调
@@ -243,38 +390,9 @@ func (h *testHandler) OnMessage(c Conn, msg Message) {
 	_ = msg.Close()
 }
 
-// TestWriteReaderChunkCount 验证按块读取次数（不经真实连接）
-func TestWriteReaderChunkCount(t *testing.T) {
-	var writes int
-	r := &countingReader{r: bytes.NewReader(bytes.Repeat([]byte("a"), 10)), readSize: 3}
-	buf := make([]byte, 3)
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			writes++
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
+// OnClose 转发到注入回调
+func (h *testHandler) OnClose(c Conn, err error) {
+	if h.onClose != nil {
+		h.onClose(c, err)
 	}
-	if writes != 4 { // 3+3+3+1
-		t.Fatalf("读次数=%d, want 4", writes)
-	}
-}
-
-// countingReader 限制单次 Read 上限，便于断言分片次数
-type countingReader struct {
-	r        io.Reader
-	readSize int
-}
-
-// Read 按 readSize 截断后读底层 Reader
-func (c *countingReader) Read(p []byte) (int, error) {
-	if len(p) > c.readSize {
-		p = p[:c.readSize]
-	}
-	return c.r.Read(p)
 }
