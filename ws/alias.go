@@ -3,7 +3,11 @@
 // @author zwei
 package ws
 
-import "gitee.com/hq_project/yomi-boot/ws/wsbase"
+import (
+	"time"
+
+	"gitee.com/hq_project/yomi-boot/ws/wsbase"
+)
 
 type (
 	// CloseCode 表示关闭帧状态码
@@ -34,4 +38,12 @@ const (
 
 	DefaultWriteMaxPayloadSize = wsbase.DefaultWriteMaxPayloadSize
 	MaxWriteMaxPayloadSize     = wsbase.MaxWriteMaxPayloadSize
+
+	DefaultHeartbeatInterval = wsbase.DefaultHeartbeatInterval
+	DefaultHeartbeatTimeout  = wsbase.DefaultHeartbeatTimeout
 )
+
+// Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout
+func Duration(d time.Duration) *time.Duration {
+	return wsbase.Duration(d)
+}

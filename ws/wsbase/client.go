@@ -24,10 +24,11 @@ func NewClient(h Handler, cfg ClientConfig) (*Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	interval, timeout := cfg.ResolvedHeartbeat()
 	return &Client{
 		name:    cfg.Name,
 		cfg:     cfg,
-		adapter: newEventAdapter(h),
+		adapter: newEventAdapter(h, heartbeatFromResolved(interval, timeout)),
 	}, nil
 }
 

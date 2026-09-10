@@ -31,6 +31,11 @@
 // 由服务端在连接建立时自动生成并登记 Hub；客户端不感知。
 // 业务鉴权应在连通后通过报文完成，不属本包。
 //
+// # 心跳
+//
+// 传输层心跳由嵌入的 wsbase.ServerConfig / ClientConfig 的 HeartbeatInterval、
+// HeartbeatTimeout 控制（见 wsbase 文档）；也可用本包 Duration / DefaultHeartbeat* 别名。
+//
 // # Client
 //
 // 一个 Client 实例对应至多一条连接；Connect 自动 Dial 并 Serve。

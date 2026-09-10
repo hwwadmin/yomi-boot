@@ -35,7 +35,8 @@ func NewServer(h Handler, cfg ServerConfig) (*Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	adapter := newEventAdapter(h)
+	interval, timeout := cfg.ResolvedHeartbeat()
+	adapter := newEventAdapter(h, heartbeatFromResolved(interval, timeout))
 	upgrader := gws.NewUpgrader(adapter, cfg.toGWSOption())
 	return &Server{
 		name:      cfg.Name,

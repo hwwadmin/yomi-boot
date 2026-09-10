@@ -18,6 +18,17 @@
 // （映射 gws，默认 256KiB）；超过则写入失败。ReadMaxPayloadSize 限制单条可读上限。
 // 本包不再提供应用层「一片一消息」的分片发送。
 //
+// # 心跳
+//
+// ServerConfig / ClientConfig 支持 HeartbeatInterval 与 HeartbeatTimeout（*time.Duration）：
+//
+//   - nil：分别使用 DefaultHeartbeatInterval（10s）与 DefaultHeartbeatTimeout（30s）
+//   - 显式 0：Interval 表示不主动发 Ping；Timeout 表示不因空闲超时踢连接
+//   - 两者均 >0 时要求 Timeout > Interval
+//
+// Timeout>0 时本包接管该连接 ReadDeadline；任意入站（消息 / Ping / Pong）会刷新。
+// Interval>0 时周期 WritePing；写失败则关闭连接。CustomizeGWS 勿再与心跳争用 ReadDeadline。
+//
 // # 高级门面
 //
 // 若希望业务不直接面对 Conn/Serve/Hub，请使用上层包 gitee.com/hq_project/yomi-boot/ws。

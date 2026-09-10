@@ -19,7 +19,18 @@ const (
 
 	// MaxWriteMaxPayloadSize 允许配置的单条可写上限（8MiB）
 	MaxWriteMaxPayloadSize = 8 * 1024 * 1024
+
+	// DefaultHeartbeatInterval 默认心跳 Ping 间隔
+	DefaultHeartbeatInterval = 10 * time.Second
+
+	// DefaultHeartbeatTimeout 默认读空闲超时（超时未获任意入站则断开）
+	DefaultHeartbeatTimeout = 30 * time.Second
 )
+
+// Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout
+func Duration(d time.Duration) *time.Duration {
+	return &d
+}
 
 // ServerConfig 独立端口 WebSocket 服务构造参数；由业务填充，本包不读配置文件
 type ServerConfig struct {
@@ -33,6 +44,12 @@ type ServerConfig struct {
 	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 用 gws 默认
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 用 gws 默认
+
+	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultHeartbeatInterval；显式 0 表示不发 Ping
+	HeartbeatInterval *time.Duration
+	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
+	// Timeout>0 时由本包接管该连接的 ReadDeadline；任意入站（消息/Ping/Pong）会刷新
+	HeartbeatTimeout *time.Duration
 
 	TLSConfig *tls.Config                                 // TLSConfig 供 StartTLS 合并（证书仍由 StartTLS 参数加载）
 	Authorize func(r *http.Request, session Session) bool // Authorize 握手鉴权；nil 表示放行
@@ -49,12 +66,20 @@ func (c ServerConfig) Validate() error {
 	if err := validateWriteMaxPayloadSize(c.WriteMaxPayloadSize); err != nil {
 		return err
 	}
+	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout); err != nil {
+		return err
+	}
 	return nil
 }
 
 // ResolvedWriteMaxPayloadSize 返回生效的单条可写上限
 func (c ServerConfig) ResolvedWriteMaxPayloadSize() int {
 	return resolveWriteMaxPayloadSize(c.WriteMaxPayloadSize)
+}
+
+// ResolvedHeartbeat 返回生效的心跳间隔与超时
+func (c ServerConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
+	return resolveHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
 }
 
 // ClientConfig 出站 WebSocket 客户端构造参数；由业务填充，本包不读配置文件
@@ -68,6 +93,11 @@ type ClientConfig struct {
 	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 用 gws 默认
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 用 gws 默认
+
+	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultHeartbeatInterval；显式 0 表示不发 Ping
+	HeartbeatInterval *time.Duration
+	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
+	HeartbeatTimeout *time.Duration
 
 	RequestHeader http.Header // RequestHeader 握手额外请求头（如鉴权）
 	TLSConfig     *tls.Config // TLSConfig wss 时可选 TLS 配置
@@ -84,12 +114,20 @@ func (c ClientConfig) Validate() error {
 	if err := validateWriteMaxPayloadSize(c.WriteMaxPayloadSize); err != nil {
 		return err
 	}
+	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout); err != nil {
+		return err
+	}
 	return nil
 }
 
 // ResolvedWriteMaxPayloadSize 返回生效的单条可写上限
 func (c ClientConfig) ResolvedWriteMaxPayloadSize() int {
 	return resolveWriteMaxPayloadSize(c.WriteMaxPayloadSize)
+}
+
+// ResolvedHeartbeat 返回生效的心跳间隔与超时
+func (c ClientConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
+	return resolveHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
 }
 
 // validateWriteMaxPayloadSize 校验单条可写上限；0 表示使用默认值故合法
@@ -109,6 +147,37 @@ func resolveWriteMaxPayloadSize(n int) int {
 		return DefaultWriteMaxPayloadSize
 	}
 	return n
+}
+
+// resolveHeartbeat 解析心跳：nil→默认；显式 0 保留为关闭对应能力
+func resolveHeartbeat(interval, timeout *time.Duration) (time.Duration, time.Duration) {
+	var i, t time.Duration
+	if interval == nil {
+		i = DefaultHeartbeatInterval
+	} else {
+		i = *interval
+	}
+	if timeout == nil {
+		t = DefaultHeartbeatTimeout
+	} else {
+		t = *timeout
+	}
+	return i, t
+}
+
+// validateHeartbeat 校验心跳配置；两者均 >0 时要求 Timeout > Interval
+func validateHeartbeat(interval, timeout *time.Duration) error {
+	if interval != nil && *interval < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatInterval 不能为负数")
+	}
+	if timeout != nil && *timeout < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatTimeout 不能为负数")
+	}
+	i, t := resolveHeartbeat(interval, timeout)
+	if i > 0 && t > 0 && t <= i {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatTimeout 必须大于 HeartbeatInterval")
+	}
+	return nil
 }
 
 // toGWSOption 映射为 gws.ServerOption
