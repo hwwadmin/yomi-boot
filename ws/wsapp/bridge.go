@@ -1,4 +1,4 @@
-// Package wsapp 将业务 Handler 桥接为 ws.Handler
+// Package wsapp 将 Config 解析出的 Handler 桥接为 ws.Handler
 //
 // @author zwei
 package wsapp

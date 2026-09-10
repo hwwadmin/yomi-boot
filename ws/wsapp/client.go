@@ -44,11 +44,11 @@ type client struct {
 }
 
 // NewClient 创建高级出站客户端
-func NewClient(h ClientHandler, cfg ClientConfig) (Client, error) {
+func NewClient(cfg ClientConfig) (Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	bridge := newClientBridge(h)
+	bridge := newClientBridge(cfg.resolveHandler())
 	raw, err := ws.NewClient(bridge, cfg.ClientConfig)
 	if err != nil {
 		return nil, err

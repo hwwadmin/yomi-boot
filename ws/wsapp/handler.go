@@ -1,4 +1,4 @@
-// Package wsapp 定义业务 Handler 与会话 Context（服务端含 ConnID，客户端不含）
+// Package wsapp 定义 Handler、默认实现与会话 Context
 //
 // @author zwei
 package wsapp
@@ -11,7 +11,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/ws"
 )
 
-// ServerHandler 是服务端业务回调；可通过 SessionContext.ConnID 做框架级推送
+// ServerHandler 是服务端会话回调；可通过 SessionContext.ConnID 做框架级推送
 type ServerHandler interface {
 	// OnConnect 连接已建立，ConnID 已由框架生成并登记
 	OnConnect(ctx SessionContext)
@@ -21,7 +21,7 @@ type ServerHandler interface {
 	OnMessage(ctx SessionContext, msg ws.Message)
 }
 
-// ClientHandler 是客户端业务回调；不涉及 ConnID
+// ClientHandler 是客户端会话回调；不涉及 ConnID
 type ClientHandler interface {
 	// OnConnect 出站已连通
 	OnConnect(ctx PeerContext)
@@ -31,7 +31,64 @@ type ClientHandler interface {
 	OnMessage(ctx PeerContext, msg ws.Message)
 }
 
-// NopServerHandler 空服务端业务实现
+// DefaultServerHandler 是默认服务端 Handler：启停转 Lifecycle，消息交 Processor。
+// 自定义 Handler 可嵌入本类型以复用 Processor 消费逻辑。
+type DefaultServerHandler struct {
+	Processor ServerMessageProcessor // Processor 是业务消息处理器；nil 时丢弃消息
+}
+
+// OnConnect 转发可选 Lifecycle
+func (h DefaultServerHandler) OnConnect(ctx SessionContext) {
+	if life, ok := h.Processor.(ServerLifecycle); ok {
+		life.OnConnect(ctx)
+	}
+}
+
+// OnDisconnect 转发可选 Lifecycle
+func (h DefaultServerHandler) OnDisconnect(connID string, err error) {
+	if life, ok := h.Processor.(ServerLifecycle); ok {
+		life.OnDisconnect(connID, err)
+	}
+}
+
+// OnMessage 关闭原始消息后交 Processor；Processor 为 nil 则丢弃
+func (h DefaultServerHandler) OnMessage(ctx SessionContext, msg ws.Message) {
+	p := takePayload(msg)
+	if h.Processor == nil {
+		return
+	}
+	_ = h.Processor.OnPayload(ctx, p)
+}
+
+// DefaultClientHandler 是默认客户端 Handler（语义同 DefaultServerHandler）
+type DefaultClientHandler struct {
+	Processor ClientMessageProcessor // Processor 是业务消息处理器；nil 时丢弃消息
+}
+
+// OnConnect 转发可选 Lifecycle
+func (h DefaultClientHandler) OnConnect(ctx PeerContext) {
+	if life, ok := h.Processor.(ClientLifecycle); ok {
+		life.OnConnect(ctx)
+	}
+}
+
+// OnDisconnect 转发可选 Lifecycle
+func (h DefaultClientHandler) OnDisconnect(err error) {
+	if life, ok := h.Processor.(ClientLifecycle); ok {
+		life.OnDisconnect(err)
+	}
+}
+
+// OnMessage 关闭原始消息后交 Processor；Processor 为 nil 则丢弃
+func (h DefaultClientHandler) OnMessage(ctx PeerContext, msg ws.Message) {
+	p := takePayload(msg)
+	if h.Processor == nil {
+		return
+	}
+	_ = h.Processor.OnPayload(ctx, p)
+}
+
+// NopServerHandler 空服务端 Handler（丢弃消息）
 type NopServerHandler struct{}
 
 // OnConnect 空实现
@@ -47,7 +104,7 @@ func (NopServerHandler) OnMessage(_ SessionContext, msg ws.Message) {
 	}
 }
 
-// NopClientHandler 空客户端业务实现
+// NopClientHandler 空客户端 Handler（丢弃消息）
 type NopClientHandler struct{}
 
 // OnConnect 空实现

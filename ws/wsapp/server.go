@@ -57,12 +57,12 @@ type server struct {
 }
 
 // NewServer 创建高级入站服务；ConnID 由框架在 OnOpen 自动生成
-func NewServer(h ServerHandler, cfg ServerConfig) (Server, error) {
+func NewServer(cfg ServerConfig) (Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	hub := ws.NewHub()
-	bridge := newServerBridge(h, hub)
+	bridge := newServerBridge(cfg.resolveHandler(), hub)
 	raw, err := ws.NewServer(bridge, cfg.ServerConfig)
 	if err != nil {
 		return nil, err
