@@ -26,9 +26,10 @@ func (a *eventAdapter) OnOpen(socket *gws.Conn) {
 	startHeartbeat(conn, a.heartbeat)
 }
 
-// OnClose 停止心跳并回调业务
+// OnClose 停止存活定时器与心跳并回调业务
 func (a *eventAdapter) OnClose(socket *gws.Conn, err error) {
 	conn := connFromGWS(socket)
+	stopMaxConnLifetime(conn)
 	stopHeartbeat(conn)
 	a.handler.OnClose(conn, err)
 }

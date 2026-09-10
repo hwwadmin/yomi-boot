@@ -25,9 +25,16 @@ const (
 
 	// DefaultHeartbeatTimeout 默认读空闲超时（超时未获任意入站则断开）
 	DefaultHeartbeatTimeout = 30 * time.Second
+
+	// DefaultMaxConnLifetime 默认通道最大存活时间（从握手成功起算）
+	DefaultMaxConnLifetime = 24 * time.Hour
+
+	// DefaultMaxConnLifetimeJitter 默认存活时间波动半宽，用于打散同时到期
+	DefaultMaxConnLifetimeJitter = 30 * time.Second
 )
 
-// Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout
+// Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout /
+// MaxConnLifetime / MaxConnLifetimeJitter
 func Duration(d time.Duration) *time.Duration {
 	return &d
 }
@@ -51,6 +58,14 @@ type ServerConfig struct {
 	// Timeout>0 时由本包接管该连接的 ReadDeadline；任意入站（消息/Ping/Pong）会刷新
 	HeartbeatTimeout *time.Duration
 
+	// MaxConnLifetime 单条通道最大存活时间，从握手成功起算，流量不续命。
+	// nil 表示 DefaultMaxConnLifetime（24h）；显式 0 表示不限制
+	MaxConnLifetime *time.Duration
+	// MaxConnLifetimeJitter 存活时间波动半宽；实际寿命为基准加减该值的均匀随机。
+	// nil 表示 DefaultMaxConnLifetimeJitter（30s）；显式 0 表示不波动。
+	// 两者 resolve 后均 >0 时要求 Jitter < Lifetime
+	MaxConnLifetimeJitter *time.Duration
+
 	TLSConfig *tls.Config                                 // TLSConfig 供 StartTLS 合并（证书仍由 StartTLS 参数加载）
 	Authorize func(r *http.Request, session Session) bool // Authorize 握手鉴权；nil 表示放行
 
@@ -69,6 +84,9 @@ func (c ServerConfig) Validate() error {
 	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout); err != nil {
 		return err
 	}
+	if err := validateMaxConnLifetime(c.MaxConnLifetime, c.MaxConnLifetimeJitter); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -80,6 +98,11 @@ func (c ServerConfig) ResolvedWriteMaxPayloadSize() int {
 // ResolvedHeartbeat 返回生效的心跳间隔与超时
 func (c ServerConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
 	return resolveHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
+}
+
+// ResolvedMaxConnLifetime 返回生效的通道最大存活时间与波动半宽
+func (c ServerConfig) ResolvedMaxConnLifetime() (lifetime, jitter time.Duration) {
+	return resolveMaxConnLifetime(c.MaxConnLifetime, c.MaxConnLifetimeJitter)
 }
 
 // ClientConfig 出站 WebSocket 客户端构造参数；由业务填充，本包不读配置文件
@@ -176,6 +199,37 @@ func validateHeartbeat(interval, timeout *time.Duration) error {
 	i, t := resolveHeartbeat(interval, timeout)
 	if i > 0 && t > 0 && t <= i {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatTimeout 必须大于 HeartbeatInterval")
+	}
+	return nil
+}
+
+// resolveMaxConnLifetime 解析通道寿命：nil→默认；显式 0 保留为关闭对应能力
+func resolveMaxConnLifetime(lifetime, jitter *time.Duration) (time.Duration, time.Duration) {
+	var life, jit time.Duration
+	if lifetime == nil {
+		life = DefaultMaxConnLifetime
+	} else {
+		life = *lifetime
+	}
+	if jitter == nil {
+		jit = DefaultMaxConnLifetimeJitter
+	} else {
+		jit = *jitter
+	}
+	return life, jit
+}
+
+// validateMaxConnLifetime 校验通道寿命；两者均 >0 时要求 Jitter < Lifetime
+func validateMaxConnLifetime(lifetime, jitter *time.Duration) error {
+	if lifetime != nil && *lifetime < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxConnLifetime 不能为负数")
+	}
+	if jitter != nil && *jitter < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxConnLifetimeJitter 不能为负数")
+	}
+	life, jit := resolveMaxConnLifetime(lifetime, jitter)
+	if life > 0 && jit > 0 && jit >= life {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxConnLifetimeJitter 必须小于 MaxConnLifetime")
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
 
@@ -24,6 +25,9 @@ type Server struct {
 	upgrader  *gws.Upgrader // upgrader 负责握手升级
 	tlsConfig *tls.Config   // tlsConfig 供 StartTLS 合并证书
 
+	maxConnLifetime       time.Duration // maxConnLifetime 已 resolve 的通道最大存活；0 表示不限制
+	maxConnLifetimeJitter time.Duration // maxConnLifetimeJitter 已 resolve 的波动半宽
+
 	listener net.Listener // listener 是当前监听器；关闭后由 serveLoop 持有局部引用
 	mu       sync.Mutex   // mu 保护 listener
 	closed   atomic.Bool  // closed 表示已关闭
@@ -36,13 +40,16 @@ func NewServer(h Handler, cfg ServerConfig) (*Server, error) {
 		return nil, err
 	}
 	interval, timeout := cfg.ResolvedHeartbeat()
+	lifetime, jitter := cfg.ResolvedMaxConnLifetime()
 	adapter := newEventAdapter(h, heartbeatFromResolved(interval, timeout))
 	upgrader := gws.NewUpgrader(adapter, cfg.toGWSOption())
 	return &Server{
-		name:      cfg.Name,
-		addr:      cfg.Addr,
-		upgrader:  upgrader,
-		tlsConfig: cfg.TLSConfig,
+		name:                  cfg.Name,
+		addr:                  cfg.Addr,
+		upgrader:              upgrader,
+		tlsConfig:             cfg.TLSConfig,
+		maxConnLifetime:       lifetime,
+		maxConnLifetimeJitter: jitter,
 	}, nil
 }
 
@@ -161,6 +168,7 @@ func (s *Server) handleConn(netConn net.Conn) {
 	}
 	// 服务端在本 goroutine 跑读循环；Conn.Serve 因 sync.Once 可再调但不会重复
 	conn := connFromGWS(socket)
+	startMaxConnLifetime(conn, s.maxConnLifetime, s.maxConnLifetimeJitter)
 	conn.Serve()
 }
 

@@ -29,6 +29,17 @@
 // Timeout>0 时本包接管该连接 ReadDeadline；任意入站（消息 / Ping / Pong）会刷新。
 // Interval>0 时周期 WritePing；写失败则关闭连接。CustomizeGWS 勿再与心跳争用 ReadDeadline。
 //
+// # 通道最长存活（仅 Server）
+//
+// ServerConfig 支持 MaxConnLifetime 与 MaxConnLifetimeJitter（*time.Duration）：
+//
+//   - nil：分别使用 DefaultMaxConnLifetime（24h）与 DefaultMaxConnLifetimeJitter（30s）
+//   - 显式 0：Lifetime 表示不限制存活；Jitter 表示不波动
+//   - 两者均 >0 时要求 Jitter < Lifetime
+//
+// 从握手成功起算墙钟时间，流量不续命。实际断开时刻为基准加减波动的均匀随机，
+// 到期后服务端以 CloseGoingAway 主动断开。ClientConfig 无此配置。
+//
 // # 高级门面
 //
 // 若希望业务不直接面对 Conn/Serve/Hub，请使用上层包 gitee.com/hq_project/yomi-boot/ws。

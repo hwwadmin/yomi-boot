@@ -43,7 +43,7 @@ const (
 	DefaultHeartbeatTimeout  = wsbase.DefaultHeartbeatTimeout
 )
 
-// Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout
+// Duration 返回 d 的指针，便于配置 Heartbeat* 与 MaxConnLifetime* 等 *time.Duration 字段
 func Duration(d time.Duration) *time.Duration {
 	return wsbase.Duration(d)
 }

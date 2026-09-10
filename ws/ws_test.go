@@ -141,7 +141,6 @@ func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc Client
 		addrCh <- addr.String()
 		srvCh <- srv
 		<-srvCtx.Done()
-		t.Log("[清理] Server goroutine 退出，Close")
 		_ = srv.Close(context.Background())
 	}()
 
@@ -175,7 +174,6 @@ func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc Client
 		}
 		cliCh <- cli
 		<-cliCtx.Done()
-		t.Log("[清理] Client goroutine 退出，Close")
 		_ = cli.Close(CloseNormalClosure, "test done")
 	}()
 

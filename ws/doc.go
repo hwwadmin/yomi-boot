@@ -36,6 +36,11 @@
 // 传输层心跳由嵌入的 wsbase.ServerConfig / ClientConfig 的 HeartbeatInterval、
 // HeartbeatTimeout 控制（见 wsbase 文档）；也可用本包 Duration / DefaultHeartbeat* 别名。
 //
+// # 通道最长存活（仅 Server）
+//
+// 由嵌入的 wsbase.ServerConfig 的 MaxConnLifetime、MaxConnLifetimeJitter 控制：
+// nil 分别为 24h 与 30s；显式 0 表示不限制 / 不波动。到期服务端主动断开，流量不续命。
+//
 // # Client
 //
 // 一个 Client 实例对应至多一条连接；Connect 自动 Dial 并 Serve。
