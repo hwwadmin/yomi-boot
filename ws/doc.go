@@ -18,6 +18,11 @@
 // （非单消息底层续帧），以便收发两端峰值内存均可控。分片大小优先级：
 // WriteOption > 实例 Config.ChunkSize > 库默认（256KiB）。
 //
+// # 高级门面
+//
+// 若希望业务不直接面对 Conn/Serve/Hub，请使用子包 gitee.com/hq_project/yomi-boot/ws/app。
+// 其中 ConnID 仅服务端自动生成；业务鉴权应在连通后用报文完成，不属 ws 传输层。
+//
 // # 读模型
 //
 // 同一连接只能使用一种读模型；门面默认 Serve → gws ReadLoop。禁止与 Native 侧
