@@ -18,8 +18,6 @@ type (
 	Hub = wsbase.Hub
 	// Session 是连接级会话存储
 	Session = wsbase.Session
-	// WriteOption 是 WriteReader 单次选项
-	WriteOption = wsbase.WriteOption
 )
 
 const (
@@ -39,9 +37,6 @@ const (
 	CloseInternalServerErr       = wsbase.CloseInternalServerErr
 	CloseTLSHandshake            = wsbase.CloseTLSHandshake
 
-	DefaultChunkSize = wsbase.DefaultChunkSize
-	MaxChunkSize     = wsbase.MaxChunkSize
+	DefaultWriteMaxPayloadSize = wsbase.DefaultWriteMaxPayloadSize
+	MaxWriteMaxPayloadSize     = wsbase.MaxWriteMaxPayloadSize
 )
-
-// WithChunkSize 指定本次 WriteReader 的分片大小（字节）
-var WithChunkSize = wsbase.WithChunkSize

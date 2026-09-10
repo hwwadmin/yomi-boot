@@ -5,7 +5,6 @@ package ws
 
 import (
 	"context"
-	"io"
 	"sync"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -25,8 +24,6 @@ type Client interface {
 	SendText(ctx context.Context, data []byte) error
 	// SendBinary 发送二进制
 	SendBinary(ctx context.Context, data []byte) error
-	// SendReader 分片发送
-	SendReader(ctx context.Context, opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error
 
 	// Conn 返回当前底层连接（逃生）；未连接时 ok=false
 	Conn() (wsbase.Conn, bool)
@@ -126,15 +123,6 @@ func (c *client) SendBinary(ctx context.Context, data []byte) error {
 		return err
 	}
 	return conn.WriteBinary(ctx, data)
-}
-
-// SendReader 分片发送
-func (c *client) SendReader(ctx context.Context, opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error {
-	conn, err := c.mustConn()
-	if err != nil {
-		return err
-	}
-	return conn.WriteReader(ctx, opcode, r, opts...)
 }
 
 // Conn 返回当前连接

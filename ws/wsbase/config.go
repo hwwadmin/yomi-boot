@@ -1,4 +1,4 @@
-// Package wsbase 定义 Server/Client 构造配置与分片默认值
+// Package wsbase 定义 Server/Client 构造配置
 //
 // @author zwei
 package wsbase
@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	// DefaultChunkSize 大负载 WriteReader 默认分片大小（256KiB）
-	DefaultChunkSize = 256 * 1024
+	// DefaultWriteMaxPayloadSize 单条逻辑消息默认可写上限（256KiB），映射 gws.WriteMaxPayloadSize
+	DefaultWriteMaxPayloadSize = 256 * 1024
 
-	// MaxChunkSize 允许配置的分片上限（8MiB），防止误配成近乎整文件一片
-	MaxChunkSize = 8 * 1024 * 1024
+	// MaxWriteMaxPayloadSize 允许配置的单条可写上限（8MiB）
+	MaxWriteMaxPayloadSize = 8 * 1024 * 1024
 )
 
 // ServerConfig 独立端口 WebSocket 服务构造参数；由业务填充，本包不读配置文件
@@ -26,14 +26,12 @@ type ServerConfig struct {
 	Name string // Name 是实例名，仅用于日志区分，可空
 	Addr string // Addr 是监听地址，必填，如 ":7101" 或 "127.0.0.1:7101"
 
-	ChunkSize int // ChunkSize 是本实例 WriteReader 默认分片字节数；0 表示 DefaultChunkSize
-
 	CompressEnabled bool // CompressEnabled 是否启用 permessage-deflate
 	ParallelEnabled bool // ParallelEnabled 是否并行处理消息
 	CheckUTF8       bool // CheckUTF8 是否校验文本 UTF-8
 
-	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条可读最大载荷；0 用 gws 默认
-	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条可写最大载荷；0 用 gws 默认
+	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 用 gws 默认
+	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 用 gws 默认
 
 	TLSConfig *tls.Config                                 // TLSConfig 供 StartTLS 合并（证书仍由 StartTLS 参数加载）
@@ -48,29 +46,27 @@ func (c ServerConfig) Validate() error {
 	if c.Addr == "" {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "ServerConfig.Addr 不能为空")
 	}
-	if err := validateChunkSize(c.ChunkSize); err != nil {
+	if err := validateWriteMaxPayloadSize(c.WriteMaxPayloadSize); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ResolvedChunkSize 返回生效的默认分片大小
-func (c ServerConfig) ResolvedChunkSize() int {
-	return resolveChunkSize(c.ChunkSize)
+// ResolvedWriteMaxPayloadSize 返回生效的单条可写上限
+func (c ServerConfig) ResolvedWriteMaxPayloadSize() int {
+	return resolveWriteMaxPayloadSize(c.WriteMaxPayloadSize)
 }
 
 // ClientConfig 出站 WebSocket 客户端构造参数；由业务填充，本包不读配置文件
 type ClientConfig struct {
 	Name string // Name 是实例名，仅用于日志区分，可空
 
-	ChunkSize int // ChunkSize 是本实例 WriteReader 默认分片字节数；0 表示 DefaultChunkSize
-
 	CompressEnabled bool // CompressEnabled 是否启用 permessage-deflate
 	ParallelEnabled bool // ParallelEnabled 是否并行处理消息
 	CheckUTF8       bool // CheckUTF8 是否校验文本 UTF-8
 
-	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条可读最大载荷；0 用 gws 默认
-	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条可写最大载荷；0 用 gws 默认
+	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 用 gws 默认
+	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 用 gws 默认
 
 	RequestHeader http.Header // RequestHeader 握手额外请求头（如鉴权）
@@ -85,32 +81,32 @@ type ClientConfig struct {
 
 // Validate 校验 ClientConfig
 func (c ClientConfig) Validate() error {
-	if err := validateChunkSize(c.ChunkSize); err != nil {
+	if err := validateWriteMaxPayloadSize(c.WriteMaxPayloadSize); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ResolvedChunkSize 返回生效的默认分片大小
-func (c ClientConfig) ResolvedChunkSize() int {
-	return resolveChunkSize(c.ChunkSize)
+// ResolvedWriteMaxPayloadSize 返回生效的单条可写上限
+func (c ClientConfig) ResolvedWriteMaxPayloadSize() int {
+	return resolveWriteMaxPayloadSize(c.WriteMaxPayloadSize)
 }
 
-// validateChunkSize 校验分片大小；0 表示使用默认值故合法
-func validateChunkSize(n int) error {
+// validateWriteMaxPayloadSize 校验单条可写上限；0 表示使用默认值故合法
+func validateWriteMaxPayloadSize(n int) error {
 	if n < 0 {
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "ChunkSize 不能为负数")
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "WriteMaxPayloadSize 不能为负数")
 	}
-	if n > MaxChunkSize {
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "ChunkSize 超过 MaxChunkSize")
+	if n > MaxWriteMaxPayloadSize {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "WriteMaxPayloadSize 超过 MaxWriteMaxPayloadSize")
 	}
 	return nil
 }
 
-// resolveChunkSize 将 0/未设置解析为 DefaultChunkSize
-func resolveChunkSize(n int) int {
+// resolveWriteMaxPayloadSize 将 0/未设置解析为 DefaultWriteMaxPayloadSize
+func resolveWriteMaxPayloadSize(n int) int {
 	if n <= 0 {
-		return DefaultChunkSize
+		return DefaultWriteMaxPayloadSize
 	}
 	return n
 }
@@ -122,7 +118,7 @@ func (c ServerConfig) toGWSOption() *gws.ServerOption {
 		ParallelEnabled:     c.ParallelEnabled,
 		CheckUtf8Enabled:    c.CheckUTF8,
 		ReadMaxPayloadSize:  c.ReadMaxPayloadSize,
-		WriteMaxPayloadSize: c.WriteMaxPayloadSize,
+		WriteMaxPayloadSize: c.ResolvedWriteMaxPayloadSize(),
 		HandshakeTimeout:    c.HandshakeTimeout,
 		TlsConfig:           c.TLSConfig,
 		Recovery:            gws.Recovery,
@@ -146,7 +142,7 @@ func (c ClientConfig) toGWSOption(addr string) *gws.ClientOption {
 		ParallelEnabled:     c.ParallelEnabled,
 		CheckUtf8Enabled:    c.CheckUTF8,
 		ReadMaxPayloadSize:  c.ReadMaxPayloadSize,
-		WriteMaxPayloadSize: c.WriteMaxPayloadSize,
+		WriteMaxPayloadSize: c.ResolvedWriteMaxPayloadSize(),
 		HandshakeTimeout:    c.HandshakeTimeout,
 		RequestHeader:       c.RequestHeader,
 		TlsConfig:           c.TLSConfig,

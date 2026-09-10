@@ -38,7 +38,7 @@ func startServerAndClient(t *testing.T, srvCfg ServerConfig, cliCfg ClientConfig
 		srvCfg.Addr = "127.0.0.1:0"
 	}
 
-	t.Logf("[流程] 准备启动 Server name=%q addr=%q chunkSize=%d", srvCfg.Name, srvCfg.Addr, srvCfg.ResolvedChunkSize())
+	t.Logf("[流程] 准备启动 Server name=%q addr=%q writeMaxPayload=%d", srvCfg.Name, srvCfg.Addr, srvCfg.ResolvedWriteMaxPayloadSize())
 
 	env := &testEnv{
 		t:           t,
@@ -123,7 +123,7 @@ func startServerAndClient(t *testing.T, srvCfg ServerConfig, cliCfg ClientConfig
 	env.wsURL = "ws://" + addr.String() + "/"
 	t.Logf("[流程] Server 已监听 listenAddr=%v", addr)
 
-	t.Logf("[流程] 准备创建 Client name=%q chunkSize=%d", cliCfg.Name, cliCfg.ResolvedChunkSize())
+	t.Logf("[流程] 准备创建 Client name=%q writeMaxPayload=%d", cliCfg.Name, cliCfg.ResolvedWriteMaxPayloadSize())
 	cli, err := NewClient(cliHandler, cliCfg)
 	if err != nil {
 		env.close()
@@ -295,77 +295,52 @@ func TestServerClientBinaryEcho(t *testing.T) {
 	t.Log("[断言] 客户端收到服务端二进制回写，用例通过")
 }
 
-// TestServerClientChunkedUpload 客户端按可配置分片上传，服务端按片接收
-func TestServerClientChunkedUpload(t *testing.T) {
-	const chunk = 4
-	t.Logf("[用例] 客户端分片上传 chunkSize=%d", chunk)
-	env := startServerAndClient(t,
-		ServerConfig{ChunkSize: chunk},
-		ClientConfig{ChunkSize: chunk},
-	)
+// TestServerClientBinaryRoundTrip 二进制整包往返（一次 WriteBinary → 一次 OnMessage）
+func TestServerClientBinaryRoundTrip(t *testing.T) {
+	t.Log("[用例] 客户端 WriteBinary 整包上传")
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
 	defer env.close()
 
-	payload := []byte("abcdefghijkl") // 12 → 3 片
-	t.Logf("[流程] 客户端 WriteReader 总长=%d 期望片数=3", len(payload))
-	if err := env.clientConn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
+	payload := []byte("abcdefghijkl")
+	t.Logf("[流程] 客户端 WriteBinary 总长=%d", len(payload))
+	if err := env.clientConn.WriteBinary(context.Background(), payload); err != nil {
 		t.Fatal(err)
 	}
-
-	var parts [][]byte
-	for i := 0; i < 3; i++ {
-		part := env.waitServerMsg()
-		t.Logf("[断言] 收到分片[%d] len=%d payload=%q", i, len(part), part)
-		parts = append(parts, part)
+	got := env.waitServerMsg()
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("服务端收到=%q want %q", got, payload)
 	}
-	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
-		t.Fatalf("拼接=%q, want %q", joined, payload)
-	}
-	for i, p := range parts {
-		if len(p) != chunk {
-			t.Fatalf("分片[%d] len=%d, want %d", i, len(p), chunk)
-		}
-	}
-	t.Log("[断言] 分片上传拼接校验通过")
+	t.Log("[断言] 服务端一次收到完整载荷")
 }
 
-// TestServerClientChunkedDownload 服务端按分片下发，客户端按片接收
-func TestServerClientChunkedDownload(t *testing.T) {
-	const chunk = 5
-	t.Logf("[用例] 服务端分片下发 chunkSize=%d", chunk)
-	env := startServerAndClient(t,
-		ServerConfig{ChunkSize: chunk},
-		ClientConfig{ChunkSize: chunk},
-	)
+// TestServerClientBinaryDownload 服务端整包下发
+func TestServerClientBinaryDownload(t *testing.T) {
+	t.Log("[用例] 服务端 WriteBinary 整包下发")
+	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
 	defer env.close()
 
-	payload := []byte("0123456789") // 10 → 2 片
-	t.Logf("[流程] 服务端 WriteReader 总长=%d 期望片数=2", len(payload))
-	if err := env.serverConn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
+	payload := []byte("0123456789")
+	t.Logf("[流程] 服务端 WriteBinary 总长=%d", len(payload))
+	if err := env.serverConn.WriteBinary(context.Background(), payload); err != nil {
 		t.Fatal(err)
 	}
-
-	var parts [][]byte
-	for i := 0; i < 2; i++ {
-		part := env.waitClientMsg()
-		t.Logf("[断言] 客户端收到分片[%d] len=%d payload=%q", i, len(part), part)
-		parts = append(parts, part)
+	got := env.waitClientMsg()
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("客户端收到=%q want %q", got, payload)
 	}
-	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
-		t.Fatalf("拼接=%q, want %q", joined, payload)
-	}
-	t.Log("[断言] 分片下发拼接校验通过")
+	t.Log("[断言] 客户端一次收到完整载荷")
 }
 
-// TestServerClientWriteReaderCanceledContext 已取消 ctx 时客户端 WriteReader 失败
-func TestServerClientWriteReaderCanceledContext(t *testing.T) {
-	t.Log("[用例] 已取消 ctx 的 WriteReader 应失败")
+// TestServerClientWriteBinaryCanceledContext 已取消 ctx 时写入失败
+func TestServerClientWriteBinaryCanceledContext(t *testing.T) {
+	t.Log("[用例] 已取消 ctx 的 WriteBinary 应失败")
 	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
 	defer env.close()
 
 	writeCtx, writeCancel := context.WithCancel(context.Background())
 	writeCancel()
-	t.Log("[流程] 使用已取消的 ctx 调用 WriteReader")
-	err := env.clientConn.WriteReader(writeCtx, OpcodeBinary, strings.NewReader(strings.Repeat("x", 1024)), WithChunkSize(64))
+	t.Log("[流程] 使用已取消的 ctx 调用 WriteBinary")
+	err := env.clientConn.WriteBinary(writeCtx, []byte(strings.Repeat("x", 64)))
 	if err == nil {
 		t.Fatal("已取消 ctx 应返回错误")
 	}
@@ -419,28 +394,28 @@ func TestServerClientHub(t *testing.T) {
 	t.Log("[断言] Hub 已清空，用例通过")
 }
 
-// TestServerConfigValidate 校验 Addr/ChunkSize 边界（无网络）
+// TestServerConfigValidate 校验 Addr / WriteMaxPayloadSize 边界（无网络）
 func TestServerConfigValidate(t *testing.T) {
 	t.Log("[用例] ServerConfig.Validate 边界")
 	if err := (ServerConfig{}).Validate(); err == nil {
 		t.Fatal("空 Addr 应失败")
 	}
 	t.Log("[断言] 空 Addr 校验失败，符合预期")
-	if err := (ServerConfig{Addr: ":0", ChunkSize: -1}).Validate(); err == nil {
-		t.Fatal("负 ChunkSize 应失败")
+	if err := (ServerConfig{Addr: ":0", WriteMaxPayloadSize: -1}).Validate(); err == nil {
+		t.Fatal("负 WriteMaxPayloadSize 应失败")
 	}
-	t.Log("[断言] 负 ChunkSize 校验失败，符合预期")
-	if err := (ServerConfig{Addr: ":0", ChunkSize: MaxChunkSize + 1}).Validate(); err == nil {
-		t.Fatal("超大 ChunkSize 应失败")
+	t.Log("[断言] 负 WriteMaxPayloadSize 校验失败，符合预期")
+	if err := (ServerConfig{Addr: ":0", WriteMaxPayloadSize: MaxWriteMaxPayloadSize + 1}).Validate(); err == nil {
+		t.Fatal("超大 WriteMaxPayloadSize 应失败")
 	}
-	t.Log("[断言] 超大 ChunkSize 校验失败，符合预期")
+	t.Log("[断言] 超大 WriteMaxPayloadSize 校验失败，符合预期")
 	if err := (ServerConfig{Addr: ":0"}).Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if got := (ServerConfig{Addr: ":0"}).ResolvedChunkSize(); got != DefaultChunkSize {
-		t.Fatalf("默认分片=%d, want %d", got, DefaultChunkSize)
+	if got := (ServerConfig{Addr: ":0"}).ResolvedWriteMaxPayloadSize(); got != DefaultWriteMaxPayloadSize {
+		t.Fatalf("默认可写上限=%d, want %d", got, DefaultWriteMaxPayloadSize)
 	}
-	t.Logf("[断言] 合法配置通过，默认 ChunkSize=%d", DefaultChunkSize)
+	t.Logf("[断言] 合法配置通过，默认 WriteMaxPayloadSize=%d", DefaultWriteMaxPayloadSize)
 }
 
 // testHandler 可注入回调的测试 Handler

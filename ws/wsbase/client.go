@@ -14,10 +14,9 @@ import (
 
 // Client 是出站 WebSocket 客户端工厂；可 New 多个，Dial 得到 Conn 后需 go Serve()
 type Client struct {
-	name      string
-	chunkSize int
-	cfg       ClientConfig
-	adapter   *eventAdapter
+	name    string
+	cfg     ClientConfig
+	adapter *eventAdapter
 }
 
 // NewClient 根据配置创建 Client
@@ -26,10 +25,9 @@ func NewClient(h Handler, cfg ClientConfig) (*Client, error) {
 		return nil, err
 	}
 	return &Client{
-		name:      cfg.Name,
-		chunkSize: cfg.ResolvedChunkSize(),
-		cfg:       cfg,
-		adapter:   newEventAdapter(h, cfg.ResolvedChunkSize()),
+		name:    cfg.Name,
+		cfg:     cfg,
+		adapter: newEventAdapter(h),
 	}, nil
 }
 
@@ -58,6 +56,6 @@ func (c *Client) Dial(ctx context.Context, url string) (Conn, *http.Response, er
 	if err != nil {
 		return nil, resp, errors.Wrap(err, "ws Dial 失败")
 	}
-	conn := connFromGWS(raw, c.chunkSize)
+	conn := connFromGWS(raw)
 	return conn, resp, nil
 }

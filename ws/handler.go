@@ -5,7 +5,6 @@ package ws
 
 import (
 	"context"
-	"io"
 
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
@@ -119,8 +118,6 @@ type Sender interface {
 	SendText(data []byte) error
 	// SendBinary 发送二进制
 	SendBinary(data []byte) error
-	// SendReader 分片发送
-	SendReader(opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error
 }
 
 // PeerContext 是客户端侧当前连接视图（无 ConnID）
@@ -177,14 +174,6 @@ func (c *peerContext) SendBinary(data []byte) error {
 		return errors.Sentinel(ErrNotConnected)
 	}
 	return c.conn.WriteBinary(c.Context(), data)
-}
-
-// SendReader 分片发送
-func (c *peerContext) SendReader(opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error {
-	if c == nil || c.conn == nil {
-		return errors.Sentinel(ErrNotConnected)
-	}
-	return c.conn.WriteReader(c.Context(), opcode, r, opts...)
 }
 
 // Conn 返回底层连接

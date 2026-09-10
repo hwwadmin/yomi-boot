@@ -21,7 +21,6 @@ import (
 type Server struct {
 	name      string        // name 是实例名
 	addr      string        // addr 是配置的监听地址
-	chunkSize int           // chunkSize 是 WriteReader 默认分片
 	upgrader  *gws.Upgrader // upgrader 负责握手升级
 	tlsConfig *tls.Config   // tlsConfig 供 StartTLS 合并证书
 
@@ -36,12 +35,11 @@ func NewServer(h Handler, cfg ServerConfig) (*Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	adapter := newEventAdapter(h, cfg.ResolvedChunkSize())
+	adapter := newEventAdapter(h)
 	upgrader := gws.NewUpgrader(adapter, cfg.toGWSOption())
 	return &Server{
 		name:      cfg.Name,
 		addr:      cfg.Addr,
-		chunkSize: cfg.ResolvedChunkSize(),
 		upgrader:  upgrader,
 		tlsConfig: cfg.TLSConfig,
 	}, nil
@@ -161,7 +159,7 @@ func (s *Server) handleConn(netConn net.Conn) {
 		return
 	}
 	// 服务端在本 goroutine 跑读循环；Conn.Serve 因 sync.Once 可再调但不会重复
-	conn := connFromGWS(socket, s.chunkSize)
+	conn := connFromGWS(socket)
 	conn.Serve()
 }
 

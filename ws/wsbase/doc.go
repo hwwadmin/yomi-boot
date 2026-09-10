@@ -1,5 +1,5 @@
 // Package wsbase 提供基于 gws 的 WebSocket 传输原语：独立端口 Server、可 Dial 的 Client、
-// 共用 Conn/Handler，以及可配置分片大小的大负载流式写入。
+// 共用 Conn/Handler；一条逻辑消息对应一次 OnMessage（gws 负责帧级合帧）。
 //
 // # 定位
 //
@@ -12,11 +12,11 @@
 //   - Client：Dial 出站连接；业务需 go Conn.Serve() 启动读循环
 //   - 连接读写统一走 Conn；缺口能力经 Native() 取 *gws.Conn
 //
-// # 大文件
+// # 载荷大小
 //
-// WriteReader 按可配置 chunkSize 循环读取 io.Reader，默认「一片一完整 binary/text 消息」
-// （非单消息底层续帧），以便收发两端峰值内存均可控。分片大小优先级：
-// WriteOption > 实例 Config.ChunkSize > 库默认（256KiB）。
+// WriteText / WriteBinary 写入一条逻辑消息。WriteMaxPayloadSize 限制单条可写上限
+// （映射 gws，默认 256KiB）；超过则写入失败。ReadMaxPayloadSize 限制单条可读上限。
+// 本包不再提供应用层「一片一消息」的分片发送。
 //
 // # 高级门面
 //

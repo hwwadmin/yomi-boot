@@ -5,7 +5,6 @@ package ws
 
 import (
 	"context"
-	"io"
 	"net"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -25,8 +24,6 @@ type Server interface {
 	SendText(connID string, data []byte) error
 	// SendBinary 向指定 ConnID 发送二进制
 	SendBinary(connID string, data []byte) error
-	// SendReader 向指定 ConnID 分片发送
-	SendReader(connID string, opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error
 	// BroadcastText 广播文本
 	BroadcastText(data []byte) error
 	// BroadcastBinary 广播二进制
@@ -108,15 +105,6 @@ func (s *server) SendBinary(connID string, data []byte) error {
 		return err
 	}
 	return conn.WriteBinary(context.Background(), data)
-}
-
-// SendReader 向指定 ConnID 分片发送
-func (s *server) SendReader(connID string, opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error {
-	conn, err := s.mustConn(connID)
-	if err != nil {
-		return err
-	}
-	return conn.WriteReader(context.Background(), opcode, r, opts...)
 }
 
 // BroadcastText 广播文本

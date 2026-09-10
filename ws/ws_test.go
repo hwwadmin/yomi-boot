@@ -21,7 +21,7 @@ func TestProcessorConnectAndText(t *testing.T) {
 
 	srvProc := newChatServerProcessor()
 	cliProc := newChatClientProcessor()
-	pair := startPairAsync(t, srvProc, cliProc, 0)
+	pair := startPairAsync(t, srvProc, cliProc)
 
 	t.Log("[发送] Connect 成功后 Client.SendText hello")
 	if err := pair.cli.SendText(pair.cliCtx, []byte("hello")); err != nil {
@@ -39,40 +39,38 @@ func TestProcessorConnectAndText(t *testing.T) {
 	t.Log("[断言] 服务端 OnPayload 消费 hello 并回 world；客户端 OnPayload 消费 world")
 }
 
-// TestProcessorSendFileChunks 连通后客户端分片上传；服务端 OnPayload 拼齐回执
-func TestProcessorSendFileChunks(t *testing.T) {
-	const chunk = 4
+// TestProcessorBinaryUpload 连通后客户端整包上传二进制；服务端 OnPayload 一次收齐并回执
+func TestProcessorBinaryUpload(t *testing.T) {
 	file := []byte("abcdefghijkl")
-	t.Logf("[用例] 分片上传 chunk=%d 总长=%d", chunk, len(file))
+	t.Logf("[用例] 二进制整包上传 总长=%d", len(file))
 
 	srvProc := newUploadServerProcessor(file)
 	cliProc := newUploadClientProcessor()
-	pair := startPairAsync(t, srvProc, cliProc, chunk)
+	pair := startPairAsync(t, srvProc, cliProc)
 
-	t.Log("[发送] Connect 成功后 Client.SendReader")
-	if err := pair.cli.SendReader(pair.cliCtx, OpcodeBinary, bytes.NewReader(file), WithChunkSize(chunk)); err != nil {
+	t.Log("[发送] Connect 成功后 Client.SendBinary")
+	if err := pair.cli.SendBinary(pair.cliCtx, file); err != nil {
 		t.Fatal(err)
 	}
 
 	cliProc.waitDone(t)
-	if !bytes.Equal(srvProc.joined(), file) {
-		t.Fatalf("服务端拼接=%q want %q", srvProc.joined(), file)
+	if !bytes.Equal(srvProc.received(), file) {
+		t.Fatalf("服务端收到=%q want %q", srvProc.received(), file)
 	}
 	if !bytes.Equal(cliProc.ack(), []byte("upload-ok")) {
 		t.Fatalf("客户端回执=%q want upload-ok", cliProc.ack())
 	}
-	t.Logf("[断言] 服务端 OnPayload 拼回 %d 片并回执", srvProc.partCount())
+	t.Log("[断言] 服务端一次 OnPayload 收齐并回执")
 }
 
-// TestProcessorServerPushFile 连通后客户端发 GET_FILE；服务端 OnPayload 内下发文件
-func TestProcessorServerPushFile(t *testing.T) {
-	const chunk = 5
+// TestProcessorBinaryDownload 连通后客户端请求；服务端 OnPayload 内整包下发
+func TestProcessorBinaryDownload(t *testing.T) {
 	file := []byte("hello-file!!")
-	t.Logf("[用例] 请求下发 chunk=%d 总长=%d", chunk, len(file))
+	t.Logf("[用例] 请求下发二进制 总长=%d", len(file))
 
-	srvProc := newDownloadServerProcessor(file, chunk)
+	srvProc := newDownloadServerProcessor(file)
 	cliProc := newDownloadClientProcessor(file)
-	pair := startPairAsync(t, srvProc, cliProc, chunk)
+	pair := startPairAsync(t, srvProc, cliProc)
 
 	t.Log("[发送] Connect 成功后 Client.SendText GET_FILE")
 	if err := pair.cli.SendText(pair.cliCtx, []byte("GET_FILE")); err != nil {
@@ -83,10 +81,10 @@ func TestProcessorServerPushFile(t *testing.T) {
 	if !bytes.Equal(srvProc.request(), []byte("GET_FILE")) {
 		t.Fatalf("服务端请求=%q want GET_FILE", srvProc.request())
 	}
-	if !bytes.Equal(cliProc.joined(), file) {
-		t.Fatalf("客户端拼接=%q want %q", cliProc.joined(), file)
+	if !bytes.Equal(cliProc.received(), file) {
+		t.Fatalf("客户端收到=%q want %q", cliProc.received(), file)
 	}
-	t.Logf("[断言] 服务端 OnPayload 下发；客户端拼回 %d 片", cliProc.partCount())
+	t.Log("[断言] 服务端 OnPayload 下发；客户端一次收到完整载荷")
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +102,7 @@ type testPair struct {
 }
 
 // startPairAsync 分别在两个协程中启动 Server 与 Client，上下文隔离
-func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc ClientMessageProcessor, chunkSize int) *testPair {
+func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc ClientMessageProcessor) *testPair {
 	t.Helper()
 
 	srvCtx, srvCancel := context.WithCancel(context.Background())
@@ -119,9 +117,8 @@ func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc Client
 	go func() {
 		srv, err := NewServer(ServerConfig{
 			ServerConfig: wsbase.ServerConfig{
-				Addr:      "127.0.0.1:0",
-				Name:      "demo-srv",
-				ChunkSize: chunkSize,
+				Addr: "127.0.0.1:0",
+				Name: "demo-srv",
 			},
 			Processor: srvProc,
 		})
@@ -161,8 +158,7 @@ func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc Client
 		}
 		cli, err := NewClient(ClientConfig{
 			ClientConfig: wsbase.ClientConfig{
-				Name:      "demo-cli",
-				ChunkSize: chunkSize,
+				Name: "demo-cli",
 			},
 			Processor: cliProc,
 		})
@@ -276,11 +272,11 @@ func (p *chatClientProcessor) waitDone(t *testing.T) {
 	waitDone(t, p.done, "等待文本往返业务完成超时")
 }
 
-// uploadServerProcessor 拼齐期望文件后回执 upload-ok
+// uploadServerProcessor 收到完整载荷后回执 upload-ok
 type uploadServerProcessor struct {
 	mu     sync.Mutex
 	expect []byte
-	parts  [][]byte
+	recv   []byte
 }
 
 func newUploadServerProcessor(expect []byte) *uploadServerProcessor {
@@ -289,26 +285,19 @@ func newUploadServerProcessor(expect []byte) *uploadServerProcessor {
 
 func (p *uploadServerProcessor) OnPayload(ctx SessionContext, payload Payload) error {
 	p.mu.Lock()
-	p.parts = append(p.parts, append([]byte(nil), payload.Data...))
-	joined := bytes.Join(p.parts, nil)
-	done := bytes.Equal(joined, p.expect)
+	p.recv = append([]byte(nil), payload.Data...)
+	ok := bytes.Equal(p.recv, p.expect)
 	p.mu.Unlock()
-	if done {
+	if ok {
 		return ctx.SendText([]byte("upload-ok"))
 	}
 	return nil
 }
 
-func (p *uploadServerProcessor) joined() []byte {
+func (p *uploadServerProcessor) received() []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return bytes.Join(p.parts, nil)
-}
-
-func (p *uploadServerProcessor) partCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.parts)
+	return append([]byte(nil), p.recv...)
 }
 
 // uploadClientProcessor 消费 upload-ok 后完成
@@ -344,16 +333,15 @@ func (p *uploadClientProcessor) waitDone(t *testing.T) {
 	waitDone(t, p.done, "等待上传业务完成超时")
 }
 
-// downloadServerProcessor 消费 GET_FILE 后分片下发
+// downloadServerProcessor 消费 GET_FILE 后整包下发
 type downloadServerProcessor struct {
-	mu    sync.Mutex
-	file  []byte
-	chunk int
-	req   []byte
+	mu   sync.Mutex
+	file []byte
+	req  []byte
 }
 
-func newDownloadServerProcessor(file []byte, chunk int) *downloadServerProcessor {
-	return &downloadServerProcessor{file: file, chunk: chunk}
+func newDownloadServerProcessor(file []byte) *downloadServerProcessor {
+	return &downloadServerProcessor{file: file}
 }
 
 func (p *downloadServerProcessor) OnPayload(ctx SessionContext, payload Payload) error {
@@ -361,7 +349,7 @@ func (p *downloadServerProcessor) OnPayload(ctx SessionContext, payload Payload)
 	p.req = append([]byte(nil), payload.Data...)
 	p.mu.Unlock()
 	if bytes.Equal(payload.Data, []byte("GET_FILE")) {
-		return ctx.SendReader(OpcodeBinary, bytes.NewReader(p.file), WithChunkSize(p.chunk))
+		return ctx.SendBinary(p.file)
 	}
 	return nil
 }
@@ -372,11 +360,11 @@ func (p *downloadServerProcessor) request() []byte {
 	return append([]byte(nil), p.req...)
 }
 
-// downloadClientProcessor 拼齐下发文件后完成
+// downloadClientProcessor 收到完整下发后完成
 type downloadClientProcessor struct {
 	mu     sync.Mutex
 	expect []byte
-	parts  [][]byte
+	recv   []byte
 	done   chan struct{}
 	finish sync.Once
 }
@@ -387,26 +375,19 @@ func newDownloadClientProcessor(expect []byte) *downloadClientProcessor {
 
 func (p *downloadClientProcessor) OnPayload(_ PeerContext, payload Payload) error {
 	p.mu.Lock()
-	p.parts = append(p.parts, append([]byte(nil), payload.Data...))
-	joined := bytes.Join(p.parts, nil)
-	done := bytes.Equal(joined, p.expect)
+	p.recv = append([]byte(nil), payload.Data...)
+	ok := bytes.Equal(p.recv, p.expect)
 	p.mu.Unlock()
-	if done {
+	if ok {
 		p.finish.Do(func() { close(p.done) })
 	}
 	return nil
 }
 
-func (p *downloadClientProcessor) joined() []byte {
+func (p *downloadClientProcessor) received() []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return bytes.Join(p.parts, nil)
-}
-
-func (p *downloadClientProcessor) partCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.parts)
+	return append([]byte(nil), p.recv...)
 }
 
 func (p *downloadClientProcessor) waitDone(t *testing.T) {

@@ -5,7 +5,6 @@ package wsbase
 
 import (
 	"context"
-	"io"
 	"net"
 	"sync"
 	"time"
@@ -17,12 +16,10 @@ import (
 
 // Conn 是 Server 与 Client 共用的连接门面
 type Conn interface {
-	// WriteText 发送文本消息
+	// WriteText 发送文本消息（单条逻辑消息；受 WriteMaxPayloadSize 限制）
 	WriteText(ctx context.Context, data []byte) error
-	// WriteBinary 发送二进制消息
+	// WriteBinary 发送二进制消息（单条逻辑消息；受 WriteMaxPayloadSize 限制）
 	WriteBinary(ctx context.Context, data []byte) error
-	// WriteReader 从 r 按分片读取并发送；默认一片一完整消息，峰值内存约等于 chunkSize
-	WriteReader(ctx context.Context, opcode Opcode, r io.Reader, opts ...WriteOption) error
 	// WritePing 发送 Ping
 	WritePing(payload []byte) error
 	// WritePong 发送 Pong
@@ -54,7 +51,6 @@ type NativeConn interface {
 // connImpl 是 Conn 的 gws 适配实现
 type connImpl struct {
 	raw       *gws.Conn // raw 是底层连接
-	chunkSize int       // chunkSize 是默认分片大小
 	serveOnce sync.Once // serveOnce 保证 ReadLoop 只跑一次
 }
 
@@ -64,8 +60,8 @@ var (
 )
 
 // newConn 包装底层连接并写入 Session
-func newConn(raw *gws.Conn, chunkSize int) *connImpl {
-	c := &connImpl{raw: raw, chunkSize: resolveChunkSize(chunkSize)}
+func newConn(raw *gws.Conn) *connImpl {
+	c := &connImpl{raw: raw}
 	if raw != nil && raw.Session() != nil {
 		raw.Session().Store(connSessionKey, c)
 	}
@@ -73,7 +69,7 @@ func newConn(raw *gws.Conn, chunkSize int) *connImpl {
 }
 
 // connFromGWS 从 gws 连接取回门面；若不存在则新建包装
-func connFromGWS(raw *gws.Conn, chunkSize int) *connImpl {
+func connFromGWS(raw *gws.Conn) *connImpl {
 	if raw == nil {
 		return nil
 	}
@@ -82,7 +78,7 @@ func connFromGWS(raw *gws.Conn, chunkSize int) *connImpl {
 			return c
 		}
 	}
-	return newConn(raw, chunkSize)
+	return newConn(raw)
 }
 
 // Native 返回底层 *gws.Conn
