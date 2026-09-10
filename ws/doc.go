@@ -18,9 +18,11 @@
 //
 // # Handler / Processor
 //
-//   - Processor：业务消息面（Payload），主扩展点
+//   - Processor：只负责 OnPayload 消费业务消息（主扩展点）
 //   - Handler：会话面（启停 + 原始 Message）；Config.Handler 为 nil 时用
-//     Default*Handler，其 OnMessage 消费 Processor
+//     Default*Handler（启停默认打日志，OnMessage 调用 Processor）
+//   - 连通后主动发信由业务在 Connect 成功后自行调用 Client/Server API，
+//     不属于 Processor
 //   - 自定义 Handler 时 Config.Processor 不自动接入；若仍需 Processor，
 //     可嵌入 Default*Handler 并自行赋值 Processor
 //

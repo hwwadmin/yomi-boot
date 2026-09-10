@@ -9,32 +9,16 @@ type Payload struct {
 	Data   []byte // Data 是载荷副本，业务可安全持有
 }
 
-// ServerMessageProcessor 服务端业务消息处理器；不接触 Message
+// ServerMessageProcessor 服务端业务消息处理器；只负责消费 Payload，不接触 Message
 type ServerMessageProcessor interface {
 	// OnPayload 处理一条业务载荷
 	OnPayload(ctx SessionContext, p Payload) error
 }
 
-// ClientMessageProcessor 客户端业务消息处理器；不接触 Message
+// ClientMessageProcessor 客户端业务消息处理器；只负责消费 Payload，不接触 Message
 type ClientMessageProcessor interface {
 	// OnPayload 处理一条业务载荷
 	OnPayload(ctx PeerContext, p Payload) error
-}
-
-// ServerLifecycle 可选：需要感知连接启停时由 Processor 实现
-type ServerLifecycle interface {
-	// OnConnect 连接已建立
-	OnConnect(ctx SessionContext)
-	// OnDisconnect 连接已结束
-	OnDisconnect(connID string, err error)
-}
-
-// ClientLifecycle 可选：需要感知连接启停时由 Processor 实现
-type ClientLifecycle interface {
-	// OnConnect 出站已连通
-	OnConnect(ctx PeerContext)
-	// OnDisconnect 连接已结束
-	OnDisconnect(err error)
 }
 
 // takePayload 拷贝载荷并关闭底层消息

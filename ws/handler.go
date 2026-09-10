@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 	"gitee.com/hq_project/yomi-boot/ws/wsbase"
 )
 
@@ -31,24 +32,20 @@ type ClientHandler interface {
 	OnMessage(ctx PeerContext, msg wsbase.Message)
 }
 
-// DefaultServerHandler 是默认服务端 Handler：启停转 Lifecycle，消息交 Processor。
+// DefaultServerHandler 是默认服务端 Handler：启停打日志，OnMessage 将消息交 Processor 消费。
 // 自定义 Handler 可嵌入本类型以复用 Processor 消费逻辑。
 type DefaultServerHandler struct {
 	Processor ServerMessageProcessor // Processor 是业务消息处理器；nil 时丢弃消息
 }
 
-// OnConnect 转发可选 Lifecycle
+// OnConnect 默认打印连接建立日志
 func (h DefaultServerHandler) OnConnect(ctx SessionContext) {
-	if life, ok := h.Processor.(ServerLifecycle); ok {
-		life.OnConnect(ctx)
-	}
+	logger.Info(ctx.Context(), "ws: 服务端连接已建立", "conn_id", ctx.ConnID())
 }
 
-// OnDisconnect 转发可选 Lifecycle
+// OnDisconnect 默认打印连接结束日志
 func (h DefaultServerHandler) OnDisconnect(connID string, err error) {
-	if life, ok := h.Processor.(ServerLifecycle); ok {
-		life.OnDisconnect(connID, err)
-	}
+	logger.InfoWithoutCtx("ws: 服务端连接已结束", "conn_id", connID, "error", err)
 }
 
 // OnMessage 关闭原始消息后交 Processor；Processor 为 nil 则丢弃
@@ -65,18 +62,14 @@ type DefaultClientHandler struct {
 	Processor ClientMessageProcessor // Processor 是业务消息处理器；nil 时丢弃消息
 }
 
-// OnConnect 转发可选 Lifecycle
+// OnConnect 默认打印出站连通日志
 func (h DefaultClientHandler) OnConnect(ctx PeerContext) {
-	if life, ok := h.Processor.(ClientLifecycle); ok {
-		life.OnConnect(ctx)
-	}
+	logger.Info(ctx.Context(), "ws: 客户端已连通")
 }
 
-// OnDisconnect 转发可选 Lifecycle
+// OnDisconnect 默认打印连接结束日志
 func (h DefaultClientHandler) OnDisconnect(err error) {
-	if life, ok := h.Processor.(ClientLifecycle); ok {
-		life.OnDisconnect(err)
-	}
+	logger.InfoWithoutCtx("ws: 客户端连接已结束", "error", err)
 }
 
 // OnMessage 关闭原始消息后交 Processor；Processor 为 nil 则丢弃
