@@ -17,6 +17,8 @@
 // WriteText / WriteBinary 写入一条逻辑消息。WriteMaxPayloadSize 限制单条可写上限
 // （映射 gws，默认 256KiB）；超过则写入失败。ReadMaxPayloadSize 限制单条可读上限。
 // 本包不再提供应用层「一片一消息」的分片发送。
+// 小文件可走本通道；大文件应经 filestorage（MinIO / S3 / OSS）间接传输，
+// WS 只传控制报文。勿靠调高读写上限把对象整包塞进一条消息。
 //
 // # 心跳
 //

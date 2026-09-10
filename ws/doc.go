@@ -26,6 +26,14 @@
 //   - 自定义 Handler 时 Config.Processor 不自动接入；若仍需 Processor，
 //     可嵌入 Default*Handler 并自行赋值 Processor
 //
+// # 载荷与文件
+//
+// OnPayload 在一条逻辑消息收齐后触发，整包进内存（合帧见 wsbase）。
+// 小文件可直接 Send(MsgBinary, data)，体量对齐 WriteMaxPayloadSize
+// （默认 256KiB，配置上限 8MiB）。大文件不要走 WebSocket 整包，应经
+// filestorage（MinIO / S3 / OSS）上传或预签名直传；WS 只推 uri、进度、
+// 完成/失败等控制报文。勿靠调高读写上限把对象塞进一条消息。
+//
 // # ConnID（仅服务端）
 //
 // 由服务端在连接建立时自动生成并登记 Hub；客户端不感知。
