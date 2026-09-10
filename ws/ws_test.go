@@ -23,8 +23,8 @@ func TestProcessorConnectAndText(t *testing.T) {
 	cliProc := newChatClientProcessor()
 	pair := startPairAsync(t, srvProc, cliProc)
 
-	t.Log("[发送] Connect 成功后 Client.SendText hello")
-	if err := pair.cli.SendText(pair.cliCtx, []byte("hello")); err != nil {
+	t.Log("[发送] Connect 成功后 Client.Send MsgText hello")
+	if err := pair.cli.Send(pair.cliCtx, MsgText, []byte("hello")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,8 +48,8 @@ func TestProcessorBinaryUpload(t *testing.T) {
 	cliProc := newUploadClientProcessor()
 	pair := startPairAsync(t, srvProc, cliProc)
 
-	t.Log("[发送] Connect 成功后 Client.SendBinary")
-	if err := pair.cli.SendBinary(pair.cliCtx, file); err != nil {
+	t.Log("[发送] Connect 成功后 Client.Send MsgBinary")
+	if err := pair.cli.Send(pair.cliCtx, MsgBinary, file); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,8 +72,8 @@ func TestProcessorBinaryDownload(t *testing.T) {
 	cliProc := newDownloadClientProcessor(file)
 	pair := startPairAsync(t, srvProc, cliProc)
 
-	t.Log("[发送] Connect 成功后 Client.SendText GET_FILE")
-	if err := pair.cli.SendText(pair.cliCtx, []byte("GET_FILE")); err != nil {
+	t.Log("[发送] Connect 成功后 Client.Send MsgText GET_FILE")
+	if err := pair.cli.Send(pair.cliCtx, MsgText, []byte("GET_FILE")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -222,7 +222,7 @@ func (p *chatServerProcessor) OnPayload(ctx SessionContext, payload Payload) err
 	p.recv = append([]byte(nil), payload.Data...)
 	p.mu.Unlock()
 	if bytes.Equal(payload.Data, []byte("hello")) {
-		return ctx.SendText([]byte("world"))
+		return ctx.Send(MsgText, []byte("world"))
 	}
 	return nil
 }
@@ -289,7 +289,7 @@ func (p *uploadServerProcessor) OnPayload(ctx SessionContext, payload Payload) e
 	ok := bytes.Equal(p.recv, p.expect)
 	p.mu.Unlock()
 	if ok {
-		return ctx.SendText([]byte("upload-ok"))
+		return ctx.Send(MsgText, []byte("upload-ok"))
 	}
 	return nil
 }
@@ -349,7 +349,7 @@ func (p *downloadServerProcessor) OnPayload(ctx SessionContext, payload Payload)
 	p.req = append([]byte(nil), payload.Data...)
 	p.mu.Unlock()
 	if bytes.Equal(payload.Data, []byte("GET_FILE")) {
-		return ctx.SendBinary(p.file)
+		return ctx.Send(MsgBinary, p.file)
 	}
 	return nil
 }

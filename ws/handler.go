@@ -47,10 +47,10 @@ func (h DefaultServerHandler) OnDisconnect(connID string, err error) {
 	logger.InfoWithoutCtx("ws: 服务端连接已结束", "conn_id", connID, "error", err)
 }
 
-// OnMessage 关闭原始消息后交 Processor；Processor 为 nil 则丢弃
+// OnMessage 关闭原始消息后交 Processor；无法识别的类型直接丢弃
 func (h DefaultServerHandler) OnMessage(ctx SessionContext, msg wsbase.Message) {
-	p := takePayload(msg)
-	if h.Processor == nil {
+	p, ok := takePayload(msg)
+	if !ok || h.Processor == nil {
 		return
 	}
 	_ = h.Processor.OnPayload(ctx, p)
@@ -71,10 +71,10 @@ func (h DefaultClientHandler) OnDisconnect(err error) {
 	logger.InfoWithoutCtx("ws: 客户端连接已结束", "error", err)
 }
 
-// OnMessage 关闭原始消息后交 Processor；Processor 为 nil 则丢弃
+// OnMessage 关闭原始消息后交 Processor；无法识别的类型直接丢弃
 func (h DefaultClientHandler) OnMessage(ctx PeerContext, msg wsbase.Message) {
-	p := takePayload(msg)
-	if h.Processor == nil {
+	p, ok := takePayload(msg)
+	if !ok || h.Processor == nil {
 		return
 	}
 	_ = h.Processor.OnPayload(ctx, p)
@@ -114,10 +114,8 @@ func (NopClientHandler) OnMessage(_ PeerContext, msg wsbase.Message) {
 
 // Sender 是面向当前连接的发送能力
 type Sender interface {
-	// SendText 发送文本
-	SendText(data []byte) error
-	// SendBinary 发送二进制
-	SendBinary(data []byte) error
+	// Send 按类型发送一条消息
+	Send(typ MsgType, data []byte) error
 }
 
 // PeerContext 是客户端侧当前连接视图（无 ConnID）
@@ -160,20 +158,12 @@ func (c *peerContext) Session() wsbase.Session {
 	return c.conn.Session()
 }
 
-// SendText 发送文本
-func (c *peerContext) SendText(data []byte) error {
+// Send 按类型发送
+func (c *peerContext) Send(typ MsgType, data []byte) error {
 	if c == nil || c.conn == nil {
 		return errors.Sentinel(ErrNotConnected)
 	}
-	return c.conn.WriteText(c.Context(), data)
-}
-
-// SendBinary 发送二进制
-func (c *peerContext) SendBinary(data []byte) error {
-	if c == nil || c.conn == nil {
-		return errors.Sentinel(ErrNotConnected)
-	}
-	return c.conn.WriteBinary(c.Context(), data)
+	return writeByType(c.Context(), c.conn, typ, data)
 }
 
 // Conn 返回底层连接

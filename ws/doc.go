@@ -18,11 +18,11 @@
 //
 // # Handler / Processor
 //
-//   - Processor：只负责 OnPayload 消费业务消息（主扩展点）
+//   - Processor：只负责 OnPayload 消费业务消息（Payload.Type + Data）
 //   - Handler：会话面（启停 + 原始 Message）；Config.Handler 为 nil 时用
-//     Default*Handler（启停默认打日志，OnMessage 调用 Processor）
-//   - 连通后主动发信由业务在 Connect 成功后自行调用 Client/Server API，
-//     不属于 Processor
+//     Default*Handler（启停默认打日志，OnMessage 映射 MsgType 后调用 Processor）
+//   - 发送统一为 Send/Broadcast(typ, data)，类型用 MsgText / MsgBinary
+//   - 连通后主动发信由业务在 Connect 成功后自行调用 Client/Server API
 //   - 自定义 Handler 时 Config.Processor 不自动接入；若仍需 Processor，
 //     可嵌入 Default*Handler 并自行赋值 Processor
 //

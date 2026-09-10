@@ -20,14 +20,10 @@ type Server interface {
 	// Close 关闭所有会话并停止监听
 	Close(ctx context.Context) error
 
-	// SendText 向指定 ConnID 发送文本
-	SendText(connID string, data []byte) error
-	// SendBinary 向指定 ConnID 发送二进制
-	SendBinary(connID string, data []byte) error
-	// BroadcastText 广播文本
-	BroadcastText(data []byte) error
-	// BroadcastBinary 广播二进制
-	BroadcastBinary(data []byte) error
+	// Send 向指定 ConnID 按类型发送
+	Send(connID string, typ MsgType, data []byte) error
+	// Broadcast 按类型广播
+	Broadcast(typ MsgType, data []byte) error
 
 	// Len 返回在线会话数
 	Len() int
@@ -89,38 +85,28 @@ func (s *server) Close(ctx context.Context) error {
 	return nil
 }
 
-// SendText 向指定 ConnID 发送文本
-func (s *server) SendText(connID string, data []byte) error {
+// Send 向指定 ConnID 按类型发送
+func (s *server) Send(connID string, typ MsgType, data []byte) error {
 	conn, err := s.mustConn(connID)
 	if err != nil {
 		return err
 	}
-	return conn.WriteText(context.Background(), data)
+	return writeByType(context.Background(), conn, typ, data)
 }
 
-// SendBinary 向指定 ConnID 发送二进制
-func (s *server) SendBinary(connID string, data []byte) error {
-	conn, err := s.mustConn(connID)
-	if err != nil {
-		return err
-	}
-	return conn.WriteBinary(context.Background(), data)
-}
-
-// BroadcastText 广播文本
-func (s *server) BroadcastText(data []byte) error {
+// Broadcast 按类型广播
+func (s *server) Broadcast(typ MsgType, data []byte) error {
 	if s == nil || s.hub == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	return s.hub.BroadcastText(data)
-}
-
-// BroadcastBinary 广播二进制
-func (s *server) BroadcastBinary(data []byte) error {
-	if s == nil || s.hub == nil {
-		return errors.Sentinel(ErrInvalidArgument)
+	switch typ {
+	case MsgText:
+		return s.hub.BroadcastText(data)
+	case MsgBinary:
+		return s.hub.BroadcastBinary(data)
+	default:
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "不支持的 MsgType")
 	}
-	return s.hub.BroadcastBinary(data)
 }
 
 // Len 返回在线数

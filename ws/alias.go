@@ -6,13 +6,11 @@ package ws
 import "gitee.com/hq_project/yomi-boot/ws/wsbase"
 
 type (
-	// Opcode 表示 WebSocket 数据帧操作码
-	Opcode = wsbase.Opcode
 	// CloseCode 表示关闭帧状态码
 	CloseCode = wsbase.CloseCode
 	// Conn 是底层连接门面
 	Conn = wsbase.Conn
-	// Message 是已接收的完整消息视图；用毕须 Close
+	// Message 是已接收的完整消息视图；用毕须 Close（逃生/自定义 Handler 使用）
 	Message = wsbase.Message
 	// Hub 是连接表
 	Hub = wsbase.Hub
@@ -21,9 +19,6 @@ type (
 )
 
 const (
-	OpcodeText   = wsbase.OpcodeText
-	OpcodeBinary = wsbase.OpcodeBinary
-
 	CloseNormalClosure           = wsbase.CloseNormalClosure
 	CloseGoingAway               = wsbase.CloseGoingAway
 	CloseProtocolError           = wsbase.CloseProtocolError

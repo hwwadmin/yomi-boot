@@ -20,10 +20,8 @@ type Client interface {
 	// Connected 是否持有连接
 	Connected() bool
 
-	// SendText 发送文本
-	SendText(ctx context.Context, data []byte) error
-	// SendBinary 发送二进制
-	SendBinary(ctx context.Context, data []byte) error
+	// Send 按类型发送
+	Send(ctx context.Context, typ MsgType, data []byte) error
 
 	// Conn 返回当前底层连接（逃生）；未连接时 ok=false
 	Conn() (wsbase.Conn, bool)
@@ -107,22 +105,13 @@ func (c *client) Connected() bool {
 	return c.conn != nil
 }
 
-// SendText 发送文本
-func (c *client) SendText(ctx context.Context, data []byte) error {
+// Send 按类型发送
+func (c *client) Send(ctx context.Context, typ MsgType, data []byte) error {
 	conn, err := c.mustConn()
 	if err != nil {
 		return err
 	}
-	return conn.WriteText(ctx, data)
-}
-
-// SendBinary 发送二进制
-func (c *client) SendBinary(ctx context.Context, data []byte) error {
-	conn, err := c.mustConn()
-	if err != nil {
-		return err
-	}
-	return conn.WriteBinary(ctx, data)
+	return writeByType(ctx, conn, typ, data)
 }
 
 // Conn 返回当前连接
