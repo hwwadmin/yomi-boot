@@ -1,4 +1,4 @@
-// Package ws 定义 WebSocket 相关哨兵错误
+// Package ws 定义门面层哨兵错误
 //
 // @author zwei
 package ws
@@ -6,12 +6,12 @@ package ws
 import "gitee.com/hq_project/yomi-boot/errors"
 
 var (
-	// ErrInvalidArgument 构造参数或选项无效
+	// ErrInvalidArgument 参数无效
 	ErrInvalidArgument = errors.NewNoStack("ws: 参数无效")
 
-	// ErrClosed 服务或连接已关闭
-	ErrClosed = errors.NewNoStack("ws: 已关闭")
+	// ErrNotConnected 客户端尚未连接或连接已关闭
+	ErrNotConnected = errors.NewNoStack("ws: 未连接")
 
-	// ErrNotStarted 服务尚未 Start
-	ErrNotStarted = errors.NewNoStack("ws: 未启动")
+	// ErrUnknownPeer 服务端找不到指定 ConnID
+	ErrUnknownPeer = errors.NewNoStack("ws: 未知会话")
 )

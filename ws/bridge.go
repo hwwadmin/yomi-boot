@@ -1,13 +1,13 @@
-// Package wsapp 将 Config 解析出的 Handler 桥接为 ws.Handler
+// Package ws 将 Config 解析出的 Handler 桥接为 wsbase.Handler
 //
 // @author zwei
-package wsapp
+package ws
 
 import (
 	"context"
 	"sync"
 
-	"gitee.com/hq_project/yomi-boot/ws"
+	"gitee.com/hq_project/yomi-boot/ws/wsbase"
 
 	"github.com/google/uuid"
 )
@@ -15,26 +15,26 @@ import (
 // serverBridge 服务端桥接：自动生成 ConnID、维护 Hub、转发业务事件
 type serverBridge struct {
 	handler ServerHandler
-	hub     *ws.Hub
+	hub     *wsbase.Hub
 
 	mu  sync.Mutex
-	ids map[ws.Conn]string // conn → connID，供 OnClose 使用
+	ids map[wsbase.Conn]string // conn → connID，供 OnClose 使用
 }
 
 // newServerBridge 创建服务端桥接
-func newServerBridge(h ServerHandler, hub *ws.Hub) *serverBridge {
+func newServerBridge(h ServerHandler, hub *wsbase.Hub) *serverBridge {
 	if h == nil {
 		h = NopServerHandler{}
 	}
 	return &serverBridge{
 		handler: h,
 		hub:     hub,
-		ids:     make(map[ws.Conn]string),
+		ids:     make(map[wsbase.Conn]string),
 	}
 }
 
 // OnOpen 生成 ConnID、登记 Hub 并回调业务
-func (b *serverBridge) OnOpen(conn ws.Conn) {
+func (b *serverBridge) OnOpen(conn wsbase.Conn) {
 	connID := uuid.NewString()
 	if conn.Session() != nil {
 		conn.Session().Store(sessionConnIDKey, connID)
@@ -50,7 +50,7 @@ func (b *serverBridge) OnOpen(conn ws.Conn) {
 }
 
 // OnClose 注销 Hub 并回调业务
-func (b *serverBridge) OnClose(conn ws.Conn, err error) {
+func (b *serverBridge) OnClose(conn wsbase.Conn, err error) {
 	b.mu.Lock()
 	connID := b.ids[conn]
 	delete(b.ids, conn)
@@ -65,13 +65,13 @@ func (b *serverBridge) OnClose(conn ws.Conn, err error) {
 }
 
 // OnPing 传输层已自动 Pong，业务不感知
-func (b *serverBridge) OnPing(ws.Conn, []byte) {}
+func (b *serverBridge) OnPing(wsbase.Conn, []byte) {}
 
 // OnPong 忽略
-func (b *serverBridge) OnPong(ws.Conn, []byte) {}
+func (b *serverBridge) OnPong(wsbase.Conn, []byte) {}
 
 // OnMessage 转发业务
-func (b *serverBridge) OnMessage(conn ws.Conn, msg ws.Message) {
+func (b *serverBridge) OnMessage(conn wsbase.Conn, msg wsbase.Message) {
 	b.mu.Lock()
 	connID := b.ids[conn]
 	b.mu.Unlock()
@@ -84,14 +84,14 @@ func (b *serverBridge) OnMessage(conn ws.Conn, msg ws.Message) {
 	}, msg)
 }
 
-var _ ws.Handler = (*serverBridge)(nil)
+var _ wsbase.Handler = (*serverBridge)(nil)
 
 // clientBridge 客户端桥接：单连接事件转发，无 ConnID
 type clientBridge struct {
 	handler ClientHandler
 
 	mu   sync.Mutex
-	conn ws.Conn
+	conn wsbase.Conn
 }
 
 // newClientBridge 创建客户端桥接
@@ -103,14 +103,14 @@ func newClientBridge(h ClientHandler) *clientBridge {
 }
 
 // setConn 更新当前连接引用
-func (b *clientBridge) setConn(conn ws.Conn) {
+func (b *clientBridge) setConn(conn wsbase.Conn) {
 	b.mu.Lock()
 	b.conn = conn
 	b.mu.Unlock()
 }
 
 // clearConn 清空当前连接引用
-func (b *clientBridge) clearConn(conn ws.Conn) {
+func (b *clientBridge) clearConn(conn wsbase.Conn) {
 	b.mu.Lock()
 	if b.conn == conn {
 		b.conn = nil
@@ -119,32 +119,32 @@ func (b *clientBridge) clearConn(conn ws.Conn) {
 }
 
 // OnOpen 回调业务 OnConnect
-func (b *clientBridge) OnOpen(conn ws.Conn) {
+func (b *clientBridge) OnOpen(conn wsbase.Conn) {
 	b.setConn(conn)
 	b.handler.OnConnect(&peerContext{ctx: context.Background(), conn: conn})
 }
 
 // OnClose 回调业务 OnDisconnect
-func (b *clientBridge) OnClose(conn ws.Conn, err error) {
+func (b *clientBridge) OnClose(conn wsbase.Conn, err error) {
 	b.clearConn(conn)
 	b.handler.OnDisconnect(err)
 }
 
 // OnPing 忽略
-func (b *clientBridge) OnPing(ws.Conn, []byte) {}
+func (b *clientBridge) OnPing(wsbase.Conn, []byte) {}
 
 // OnPong 忽略
-func (b *clientBridge) OnPong(ws.Conn, []byte) {}
+func (b *clientBridge) OnPong(wsbase.Conn, []byte) {}
 
 // OnMessage 转发业务
-func (b *clientBridge) OnMessage(conn ws.Conn, msg ws.Message) {
+func (b *clientBridge) OnMessage(conn wsbase.Conn, msg wsbase.Message) {
 	b.handler.OnMessage(&peerContext{ctx: context.Background(), conn: conn}, msg)
 }
 
-var _ ws.Handler = (*clientBridge)(nil)
+var _ wsbase.Handler = (*clientBridge)(nil)
 
 // loadConnID 从 Session 读取框架写入的 ConnID
-func loadConnID(conn ws.Conn) string {
+func loadConnID(conn wsbase.Conn) string {
 	if conn == nil || conn.Session() == nil {
 		return ""
 	}

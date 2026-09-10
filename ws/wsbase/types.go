@@ -1,7 +1,7 @@
-// Package ws 定义 Opcode、关闭码与消息视图
+// Package wsbase 定义 Opcode、关闭码与消息视图
 //
 // @author zwei
-package ws
+package wsbase
 
 import "github.com/lxzan/gws"
 

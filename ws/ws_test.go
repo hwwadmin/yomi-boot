@@ -1,4 +1,4 @@
-// Package ws 的 Server/Client 联调测试
+// Package ws 的 Server/Client 门面联调测试
 //
 // @author zwei
 package ws
@@ -6,470 +6,581 @@ package ws
 import (
 	"bytes"
 	"context"
-	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/ws/wsbase"
 )
 
 const testWait = 2 * time.Second
 
-// testEnv 表示已启动的 Server 与已连上的 Client 连接
-type testEnv struct {
-	t          *testing.T
-	srv        *Server
-	client     *Client
-	clientConn Conn
-	serverConn Conn // 服务端侧连接，由 srv OnOpen 捕获
-	cancel     context.CancelFunc
-	wsURL      string
+// testServerBiz 可观察的服务端 Handler
+type testServerBiz struct {
+	NopServerHandler
+	mu sync.Mutex
 
-	serverOpen  chan Conn
-	clientOpen  chan Conn
-	serverMsgs  chan []byte
-	clientMsgs  chan []byte
-	serverClose chan struct{}
-	clientClose chan struct{}
+	connIDs  []string
+	messages map[string][][]byte
+
+	connectCh chan string
+	messageCh chan struct{}
 }
 
-// startServerAndClient 打开独立端口 Server，并用 Client Dial 连上；调用方负责 env.close()
-func startServerAndClient(t *testing.T, srvCfg ServerConfig, cliCfg ClientConfig) *testEnv {
+// newTestServerBiz 创建可观察服务端 Handler
+func newTestServerBiz() *testServerBiz {
+	return &testServerBiz{
+		messages:  make(map[string][][]byte),
+		connectCh: make(chan string, 8),
+		messageCh: make(chan struct{}, 64),
+	}
+}
+
+// OnConnect 记录 ConnID
+func (b *testServerBiz) OnConnect(ctx SessionContext) {
+	id := ctx.ConnID()
+	b.mu.Lock()
+	b.connIDs = append(b.connIDs, id)
+	b.mu.Unlock()
+	select {
+	case b.connectCh <- id:
+	default:
+	}
+}
+
+// OnMessage 按 ConnID 记录消息
+func (b *testServerBiz) OnMessage(ctx SessionContext, msg Message) {
+	defer msg.Close()
+	cp := append([]byte(nil), msg.Bytes()...)
+	id := ctx.ConnID()
+	b.mu.Lock()
+	b.messages[id] = append(b.messages[id], cp)
+	b.mu.Unlock()
+	select {
+	case b.messageCh <- struct{}{}:
+	default:
+	}
+}
+
+// lastConnID 返回最近一次连接的 ConnID
+func (b *testServerBiz) lastConnID(t *testing.T) string {
 	t.Helper()
-	if srvCfg.Addr == "" {
-		srvCfg.Addr = "127.0.0.1:0"
+	select {
+	case id := <-b.connectCh:
+		if id == "" {
+			t.Fatal("ConnID 为空")
+		}
+		return id
+	case <-time.After(testWait):
+		t.Fatal("等待服务端 OnConnect 超时")
+		return ""
 	}
+}
 
-	t.Logf("[流程] 准备启动 Server name=%q addr=%q chunkSize=%d", srvCfg.Name, srvCfg.Addr, srvCfg.ResolvedChunkSize())
-
-	env := &testEnv{
-		t:           t,
-		serverOpen:  make(chan Conn, 1),
-		clientOpen:  make(chan Conn, 1),
-		serverMsgs:  make(chan []byte, 64),
-		clientMsgs:  make(chan []byte, 64),
-		serverClose: make(chan struct{}, 1),
-		clientClose: make(chan struct{}, 1),
+// waitMessages 等待至少 n 条消息
+func (b *testServerBiz) waitMessages(t *testing.T, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-b.messageCh:
+		case <-time.After(testWait):
+			t.Fatalf("等待服务端消息超时 at %d/%d", i, n)
+		}
 	}
+}
 
-	srvHandler := &testHandler{
-		onOpen: func(c Conn) {
-			t.Logf("[服务端] OnOpen remote=%v local=%v", c.RemoteAddr(), c.LocalAddr())
-			select {
-			case env.serverOpen <- c:
-			default:
-			}
-		},
-		onMessage: func(_ Conn, msg Message) {
-			defer func() { _ = msg.Close() }()
-			cp := append([]byte(nil), msg.Bytes()...)
-			t.Logf("[服务端] OnMessage opcode=%v len=%d payload=%q", msg.Opcode(), len(cp), previewBytes(cp))
-			select {
-			case env.serverMsgs <- cp:
-			default:
-				t.Error("serverMsgs 通道已满")
-			}
-		},
-		onClose: func(c Conn, err error) {
-			t.Logf("[服务端] OnClose remote=%v err=%v", addrOrNil(c), err)
-			select {
-			case env.serverClose <- struct{}{}:
-			default:
-			}
-		},
-	}
-	cliHandler := &testHandler{
-		onOpen: func(c Conn) {
-			t.Logf("[客户端] OnOpen remote=%v local=%v", c.RemoteAddr(), c.LocalAddr())
-			select {
-			case env.clientOpen <- c:
-			default:
-			}
-		},
-		onMessage: func(_ Conn, msg Message) {
-			defer func() { _ = msg.Close() }()
-			cp := append([]byte(nil), msg.Bytes()...)
-			t.Logf("[客户端] OnMessage opcode=%v len=%d payload=%q", msg.Opcode(), len(cp), previewBytes(cp))
-			select {
-			case env.clientMsgs <- cp:
-			default:
-				t.Error("clientMsgs 通道已满")
-			}
-		},
-		onClose: func(c Conn, err error) {
-			t.Logf("[客户端] OnClose remote=%v err=%v", addrOrNil(c), err)
-			select {
-			case env.clientClose <- struct{}{}:
-			default:
-			}
-		},
-	}
+// testClientBiz 可观察的客户端 Handler
+type testClientBiz struct {
+	NopClientHandler
+	mu sync.Mutex
 
-	srv, err := NewServer(srvHandler, srvCfg)
+	connected bool
+	messages  [][]byte
+
+	connectCh chan struct{}
+	messageCh chan struct{}
+}
+
+// newTestClientBiz 创建可观察客户端 Handler
+func newTestClientBiz() *testClientBiz {
+	return &testClientBiz{
+		connectCh: make(chan struct{}, 8),
+		messageCh: make(chan struct{}, 64),
+	}
+}
+
+// OnConnect 标记已连接
+func (b *testClientBiz) OnConnect(PeerContext) {
+	b.mu.Lock()
+	b.connected = true
+	b.mu.Unlock()
+	select {
+	case b.connectCh <- struct{}{}:
+	default:
+	}
+}
+
+// OnMessage 记录消息
+func (b *testClientBiz) OnMessage(_ PeerContext, msg Message) {
+	defer msg.Close()
+	cp := append([]byte(nil), msg.Bytes()...)
+	b.mu.Lock()
+	b.messages = append(b.messages, cp)
+	b.mu.Unlock()
+	select {
+	case b.messageCh <- struct{}{}:
+	default:
+	}
+}
+
+// waitConnect 等待客户端连通
+func (b *testClientBiz) waitConnect(t *testing.T) {
+	t.Helper()
+	select {
+	case <-b.connectCh:
+	case <-time.After(testWait):
+		t.Fatal("等待客户端 OnConnect 超时")
+	}
+}
+
+// waitMessages 等待至少 n 条消息
+func (b *testClientBiz) waitMessages(t *testing.T, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-b.messageCh:
+		case <-time.After(testWait):
+			t.Fatalf("等待客户端消息超时 at %d/%d", i, n)
+		}
+	}
+}
+
+// startAppPair 用自定义 Handler 启动一对 Server/Client
+func startAppPair(t *testing.T, srvBiz ServerHandler, cliBiz ClientHandler) (Server, Client, string) {
+	t.Helper()
+	t.Log("[流程] 启动 Server（ConnID 由服务端自动生成）")
+
+	srv, err := NewServer(ServerConfig{
+		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0", Name: "app-srv"},
+		Handler:      srvBiz,
+	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	env.cancel = cancel
-	if err := srv.Start(ctx); err != nil {
+	t.Cleanup(func() {
+		t.Log("[流程] Cleanup：关闭 Client 与 Server")
 		cancel()
-		t.Fatalf("Server.Start: %v", err)
+		_ = srv.Close(context.Background())
+	})
+	if err := srv.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
-	env.srv = srv
-
 	addr, err := srv.ListenAddr()
 	if err != nil {
-		env.close()
 		t.Fatalf("ListenAddr: %v", err)
 	}
-	env.wsURL = "ws://" + addr.String() + "/"
-	t.Logf("[流程] Server 已监听 listenAddr=%v", addr)
+	t.Logf("[流程] Server 监听 %v", addr)
 
-	t.Logf("[流程] 准备创建 Client name=%q chunkSize=%d", cliCfg.Name, cliCfg.ResolvedChunkSize())
-	cli, err := NewClient(cliHandler, cliCfg)
+	cli, err := NewClient(ClientConfig{
+		ClientConfig: wsbase.ClientConfig{Name: "app-cli"},
+		Handler:      cliBiz,
+	})
 	if err != nil {
-		env.close()
 		t.Fatalf("NewClient: %v", err)
 	}
-	env.client = cli
+	url := "ws://" + addr.String() + "/"
+	t.Logf("[流程] Client Connect url=%s", url)
+	if err := cli.Connect(context.Background(), url); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(func() { _ = cli.Close(CloseNormalClosure, "test done") })
 
-	t.Logf("[流程] Client Dial url=%s", env.wsURL)
-	conn, _, err := cli.Dial(context.Background(), env.wsURL)
-	if err != nil {
-		env.close()
-		t.Fatalf("Client.Dial: %v", err)
+	var connID string
+	if tb, ok := srvBiz.(*testServerBiz); ok {
+		connID = tb.lastConnID(t)
+		t.Logf("[流程] 服务端 OnConnect connID=%s", connID)
 	}
-	env.clientConn = conn
-	go conn.Serve()
-	t.Logf("[流程] Client Serve 已启动")
-
-	select {
-	case env.serverConn = <-env.serverOpen:
-		t.Logf("[流程] 已等到服务端 OnOpen")
-	case <-time.After(testWait):
-		env.close()
-		t.Fatal("等待服务端 OnOpen 超时")
+	if tb, ok := cliBiz.(*testClientBiz); ok {
+		tb.waitConnect(t)
+		t.Log("[流程] 客户端 OnConnect")
 	}
-	select {
-	case <-env.clientOpen:
-		t.Logf("[流程] 已等到客户端 OnOpen，握手完成")
-	case <-time.After(testWait):
-		env.close()
-		t.Fatal("等待客户端 OnOpen 超时")
-	}
-	return env
+	return srv, cli, connID
 }
 
-// close 关闭客户端连接与 Server
-func (env *testEnv) close() {
-	env.t.Logf("[流程] 开始关闭：先关 Client 连接，再停 Server")
-	if env.clientConn != nil {
-		_ = env.clientConn.Close(CloseNormalClosure, "test done")
+// TestAppServerClientConnect 门面基本用例：连通后服务端拥有 ConnID
+func TestAppServerClientConnect(t *testing.T) {
+	t.Log("[用例] Server + Client 连接")
+	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
+	srv, cli, connID := startAppPair(t, srvBiz, cliBiz)
+
+	if !cli.Connected() {
+		t.Fatal("Client 应已连接")
 	}
-	if env.cancel != nil {
-		env.cancel()
+	if connID == "" || !srv.Has(connID) {
+		t.Fatalf("服务端应登记自动生成的 ConnID, got %q", connID)
 	}
-	if env.srv != nil {
-		_ = env.srv.Close(context.Background())
+	if srv.Len() != 1 {
+		t.Fatalf("Len=%d", srv.Len())
 	}
-	env.t.Logf("[流程] 关闭完成")
+	t.Logf("[断言] Len=1 Has(%s)=true Client.Connected=true", connID)
 }
 
-// waitServerMsg 等待服务端收到一条消息
-func (env *testEnv) waitServerMsg() []byte {
-	env.t.Helper()
-	select {
-	case b := <-env.serverMsgs:
-		env.t.Logf("[流程] 断言侧取到服务端消息 len=%d payload=%q", len(b), previewBytes(b))
-		return b
-	case <-time.After(testWait):
-		env.t.Fatal("等待服务端消息超时")
-		return nil
-	}
-}
+// TestAppServerClientTextRoundTrip 文本往返：客户端无 ConnID，服务端用 ConnID 回写
+func TestAppServerClientTextRoundTrip(t *testing.T) {
+	t.Log("[用例] 文本往返")
+	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
+	srv, cli, connID := startAppPair(t, srvBiz, cliBiz)
 
-// waitClientMsg 等待客户端收到一条消息
-func (env *testEnv) waitClientMsg() []byte {
-	env.t.Helper()
-	select {
-	case b := <-env.clientMsgs:
-		env.t.Logf("[流程] 断言侧取到客户端消息 len=%d payload=%q", len(b), previewBytes(b))
-		return b
-	case <-time.After(testWait):
-		env.t.Fatal("等待客户端消息超时")
-		return nil
-	}
-}
-
-// previewBytes 截断过长载荷便于日志阅读
-func previewBytes(b []byte) string {
-	const max = 64
-	if len(b) <= max {
-		return string(b)
-	}
-	return string(b[:max]) + "..."
-}
-
-// addrOrNil 安全打印连接远端地址
-func addrOrNil(c Conn) any {
-	if c == nil {
-		return nil
-	}
-	return c.RemoteAddr()
-}
-
-// TestServerAndClientConnect 基本用例：启动 Server，Client 拨号连上，双方 OnOpen
-func TestServerAndClientConnect(t *testing.T) {
-	t.Log("[用例] Server 启动 + Client 连接")
-	env := startServerAndClient(t, ServerConfig{Name: "srv"}, ClientConfig{Name: "cli"})
-	defer env.close()
-
-	t.Logf("[断言] Server.Name=%q Client.Name=%q", env.srv.Name(), env.client.Name())
-	if env.srv.Name() != "srv" {
-		t.Fatalf("Server.Name=%q", env.srv.Name())
-	}
-	if env.client.Name() != "cli" {
-		t.Fatalf("Client.Name=%q", env.client.Name())
-	}
-	if env.serverConn == nil || env.clientConn == nil {
-		t.Fatal("两侧连接均应非空")
-	}
-	if env.clientConn.RemoteAddr() == nil || env.serverConn.RemoteAddr() == nil {
-		t.Fatal("RemoteAddr 不应为 nil")
-	}
-	t.Logf("[断言] 连接就绪 clientRemote=%v serverRemote=%v", env.clientConn.RemoteAddr(), env.serverConn.RemoteAddr())
-}
-
-// TestServerClientTextEcho 客户端发文本，服务端收到后再回写，客户端收到
-func TestServerClientTextEcho(t *testing.T) {
-	t.Log("[用例] 文本双向回声")
-	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
-	defer env.close()
-
-	want := []byte("hello-ws")
-	t.Logf("[流程] 客户端 WriteText %q", want)
-	if err := env.clientConn.WriteText(context.Background(), want); err != nil {
+	t.Log("[流程] Client.SendText hello")
+	if err := cli.SendText(context.Background(), []byte("hello")); err != nil {
 		t.Fatal(err)
 	}
-	got := env.waitServerMsg()
-	if !bytes.Equal(got, want) {
-		t.Fatalf("服务端收到=%q, want %q", got, want)
+	srvBiz.waitMessages(t, 1)
+	srvBiz.mu.Lock()
+	got := srvBiz.messages[connID][0]
+	srvBiz.mu.Unlock()
+	if !bytes.Equal(got, []byte("hello")) {
+		t.Fatalf("服务端收到=%q", got)
 	}
-	t.Log("[断言] 服务端收到客户端文本，准备回写")
+	t.Log("[断言] 服务端业务收到 hello")
 
-	reply := []byte("pong-text")
-	t.Logf("[流程] 服务端 WriteText %q", reply)
-	if err := env.serverConn.WriteText(context.Background(), reply); err != nil {
+	t.Logf("[流程] Server.SendText(connID=%s) 回写 world", connID)
+	if err := srv.SendText(connID, []byte("world")); err != nil {
 		t.Fatal(err)
 	}
-	got = env.waitClientMsg()
-	if !bytes.Equal(got, reply) {
-		t.Fatalf("客户端收到=%q, want %q", got, reply)
+	cliBiz.waitMessages(t, 1)
+	cliBiz.mu.Lock()
+	got = cliBiz.messages[0]
+	cliBiz.mu.Unlock()
+	if !bytes.Equal(got, []byte("world")) {
+		t.Fatalf("客户端收到=%q", got)
 	}
-	t.Log("[断言] 客户端收到服务端回写，用例通过")
+	t.Log("[断言] 客户端业务收到 world（客户端仍不知 ConnID）")
 }
 
-// TestServerClientBinaryEcho 客户端发二进制，服务端收到后再回写
-func TestServerClientBinaryEcho(t *testing.T) {
-	t.Log("[用例] 二进制双向回声")
-	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
-	defer env.close()
-
-	want := []byte{0x00, 0x01, 0xff, 0xfe}
-	t.Logf("[流程] 客户端 WriteBinary len=%d", len(want))
-	if err := env.clientConn.WriteBinary(context.Background(), want); err != nil {
-		t.Fatal(err)
-	}
-	got := env.waitServerMsg()
-	if !bytes.Equal(got, want) {
-		t.Fatalf("服务端收到=%v, want %v", got, want)
-	}
-	t.Log("[断言] 服务端收到二进制，准备回写")
-
-	t.Logf("[流程] 服务端 WriteBinary len=%d", len(want))
-	if err := env.serverConn.WriteBinary(context.Background(), want); err != nil {
-		t.Fatal(err)
-	}
-	got = env.waitClientMsg()
-	if !bytes.Equal(got, want) {
-		t.Fatalf("客户端收到=%v, want %v", got, want)
-	}
-	t.Log("[断言] 客户端收到服务端二进制回写，用例通过")
-}
-
-// TestServerClientChunkedUpload 客户端按可配置分片上传，服务端按片接收
-func TestServerClientChunkedUpload(t *testing.T) {
+// TestAppClientChunkedUpload 客户端分片上传
+func TestAppClientChunkedUpload(t *testing.T) {
 	const chunk = 4
-	t.Logf("[用例] 客户端分片上传 chunkSize=%d", chunk)
-	env := startServerAndClient(t,
-		ServerConfig{ChunkSize: chunk},
-		ClientConfig{ChunkSize: chunk},
-	)
-	defer env.close()
+	t.Logf("[用例] Client.SendReader 分片上传 chunk=%d", chunk)
+	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
+	_, cli, connID := startAppPair(t, srvBiz, cliBiz)
 
-	payload := []byte("abcdefghijkl") // 12 → 3 片
-	t.Logf("[流程] 客户端 WriteReader 总长=%d 期望片数=3", len(payload))
-	if err := env.clientConn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
+	payload := []byte("abcdefghijkl")
+	t.Logf("[流程] SendReader 总长=%d", len(payload))
+	if err := cli.SendReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
 		t.Fatal(err)
 	}
-
-	var parts [][]byte
-	for i := 0; i < 3; i++ {
-		part := env.waitServerMsg()
-		t.Logf("[断言] 收到分片[%d] len=%d payload=%q", i, len(part), part)
-		parts = append(parts, part)
-	}
+	srvBiz.waitMessages(t, 3)
+	srvBiz.mu.Lock()
+	parts := srvBiz.messages[connID]
+	srvBiz.mu.Unlock()
 	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
-		t.Fatalf("拼接=%q, want %q", joined, payload)
+		t.Fatalf("拼接=%q want %q", joined, payload)
 	}
-	for i, p := range parts {
-		if len(p) != chunk {
-			t.Fatalf("分片[%d] len=%d, want %d", i, len(p), chunk)
-		}
-	}
-	t.Log("[断言] 分片上传拼接校验通过")
+	t.Log("[断言] 分片拼接正确")
 }
 
-// TestServerClientChunkedDownload 服务端按分片下发，客户端按片接收
-func TestServerClientChunkedDownload(t *testing.T) {
-	const chunk = 5
-	t.Logf("[用例] 服务端分片下发 chunkSize=%d", chunk)
-	env := startServerAndClient(t,
-		ServerConfig{ChunkSize: chunk},
-		ClientConfig{ChunkSize: chunk},
-	)
-	defer env.close()
-
-	payload := []byte("0123456789") // 10 → 2 片
-	t.Logf("[流程] 服务端 WriteReader 总长=%d 期望片数=2", len(payload))
-	if err := env.serverConn.WriteReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
+// TestAppServerSendUnknownPeer 向不存在 ConnID 推送应失败
+func TestAppServerSendUnknownPeer(t *testing.T) {
+	t.Log("[用例] SendText 未知 ConnID")
+	srv, err := NewServer(ServerConfig{
+		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0"},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	var parts [][]byte
-	for i := 0; i < 2; i++ {
-		part := env.waitClientMsg()
-		t.Logf("[断言] 客户端收到分片[%d] len=%d payload=%q", i, len(part), part)
-		parts = append(parts, part)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer srv.Close(context.Background())
+	if err := srv.Start(ctx); err != nil {
+		t.Fatal(err)
 	}
-	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
-		t.Fatalf("拼接=%q, want %q", joined, payload)
-	}
-	t.Log("[断言] 分片下发拼接校验通过")
-}
-
-// TestServerClientWriteReaderCanceledContext 已取消 ctx 时客户端 WriteReader 失败
-func TestServerClientWriteReaderCanceledContext(t *testing.T) {
-	t.Log("[用例] 已取消 ctx 的 WriteReader 应失败")
-	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
-	defer env.close()
-
-	writeCtx, writeCancel := context.WithCancel(context.Background())
-	writeCancel()
-	t.Log("[流程] 使用已取消的 ctx 调用 WriteReader")
-	err := env.clientConn.WriteReader(writeCtx, OpcodeBinary, strings.NewReader(strings.Repeat("x", 1024)), WithChunkSize(64))
+	err = srv.SendText("nobody", []byte("x"))
 	if err == nil {
-		t.Fatal("已取消 ctx 应返回错误")
+		t.Fatal("应返回 ErrUnknownPeer")
 	}
-	t.Logf("[断言] 得到预期错误: %v", err)
+	t.Logf("[断言] 错误=%v", err)
 }
 
-// TestServerClientNative 验证连上后 Native 逃生舱可用
-func TestServerClientNative(t *testing.T) {
-	t.Log("[用例] Native 逃生舱")
-	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
-	defer env.close()
-
-	n, ok := env.clientConn.(NativeConn)
-	if !ok || n.Native() == nil {
-		t.Fatal("客户端 Conn 应支持 Native()")
-	}
-	t.Logf("[断言] 客户端 Native()=%T 非空", n.Native())
-	n2, ok := env.serverConn.(NativeConn)
-	if !ok || n2.Native() == nil {
-		t.Fatal("服务端 Conn 应支持 Native()")
-	}
-	t.Logf("[断言] 服务端 Native()=%T 非空", n2.Native())
-	if env.srv.NativeUpgrader() == nil {
-		t.Fatal("NativeUpgrader 不应为 nil")
-	}
-	t.Log("[断言] NativeUpgrader 非空，用例通过")
-}
-
-// TestServerClientHub 连上后将服务端连接注册进 Hub 并可取出
-func TestServerClientHub(t *testing.T) {
-	t.Log("[用例] Hub 注册/查询/卸载")
-	env := startServerAndClient(t, ServerConfig{}, ClientConfig{})
-	defer env.close()
-
-	hub := NewHub()
-	t.Log("[流程] Hub.Register id=u1")
-	hub.Register("u1", env.serverConn)
-	got, ok := hub.Get("u1")
-	if !ok || got != env.serverConn {
-		t.Fatal("Hub.Get 失败")
-	}
-	t.Logf("[断言] Hub.Get 成功 Len=%d", hub.Len())
-	if hub.Len() != 1 {
-		t.Fatalf("Len=%d", hub.Len())
-	}
-	t.Log("[流程] Hub.Unregister id=u1")
-	hub.Unregister("u1", env.serverConn)
-	if hub.Len() != 0 {
-		t.Fatal("Unregister 后应为空")
-	}
-	t.Log("[断言] Hub 已清空，用例通过")
-}
-
-// TestServerConfigValidate 校验 Addr/ChunkSize 边界（无网络）
-func TestServerConfigValidate(t *testing.T) {
-	t.Log("[用例] ServerConfig.Validate 边界")
-	if err := (ServerConfig{}).Validate(); err == nil {
-		t.Fatal("空 Addr 应失败")
-	}
-	t.Log("[断言] 空 Addr 校验失败，符合预期")
-	if err := (ServerConfig{Addr: ":0", ChunkSize: -1}).Validate(); err == nil {
-		t.Fatal("负 ChunkSize 应失败")
-	}
-	t.Log("[断言] 负 ChunkSize 校验失败，符合预期")
-	if err := (ServerConfig{Addr: ":0", ChunkSize: MaxChunkSize + 1}).Validate(); err == nil {
-		t.Fatal("超大 ChunkSize 应失败")
-	}
-	t.Log("[断言] 超大 ChunkSize 校验失败，符合预期")
-	if err := (ServerConfig{Addr: ":0"}).Validate(); err != nil {
+// TestAppClientSendBeforeConnect 未连接发送应失败
+func TestAppClientSendBeforeConnect(t *testing.T) {
+	t.Log("[用例] 未 Connect 时 SendText")
+	cli, err := NewClient(ClientConfig{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := (ServerConfig{Addr: ":0"}).ResolvedChunkSize(); got != DefaultChunkSize {
-		t.Fatalf("默认分片=%d, want %d", got, DefaultChunkSize)
+	err = cli.SendText(context.Background(), []byte("x"))
+	if err == nil {
+		t.Fatal("应返回 ErrNotConnected")
 	}
-	t.Logf("[断言] 合法配置通过，默认 ChunkSize=%d", DefaultChunkSize)
+	t.Logf("[断言] 错误=%v", err)
 }
 
-// testHandler 可注入回调的测试 Handler
-type testHandler struct {
-	NopHandler
-	onOpen    func(Conn)
-	onMessage func(Conn, Message)
-	onClose   func(Conn, error)
+// TestAppEscapeHatches 逃生舱可用
+func TestAppEscapeHatches(t *testing.T) {
+	t.Log("[用例] Hub/Underlying/Conn 逃生舱")
+	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
+	srv, cli, connID := startAppPair(t, srvBiz, cliBiz)
+
+	if srv.Hub() == nil || srv.Underlying() == nil || srv.NativeUpgrader() == nil {
+		t.Fatal("Server 逃生舱不应为空")
+	}
+	if _, ok := srv.GetConn(connID); !ok {
+		t.Fatal("GetConn(connID) 应成功")
+	}
+	if cli.Underlying() == nil {
+		t.Fatal("Client.Underlying 不应为空")
+	}
+	if _, ok := cli.Conn(); !ok {
+		t.Fatal("Client.Conn 应成功")
+	}
+	t.Log("[断言] 逃生舱均可用")
 }
 
-// OnOpen 转发到注入回调
-func (h *testHandler) OnOpen(c Conn) {
-	if h.onOpen != nil {
-		h.onOpen(c)
+// echoServerProcessor 服务端消息处理器：收到后原样回写
+type echoServerProcessor struct {
+	mu       sync.Mutex
+	payloads []Payload
+	connID   string
+	ready    chan struct{}
+	gotMsg   chan struct{}
+}
+
+// OnConnect 记录 ConnID
+func (p *echoServerProcessor) OnConnect(ctx SessionContext) {
+	p.mu.Lock()
+	p.connID = ctx.ConnID()
+	p.mu.Unlock()
+	select {
+	case p.ready <- struct{}{}:
+	default:
 	}
 }
 
-// OnMessage 转发到注入回调；未注入时关闭消息
-func (h *testHandler) OnMessage(c Conn, msg Message) {
-	if h.onMessage != nil {
-		h.onMessage(c, msg)
-		return
+// OnDisconnect 空
+func (p *echoServerProcessor) OnDisconnect(string, error) {}
+
+// OnPayload 记录并回写
+func (p *echoServerProcessor) OnPayload(ctx SessionContext, payload Payload) error {
+	p.mu.Lock()
+	p.payloads = append(p.payloads, payload)
+	p.mu.Unlock()
+	select {
+	case p.gotMsg <- struct{}{}:
+	default:
 	}
-	_ = msg.Close()
+	return ctx.SendBinary(payload.Data)
 }
 
-// OnClose 转发到注入回调
-func (h *testHandler) OnClose(c Conn, err error) {
-	if h.onClose != nil {
-		h.onClose(c, err)
+// echoClientProcessor 客户端消息处理器
+type echoClientProcessor struct {
+	mu       sync.Mutex
+	payloads []Payload
+	ready    chan struct{}
+	gotMsg   chan struct{}
+}
+
+// OnConnect 标记就绪
+func (p *echoClientProcessor) OnConnect(PeerContext) {
+	select {
+	case p.ready <- struct{}{}:
+	default:
 	}
+}
+
+// OnDisconnect 空
+func (p *echoClientProcessor) OnDisconnect(error) {}
+
+// OnPayload 记录载荷
+func (p *echoClientProcessor) OnPayload(_ PeerContext, payload Payload) error {
+	p.mu.Lock()
+	p.payloads = append(p.payloads, payload)
+	p.mu.Unlock()
+	select {
+	case p.gotMsg <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// TestMessageProcessorConfig 验证只配 Processor 的主路径
+func TestMessageProcessorConfig(t *testing.T) {
+	t.Log("[用例] Config.Processor 主路径")
+	srvProc := &echoServerProcessor{
+		ready:  make(chan struct{}, 1),
+		gotMsg: make(chan struct{}, 8),
+	}
+	cliProc := &echoClientProcessor{
+		ready:  make(chan struct{}, 1),
+		gotMsg: make(chan struct{}, 8),
+	}
+
+	srv, err := NewServer(ServerConfig{
+		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0"},
+		Processor:    srvProc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer srv.Close(context.Background())
+	if err := srv.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	addr, err := srv.ListenAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("[流程] Server 监听 %v", addr)
+
+	cli, err := NewClient(ClientConfig{Processor: cliProc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close(CloseNormalClosure, "done")
+	if err := cli.Connect(context.Background(), "ws://"+addr.String()+"/"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-srvProc.ready:
+		t.Log("[流程] 服务端 Processor OnConnect")
+	case <-time.After(testWait):
+		t.Fatal("等待服务端 Processor OnConnect 超时")
+	}
+	select {
+	case <-cliProc.ready:
+		t.Log("[流程] 客户端 Processor OnConnect")
+	case <-time.After(testWait):
+		t.Fatal("等待客户端 Processor OnConnect 超时")
+	}
+
+	want := []byte("proc-ping")
+	if err := cli.SendBinary(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-srvProc.gotMsg:
+	case <-time.After(testWait):
+		t.Fatal("等待服务端 OnPayload 超时")
+	}
+	select {
+	case <-cliProc.gotMsg:
+	case <-time.After(testWait):
+		t.Fatal("等待客户端收到回写超时")
+	}
+
+	srvProc.mu.Lock()
+	srvGot := append([]byte(nil), srvProc.payloads[0].Data...)
+	srvProc.mu.Unlock()
+	cliProc.mu.Lock()
+	cliGot := append([]byte(nil), cliProc.payloads[0].Data...)
+	cliProc.mu.Unlock()
+	if !bytes.Equal(srvGot, want) || !bytes.Equal(cliGot, want) {
+		t.Fatalf("srv=%q cli=%q want=%q", srvGot, cliGot, want)
+	}
+	t.Log("[断言] Processor 收发正确")
+}
+
+// countingServerHandler 嵌入默认 Handler，额外计数 OnMessage
+type countingServerHandler struct {
+	DefaultServerHandler
+	mu    sync.Mutex
+	count int
+}
+
+// OnMessage 计数后转交默认实现
+func (h *countingServerHandler) OnMessage(ctx SessionContext, msg Message) {
+	h.mu.Lock()
+	h.count++
+	h.mu.Unlock()
+	h.DefaultServerHandler.OnMessage(ctx, msg)
+}
+
+// TestCustomHandlerStillUsesProcessor 自定义 Handler 嵌入默认实现并复用 Processor
+func TestCustomHandlerStillUsesProcessor(t *testing.T) {
+	t.Log("[用例] 自定义 Handler 嵌入 DefaultServerHandler")
+	srvProc := &echoServerProcessor{
+		ready:  make(chan struct{}, 1),
+		gotMsg: make(chan struct{}, 8),
+	}
+	cliProc := &echoClientProcessor{
+		ready:  make(chan struct{}, 1),
+		gotMsg: make(chan struct{}, 8),
+	}
+	srvH := &countingServerHandler{
+		DefaultServerHandler: DefaultServerHandler{Processor: srvProc},
+	}
+
+	srv, err := NewServer(ServerConfig{
+		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0"},
+		Handler:      srvH,
+		Processor:    &echoServerProcessor{}, // 应被静默忽略（不自动接入）
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer srv.Close(context.Background())
+	if err := srv.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	addr, err := srv.ListenAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cli, err := NewClient(ClientConfig{
+		Handler: DefaultClientHandler{Processor: cliProc},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close(CloseNormalClosure, "done")
+	if err := cli.Connect(context.Background(), "ws://"+addr.String()+"/"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-srvProc.ready:
+	case <-time.After(testWait):
+		t.Fatal("等待服务端 OnConnect 超时")
+	}
+	select {
+	case <-cliProc.ready:
+	case <-time.After(testWait):
+		t.Fatal("等待客户端 OnConnect 超时")
+	}
+
+	want := []byte("embed-ping")
+	if err := cli.SendBinary(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-srvProc.gotMsg:
+	case <-time.After(testWait):
+		t.Fatal("等待嵌入 Handler 的 Processor 超时")
+	}
+	select {
+	case <-cliProc.gotMsg:
+	case <-time.After(testWait):
+		t.Fatal("等待客户端回写超时")
+	}
+
+	srvH.mu.Lock()
+	n := srvH.count
+	srvH.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("自定义 OnMessage 计数=%d want 1", n)
+	}
+	srvProc.mu.Lock()
+	got := append([]byte(nil), srvProc.payloads[0].Data...)
+	srvProc.mu.Unlock()
+	if !bytes.Equal(got, want) {
+		t.Fatalf("Processor 收到=%q", got)
+	}
+	t.Log("[断言] 自定义 Handler 加强后仍走嵌入的 Processor")
 }

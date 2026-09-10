@@ -1,7 +1,7 @@
-// Package ws 实现可配置分片的 WriteReader
+// Package wsbase 实现可配置分片的 WriteReader
 //
 // @author zwei
-package ws
+package wsbase
 
 import (
 	"context"

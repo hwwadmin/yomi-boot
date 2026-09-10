@@ -1,7 +1,7 @@
-// Package ws 将业务 Handler 适配为 gws.Event
+// Package wsbase 将业务 Handler 适配为 gws.Event
 //
 // @author zwei
-package ws
+package wsbase
 
 import "github.com/lxzan/gws"
 

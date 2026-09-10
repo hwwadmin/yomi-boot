@@ -1,7 +1,7 @@
-// Package ws 提供实例级连接表与广播
+// Package wsbase 提供实例级连接表与广播
 //
 // @author zwei
-package ws
+package wsbase
 
 import (
 	"context"

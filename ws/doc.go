@@ -1,32 +1,37 @@
-// Package ws 提供基于 gws 的 WebSocket 能力库：独立端口 Server、可 Dial 的 Client、
-// 共用 Conn/Handler，以及可配置分片大小的大负载流式写入。
+// Package ws 提供基于 wsbase 的高级会话门面：业务收发与连接启停，不直接管理
+// Conn / Serve / Hub；底层能力经逃生舱或 wsbase 按需使用。
 //
-// # 定位
+// # 与 wsbase 的关系
 //
-// 本包是构造入口型能力库：业务自行准备 ServerConfig / ClientConfig 并多次 New*
-// 启动多个实例；不提供 yml 配置段，也不挂默认 infra 插件。
+// 本包只组装 gitee.com/hq_project/yomi-boot/ws/wsbase，不修改其行为。
 //
-// # 主路径
+// # 用法（推荐）
 //
-//   - Server：独立 TCP 端口监听并完成 WebSocket 握手，与业务 HTTP/gin 解耦
-//   - Client：Dial 出站连接；业务需 go Conn.Serve() 启动读循环
-//   - 连接读写统一走 Conn；缺口能力经 Native() 取 *gws.Conn
+// 业务实现 MessageProcessor，写入 Config 后启动：
 //
-// # 大文件
+//	srv, _ := ws.NewServer(ws.ServerConfig{
+//	    ServerConfig: wsbase.ServerConfig{Addr: ":8080"},
+//	    Processor:    myBiz{},
+//	})
 //
-// WriteReader 按可配置 chunkSize 循环读取 io.Reader，默认「一片一完整 binary/text 消息」
-// （非单消息底层续帧），以便收发两端峰值内存均可控。分片大小优先级：
-// WriteOption > 实例 Config.ChunkSize > 库默认（256KiB）。
+// 常用传输类型也可经本包别名使用（见 alias.go），多数场景无需再 import wsbase。
 //
-// # 高级门面
+// # Handler / Processor
 //
-// 若希望业务不直接面对 Conn/Serve/Hub，请使用子包 gitee.com/hq_project/yomi-boot/ws/wsapp。
-// 其中 ConnID 仅服务端自动生成；业务鉴权应在连通后用报文完成，不属 ws 传输层。
+//   - Processor：业务消息面（Payload），主扩展点
+//   - Handler：会话面（启停 + 原始 Message）；Config.Handler 为 nil 时用
+//     Default*Handler，其 OnMessage 消费 Processor
+//   - 自定义 Handler 时 Config.Processor 不自动接入；若仍需 Processor，
+//     可嵌入 Default*Handler 并自行赋值 Processor
 //
-// # 读模型
+// # ConnID（仅服务端）
 //
-// 同一连接只能使用一种读模型；门面默认 Serve → gws ReadLoop。禁止与 Native 侧
-// ReadMessage/NextReader 混用。
+// 由服务端在连接建立时自动生成并登记 Hub；客户端不感知。
+// 业务鉴权应在连通后通过报文完成，不属本包。
+//
+// # Client
+//
+// 一个 Client 实例对应至多一条连接；Connect 自动 Dial 并 Serve。
 //
 // @author zwei
 package ws

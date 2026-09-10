@@ -1,7 +1,7 @@
-// Package ws 定义 Conn 门面与底层逃生舱
+// Package wsbase 定义 Conn 门面与底层逃生舱
 //
 // @author zwei
-package ws
+package wsbase
 
 import (
 	"context"

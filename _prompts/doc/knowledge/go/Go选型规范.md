@@ -152,9 +152,9 @@
   - `gitee.com/hq_project/yomi-boot/kafka/`：Kafka 发布/消费；测试用 `kafka/kafkatest`（底层 `franz-go/kfake`），**franz-go 不得进入生产代码路径**。
   - `gitee.com/hq_project/yomi-boot/redisstream/`：Redis Stream 发布/消费组；复用 `RedisClient`，不耦合 `RedisService`。
   - `gitee.com/hq_project/yomi-boot/event/`：Outbox/Inbox 可靠领域事件（当前传输侧接 Kafka）。
-- **WebSocket**（可选）：`gitee.com/hq_project/yomi-boot/ws/`（底层 `github.com/lxzan/gws`）；独立端口 Server / Client Dial，构造期 Config 多实例装配，无 yml 段与默认插件；大负载用可配置分片 `WriteReader`。
+- **WebSocket**（可选）：`gitee.com/hq_project/yomi-boot/ws/`（高级门面）+ `ws/wsbase`（传输原语，底层 `github.com/lxzan/gws`）；独立端口 Server / Client，构造期 Config 多实例装配，无 yml 段与默认插件；大负载用可配置分片 `WriteReader`。
 - 服务间默认同步通信仍是 HTTP；异步是否启用、选用哪种消息能力由业务场景决定。
-- 不作为默认：`resty`（HTTP Client）；`jsoniter`/`sonic`（JSON）；gRPC 服务间调用；用 Outbox/Inbox 替代 DTM Saga 作为跨域写默认方案；在 boot 已提供能力之外再引入 RabbitMQ/NATS/Pulsar 等客户端而不经评审；业务直依赖 `lxzan/gws`（应经 `ws` 门面，缺口再用 `Native()`）。
+- 不作为默认：`resty`（HTTP Client）；`jsoniter`/`sonic`（JSON）；gRPC 服务间调用；用 Outbox/Inbox 替代 DTM Saga 作为跨域写默认方案；在 boot 已提供能力之外再引入 RabbitMQ/NATS/Pulsar 等客户端而不经评审；业务直依赖 `lxzan/gws`（应经 `ws` / `wsbase` 门面，缺口再用 `Native()`）。
 
 #### 3.3.6 测试与质量工具
 

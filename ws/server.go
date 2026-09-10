@@ -1,199 +1,204 @@
-// Package ws 实现独立端口 WebSocket Server
+// Package ws 实现高级入站 Server 门面
 //
 // @author zwei
 package ws
 
 import (
-	"bufio"
 	"context"
-	"crypto/tls"
+	"io"
 	"net"
-	"net/http"
-	"sync"
-	"sync/atomic"
 
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/ws/wsbase"
 
 	"github.com/lxzan/gws"
 )
 
-// Server 是独立端口的 WebSocket 服务实例；可 New 多个
-type Server struct {
-	name      string        // name 是实例名
-	addr      string        // addr 是配置的监听地址
-	chunkSize int           // chunkSize 是 WriteReader 默认分片
-	upgrader  *gws.Upgrader // upgrader 负责握手升级
-	tlsConfig *tls.Config   // tlsConfig 供 StartTLS 合并证书
+// Server 是高级入站服务门面：内置 Hub，按框架 ConnID 推送
+type Server interface {
+	// Start 非阻塞启动
+	Start(ctx context.Context) error
+	// Close 关闭所有会话并停止监听
+	Close(ctx context.Context) error
 
-	listener net.Listener // listener 是当前监听器；关闭后由 serveLoop 持有局部引用
-	mu       sync.Mutex   // mu 保护 listener
-	closed   atomic.Bool  // closed 表示已关闭
-	started  atomic.Bool  // started 表示已启动
+	// SendText 向指定 ConnID 发送文本
+	SendText(connID string, data []byte) error
+	// SendBinary 向指定 ConnID 发送二进制
+	SendBinary(connID string, data []byte) error
+	// SendReader 向指定 ConnID 分片发送
+	SendReader(connID string, opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error
+	// BroadcastText 广播文本
+	BroadcastText(data []byte) error
+	// BroadcastBinary 广播二进制
+	BroadcastBinary(data []byte) error
+
+	// Len 返回在线会话数
+	Len() int
+	// Has 判断 ConnID 是否在线
+	Has(connID string) bool
+
+	// Hub 返回内置连接表（逃生）
+	Hub() *wsbase.Hub
+	// GetConn 按 ConnID 取底层连接（逃生）
+	GetConn(connID string) (wsbase.Conn, bool)
+	// Underlying 返回传输层 Server（逃生）
+	Underlying() *wsbase.Server
+	// NativeUpgrader 返回底层 Upgrader（逃生）
+	NativeUpgrader() *gws.Upgrader
+	// ListenAddr 返回实际监听地址
+	ListenAddr() (net.Addr, error)
 }
 
-// NewServer 根据配置创建 Server；调用 Start / StartTLS 后开始接受连接
-func NewServer(h Handler, cfg ServerConfig) (*Server, error) {
+// server 是 Server 的默认实现
+type server struct {
+	raw    *wsbase.Server
+	hub    *wsbase.Hub
+	bridge *serverBridge
+}
+
+// NewServer 创建高级入站服务；ConnID 由框架在 OnOpen 自动生成
+func NewServer(cfg ServerConfig) (Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	adapter := newEventAdapter(h, cfg.ResolvedChunkSize())
-	upgrader := gws.NewUpgrader(adapter, cfg.toGWSOption())
-	return &Server{
-		name:      cfg.Name,
-		addr:      cfg.Addr,
-		chunkSize: cfg.ResolvedChunkSize(),
-		upgrader:  upgrader,
-		tlsConfig: cfg.TLSConfig,
-	}, nil
-}
-
-// Name 返回实例名
-func (s *Server) Name() string {
-	if s == nil {
-		return ""
+	hub := wsbase.NewHub()
+	bridge := newServerBridge(cfg.resolveHandler(), hub)
+	raw, err := wsbase.NewServer(bridge, cfg.ServerConfig)
+	if err != nil {
+		return nil, err
 	}
-	return s.name
+	return &server{raw: raw, hub: hub, bridge: bridge}, nil
 }
 
-// Addr 返回配置的监听地址（非实际 LocalAddr）
-func (s *Server) Addr() string {
-	if s == nil {
-		return ""
-	}
-	return s.addr
-}
-
-// NativeUpgrader 返回底层 gws.Upgrader，供未封装能力使用
-func (s *Server) NativeUpgrader() *gws.Upgrader {
-	if s == nil {
-		return nil
-	}
-	return s.upgrader
-}
-
-// Start 非阻塞启动明文监听；ctx 取消时关闭服务
-func (s *Server) Start(ctx context.Context) error {
-	return s.start(ctx, false, "", "")
-}
-
-// StartTLS 非阻塞启动 TLS 监听；certFile/keyFile 为证书路径
-func (s *Server) StartTLS(ctx context.Context, certFile, keyFile string) error {
-	if certFile == "" || keyFile == "" {
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "StartTLS 需要 certFile 与 keyFile")
-	}
-	return s.start(ctx, true, certFile, keyFile)
-}
-
-// start 监听并启动接受循环；useTLS 为 true 时包装 TLS
-func (s *Server) start(ctx context.Context, useTLS bool, certFile, keyFile string) error {
-	if s == nil {
+// Start 启动监听
+func (s *server) Start(ctx context.Context) error {
+	if s == nil || s.raw == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	if !s.started.CompareAndSwap(false, true) {
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "Server 已启动")
-	}
-	if s.closed.Load() {
-		return errors.Sentinel(ErrClosed)
-	}
-
-	ln, err := net.Listen("tcp", s.addr)
-	if err != nil {
-		s.started.Store(false)
-		return errors.Wrap(err, "ws Server 监听失败")
-	}
-	if useTLS {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			_ = ln.Close()
-			s.started.Store(false)
-			return errors.Wrap(err, "ws Server 加载证书失败")
-		}
-		tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{"http/1.1"}}
-		if s.tlsConfig != nil {
-			tlsCfg = s.tlsConfig.Clone()
-			tlsCfg.Certificates = []tls.Certificate{cert}
-			if len(tlsCfg.NextProtos) == 0 {
-				tlsCfg.NextProtos = []string{"http/1.1"}
-			}
-		}
-		ln = tls.NewListener(ln, tlsCfg)
-	}
-
-	s.mu.Lock()
-	s.listener = ln
-	s.mu.Unlock()
-
-	go s.serveLoop(ln)
-	if ctx != nil {
-		go func() {
-			<-ctx.Done()
-			_ = s.Close(context.Background())
-		}()
-	}
-	return nil
+	return s.raw.Start(ctx)
 }
 
-// serveLoop 在 ln 上接受连接；须传入局部 listener，避免 Close 置空字段后空指针
-func (s *Server) serveLoop(ln net.Listener) {
-	for {
-		netConn, err := ln.Accept()
-		if err != nil {
-			if s.closed.Load() {
-				return
-			}
-			continue
-		}
-		go s.handleConn(netConn)
-	}
-}
-
-// handleConn 完成握手并阻塞运行该连接的读循环
-func (s *Server) handleConn(netConn net.Conn) {
-	br := bufio.NewReader(netConn)
-	req, err := http.ReadRequest(br)
-	if err != nil {
-		_ = netConn.Close()
-		return
-	}
-	socket, err := s.upgrader.UpgradeFromConn(netConn, br, req)
-	if err != nil {
-		_ = netConn.Close()
-		return
-	}
-	// 服务端在本 goroutine 跑读循环；Conn.Serve 因 sync.Once 可再调但不会重复
-	conn := connFromGWS(socket, s.chunkSize)
-	conn.Serve()
-}
-
-// Close 停止监听；已建立连接需业务侧 Close 或对端断开
-func (s *Server) Close(_ context.Context) error {
+// Close 关闭全部会话并停听
+func (s *server) Close(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	if !s.closed.CompareAndSwap(false, true) {
-		return nil
+	if s.hub != nil {
+		s.hub.CloseAll(wsbase.CloseGoingAway, "server closing")
 	}
-	s.mu.Lock()
-	ln := s.listener
-	s.listener = nil
-	s.mu.Unlock()
-	if ln != nil {
-		if err := ln.Close(); err != nil {
-			return errors.Wrap(err, "ws Server 关闭监听失败")
-		}
+	if s.raw != nil {
+		return s.raw.Close(ctx)
 	}
 	return nil
 }
 
-// ListenAddr 返回实际监听地址；未启动时返回错误
-func (s *Server) ListenAddr() (net.Addr, error) {
+// SendText 向指定 ConnID 发送文本
+func (s *server) SendText(connID string, data []byte) error {
+	conn, err := s.mustConn(connID)
+	if err != nil {
+		return err
+	}
+	return conn.WriteText(context.Background(), data)
+}
+
+// SendBinary 向指定 ConnID 发送二进制
+func (s *server) SendBinary(connID string, data []byte) error {
+	conn, err := s.mustConn(connID)
+	if err != nil {
+		return err
+	}
+	return conn.WriteBinary(context.Background(), data)
+}
+
+// SendReader 向指定 ConnID 分片发送
+func (s *server) SendReader(connID string, opcode wsbase.Opcode, r io.Reader, opts ...wsbase.WriteOption) error {
+	conn, err := s.mustConn(connID)
+	if err != nil {
+		return err
+	}
+	return conn.WriteReader(context.Background(), opcode, r, opts...)
+}
+
+// BroadcastText 广播文本
+func (s *server) BroadcastText(data []byte) error {
+	if s == nil || s.hub == nil {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return s.hub.BroadcastText(data)
+}
+
+// BroadcastBinary 广播二进制
+func (s *server) BroadcastBinary(data []byte) error {
+	if s == nil || s.hub == nil {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return s.hub.BroadcastBinary(data)
+}
+
+// Len 返回在线数
+func (s *server) Len() int {
+	if s == nil || s.hub == nil {
+		return 0
+	}
+	return s.hub.Len()
+}
+
+// Has 判断是否在线
+func (s *server) Has(connID string) bool {
+	_, ok := s.GetConn(connID)
+	return ok
+}
+
+// Hub 返回内置 Hub
+func (s *server) Hub() *wsbase.Hub {
+	if s == nil {
+		return nil
+	}
+	return s.hub
+}
+
+// GetConn 按 ConnID 取连接
+func (s *server) GetConn(connID string) (wsbase.Conn, bool) {
+	if s == nil || s.hub == nil {
+		return nil, false
+	}
+	return s.hub.Get(connID)
+}
+
+// Underlying 返回传输层 Server
+func (s *server) Underlying() *wsbase.Server {
+	if s == nil {
+		return nil
+	}
+	return s.raw
+}
+
+// NativeUpgrader 返回底层 Upgrader
+func (s *server) NativeUpgrader() *gws.Upgrader {
+	if s == nil || s.raw == nil {
+		return nil
+	}
+	return s.raw.NativeUpgrader()
+}
+
+// ListenAddr 返回实际监听地址
+func (s *server) ListenAddr() (net.Addr, error) {
+	if s == nil || s.raw == nil {
+		return nil, errors.Sentinel(ErrInvalidArgument)
+	}
+	return s.raw.ListenAddr()
+}
+
+func (s *server) mustConn(connID string) (wsbase.Conn, error) {
 	if s == nil {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.listener == nil {
-		return nil, errors.Sentinel(ErrNotStarted)
+	if connID == "" {
+		return nil, errors.Wrap(errors.Sentinel(ErrInvalidArgument), "connID 不能为空")
 	}
-	return s.listener.Addr(), nil
+	conn, ok := s.GetConn(connID)
+	if !ok || conn == nil {
+		return nil, errors.Sentinel(ErrUnknownPeer)
+	}
+	return conn, nil
 }
