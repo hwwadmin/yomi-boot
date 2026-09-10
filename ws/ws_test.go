@@ -1,4 +1,4 @@
-// Package ws 的 Server/Client 门面联调测试
+// Package ws 门面联调测试：演示如何定义 Processor、配置启动 Server/Client、收发消息与分片发文件
 //
 // @author zwei
 package ws
@@ -15,164 +15,259 @@ import (
 
 const testWait = 2 * time.Second
 
-// testServerBiz 可观察的服务端 Handler
-type testServerBiz struct {
-	NopServerHandler
-	mu sync.Mutex
+// TestProcessorConnectAndText 定义 Processor → 配置启动 → 文本往返
+func TestProcessorConnectAndText(t *testing.T) {
+	t.Log("[用例] Processor 主路径：连通 + 文本收发")
 
-	connIDs  []string
-	messages map[string][][]byte
+	srvProc := newRecordServerProcessor()
+	cliProc := newRecordClientProcessor()
+	srv, cli := startPair(t, srvProc, cliProc, 0)
 
-	connectCh chan string
-	messageCh chan struct{}
+	connID := srvProc.waitReady(t)
+	cliProc.waitReady(t)
+	t.Logf("[断言] 已连通 connID=%s Client.Connected=%v", connID, cli.Connected())
+	if !cli.Connected() || !srv.Has(connID) {
+		t.Fatal("连接状态异常")
+	}
+
+	t.Log("[发送] Client.SendText hello")
+	if err := cli.SendText(context.Background(), []byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	got := srvProc.waitPayloads(t, 1)
+	if !bytes.Equal(got[0].Data, []byte("hello")) {
+		t.Fatalf("服务端收到=%q", got[0].Data)
+	}
+	t.Log("[断言] 服务端 Processor 收到 hello")
+
+	t.Logf("[发送] Server.SendText(connID=%s) world", connID)
+	if err := srv.SendText(connID, []byte("world")); err != nil {
+		t.Fatal(err)
+	}
+	got = cliProc.waitPayloads(t, 1)
+	if !bytes.Equal(got[0].Data, []byte("world")) {
+		t.Fatalf("客户端收到=%q", got[0].Data)
+	}
+	t.Log("[断言] 客户端 Processor 收到 world（客户端不感知 ConnID）")
 }
 
-// newTestServerBiz 创建可观察服务端 Handler
-func newTestServerBiz() *testServerBiz {
-	return &testServerBiz{
-		messages:  make(map[string][][]byte),
-		connectCh: make(chan string, 8),
-		messageCh: make(chan struct{}, 64),
+// TestProcessorSendFileChunks 分片发文件：Client.SendReader → 服务端多片 OnPayload 拼回
+func TestProcessorSendFileChunks(t *testing.T) {
+	const chunk = 4
+	file := []byte("abcdefghijkl") // 12 字节 → 3 片
+	t.Logf("[用例] 分片发文件 chunk=%d 总长=%d 期望片数=%d", chunk, len(file), (len(file)+chunk-1)/chunk)
+
+	srvProc := newRecordServerProcessor()
+	cliProc := newRecordClientProcessor()
+	_, cli := startPair(t, srvProc, cliProc, chunk)
+
+	_ = srvProc.waitReady(t)
+	cliProc.waitReady(t)
+
+	t.Log("[发送] Client.SendReader 模拟上传文件")
+	if err := cli.SendReader(context.Background(), OpcodeBinary, bytes.NewReader(file), WithChunkSize(chunk)); err != nil {
+		t.Fatal(err)
+	}
+	parts := srvProc.waitPayloads(t, 3)
+	joined := joinPayloadData(parts)
+	if !bytes.Equal(joined, file) {
+		t.Fatalf("拼接=%q want %q", joined, file)
+	}
+	t.Logf("[断言] 服务端收到 %d 片，拼接与原文一致", len(parts))
+}
+
+// TestProcessorServerPushFile 服务端按 ConnID 分片下发文件
+func TestProcessorServerPushFile(t *testing.T) {
+	const chunk = 5
+	file := []byte("hello-file!!") // 12 字节 → 3 片（5+5+2）
+	t.Logf("[用例] 服务端分片下发 chunk=%d 总长=%d", chunk, len(file))
+
+	srvProc := newRecordServerProcessor()
+	cliProc := newRecordClientProcessor()
+	srv, _ := startPair(t, srvProc, cliProc, chunk)
+
+	connID := srvProc.waitReady(t)
+	cliProc.waitReady(t)
+
+	t.Logf("[发送] Server.SendReader(connID=%s)", connID)
+	if err := srv.SendReader(connID, OpcodeBinary, bytes.NewReader(file), WithChunkSize(chunk)); err != nil {
+		t.Fatal(err)
+	}
+	parts := cliProc.waitPayloads(t, 3)
+	joined := joinPayloadData(parts)
+	if !bytes.Equal(joined, file) {
+		t.Fatalf("拼接=%q want %q", joined, file)
+	}
+	t.Logf("[断言] 客户端收到 %d 片，拼接与原文一致", len(parts))
+}
+
+// ---------------------------------------------------------------------------
+// 辅助：可观察 Processor + 启动装配
+// ---------------------------------------------------------------------------
+
+// recordServerProcessor 服务端处理器：记录 ConnID 与收到的载荷
+type recordServerProcessor struct {
+	mu       sync.Mutex
+	connID   string
+	payloads []Payload
+
+	ready  chan struct{}
+	gotMsg chan struct{}
+}
+
+// newRecordServerProcessor 创建可观察的服务端处理器
+func newRecordServerProcessor() *recordServerProcessor {
+	return &recordServerProcessor{
+		ready:  make(chan struct{}, 1),
+		gotMsg: make(chan struct{}, 64),
 	}
 }
 
-// OnConnect 记录 ConnID
-func (b *testServerBiz) OnConnect(ctx SessionContext) {
-	id := ctx.ConnID()
-	b.mu.Lock()
-	b.connIDs = append(b.connIDs, id)
-	b.mu.Unlock()
-	select {
-	case b.connectCh <- id:
-	default:
-	}
+// OnConnect 连接建立后记录框架 ConnID
+func (p *recordServerProcessor) OnConnect(ctx SessionContext) {
+	p.mu.Lock()
+	p.connID = ctx.ConnID()
+	p.mu.Unlock()
+	tlogReady(p.ready)
 }
 
-// OnMessage 按 ConnID 记录消息
-func (b *testServerBiz) OnMessage(ctx SessionContext, msg Message) {
-	defer msg.Close()
-	cp := append([]byte(nil), msg.Bytes()...)
-	id := ctx.ConnID()
-	b.mu.Lock()
-	b.messages[id] = append(b.messages[id], cp)
-	b.mu.Unlock()
-	select {
-	case b.messageCh <- struct{}{}:
-	default:
-	}
+// OnDisconnect 连接结束（本示例空实现）
+func (p *recordServerProcessor) OnDisconnect(string, error) {}
+
+// OnPayload 消费一条业务消息
+func (p *recordServerProcessor) OnPayload(_ SessionContext, payload Payload) error {
+	p.mu.Lock()
+	p.payloads = append(p.payloads, payload)
+	p.mu.Unlock()
+	tlogReady(p.gotMsg)
+	return nil
 }
 
-// lastConnID 返回最近一次连接的 ConnID
-func (b *testServerBiz) lastConnID(t *testing.T) string {
+// waitReady 等待 OnConnect
+func (p *recordServerProcessor) waitReady(t *testing.T) string {
 	t.Helper()
 	select {
-	case id := <-b.connectCh:
-		if id == "" {
-			t.Fatal("ConnID 为空")
-		}
-		return id
+	case <-p.ready:
 	case <-time.After(testWait):
-		t.Fatal("等待服务端 OnConnect 超时")
-		return ""
+		t.Fatal("等待服务端 Processor OnConnect 超时")
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.connID == "" {
+		t.Fatal("ConnID 为空")
+	}
+	return p.connID
 }
 
-// waitMessages 等待至少 n 条消息
-func (b *testServerBiz) waitMessages(t *testing.T, n int) {
+// waitPayloads 等待至少 n 条载荷
+func (p *recordServerProcessor) waitPayloads(t *testing.T, n int) []Payload {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		select {
-		case <-b.messageCh:
+		case <-p.gotMsg:
 		case <-time.After(testWait):
-			t.Fatalf("等待服务端消息超时 at %d/%d", i, n)
+			t.Fatalf("等待服务端 OnPayload 超时 at %d/%d", i, n)
 		}
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]Payload, len(p.payloads))
+	copy(out, p.payloads)
+	return out
 }
 
-// testClientBiz 可观察的客户端 Handler
-type testClientBiz struct {
-	NopClientHandler
-	mu sync.Mutex
+// recordClientProcessor 客户端处理器：记录收到的载荷（无 ConnID）
+type recordClientProcessor struct {
+	mu       sync.Mutex
+	payloads []Payload
 
-	connected bool
-	messages  [][]byte
-
-	connectCh chan struct{}
-	messageCh chan struct{}
+	ready  chan struct{}
+	gotMsg chan struct{}
 }
 
-// newTestClientBiz 创建可观察客户端 Handler
-func newTestClientBiz() *testClientBiz {
-	return &testClientBiz{
-		connectCh: make(chan struct{}, 8),
-		messageCh: make(chan struct{}, 64),
+// newRecordClientProcessor 创建可观察的客户端处理器
+func newRecordClientProcessor() *recordClientProcessor {
+	return &recordClientProcessor{
+		ready:  make(chan struct{}, 1),
+		gotMsg: make(chan struct{}, 64),
 	}
 }
 
-// OnConnect 标记已连接
-func (b *testClientBiz) OnConnect(PeerContext) {
-	b.mu.Lock()
-	b.connected = true
-	b.mu.Unlock()
-	select {
-	case b.connectCh <- struct{}{}:
-	default:
-	}
+// OnConnect 出站已连通
+func (p *recordClientProcessor) OnConnect(PeerContext) {
+	tlogReady(p.ready)
 }
 
-// OnMessage 记录消息
-func (b *testClientBiz) OnMessage(_ PeerContext, msg Message) {
-	defer msg.Close()
-	cp := append([]byte(nil), msg.Bytes()...)
-	b.mu.Lock()
-	b.messages = append(b.messages, cp)
-	b.mu.Unlock()
-	select {
-	case b.messageCh <- struct{}{}:
-	default:
-	}
+// OnDisconnect 连接结束（本示例空实现）
+func (p *recordClientProcessor) OnDisconnect(error) {}
+
+// OnPayload 消费一条业务消息
+func (p *recordClientProcessor) OnPayload(_ PeerContext, payload Payload) error {
+	p.mu.Lock()
+	p.payloads = append(p.payloads, payload)
+	p.mu.Unlock()
+	tlogReady(p.gotMsg)
+	return nil
 }
 
-// waitConnect 等待客户端连通
-func (b *testClientBiz) waitConnect(t *testing.T) {
+// waitReady 等待 OnConnect
+func (p *recordClientProcessor) waitReady(t *testing.T) {
 	t.Helper()
 	select {
-	case <-b.connectCh:
+	case <-p.ready:
 	case <-time.After(testWait):
-		t.Fatal("等待客户端 OnConnect 超时")
+		t.Fatal("等待客户端 Processor OnConnect 超时")
 	}
 }
 
-// waitMessages 等待至少 n 条消息
-func (b *testClientBiz) waitMessages(t *testing.T, n int) {
+// waitPayloads 等待至少 n 条载荷
+func (p *recordClientProcessor) waitPayloads(t *testing.T, n int) []Payload {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		select {
-		case <-b.messageCh:
+		case <-p.gotMsg:
 		case <-time.After(testWait):
-			t.Fatalf("等待客户端消息超时 at %d/%d", i, n)
+			t.Fatalf("等待客户端 OnPayload 超时 at %d/%d", i, n)
 		}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]Payload, len(p.payloads))
+	copy(out, p.payloads)
+	return out
+}
+
+func tlogReady(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
 	}
 }
 
-// startAppPair 用自定义 Handler 启动一对 Server/Client
-func startAppPair(t *testing.T, srvBiz ServerHandler, cliBiz ClientHandler) (Server, Client, string) {
+// startPair 按业务主路径启动一对 Server/Client（只配 Processor）
+func startPair(t *testing.T, srvProc ServerMessageProcessor, cliProc ClientMessageProcessor, chunkSize int) (Server, Client) {
 	t.Helper()
-	t.Log("[流程] 启动 Server（ConnID 由服务端自动生成）")
+	t.Log("[配置] NewServer：Addr=127.0.0.1:0，Processor=业务实现，Handler 默认")
 
 	srv, err := NewServer(ServerConfig{
-		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0", Name: "app-srv"},
-		Handler:      srvBiz,
+		ServerConfig: wsbase.ServerConfig{
+			Addr:      "127.0.0.1:0",
+			Name:      "demo-srv",
+			ChunkSize: chunkSize,
+		},
+		Processor: srvProc,
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
-		t.Log("[流程] Cleanup：关闭 Client 与 Server")
+		t.Log("[清理] 关闭 Server")
 		cancel()
 		_ = srv.Close(context.Background())
 	})
+
+	t.Log("[启动] Server.Start")
 	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -180,407 +275,36 @@ func startAppPair(t *testing.T, srvBiz ServerHandler, cliBiz ClientHandler) (Ser
 	if err != nil {
 		t.Fatalf("ListenAddr: %v", err)
 	}
-	t.Logf("[流程] Server 监听 %v", addr)
+	t.Logf("[启动] Server 监听 %v", addr)
 
+	t.Log("[配置] NewClient：Processor=业务实现，Handler 默认")
 	cli, err := NewClient(ClientConfig{
-		ClientConfig: wsbase.ClientConfig{Name: "app-cli"},
-		Handler:      cliBiz,
+		ClientConfig: wsbase.ClientConfig{
+			Name:      "demo-cli",
+			ChunkSize: chunkSize,
+		},
+		Processor: cliProc,
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
+	t.Cleanup(func() {
+		t.Log("[清理] 关闭 Client")
+		_ = cli.Close(CloseNormalClosure, "test done")
+	})
+
 	url := "ws://" + addr.String() + "/"
-	t.Logf("[流程] Client Connect url=%s", url)
+	t.Logf("[启动] Client.Connect %s", url)
 	if err := cli.Connect(context.Background(), url); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	t.Cleanup(func() { _ = cli.Close(CloseNormalClosure, "test done") })
-
-	var connID string
-	if tb, ok := srvBiz.(*testServerBiz); ok {
-		connID = tb.lastConnID(t)
-		t.Logf("[流程] 服务端 OnConnect connID=%s", connID)
-	}
-	if tb, ok := cliBiz.(*testClientBiz); ok {
-		tb.waitConnect(t)
-		t.Log("[流程] 客户端 OnConnect")
-	}
-	return srv, cli, connID
+	return srv, cli
 }
 
-// TestAppServerClientConnect 门面基本用例：连通后服务端拥有 ConnID
-func TestAppServerClientConnect(t *testing.T) {
-	t.Log("[用例] Server + Client 连接")
-	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
-	srv, cli, connID := startAppPair(t, srvBiz, cliBiz)
-
-	if !cli.Connected() {
-		t.Fatal("Client 应已连接")
+func joinPayloadData(ps []Payload) []byte {
+	var b []byte
+	for _, p := range ps {
+		b = append(b, p.Data...)
 	}
-	if connID == "" || !srv.Has(connID) {
-		t.Fatalf("服务端应登记自动生成的 ConnID, got %q", connID)
-	}
-	if srv.Len() != 1 {
-		t.Fatalf("Len=%d", srv.Len())
-	}
-	t.Logf("[断言] Len=1 Has(%s)=true Client.Connected=true", connID)
-}
-
-// TestAppServerClientTextRoundTrip 文本往返：客户端无 ConnID，服务端用 ConnID 回写
-func TestAppServerClientTextRoundTrip(t *testing.T) {
-	t.Log("[用例] 文本往返")
-	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
-	srv, cli, connID := startAppPair(t, srvBiz, cliBiz)
-
-	t.Log("[流程] Client.SendText hello")
-	if err := cli.SendText(context.Background(), []byte("hello")); err != nil {
-		t.Fatal(err)
-	}
-	srvBiz.waitMessages(t, 1)
-	srvBiz.mu.Lock()
-	got := srvBiz.messages[connID][0]
-	srvBiz.mu.Unlock()
-	if !bytes.Equal(got, []byte("hello")) {
-		t.Fatalf("服务端收到=%q", got)
-	}
-	t.Log("[断言] 服务端业务收到 hello")
-
-	t.Logf("[流程] Server.SendText(connID=%s) 回写 world", connID)
-	if err := srv.SendText(connID, []byte("world")); err != nil {
-		t.Fatal(err)
-	}
-	cliBiz.waitMessages(t, 1)
-	cliBiz.mu.Lock()
-	got = cliBiz.messages[0]
-	cliBiz.mu.Unlock()
-	if !bytes.Equal(got, []byte("world")) {
-		t.Fatalf("客户端收到=%q", got)
-	}
-	t.Log("[断言] 客户端业务收到 world（客户端仍不知 ConnID）")
-}
-
-// TestAppClientChunkedUpload 客户端分片上传
-func TestAppClientChunkedUpload(t *testing.T) {
-	const chunk = 4
-	t.Logf("[用例] Client.SendReader 分片上传 chunk=%d", chunk)
-	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
-	_, cli, connID := startAppPair(t, srvBiz, cliBiz)
-
-	payload := []byte("abcdefghijkl")
-	t.Logf("[流程] SendReader 总长=%d", len(payload))
-	if err := cli.SendReader(context.Background(), OpcodeBinary, bytes.NewReader(payload), WithChunkSize(chunk)); err != nil {
-		t.Fatal(err)
-	}
-	srvBiz.waitMessages(t, 3)
-	srvBiz.mu.Lock()
-	parts := srvBiz.messages[connID]
-	srvBiz.mu.Unlock()
-	if joined := bytes.Join(parts, nil); !bytes.Equal(joined, payload) {
-		t.Fatalf("拼接=%q want %q", joined, payload)
-	}
-	t.Log("[断言] 分片拼接正确")
-}
-
-// TestAppServerSendUnknownPeer 向不存在 ConnID 推送应失败
-func TestAppServerSendUnknownPeer(t *testing.T) {
-	t.Log("[用例] SendText 未知 ConnID")
-	srv, err := NewServer(ServerConfig{
-		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	defer srv.Close(context.Background())
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	err = srv.SendText("nobody", []byte("x"))
-	if err == nil {
-		t.Fatal("应返回 ErrUnknownPeer")
-	}
-	t.Logf("[断言] 错误=%v", err)
-}
-
-// TestAppClientSendBeforeConnect 未连接发送应失败
-func TestAppClientSendBeforeConnect(t *testing.T) {
-	t.Log("[用例] 未 Connect 时 SendText")
-	cli, err := NewClient(ClientConfig{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cli.SendText(context.Background(), []byte("x"))
-	if err == nil {
-		t.Fatal("应返回 ErrNotConnected")
-	}
-	t.Logf("[断言] 错误=%v", err)
-}
-
-// TestAppEscapeHatches 逃生舱可用
-func TestAppEscapeHatches(t *testing.T) {
-	t.Log("[用例] Hub/Underlying/Conn 逃生舱")
-	srvBiz, cliBiz := newTestServerBiz(), newTestClientBiz()
-	srv, cli, connID := startAppPair(t, srvBiz, cliBiz)
-
-	if srv.Hub() == nil || srv.Underlying() == nil || srv.NativeUpgrader() == nil {
-		t.Fatal("Server 逃生舱不应为空")
-	}
-	if _, ok := srv.GetConn(connID); !ok {
-		t.Fatal("GetConn(connID) 应成功")
-	}
-	if cli.Underlying() == nil {
-		t.Fatal("Client.Underlying 不应为空")
-	}
-	if _, ok := cli.Conn(); !ok {
-		t.Fatal("Client.Conn 应成功")
-	}
-	t.Log("[断言] 逃生舱均可用")
-}
-
-// echoServerProcessor 服务端消息处理器：收到后原样回写
-type echoServerProcessor struct {
-	mu       sync.Mutex
-	payloads []Payload
-	connID   string
-	ready    chan struct{}
-	gotMsg   chan struct{}
-}
-
-// OnConnect 记录 ConnID
-func (p *echoServerProcessor) OnConnect(ctx SessionContext) {
-	p.mu.Lock()
-	p.connID = ctx.ConnID()
-	p.mu.Unlock()
-	select {
-	case p.ready <- struct{}{}:
-	default:
-	}
-}
-
-// OnDisconnect 空
-func (p *echoServerProcessor) OnDisconnect(string, error) {}
-
-// OnPayload 记录并回写
-func (p *echoServerProcessor) OnPayload(ctx SessionContext, payload Payload) error {
-	p.mu.Lock()
-	p.payloads = append(p.payloads, payload)
-	p.mu.Unlock()
-	select {
-	case p.gotMsg <- struct{}{}:
-	default:
-	}
-	return ctx.SendBinary(payload.Data)
-}
-
-// echoClientProcessor 客户端消息处理器
-type echoClientProcessor struct {
-	mu       sync.Mutex
-	payloads []Payload
-	ready    chan struct{}
-	gotMsg   chan struct{}
-}
-
-// OnConnect 标记就绪
-func (p *echoClientProcessor) OnConnect(PeerContext) {
-	select {
-	case p.ready <- struct{}{}:
-	default:
-	}
-}
-
-// OnDisconnect 空
-func (p *echoClientProcessor) OnDisconnect(error) {}
-
-// OnPayload 记录载荷
-func (p *echoClientProcessor) OnPayload(_ PeerContext, payload Payload) error {
-	p.mu.Lock()
-	p.payloads = append(p.payloads, payload)
-	p.mu.Unlock()
-	select {
-	case p.gotMsg <- struct{}{}:
-	default:
-	}
-	return nil
-}
-
-// TestMessageProcessorConfig 验证只配 Processor 的主路径
-func TestMessageProcessorConfig(t *testing.T) {
-	t.Log("[用例] Config.Processor 主路径")
-	srvProc := &echoServerProcessor{
-		ready:  make(chan struct{}, 1),
-		gotMsg: make(chan struct{}, 8),
-	}
-	cliProc := &echoClientProcessor{
-		ready:  make(chan struct{}, 1),
-		gotMsg: make(chan struct{}, 8),
-	}
-
-	srv, err := NewServer(ServerConfig{
-		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0"},
-		Processor:    srvProc,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	defer srv.Close(context.Background())
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	addr, err := srv.ListenAddr()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("[流程] Server 监听 %v", addr)
-
-	cli, err := NewClient(ClientConfig{Processor: cliProc})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cli.Close(CloseNormalClosure, "done")
-	if err := cli.Connect(context.Background(), "ws://"+addr.String()+"/"); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case <-srvProc.ready:
-		t.Log("[流程] 服务端 Processor OnConnect")
-	case <-time.After(testWait):
-		t.Fatal("等待服务端 Processor OnConnect 超时")
-	}
-	select {
-	case <-cliProc.ready:
-		t.Log("[流程] 客户端 Processor OnConnect")
-	case <-time.After(testWait):
-		t.Fatal("等待客户端 Processor OnConnect 超时")
-	}
-
-	want := []byte("proc-ping")
-	if err := cli.SendBinary(context.Background(), want); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-srvProc.gotMsg:
-	case <-time.After(testWait):
-		t.Fatal("等待服务端 OnPayload 超时")
-	}
-	select {
-	case <-cliProc.gotMsg:
-	case <-time.After(testWait):
-		t.Fatal("等待客户端收到回写超时")
-	}
-
-	srvProc.mu.Lock()
-	srvGot := append([]byte(nil), srvProc.payloads[0].Data...)
-	srvProc.mu.Unlock()
-	cliProc.mu.Lock()
-	cliGot := append([]byte(nil), cliProc.payloads[0].Data...)
-	cliProc.mu.Unlock()
-	if !bytes.Equal(srvGot, want) || !bytes.Equal(cliGot, want) {
-		t.Fatalf("srv=%q cli=%q want=%q", srvGot, cliGot, want)
-	}
-	t.Log("[断言] Processor 收发正确")
-}
-
-// countingServerHandler 嵌入默认 Handler，额外计数 OnMessage
-type countingServerHandler struct {
-	DefaultServerHandler
-	mu    sync.Mutex
-	count int
-}
-
-// OnMessage 计数后转交默认实现
-func (h *countingServerHandler) OnMessage(ctx SessionContext, msg Message) {
-	h.mu.Lock()
-	h.count++
-	h.mu.Unlock()
-	h.DefaultServerHandler.OnMessage(ctx, msg)
-}
-
-// TestCustomHandlerStillUsesProcessor 自定义 Handler 嵌入默认实现并复用 Processor
-func TestCustomHandlerStillUsesProcessor(t *testing.T) {
-	t.Log("[用例] 自定义 Handler 嵌入 DefaultServerHandler")
-	srvProc := &echoServerProcessor{
-		ready:  make(chan struct{}, 1),
-		gotMsg: make(chan struct{}, 8),
-	}
-	cliProc := &echoClientProcessor{
-		ready:  make(chan struct{}, 1),
-		gotMsg: make(chan struct{}, 8),
-	}
-	srvH := &countingServerHandler{
-		DefaultServerHandler: DefaultServerHandler{Processor: srvProc},
-	}
-
-	srv, err := NewServer(ServerConfig{
-		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0"},
-		Handler:      srvH,
-		Processor:    &echoServerProcessor{}, // 应被静默忽略（不自动接入）
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	defer srv.Close(context.Background())
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	addr, err := srv.ListenAddr()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cli, err := NewClient(ClientConfig{
-		Handler: DefaultClientHandler{Processor: cliProc},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cli.Close(CloseNormalClosure, "done")
-	if err := cli.Connect(context.Background(), "ws://"+addr.String()+"/"); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case <-srvProc.ready:
-	case <-time.After(testWait):
-		t.Fatal("等待服务端 OnConnect 超时")
-	}
-	select {
-	case <-cliProc.ready:
-	case <-time.After(testWait):
-		t.Fatal("等待客户端 OnConnect 超时")
-	}
-
-	want := []byte("embed-ping")
-	if err := cli.SendBinary(context.Background(), want); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-srvProc.gotMsg:
-	case <-time.After(testWait):
-		t.Fatal("等待嵌入 Handler 的 Processor 超时")
-	}
-	select {
-	case <-cliProc.gotMsg:
-	case <-time.After(testWait):
-		t.Fatal("等待客户端回写超时")
-	}
-
-	srvH.mu.Lock()
-	n := srvH.count
-	srvH.mu.Unlock()
-	if n != 1 {
-		t.Fatalf("自定义 OnMessage 计数=%d want 1", n)
-	}
-	srvProc.mu.Lock()
-	got := append([]byte(nil), srvProc.payloads[0].Data...)
-	srvProc.mu.Unlock()
-	if !bytes.Equal(got, want) {
-		t.Fatalf("Processor 收到=%q", got)
-	}
-	t.Log("[断言] 自定义 Handler 加强后仍走嵌入的 Processor")
+	return b
 }
