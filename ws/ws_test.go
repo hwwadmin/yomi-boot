@@ -59,7 +59,7 @@ func startServerAndClient(t *testing.T, srvCfg ServerConfig, cliCfg ClientConfig
 			}
 		},
 		onMessage: func(_ Conn, msg Message) {
-			defer msg.Close()
+			defer func() { _ = msg.Close() }()
 			cp := append([]byte(nil), msg.Bytes()...)
 			t.Logf("[服务端] OnMessage opcode=%v len=%d payload=%q", msg.Opcode(), len(cp), previewBytes(cp))
 			select {
@@ -85,7 +85,7 @@ func startServerAndClient(t *testing.T, srvCfg ServerConfig, cliCfg ClientConfig
 			}
 		},
 		onMessage: func(_ Conn, msg Message) {
-			defer msg.Close()
+			defer func() { _ = msg.Close() }()
 			cp := append([]byte(nil), msg.Bytes()...)
 			t.Logf("[客户端] OnMessage opcode=%v len=%d payload=%q", msg.Opcode(), len(cp), previewBytes(cp))
 			select {

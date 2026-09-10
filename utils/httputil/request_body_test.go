@@ -98,7 +98,7 @@ func TestReplayRequestBody_KeepAliveReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
@@ -116,8 +116,8 @@ func TestReplayRequestBody_KeepAliveReuse(t *testing.T) {
 		_, _ = w.Write(b)
 	})
 	srv := &http.Server{Handler: mux}
-	go srv.Serve(ln)
-	defer srv.Close()
+	go func() { _ = srv.Serve(ln) }()
+	defer func() { _ = srv.Close() }()
 
 	tr := &http.Transport{DisableKeepAlives: false, MaxIdleConnsPerHost: 4}
 	client := &http.Client{Transport: tr, Timeout: 5 * time.Second}
@@ -143,7 +143,7 @@ func TestReplayRequestBody_KeepAliveReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if !bytes.Equal(got, body) {
 				t.Fatalf("echo mismatch len got=%d want=%d", len(got), len(body))
 			}

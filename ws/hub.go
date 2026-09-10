@@ -90,7 +90,7 @@ func (h *Hub) broadcast(opcode Opcode, payload []byte) error {
 
 	var firstErr error
 	b := gws.NewBroadcaster(opcode, payload)
-	defer b.Close()
+	defer func() { _ = b.Close() }()
 	for _, c := range list {
 		native, ok := c.(NativeConn)
 		if !ok || native.Native() == nil {
