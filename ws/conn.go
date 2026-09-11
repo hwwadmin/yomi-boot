@@ -166,11 +166,15 @@ func (c *connImpl) serve() {
 			if c.sendQ != nil {
 				c.sendQ.shutdown()
 			}
-			if c.onClose != nil {
-				c.onClose(c, err)
-			}
+			// 先拆底层，再回调；OnDisconnect panic 不得跳过 CloseNow，也不得打穿 serve goroutine
 			if c.raw != nil {
 				_ = c.raw.CloseNow()
+			}
+			if c.onClose != nil {
+				func() {
+					defer func() { _ = recover() }()
+					c.onClose(c, err)
+				}()
 			}
 		}()
 		for {

@@ -642,3 +642,46 @@ func (h *captureIDHandler) OnConnect(ctx SessionContext) {
 	default:
 	}
 }
+
+// TestOnDisconnectPanicStillTearsDown OnDisconnect panic 不得打穿拆除，Hub 应清空
+func TestOnDisconnectPanicStillTearsDown(t *testing.T) {
+	hit := make(chan struct{}, 1)
+	srv, url := startTestServer(t, ServerConfig{
+		Addr:             "127.0.0.1:0",
+		HeartbeatTimeout: Duration(0),
+		MaxConnLifetime:  Duration(0),
+		Handler:          &panicOnDisconnectHandler{hit: hit},
+	})
+	cli := connectTestClient(t, url, ClientConfig{
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		Handler:           NopClientHandler{},
+	})
+	waitUntil(t, testWait, func() bool { return srv.Len() == 1 }, "等待连接登记超时")
+	if err := cli.Close(CloseNormalClosure, "trigger disconnect"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-hit:
+	case <-time.After(testWait):
+		t.Fatal("等待 OnDisconnect 超时")
+	}
+	waitUntil(t, testWait, func() bool { return srv.Len() == 0 }, "OnDisconnect panic 后 Hub 未清空")
+}
+
+// panicOnDisconnectHandler 在 OnDisconnect 故意 panic，用于验证拆除路径
+type panicOnDisconnectHandler struct {
+	hit chan struct{}
+}
+
+func (h *panicOnDisconnectHandler) OnConnect(SessionContext) {}
+
+func (h *panicOnDisconnectHandler) OnDisconnect(string, error) {
+	select {
+	case h.hit <- struct{}{}:
+	default:
+	}
+	panic("on_disconnect boom")
+}
+
+func (h *panicOnDisconnectHandler) OnPayload(SessionContext, Payload) {}
