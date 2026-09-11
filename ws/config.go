@@ -92,7 +92,13 @@ type ServerConfig struct {
 	// OriginPatterns 允许的 Origin host 模式（path.Match）；空则不做 Origin 校验
 	OriginPatterns []string
 
-	TLSConfig *tls.Config                // TLSConfig 供 StartTLS 合并（证书仍由 StartTLS 参数加载）
+	// TLSEnabled 为 true 时 Start 以 TLS 监听；需同时配置 TLSCertFile / TLSKeyFile
+	TLSEnabled  bool
+	TLSCertFile string // TLSCertFile 是证书文件路径（TLSEnabled 时必填）
+	TLSKeyFile  string // TLSKeyFile 是私钥文件路径（TLSEnabled 时必填）
+	// TLSConfig 可选；TLSEnabled 时与证书合并（Certificates 由文件加载覆盖）
+	TLSConfig *tls.Config
+
 	Authorize func(r *http.Request) bool // Authorize 握手鉴权；nil 表示放行
 
 	Handler   ServerHandler          // Handler 可选；nil 则用默认实现
@@ -124,6 +130,11 @@ func (c ServerConfig) Validate() error {
 	}
 	if err := validateQueueGCInterval(c.QueueGCInterval); err != nil {
 		return err
+	}
+	if c.TLSEnabled {
+		if c.TLSCertFile == "" || c.TLSKeyFile == "" {
+			return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "TLSEnabled 时 TLSCertFile 与 TLSKeyFile 不能为空")
+		}
 	}
 	return nil
 }

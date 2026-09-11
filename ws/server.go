@@ -19,10 +19,8 @@ import (
 
 // Server 是入站服务：内置连接表，按框架 ConnID 推送
 type Server interface {
-	// Start 非阻塞启动明文监听；ctx 取消时关闭服务
+	// Start 非阻塞启动监听；是否 TLS 由 ServerConfig 决定；ctx 取消时关闭服务
 	Start(ctx context.Context) error
-	// StartTLS 非阻塞启动 TLS 监听
-	StartTLS(ctx context.Context, certFile, keyFile string) error
 	// Close 关闭所有会话并停止监听
 	Close(ctx context.Context) error
 
@@ -42,9 +40,12 @@ type Server interface {
 
 // server 是 Server 的默认实现
 type server struct {
-	addr      string        // addr 是配置的监听地址
-	handler   ServerHandler // handler 是会话回调
-	tlsConfig *tls.Config   // tlsConfig 供 StartTLS 合并证书
+	addr        string        // addr 是配置的监听地址
+	handler     ServerHandler // handler 是会话回调
+	tlsEnabled  bool          // tlsEnabled 是否启用 TLS
+	tlsCertFile string        // tlsCertFile 证书路径
+	tlsKeyFile  string        // tlsKeyFile 私钥路径
+	tlsConfig   *tls.Config   // tlsConfig 可选合并配置
 
 	handshakeTimeout      time.Duration            // handshakeTimeout 已 resolve 的握手超时
 	maxConnLifetime       time.Duration            // maxConnLifetime 已 resolve 的通道最大存活；0 表示不限制
@@ -80,6 +81,9 @@ func NewServer(cfg ServerConfig) (Server, error) {
 	return &server{
 		addr:                  cfg.Addr,
 		handler:               cfg.resolveHandler(),
+		tlsEnabled:            cfg.TLSEnabled,
+		tlsCertFile:           cfg.TLSCertFile,
+		tlsKeyFile:            cfg.TLSKeyFile,
 		tlsConfig:             cfg.TLSConfig,
 		handshakeTimeout:      cfg.ResolvedHandshakeTimeout(),
 		maxConnLifetime:       lifetime,
@@ -98,21 +102,8 @@ func NewServer(cfg ServerConfig) (Server, error) {
 	}, nil
 }
 
-// Start 非阻塞启动明文监听
+// Start 非阻塞启动监听（明文或 TLS 由配置决定）
 func (s *server) Start(ctx context.Context) error {
-	return s.start(ctx, false, "", "")
-}
-
-// StartTLS 非阻塞启动 TLS 监听
-func (s *server) StartTLS(ctx context.Context, certFile, keyFile string) error {
-	if certFile == "" || keyFile == "" {
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "StartTLS 需要 certFile 与 keyFile")
-	}
-	return s.start(ctx, true, certFile, keyFile)
-}
-
-// start 监听并启动接受循环；useTLS 为 true 时包装 TLS
-func (s *server) start(ctx context.Context, useTLS bool, certFile, keyFile string) error {
 	if s == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
@@ -128,8 +119,8 @@ func (s *server) start(ctx context.Context, useTLS bool, certFile, keyFile strin
 		s.started.Store(false)
 		return errors.Wrap(err, "ws Server 监听失败")
 	}
-	if useTLS {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if s.tlsEnabled {
+		cert, err := tls.LoadX509KeyPair(s.tlsCertFile, s.tlsKeyFile)
 		if err != nil {
 			_ = ln.Close()
 			s.started.Store(false)
@@ -155,6 +146,7 @@ func (s *server) start(ctx context.Context, useTLS bool, certFile, keyFile strin
 	if s.closed.Load() {
 		s.hub.mu.Unlock()
 		_ = ln.Close()
+		s.started.Store(false)
 		return errors.Sentinel(ErrClosed)
 	}
 	s.listener = ln

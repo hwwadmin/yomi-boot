@@ -47,6 +47,17 @@ func TestQueueGCIntervalResolve(t *testing.T) {
 	}
 }
 
+func TestServerConfigTLSEnabledRequiresCert(t *testing.T) {
+	err := ServerConfig{Addr: ":1", TLSEnabled: true}.Validate()
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("TLSEnabled 无证书应得 ErrInvalidArgument，实际 %v", err)
+	}
+	err = ServerConfig{Addr: ":1", TLSEnabled: true, TLSCertFile: "c.pem", TLSKeyFile: "k.pem"}.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServerConfigValidatePayloadSize(t *testing.T) {
 	if err := (ServerConfig{Addr: ":1", WriteMaxPayloadSize: -1}).Validate(); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("负 WriteMaxPayloadSize 应得 ErrInvalidArgument，实际 %v", err)
