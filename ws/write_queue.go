@@ -223,7 +223,8 @@ func (c *connImpl) writeLoop() {
 	}
 }
 
-// writeMessageDirect 由写循环调用，直接写底层（不再入队）
+// writeMessageDirect 由写循环调用，直接写底层（不再入队）。
+// maxFrame>0 且明文超长时经 Writer 做协议分片；压缩开启时帧长尽力而为。
 func (c *connImpl) writeMessageDirect(typ MsgType, data []byte) error {
 	if c == nil || c.raw == nil {
 		return errors.Sentinel(ErrNotConnected)
@@ -237,8 +238,32 @@ func (c *connImpl) writeMessageDirect(typ MsgType, data []byte) error {
 	default:
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "不支持的 MsgType")
 	}
-	if err := c.raw.Write(context.Background(), wtyp, data); err != nil {
-		return errors.Wrap(err, "ws 写入消息失败")
+	ctx := context.Background()
+	maxFrame := c.maxFrame
+	if maxFrame <= 0 || len(data) <= maxFrame {
+		if err := c.raw.Write(ctx, wtyp, data); err != nil {
+			return errors.Wrap(err, "ws 写入消息失败")
+		}
+		return nil
+	}
+
+	w, err := c.raw.Writer(ctx, wtyp)
+	if err != nil {
+		return errors.Wrap(err, "ws 获取分片 Writer 失败")
+	}
+	for offset := 0; offset < len(data); {
+		end := offset + maxFrame
+		if end > len(data) {
+			end = len(data)
+		}
+		if _, err := w.Write(data[offset:end]); err != nil {
+			_ = w.Close()
+			return errors.Wrap(err, "ws 写入分片失败")
+		}
+		offset = end
+	}
+	if err := w.Close(); err != nil {
+		return errors.Wrap(err, "ws 结束分片消息失败")
 	}
 	return nil
 }

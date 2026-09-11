@@ -20,6 +20,12 @@
 // 通道健康只看心跳；写出卡住不因此拆线。
 // QueueGCInterval：nil→30s；显式 0→关闭。Close 会停巡检，丢弃实例前应 Close。
 //
+// # 协议分片
+//
+// MaxFramePayloadSize：0=关闭（默认）；>0 且明文超过该值时自动 RFC continuation 分片。
+// Send/OnPayload 仍是一整条消息。未压缩时各数据帧载荷 ≤ 该值；已压缩时帧长尽力而为，
+// 不保证每帧严格 ≤ 配置。可与 CompressEnabled 同时开启。
+//
 // # 其它
 //
 // 小文件可走 WS（受 WriteMaxPayloadSize 限制，默认 256KiB，上限 8MiB）；

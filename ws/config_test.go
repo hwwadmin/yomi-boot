@@ -67,6 +67,29 @@ func TestServerConfigValidatePayloadSize(t *testing.T) {
 	}
 }
 
+func TestServerConfigValidateMaxFramePayloadSize(t *testing.T) {
+	if err := (ServerConfig{Addr: ":1", MaxFramePayloadSize: -1}).Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("负 MaxFramePayloadSize 应得 ErrInvalidArgument，实际 %v", err)
+	}
+	if err := (ServerConfig{Addr: ":1", MaxFramePayloadSize: 0}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (ServerConfig{
+		Addr:                ":1",
+		WriteMaxPayloadSize: 1024,
+		MaxFramePayloadSize: 2048,
+	}).Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("MaxFrame>WriteMax 应得 ErrInvalidArgument，实际 %v", err)
+	}
+	if err := (ServerConfig{
+		Addr:                ":1",
+		WriteMaxPayloadSize: 4096,
+		MaxFramePayloadSize: 1024,
+	}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServerConfigValidateHeartbeat(t *testing.T) {
 	neg := Duration(-time.Second)
 	if err := (ServerConfig{Addr: ":1", HeartbeatInterval: neg}).Validate(); !errors.Is(err, ErrInvalidArgument) {

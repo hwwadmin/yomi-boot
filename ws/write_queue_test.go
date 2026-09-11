@@ -4,6 +4,7 @@
 package ws
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"testing"
@@ -84,5 +85,99 @@ func TestServerBroadcastSkipsDeadConn(t *testing.T) {
 	waitUntil(t, testWait, func() bool { return srv.Len() == 0 }, "等待 hub 清空超时")
 	if err := srv.Broadcast(MsgText, []byte("hi")); err != nil {
 		t.Fatalf("空 hub Broadcast 应成功，实际 %v", err)
+	}
+}
+
+// captureServerProcessor 将收到的载荷送入通道（分片写出用例）
+type captureServerProcessor struct {
+	ch chan []byte
+}
+
+func (p *captureServerProcessor) OnPayload(_ SessionContext, payload Payload) error {
+	p.ch <- append([]byte(nil), payload.Data...)
+	return nil
+}
+
+// TestMaxFramePayloadRoundTrip 超 MaxFrame 的明文经协议分片后对端仍一次 OnPayload
+func TestMaxFramePayloadRoundTrip(t *testing.T) {
+	t.Log("[用例] MaxFramePayloadSize=8，发送 40 字节二进制，对端一次收齐")
+
+	const maxFrame = 8
+	payload := bytes.Repeat([]byte("0123456789"), 4) // 40 bytes
+
+	srvGot := make(chan []byte, 1)
+	_, url := startTestServer(t, ServerConfig{
+		Addr:                "127.0.0.1:0",
+		WriteMaxPayloadSize: 256,
+		MaxFramePayloadSize: maxFrame,
+		HeartbeatTimeout:    Duration(0),
+		MaxConnLifetime:     Duration(0),
+		QueueGCInterval:     Duration(0),
+		Handler: DefaultServerHandler{
+			Processor: &captureServerProcessor{ch: srvGot},
+		},
+	})
+	cli := connectTestClient(t, url, ClientConfig{
+		WriteMaxPayloadSize: 256,
+		MaxFramePayloadSize: maxFrame,
+		HeartbeatInterval:   Duration(0),
+		HeartbeatTimeout:    Duration(0),
+		QueueGCInterval:     Duration(0),
+		Handler:             NopClientHandler{},
+	})
+
+	if err := cli.Send(MsgBinary, payload); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-srvGot:
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("服务端收到 len=%d want %d", len(got), len(payload))
+		}
+	case <-time.After(testWait):
+		t.Fatal("等待分片合帧超时")
+	}
+}
+
+// TestMaxFramePayloadRoundTripWithCompress 压缩+分片仍一次 OnPayload
+func TestMaxFramePayloadRoundTripWithCompress(t *testing.T) {
+	t.Log("[用例] CompressEnabled + MaxFramePayloadSize，大包一次收齐")
+
+	const maxFrame = 16
+	payload := bytes.Repeat([]byte("abcdef"), 20) // 120 bytes
+
+	srvGot := make(chan []byte, 1)
+	_, url := startTestServer(t, ServerConfig{
+		Addr:                "127.0.0.1:0",
+		CompressEnabled:     true,
+		WriteMaxPayloadSize: 1024,
+		MaxFramePayloadSize: maxFrame,
+		HeartbeatTimeout:    Duration(0),
+		MaxConnLifetime:     Duration(0),
+		QueueGCInterval:     Duration(0),
+		Handler: DefaultServerHandler{
+			Processor: &captureServerProcessor{ch: srvGot},
+		},
+	})
+	cli := connectTestClient(t, url, ClientConfig{
+		CompressEnabled:     true,
+		WriteMaxPayloadSize: 1024,
+		MaxFramePayloadSize: maxFrame,
+		HeartbeatInterval:   Duration(0),
+		HeartbeatTimeout:    Duration(0),
+		QueueGCInterval:     Duration(0),
+		Handler:             NopClientHandler{},
+	})
+
+	if err := cli.Send(MsgBinary, payload); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-srvGot:
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("服务端收到 len=%d want %d", len(got), len(payload))
+		}
+	case <-time.After(testWait):
+		t.Fatal("等待压缩分片合帧超时")
 	}
 }

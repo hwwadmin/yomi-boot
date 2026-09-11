@@ -196,7 +196,7 @@ services/{domain}/
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
 | `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |
 | `rpc` | HTTP RPC 读客户端（Consul 发现 + POST JSON）；轻量重试（退避）+ 按下游服务熔断；跨域写走 DTM，不在此叠加写重试 |
-| `ws` | 独立端口 WebSocket（coder/websocket）：Config 配 Processor/可选 Handler；默认 Handler 消费消息；ConnID 仅服务端；心跳/寿命/`MaxConnections`；无 yml/默认插件；小文件可走 WS，大文件走 `filestorage` |
+| `ws` | 独立端口 WebSocket（coder/websocket）：Config 配 Processor/可选 Handler；默认 Handler 消费消息；ConnID 仅服务端；心跳/寿命/`MaxConnections`；可选 `MaxFramePayloadSize` 协议分片；无 yml/默认插件；小文件可走 WS，大文件走 `filestorage` |
 | `distlock` | 基于 Redsync 的分布式锁、看门狗 |
 | `errors` | 系统级错误包装与 `BizError` 业务异常类型 |
 | `response` | `Encoder` 接口、显式 `MustRegister`；可提供预制实现供业务显式选用（预制 ≠ 强制契约） |

@@ -25,6 +25,7 @@ type connImpl struct {
 	remote   net.Addr        // remote 是对端地址
 	local    net.Addr        // local 是本地地址
 	writeMax int             // writeMax 是单条可写上限
+	maxFrame int             // maxFrame 是出站分片目标帧载荷；0 关闭
 	connID   string          // connID 仅服务端在登记后赋值
 
 	sendQ *writeQueue // sendQ 是发送队列；业务与 Ping 经此串行写出
@@ -82,6 +83,7 @@ type connParams struct {
 	local         net.Addr
 	writeMax      int
 	readMax       int
+	maxFrame      int // maxFrame 出站分片目标帧载荷；0 关闭
 	sendQueueSize int // sendQueueSize 是发送队列容量；0 表示无界
 }
 
@@ -100,6 +102,7 @@ func newConn(p connParams) *connImpl {
 		remote:      p.remote,
 		local:       p.local,
 		writeMax:    p.writeMax,
+		maxFrame:    p.maxFrame,
 		serveCtx:    ctx,
 		serveCancel: cancel,
 	}

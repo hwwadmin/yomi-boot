@@ -34,6 +34,7 @@ type client struct {
 	heartbeat       heartbeatSettings
 	writeMax        int
 	readMax         int
+	maxFrame        int
 	sendQueueSize   int
 	queueGCInterval time.Duration
 
@@ -56,6 +57,7 @@ func NewClient(cfg ClientConfig) (Client, error) {
 		heartbeat:       heartbeatFromResolved(interval, timeout),
 		writeMax:        cfg.ResolvedWriteMaxPayloadSize(),
 		readMax:         cfg.ResolvedReadMaxPayloadSize(),
+		maxFrame:        cfg.MaxFramePayloadSize,
 		sendQueueSize:   cfg.SendQueueSize,
 		queueGCInterval: cfg.ResolvedQueueGCInterval(),
 	}, nil
@@ -122,6 +124,7 @@ func (c *client) dial(ctx context.Context, rawURL string) (out *connImpl, err er
 		remote:        parseNetAddr(host),
 		writeMax:      c.writeMax,
 		readMax:       c.readMax,
+		maxFrame:      c.maxFrame,
 		sendQueueSize: c.sendQueueSize,
 	})
 	ref.bind(conn)

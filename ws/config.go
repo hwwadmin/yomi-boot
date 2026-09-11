@@ -68,6 +68,11 @@ type ServerConfig struct {
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 表示 DefaultHandshakeTimeout
 
+	// MaxFramePayloadSize 出站协议分片目标帧载荷；0 表示关闭分片。
+	// 明文长度超过该值时启用 RFC continuation 分片；未压缩时各数据帧载荷 ≤ 该值（末帧可更小）。
+	// 已压缩时尽力控制在该量级，不保证每帧严格 ≤ 该值。须 ≤ 生效的 WriteMaxPayloadSize。
+	MaxFramePayloadSize int
+
 	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultServerHeartbeatInterval；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
 	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
@@ -114,6 +119,9 @@ func (c ServerConfig) Validate() error {
 		return err
 	}
 	if err := validatePayloadSize(c.ReadMaxPayloadSize, "ReadMaxPayloadSize"); err != nil {
+		return err
+	}
+	if err := validateMaxFramePayloadSize(c.MaxFramePayloadSize, c.ResolvedWriteMaxPayloadSize()); err != nil {
 		return err
 	}
 	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout, resolveServerHeartbeat); err != nil {
@@ -187,6 +195,9 @@ type ClientConfig struct {
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时（拨号+升级）；0 表示 DefaultHandshakeTimeout
 
+	// MaxFramePayloadSize 出站协议分片目标帧载荷；语义同 ServerConfig.MaxFramePayloadSize
+	MaxFramePayloadSize int
+
 	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultClientHeartbeatInterval；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
 	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
@@ -211,6 +222,9 @@ func (c ClientConfig) Validate() error {
 		return err
 	}
 	if err := validatePayloadSize(c.ReadMaxPayloadSize, "ReadMaxPayloadSize"); err != nil {
+		return err
+	}
+	if err := validateMaxFramePayloadSize(c.MaxFramePayloadSize, c.ResolvedWriteMaxPayloadSize()); err != nil {
 		return err
 	}
 	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout, resolveClientHeartbeat); err != nil {
@@ -265,6 +279,17 @@ func validatePayloadSize(n int, field string) error {
 	}
 	if n > MaxWriteMaxPayloadSize {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "%s 超过 MaxWriteMaxPayloadSize", field)
+	}
+	return nil
+}
+
+// validateMaxFramePayloadSize 校验分片目标帧长；0 表示关闭；>0 时不得超过生效的 WriteMax
+func validateMaxFramePayloadSize(maxFrame, writeMax int) error {
+	if maxFrame < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxFramePayloadSize 不能为负数")
+	}
+	if maxFrame > 0 && maxFrame > writeMax {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxFramePayloadSize 不能大于 WriteMaxPayloadSize")
 	}
 	return nil
 }
