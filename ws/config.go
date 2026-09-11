@@ -46,69 +46,93 @@ const (
 	DefaultQueueGCInterval = 30 * time.Second
 )
 
-// Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout /
-// MaxConnLifetime / MaxConnLifetimeJitter / QueueGCInterval
+// Duration 返回 d 的指针，用于需区分 nil（默认）与显式 0（关闭）的配置项
 func Duration(d time.Duration) *time.Duration {
 	return &d
 }
 
 // ServerConfig 独立端口 WebSocket 服务构造参数；由业务填充，本包不读配置文件。
 //
-// Handler / Processor 接线规则：
-//   - Handler == nil：使用 DefaultServerHandler，其 OnPayload 消费 Processor
-//   - Handler != nil：使用自定义 Handler；Config.Processor 不自动接入
-//     （自定义 Handler 若仍需 Processor，可嵌入 DefaultServerHandler 自行持有）
+// Handler / Processor：
+//   - Handler == nil：用 DefaultServerHandler，OnPayload 消费 Processor
+//   - Handler != nil：用自定义 Handler，Processor 不自动接入
 type ServerConfig struct {
-	Name string // Name 实例名，写入默认 Handler 日志；可空
-	Addr string // Addr 是监听地址，必填，如 ":7101" 或 "127.0.0.1:7101"
+	// Name 实例名，写入默认 Handler 日志
+	// 默认：空
+	Name string
+	// Addr 监听地址，必填，如 ":7101"
+	Addr string
 
-	// CompressEnabled 是否启用 permessage-deflate；零值 false 表示默认关闭压缩
+	// CompressEnabled 是否启用 permessage-deflate 压缩
+	// 默认：false（关闭）
 	CompressEnabled bool
 
-	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 表示 DefaultReadMaxPayloadSize
-	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
-	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时；0 表示 DefaultHandshakeTimeout
+	// ReadMaxPayloadSize 单条逻辑消息可读上限（字节）
+	// 默认：0 → DefaultReadMaxPayloadSize（256KiB）
+	ReadMaxPayloadSize int
+	// WriteMaxPayloadSize 单条逻辑消息可写上限（字节）
+	// 默认：0 → DefaultWriteMaxPayloadSize（256KiB）
+	WriteMaxPayloadSize int
+	// HandshakeTimeout 握手超时
+	// 默认：0 → DefaultHandshakeTimeout（5s）
+	HandshakeTimeout time.Duration
 
-	// MaxFramePayloadSize 出站协议分片目标帧载荷；0 表示关闭分片。
-	// 明文长度超过该值时启用 RFC continuation 分片；未压缩时各数据帧载荷 ≤ 该值（末帧可更小）。
-	// 已压缩时尽力控制在该量级，不保证每帧严格 ≤ 该值。须 ≤ 生效的 WriteMaxPayloadSize。
+	// MaxFramePayloadSize 出站协议分片目标帧载荷（字节）；超过则 RFC continuation 分片
+	// 默认：0（关闭分片）；须 ≤ 生效的 WriteMaxPayloadSize；压缩开启时帧长尽力而为
 	MaxFramePayloadSize int
 
-	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultServerHeartbeatInterval；显式 0 表示不发 Ping
+	// HeartbeatInterval 主动 Ping 间隔
+	// 默认：nil → DefaultServerHeartbeatInterval（0，不发 Ping）；显式 0 同样不发 Ping
 	HeartbeatInterval *time.Duration
-	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
+	// HeartbeatTimeout 读空闲超时，超时踢连接
+	// 默认：nil → DefaultHeartbeatTimeout（30s）；显式 0 表示不超时踢
 	HeartbeatTimeout *time.Duration
 
-	// MaxConnLifetime 单条通道最大存活时间，从握手成功起算，流量不续命。
-	// nil 表示 DefaultMaxConnLifetime（24h）；显式 0 表示不限制
+	// MaxConnLifetime 单连接最大存活时间（自握手起，流量不续命）
+	// 默认：nil → DefaultMaxConnLifetime（24h）；显式 0 表示不限制
 	MaxConnLifetime *time.Duration
-	// MaxConnLifetimeJitter 存活时间波动半宽；实际寿命为基准加减该值的均匀随机。
-	// nil 表示 DefaultMaxConnLifetimeJitter（30s）；显式 0 表示不波动。
-	// 两者 resolve 后均 >0 时要求 Jitter < Lifetime
+	// MaxConnLifetimeJitter 存活时间抖动半宽，用于打散到期
+	// 默认：nil → DefaultMaxConnLifetimeJitter（30s）；显式 0 表示不抖动
 	MaxConnLifetimeJitter *time.Duration
 
-	// MaxConnections 同时在线连接上限；0 表示不限制；超过时握手成功后立即以 CloseTryAgainLater 断开
+	// MaxConnections 同时在线连接上限；超限握手后 CloseTryAgainLater
+	// 默认：0（不限制）
 	MaxConnections int
 
-	// SendQueueSize 每连接发送队列容量；0 表示无界；>0 为有界（满则阻塞入队）
+	// SendQueueSize 每连接发送队列容量；满则阻塞入队
+	// 默认：0（无界）
 	SendQueueSize int
-	// QueueGCInterval 孤儿发送队列巡检间隔；nil 表示 DefaultQueueGCInterval；显式 0 表示关闭巡检
+	// QueueGCInterval 孤儿发送队列巡检间隔
+	// 默认：nil → DefaultQueueGCInterval（30s）；显式 0 表示关闭巡检
 	QueueGCInterval *time.Duration
 
-	// OriginPatterns 允许的 Origin host 模式（path.Match）；空则不做 Origin 校验
+	// OriginPatterns 允许的 Origin host 模式（path.Match）
+	// 默认：空（不做 Origin 校验）
 	OriginPatterns []string
 
-	// TLSEnabled 为 true 时 Start 以 TLS 监听；需同时配置 TLSCertFile / TLSKeyFile
-	TLSEnabled  bool
-	TLSCertFile string // TLSCertFile 是证书文件路径（TLSEnabled 时必填）
-	TLSKeyFile  string // TLSKeyFile 是私钥文件路径（TLSEnabled 时必填）
-	// TLSConfig 可选；TLSEnabled 时与证书合并（Certificates 由文件加载覆盖）
+	// TLSEnabled 是否 TLS 监听；为 true 时须配证书与私钥
+	// 默认：false
+	TLSEnabled bool
+	// TLSCertFile TLS 证书路径；TLSEnabled 时必填
+	// 默认：空
+	TLSCertFile string
+	// TLSKeyFile TLS 私钥路径；TLSEnabled 时必填
+	// 默认：空
+	TLSKeyFile string
+	// TLSConfig 可选 TLS 配置，与证书文件合并（Certificates 由文件覆盖）
+	// 默认：nil
 	TLSConfig *tls.Config
 
-	Authorize func(r *http.Request) bool // Authorize 握手鉴权；nil 表示放行
+	// Authorize 握手鉴权；返回 false 拒绝
+	// 默认：nil（放行）
+	Authorize func(r *http.Request) bool
 
-	Handler   ServerHandler          // Handler 可选；nil 则用默认实现
-	Processor ServerMessageProcessor // Processor 可选；仅 Handler 为 nil 时由默认实现消费
+	// Handler 会话回调；自定义时 Processor 不自动接入
+	// 默认：nil → DefaultServerHandler
+	Handler ServerHandler
+	// Processor 业务消费 OnPayload；仅 Handler 为 nil 时由默认 Handler 调用
+	// 默认：nil
+	Processor ServerMessageProcessor
 }
 
 // Validate 校验 ServerConfig
@@ -188,34 +212,58 @@ func (c ServerConfig) resolveHandler() ServerHandler {
 
 // ClientConfig 出站 WebSocket 客户端构造参数（Handler / Processor 规则同 ServerConfig）
 type ClientConfig struct {
-	Name string // Name 实例名，写入默认 Handler 日志；可空
+	// Name 实例名，写入默认 Handler 日志
+	// 默认：空
+	Name string
 
-	// CompressEnabled 是否启用 permessage-deflate；零值 false 表示默认关闭压缩
+	// CompressEnabled 是否启用 permessage-deflate 压缩
+	// 默认：false（关闭）
 	CompressEnabled bool
 
-	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 表示 DefaultReadMaxPayloadSize
-	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
-	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时（拨号+升级）；0 表示 DefaultHandshakeTimeout
+	// ReadMaxPayloadSize 单条逻辑消息可读上限（字节）
+	// 默认：0 → DefaultReadMaxPayloadSize（256KiB）
+	ReadMaxPayloadSize int
+	// WriteMaxPayloadSize 单条逻辑消息可写上限（字节）
+	// 默认：0 → DefaultWriteMaxPayloadSize（256KiB）
+	WriteMaxPayloadSize int
+	// HandshakeTimeout 拨号与升级握手超时
+	// 默认：0 → DefaultHandshakeTimeout（5s）
+	HandshakeTimeout time.Duration
 
-	// MaxFramePayloadSize 出站协议分片目标帧载荷；语义同 ServerConfig.MaxFramePayloadSize
+	// MaxFramePayloadSize 出站协议分片目标帧载荷（字节）；超过则 RFC continuation 分片
+	// 默认：0（关闭分片）；须 ≤ 生效的 WriteMaxPayloadSize；压缩开启时帧长尽力而为
 	MaxFramePayloadSize int
 
-	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultClientHeartbeatInterval；显式 0 表示不发 Ping
+	// HeartbeatInterval 主动 Ping 间隔
+	// 默认：nil → DefaultClientHeartbeatInterval（10s）；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
-	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
+	// HeartbeatTimeout 读空闲超时，超时踢连接
+	// 默认：nil → DefaultHeartbeatTimeout（30s）；显式 0 表示不超时踢
 	HeartbeatTimeout *time.Duration
 
-	// SendQueueSize 发送队列容量；0 表示无界；>0 为有界（满则阻塞入队）
+	// SendQueueSize 发送队列容量；满则阻塞入队
+	// 默认：0（无界）
 	SendQueueSize int
-	// QueueGCInterval 孤儿发送队列巡检间隔；nil 表示 DefaultQueueGCInterval；显式 0 表示关闭巡检
+	// QueueGCInterval 孤儿发送队列巡检间隔
+	// 默认：nil → DefaultQueueGCInterval（30s）；显式 0 表示关闭巡检
 	QueueGCInterval *time.Duration
 
-	RequestHeader http.Header  // RequestHeader 握手额外请求头（如鉴权）
-	TLSConfig     *tls.Config  // TLSConfig wss 时可选 TLS 配置；HTTPClient 非空时忽略
-	HTTPClient    *http.Client // HTTPClient 自定义握手客户端（代理等）；nil 使用带超时的默认 Transport
+	// RequestHeader 握手额外请求头（如鉴权）
+	// 默认：nil
+	RequestHeader http.Header
+	// TLSConfig wss 可选 TLS 配置；HTTPClient 非空时忽略本字段
+	// 默认：nil
+	TLSConfig *tls.Config
+	// HTTPClient 自定义握手客户端（代理等）
+	// 默认：nil → 带握手超时的默认 Transport
+	HTTPClient *http.Client
 
-	Handler   ClientHandler          // Handler 可选；nil 则用默认实现
-	Processor ClientMessageProcessor // Processor 可选；仅 Handler 为 nil 时由默认实现消费
+	// Handler 会话回调；自定义时 Processor 不自动接入
+	// 默认：nil → DefaultClientHandler
+	Handler ClientHandler
+	// Processor 业务消费 OnPayload；仅 Handler 为 nil 时由默认 Handler 调用
+	// 默认：nil
+	Processor ClientMessageProcessor
 }
 
 // Validate 校验 ClientConfig
