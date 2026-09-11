@@ -30,8 +30,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.47
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.71.0
 	github.com/aws/smithy-go v1.22.1
+	github.com/coder/websocket v1.8.15
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/lxzan/gws v1.10.1
 	github.com/minio/minio-go/v7 v7.0.80
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pkg/errors v0.9.1

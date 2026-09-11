@@ -1,4 +1,4 @@
-// Package ws 门面联调测试：演示 Processor 只消费消息；连通后主动发信在 Connect 之后发起
+// Package ws 联调测试：Processor 只消费消息；连通后主动发信在 Connect 之后发起
 //
 // @author zwei
 package ws
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/ws/wsbase"
+	"gitee.com/hq_project/yomi-boot/errors"
 )
 
 const testWait = 2 * time.Second
@@ -116,10 +116,8 @@ func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc Client
 	t.Log("[启动] goroutine：Server（独立 srvCtx）")
 	go func() {
 		srv, err := NewServer(ServerConfig{
-			ServerConfig: wsbase.ServerConfig{
-				Addr: "127.0.0.1:0",
-				Name: "demo-srv",
-			},
+			Addr:      "127.0.0.1:0",
+			Name:      "demo-srv",
 			Processor: srvProc,
 		})
 		if err != nil {
@@ -156,9 +154,7 @@ func startPairAsync(t *testing.T, srvProc ServerMessageProcessor, cliProc Client
 			return
 		}
 		cli, err := NewClient(ClientConfig{
-			ClientConfig: wsbase.ClientConfig{
-				Name: "demo-cli",
-			},
+			Name:      "demo-cli",
 			Processor: cliProc,
 		})
 		if err != nil {
@@ -438,8 +434,9 @@ func TestServerCloseLeavesHubEmpty(t *testing.T) {
 	defer srvCancel()
 
 	srv, err := NewServer(ServerConfig{
-		ServerConfig: wsbase.ServerConfig{Addr: "127.0.0.1:0", Name: "close-hub"},
-		Processor:    newChatServerProcessor(),
+		Addr:      "127.0.0.1:0",
+		Name:      "close-hub",
+		Processor: newChatServerProcessor(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -459,8 +456,8 @@ func TestServerCloseLeavesHubEmpty(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			cli, err := NewClient(ClientConfig{
-				ClientConfig: wsbase.ClientConfig{Name: "close-racer"},
-				Processor:    newChatClientProcessor(),
+				Name:      "close-racer",
+				Processor: newChatClientProcessor(),
 			})
 			if err != nil {
 				return
@@ -486,4 +483,148 @@ func TestServerCloseLeavesHubEmpty(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("Close 后 Len=%d，期望 0", srv.Len())
+}
+
+// TestServerSendUnknownPeer 未知 ConnID 应返回 ErrUnknownPeer
+func TestServerSendUnknownPeer(t *testing.T) {
+	pair := startPairAsync(t, newChatServerProcessor(), newChatClientProcessor())
+	err := pair.srv.Send("missing", MsgText, []byte("x"))
+	if !errors.Is(err, ErrUnknownPeer) {
+		t.Fatalf("应得 ErrUnknownPeer，实际 %v", err)
+	}
+}
+
+// TestClientSendCanceledContext 已取消的 ctx 写入应失败
+func TestClientSendCanceledContext(t *testing.T) {
+	pair := startPairAsync(t, newChatServerProcessor(), newChatClientProcessor())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := pair.cli.Send(ctx, MsgText, []byte("x"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("应得 context.Canceled，实际 %v", err)
+	}
+}
+
+// TestSessionEmptyOnConnect 框架不向 Session 写入内部键
+func TestSessionEmptyOnConnect(t *testing.T) {
+	h := &sessionProbeHandler{ready: make(chan int, 1)}
+	_, url := startTestServer(t, ServerConfig{
+		Addr:             "127.0.0.1:0",
+		HeartbeatTimeout: Duration(0),
+		MaxConnLifetime:  Duration(0),
+		Handler:          h,
+	})
+	_ = connectTestClient(t, url, ClientConfig{
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		Handler:           NopClientHandler{},
+	})
+	select {
+	case n := <-h.ready:
+		if n != 0 {
+			t.Fatalf("OnConnect 时 Session.Len=%d，期望 0", n)
+		}
+	case <-time.After(testWait):
+		t.Fatal("等待 OnConnect 超时")
+	}
+}
+
+// TestMaxConnectionsRejectsExtra 超额连接握手后断开，不占 Hub
+func TestMaxConnectionsRejectsExtra(t *testing.T) {
+	t.Log("[用例] MaxConnections=1，第二条应被 CloseTryAgainLater")
+
+	extraH := newDisconnectClientHandler()
+	srv, url := startTestServer(t, ServerConfig{
+		Addr:             "127.0.0.1:0",
+		MaxConnections:   1,
+		HeartbeatTimeout: Duration(0),
+		MaxConnLifetime:  Duration(0),
+		Handler:          NopServerHandler{},
+	})
+	first := connectTestClient(t, url, ClientConfig{
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		Handler:           NopClientHandler{},
+	})
+	waitUntil(t, testWait, func() bool { return srv.Len() == 1 && first.Connected() }, "等待第一条登记超时")
+
+	extra := connectTestClient(t, url, ClientConfig{
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		Handler:           extraH,
+	})
+	extraH.wait(t)
+	waitUntil(t, testWait, func() bool { return !extra.Connected() }, "超额客户端应断开")
+	if srv.Len() != 1 {
+		t.Fatalf("Len=%d want 1", srv.Len())
+	}
+	if !first.Connected() {
+		t.Fatal("既有连接不应被踢")
+	}
+	t.Log("[断言] Hub 仍为 1，超额客户端已断开")
+}
+
+// TestServerSendByConnID 按框架 ConnID 推送；自定义 Handler 嵌入 DefaultServerHandler 以接入 Processor
+func TestServerSendByConnID(t *testing.T) {
+	idCh := make(chan string, 1)
+	cliProc := newChatClientProcessor()
+	h := &captureIDHandler{
+		DefaultServerHandler: DefaultServerHandler{Processor: newChatServerProcessor()},
+		idCh:                 idCh,
+	}
+	srv, url := startTestServer(t, ServerConfig{
+		Addr:             "127.0.0.1:0",
+		HeartbeatTimeout: Duration(0),
+		MaxConnLifetime:  Duration(0),
+		Handler:          h,
+	})
+	_ = connectTestClient(t, url, ClientConfig{
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		Processor:         cliProc,
+	})
+
+	var id string
+	select {
+	case id = <-idCh:
+	case <-time.After(testWait):
+		t.Fatal("等待 ConnID 超时")
+	}
+	if !srv.Has(id) {
+		t.Fatalf("Has(%s)=false", id)
+	}
+	if err := srv.Send(id, MsgText, []byte("world")); err != nil {
+		t.Fatal(err)
+	}
+	cliProc.waitDone(t)
+}
+
+// sessionProbeHandler 在 OnConnect 报告 Session 条目数
+type sessionProbeHandler struct {
+	ready chan int
+}
+
+func (h *sessionProbeHandler) OnConnect(ctx SessionContext) {
+	select {
+	case h.ready <- ctx.Session().Len():
+	default:
+	}
+}
+
+func (h *sessionProbeHandler) OnDisconnect(string, error) {}
+
+func (h *sessionProbeHandler) OnPayload(SessionContext, Payload) {}
+
+// captureIDHandler 嵌入默认 Handler，在 OnConnect 暴露 ConnID
+type captureIDHandler struct {
+	DefaultServerHandler
+	idCh chan string
+}
+
+func (h *captureIDHandler) OnConnect(ctx SessionContext) {
+	h.DefaultServerHandler.OnConnect(ctx)
+	select {
+	case h.idCh <- ctx.ConnID():
+	default:
+	}
 }

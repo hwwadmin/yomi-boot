@@ -1,26 +1,19 @@
-// Package ws 提供基于 wsbase 的高级会话门面：业务收发与连接启停，不直接管理
-// Conn / Serve / Hub；底层能力经逃生舱或 wsbase 按需使用。
-//
-// # 与 wsbase 的关系
-//
-// 本包只组装 gitee.com/hq_project/yomi-boot/ws/wsbase，不修改其行为。
+// Package ws 提供独立端口 WebSocket：业务只面对会话与报文，不直接管理读循环或协议库。
 //
 // # 用法（推荐）
 //
-// 业务实现 MessageProcessor，写入 Config 后启动：
+// 业务实现 ServerMessageProcessor / ClientMessageProcessor，写入 Config 后启动：
 //
 //	srv, _ := ws.NewServer(ws.ServerConfig{
-//	    ServerConfig: wsbase.ServerConfig{Addr: ":8080"},
-//	    Processor:    myBiz{},
+//	    Addr:      ":8080",
+//	    Processor: myBiz{},
 //	})
-//
-// 常用传输类型也可经本包别名使用（见 alias.go），多数场景无需再 import wsbase。
 //
 // # Handler / Processor
 //
 //   - Processor：只负责 OnPayload 消费业务消息（Payload.Type + Data）
-//   - Handler：会话面（启停 + 原始 Message）；Config.Handler 为 nil 时用
-//     Default*Handler（启停默认打日志，OnMessage 映射 MsgType 后调用 Processor）
+//   - Handler：会话面（启停 + OnPayload）；Config.Handler 为 nil 时用
+//     Default*Handler（启停默认打日志，OnPayload 调用 Processor）
 //   - 发送统一为 Send/Broadcast(typ, data)，类型用 MsgText / MsgBinary
 //   - 连通后主动发信由业务在 Connect 成功后自行调用 Client/Server API
 //   - 自定义 Handler 时 Config.Processor 不自动接入；若仍需 Processor，
@@ -28,7 +21,7 @@
 //
 // # 载荷与文件
 //
-// OnPayload 在一条逻辑消息收齐后触发，整包进内存（合帧见 wsbase）。
+// OnPayload 在一条逻辑消息收齐后触发，整包进内存。
 // 小文件可直接 Send(MsgBinary, data)，体量对齐 WriteMaxPayloadSize
 // （默认 256KiB，配置上限 8MiB）。大文件不要走 WebSocket 整包，应经
 // filestorage（MinIO / S3 / OSS）上传或预签名直传；WS 只推 uri、进度、
@@ -36,28 +29,35 @@
 //
 // # ConnID（仅服务端）
 //
-// 由服务端在连接建立时自动生成并登记 Hub；客户端不感知。
+// 由服务端在连接建立时自动生成并登记；客户端不感知。
 // 业务鉴权应在连通后通过报文完成，不属本包。
 //
 // # 心跳
 //
-// 传输层心跳由嵌入的 wsbase.ServerConfig / ClientConfig 的 HeartbeatInterval、
-// HeartbeatTimeout 控制（见 wsbase 文档）；也可用本包 Duration / Default*Heartbeat* 别名。
-// 默认：服务端 DefaultServerHeartbeatInterval（0）+ 30s 空闲超时；客户端 10s Ping + 30s 超时。
+// HeartbeatInterval、HeartbeatTimeout：nil→该端默认常量；显式 0→关闭对应能力。
+// 默认：服务端不主动 Ping + 30s 空闲超时；客户端 10s Ping + 30s 超时。
+// Timeout>0 时任意入站（消息 / Ping / Pong）刷新空闲定时器。
 //
 // # 通道最长存活（仅 Server）
 //
-// 由嵌入的 wsbase.ServerConfig 的 MaxConnLifetime、MaxConnLifetimeJitter 控制：
-// nil 分别为 24h 与 30s；显式 0 表示不限制 / 不波动。到期服务端主动断开，流量不续命。
+// MaxConnLifetime、MaxConnLifetimeJitter：nil 分别为 24h 与 30s；显式 0 表示不限制 / 不波动。
+// 到期服务端主动断开，流量不续命。
 //
 // # 连接数上限（仅 Server）
 //
-// 由嵌入的 wsbase.ServerConfig.MaxConnections 控制：0 不限制；>0 为同时在线上限，
-// 超额连接握手后以 CloseTryAgainLater 断开。
+// MaxConnections：0 不限制；>0 为同时在线上限，超额连接握手后以 CloseTryAgainLater 断开。
+//
+// # Origin
+//
+// OriginPatterns 为空时不做 Origin 校验（独立端口默认，便于非浏览器客户端）。
+// 浏览器跨源场景应显式填写允许的 Origin host 模式。
 //
 // # Client
 //
-// 一个 Client 实例对应至多一条连接；Connect 自动 Dial 并 Serve。
+// 一个 Client 实例对应至多一条连接；Connect 自动 Dial 并启动读循环。
+//
+// 本包不提供 yml 配置段，也不挂默认 infra 插件；构造期 Config 多实例装配。
+// 业务不要直接依赖 github.com/coder/websocket。
 //
 // @author zwei
 package ws

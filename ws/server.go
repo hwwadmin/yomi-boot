@@ -1,22 +1,27 @@
-// Package ws 实现高级入站 Server 门面
+// Package ws 实现独立端口 WebSocket Server
 //
 // @author zwei
 package ws
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
+	"net/http"
+	"sync/atomic"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/ws/wsbase"
 
-	"github.com/lxzan/gws"
+	"github.com/google/uuid"
 )
 
-// Server 是高级入站服务门面：内置 Hub，按框架 ConnID 推送
+// Server 是入站服务：内置连接表，按框架 ConnID 推送
 type Server interface {
-	// Start 非阻塞启动
+	// Start 非阻塞启动明文监听；ctx 取消时关闭服务
 	Start(ctx context.Context) error
+	// StartTLS 非阻塞启动 TLS 监听
+	StartTLS(ctx context.Context, certFile, keyFile string) error
 	// Close 关闭所有会话并停止监听
 	Close(ctx context.Context) error
 
@@ -30,72 +35,244 @@ type Server interface {
 	// Has 判断 ConnID 是否在线
 	Has(connID string) bool
 
-	// Hub 返回内置连接表（逃生）
-	Hub() *wsbase.Hub
-	// GetConn 按 ConnID 取底层连接（逃生）
-	GetConn(connID string) (wsbase.Conn, bool)
-	// Underlying 返回传输层 Server（逃生）
-	Underlying() *wsbase.Server
-	// NativeUpgrader 返回底层 Upgrader（逃生）
-	NativeUpgrader() *gws.Upgrader
 	// ListenAddr 返回实际监听地址
 	ListenAddr() (net.Addr, error)
 }
 
 // server 是 Server 的默认实现
 type server struct {
-	raw    *wsbase.Server
-	hub    *wsbase.Hub
-	bridge *serverBridge
+	addr      string        // addr 是配置的监听地址
+	handler   ServerHandler // handler 是会话回调
+	tlsConfig *tls.Config   // tlsConfig 供 StartTLS 合并证书
+
+	handshakeTimeout      time.Duration            // handshakeTimeout 已 resolve 的握手超时
+	maxConnLifetime       time.Duration            // maxConnLifetime 已 resolve 的通道最大存活；0 表示不限制
+	maxConnLifetimeJitter time.Duration            // maxConnLifetimeJitter 已 resolve 的波动半宽
+	maxConnections        int64                    // maxConnections 在线上限；0 表示不限制
+	heartbeat             heartbeatSettings        // heartbeat 已 resolve 的心跳
+	writeMax              int                      // writeMax 单条可写上限
+	readMax               int                      // readMax 单条可读上限
+	compress              bool                     // compress 是否启用压缩
+	originPatterns        []string                 // originPatterns 允许的 Origin；空则跳过校验
+	authorize             func(*http.Request) bool // authorize 握手鉴权
+
+	httpSrv     *http.Server // httpSrv 承接 Accept
+	listener    net.Listener // listener 是当前监听器
+	hub         *hub         // hub 是 ConnID 表
+	closed      atomic.Bool  // closed 表示已关闭
+	started     atomic.Bool  // started 表示已启动
+	activeConns atomic.Int64 // activeConns 当前已占槽的在线连接数
 }
 
-// NewServer 创建高级入站服务；ConnID 由框架在 OnOpen 自动生成
+// NewServer 创建入站服务；ConnID 由框架在连通时自动生成
 func NewServer(cfg ServerConfig) (Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	hub := wsbase.NewHub()
-	bridge := newServerBridge(cfg.resolveHandler(), hub)
-	raw, err := wsbase.NewServer(bridge, cfg.ServerConfig)
-	if err != nil {
-		return nil, err
-	}
-	return &server{raw: raw, hub: hub, bridge: bridge}, nil
+	interval, timeout := cfg.ResolvedHeartbeat()
+	lifetime, jitter := cfg.ResolvedMaxConnLifetime()
+	return &server{
+		addr:                  cfg.Addr,
+		handler:               cfg.resolveHandler(),
+		tlsConfig:             cfg.TLSConfig,
+		handshakeTimeout:      cfg.ResolvedHandshakeTimeout(),
+		maxConnLifetime:       lifetime,
+		maxConnLifetimeJitter: jitter,
+		maxConnections:        int64(cfg.MaxConnections),
+		heartbeat:             heartbeatFromResolved(interval, timeout),
+		writeMax:              cfg.ResolvedWriteMaxPayloadSize(),
+		readMax:               cfg.ResolvedReadMaxPayloadSize(),
+		compress:              cfg.CompressEnabled,
+		originPatterns:        append([]string(nil), cfg.OriginPatterns...),
+		authorize:             cfg.Authorize,
+		hub:                   newHub(),
+	}, nil
 }
 
-// Start 启动监听
+// Start 非阻塞启动明文监听
 func (s *server) Start(ctx context.Context) error {
-	if s == nil || s.raw == nil {
+	return s.start(ctx, false, "", "")
+}
+
+// StartTLS 非阻塞启动 TLS 监听
+func (s *server) StartTLS(ctx context.Context, certFile, keyFile string) error {
+	if certFile == "" || keyFile == "" {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "StartTLS 需要 certFile 与 keyFile")
+	}
+	return s.start(ctx, true, certFile, keyFile)
+}
+
+// start 监听并启动接受循环；useTLS 为 true 时包装 TLS
+func (s *server) start(ctx context.Context, useTLS bool, certFile, keyFile string) error {
+	if s == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	return s.raw.Start(ctx)
+	if !s.started.CompareAndSwap(false, true) {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "Server 已启动")
+	}
+	if s.closed.Load() {
+		return errors.Sentinel(ErrClosed)
+	}
+
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		s.started.Store(false)
+		return errors.Wrap(err, "ws Server 监听失败")
+	}
+	if useTLS {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			_ = ln.Close()
+			s.started.Store(false)
+			return errors.Wrap(err, "ws Server 加载证书失败")
+		}
+		tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{"http/1.1"}}
+		if s.tlsConfig != nil {
+			tlsCfg = s.tlsConfig.Clone()
+			tlsCfg.Certificates = []tls.Certificate{cert}
+			if len(tlsCfg.NextProtos) == 0 {
+				tlsCfg.NextProtos = []string{"http/1.1"}
+			}
+		}
+		ln = tls.NewListener(ln, tlsCfg)
+	}
+
+	hs := &http.Server{
+		Handler:           http.HandlerFunc(s.serveHTTP),
+		ReadHeaderTimeout: s.handshakeTimeout,
+	}
+
+	s.hub.mu.Lock()
+	if s.closed.Load() {
+		s.hub.mu.Unlock()
+		_ = ln.Close()
+		return errors.Sentinel(ErrClosed)
+	}
+	s.listener = ln
+	s.httpSrv = hs
+	s.hub.mu.Unlock()
+
+	go func() {
+		_ = hs.Serve(ln)
+	}()
+	if ctx != nil {
+		go func() {
+			<-ctx.Done()
+			_ = s.Close(context.Background())
+		}()
+	}
+	return nil
 }
 
-// Close 先标记关闭（拒绝新登记），再停听，最后 CloseAll 踢掉已登记会话
-func (s *server) Close(ctx context.Context) error {
-	if s == nil {
-		return nil
+// serveHTTP 完成握手、登记会话并阻塞运行读循环
+func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.closed.Load() {
+		http.Error(w, "server closing", http.StatusServiceUnavailable)
+		return
 	}
-	if s.bridge != nil {
-		s.bridge.beginClose()
+	if s.authorize != nil && !s.authorize(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
 	}
-	var closeErr error
-	if s.raw != nil {
-		closeErr = s.raw.Close(ctx)
+
+	ref := &connRef{}
+	raw, err := acceptRaw(w, r, acceptOptions(s.originPatterns, s.compress, ref))
+	if err != nil {
+		return
 	}
-	if s.hub != nil {
-		s.hub.CloseAll(wsbase.CloseGoingAway, "server closing")
+
+	s.hub.mu.Lock()
+	local := net.Addr(nil)
+	if s.listener != nil {
+		local = s.listener.Addr()
 	}
-	return closeErr
+	s.hub.mu.Unlock()
+
+	conn := newConn(connParams{
+		raw:      raw,
+		remote:   parseNetAddr(r.RemoteAddr),
+		local:    local,
+		writeMax: s.writeMax,
+		readMax:  s.readMax,
+	})
+	ref.bind(conn)
+	conn.onPayload = func(c *connImpl, p Payload) {
+		s.handler.OnPayload(&sessionContext{peerContext: peerContext{ctx: context.Background(), conn: c}}, p)
+	}
+	conn.onClose = func(c *connImpl, closeErr error) {
+		s.hub.unregister(c.connID, c)
+		s.handler.OnDisconnect(c.connID, closeErr)
+	}
+
+	if s.closed.Load() {
+		_ = conn.Close(CloseGoingAway, "server closing")
+		return
+	}
+	if !s.tryAcquireConn() {
+		_ = conn.Close(CloseTryAgainLater, "max connections exceeded")
+		return
+	}
+	defer s.releaseConn()
+
+	connID := uuid.NewString()
+	if !s.tryRegister(connID, conn) {
+		_ = conn.Close(CloseGoingAway, "server closing")
+		return
+	}
+	conn.connID = connID
+
+	s.handler.OnConnect(&sessionContext{peerContext: peerContext{ctx: context.Background(), conn: conn}})
+	conn.startHeartbeat(s.heartbeat)
+	conn.startLifetime(s.maxConnLifetime, s.maxConnLifetimeJitter)
+	conn.serve()
+}
+
+// tryRegister 在未关闭时登记连接
+func (s *server) tryRegister(id string, c *connImpl) bool {
+	s.hub.mu.Lock()
+	defer s.hub.mu.Unlock()
+	if s.closed.Load() {
+		return false
+	}
+	s.hub.putLocked(id, c)
+	return true
+}
+
+// tryAcquireConn 尝试占一个连接槽；MaxConnections==0 时不限制但仍计数
+func (s *server) tryAcquireConn() bool {
+	if s.maxConnections <= 0 {
+		s.activeConns.Add(1)
+		return true
+	}
+	for {
+		n := s.activeConns.Load()
+		if n >= s.maxConnections {
+			return false
+		}
+		if s.activeConns.CompareAndSwap(n, n+1) {
+			return true
+		}
+	}
+}
+
+// releaseConn 释放一个连接槽
+func (s *server) releaseConn() {
+	s.activeConns.Add(-1)
 }
 
 // Send 向指定 ConnID 按类型发送
 func (s *server) Send(connID string, typ MsgType, data []byte) error {
-	conn, err := s.mustConn(connID)
-	if err != nil {
-		return err
+	if s == nil {
+		return errors.Sentinel(ErrInvalidArgument)
 	}
-	return writeByType(context.Background(), conn, typ, data)
+	if connID == "" {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "connID 不能为空")
+	}
+	conn, ok := s.hub.get(connID)
+	if !ok || conn == nil {
+		return errors.Sentinel(ErrUnknownPeer)
+	}
+	return conn.write(context.Background(), typ, data)
 }
 
 // Broadcast 按类型广播
@@ -104,80 +281,67 @@ func (s *server) Broadcast(typ MsgType, data []byte) error {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	switch typ {
-	case MsgText:
-		return s.hub.BroadcastText(data)
-	case MsgBinary:
-		return s.hub.BroadcastBinary(data)
+	case MsgText, MsgBinary:
+		return s.hub.broadcast(typ, data)
 	default:
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "不支持的 MsgType")
 	}
 }
 
-// Len 返回在线数
+// Len 返回在线会话数
 func (s *server) Len() int {
 	if s == nil || s.hub == nil {
 		return 0
 	}
-	return s.hub.Len()
+	return s.hub.len()
 }
 
-// Has 判断是否在线
+// Has 判断 ConnID 是否在线
 func (s *server) Has(connID string) bool {
-	_, ok := s.GetConn(connID)
+	if s == nil || s.hub == nil {
+		return false
+	}
+	_, ok := s.hub.get(connID)
 	return ok
 }
 
-// Hub 返回内置 Hub
-func (s *server) Hub() *wsbase.Hub {
+// Close 先拒绝新登记，再停听，最后踢掉已登记会话
+func (s *server) Close(_ context.Context) error {
 	if s == nil {
 		return nil
 	}
-	return s.hub
-}
-
-// GetConn 按 ConnID 取连接
-func (s *server) GetConn(connID string) (wsbase.Conn, bool) {
-	if s == nil || s.hub == nil {
-		return nil, false
-	}
-	return s.hub.Get(connID)
-}
-
-// Underlying 返回传输层 Server
-func (s *server) Underlying() *wsbase.Server {
-	if s == nil {
+	s.hub.mu.Lock()
+	if !s.closed.CompareAndSwap(false, true) {
+		s.hub.mu.Unlock()
 		return nil
 	}
-	return s.raw
-}
+	list := s.hub.takeAllLocked()
+	hs := s.httpSrv
+	s.httpSrv = nil
+	s.listener = nil
+	s.hub.mu.Unlock()
 
-// NativeUpgrader 返回底层 Upgrader
-func (s *server) NativeUpgrader() *gws.Upgrader {
-	if s == nil || s.raw == nil {
-		return nil
+	var closeErr error
+	if hs != nil {
+		if err := hs.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			closeErr = errors.Wrap(err, "ws Server 关闭监听失败")
+		}
 	}
-	return s.raw.NativeUpgrader()
+	for _, c := range list {
+		_ = c.Close(CloseGoingAway, "server closing")
+	}
+	return closeErr
 }
 
-// ListenAddr 返回实际监听地址
+// ListenAddr 返回实际监听地址；未启动时返回错误
 func (s *server) ListenAddr() (net.Addr, error) {
-	if s == nil || s.raw == nil {
-		return nil, errors.Sentinel(ErrInvalidArgument)
-	}
-	return s.raw.ListenAddr()
-}
-
-// mustConn 按 ConnID 取连接；缺失时返回 ErrUnknownPeer
-func (s *server) mustConn(connID string) (wsbase.Conn, error) {
 	if s == nil {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	if connID == "" {
-		return nil, errors.Wrap(errors.Sentinel(ErrInvalidArgument), "connID 不能为空")
+	s.hub.mu.Lock()
+	defer s.hub.mu.Unlock()
+	if s.listener == nil {
+		return nil, errors.Sentinel(ErrNotStarted)
 	}
-	conn, ok := s.GetConn(connID)
-	if !ok || conn == nil {
-		return nil, errors.Sentinel(ErrUnknownPeer)
-	}
-	return conn, nil
+	return s.listener.Addr(), nil
 }

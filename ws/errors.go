@@ -1,4 +1,4 @@
-// Package ws 定义门面层哨兵错误
+// Package ws 定义哨兵错误
 //
 // @author zwei
 package ws
@@ -14,4 +14,10 @@ var (
 
 	// ErrUnknownPeer 服务端找不到指定 ConnID
 	ErrUnknownPeer = errors.NewNoStack("ws: 未知会话")
+
+	// ErrClosed 服务或连接已关闭
+	ErrClosed = errors.NewNoStack("ws: 已关闭")
+
+	// ErrNotStarted 服务尚未 Start
+	ErrNotStarted = errors.NewNoStack("ws: 未启动")
 )
