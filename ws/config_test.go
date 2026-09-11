@@ -24,6 +24,29 @@ func TestServerConfigValidateMaxConnections(t *testing.T) {
 	}
 }
 
+func TestServerConfigValidateSendQueueSize(t *testing.T) {
+	if err := (ServerConfig{Addr: ":1", SendQueueSize: -1}).Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("负 SendQueueSize 应得 ErrInvalidArgument，实际 %v", err)
+	}
+	if err := (ServerConfig{Addr: ":1", SendQueueSize: 0}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQueueGCIntervalResolve(t *testing.T) {
+	cfg := ServerConfig{Addr: ":1"}
+	if got := cfg.ResolvedQueueGCInterval(); got != DefaultQueueGCInterval {
+		t.Fatalf("nil => %v want %v", got, DefaultQueueGCInterval)
+	}
+	cfg.QueueGCInterval = Duration(0)
+	if got := cfg.ResolvedQueueGCInterval(); got != 0 {
+		t.Fatalf("显式 0 应关闭巡检，实际 %v", got)
+	}
+	if err := (ServerConfig{Addr: ":1", QueueGCInterval: Duration(-time.Second)}).Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("负 QueueGCInterval 应得 ErrInvalidArgument，实际 %v", err)
+	}
+}
+
 func TestServerConfigValidatePayloadSize(t *testing.T) {
 	if err := (ServerConfig{Addr: ":1", WriteMaxPayloadSize: -1}).Validate(); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("负 WriteMaxPayloadSize 应得 ErrInvalidArgument，实际 %v", err)

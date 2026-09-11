@@ -4,7 +4,6 @@
 package ws
 
 import (
-	"context"
 	"sync"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -78,23 +77,32 @@ func (h *hub) unregister(id string, c *connImpl) {
 	h.deleteLocked(id, c)
 }
 
-// broadcast 向全部连接发送同一载荷
+// broadcast 向全部连接入队同一载荷；入队时连接已拆则跳过
 func (h *hub) broadcast(typ MsgType, data []byte) error {
 	if h == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	list := h.snapshot()
-	ctx := context.Background()
 	var firstErr error
 	for _, c := range list {
-		if err := c.write(ctx, typ, data); err != nil && firstErr == nil {
+		if c == nil {
+			continue
+		}
+		err := c.enqueue(typ, data)
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, ErrNotConnected) {
+			continue // 入队时连接刚拆：跳过
+		}
+		if firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
 }
 
-// takeAll 清空表并返回原有连接（调用方须已持有 mu）
+// takeAllLocked 清空表并返回原有连接（调用方须已持有 mu）
 func (h *hub) takeAllLocked() []*connImpl {
 	list := make([]*connImpl, 0, len(h.conns))
 	for _, c := range h.conns {

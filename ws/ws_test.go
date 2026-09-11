@@ -24,7 +24,7 @@ func TestProcessorConnectAndText(t *testing.T) {
 	pair := startPairAsync(t, srvProc, cliProc)
 
 	t.Log("[发送] Connect 成功后 Client.Send MsgText hello")
-	if err := pair.cli.Send(pair.cliCtx, MsgText, []byte("hello")); err != nil {
+	if err := pair.cli.Send(MsgText, []byte("hello")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -49,7 +49,7 @@ func TestProcessorBinaryUpload(t *testing.T) {
 	pair := startPairAsync(t, srvProc, cliProc)
 
 	t.Log("[发送] Connect 成功后 Client.Send MsgBinary")
-	if err := pair.cli.Send(pair.cliCtx, MsgBinary, file); err != nil {
+	if err := pair.cli.Send(MsgBinary, file); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,7 +73,7 @@ func TestProcessorBinaryDownload(t *testing.T) {
 	pair := startPairAsync(t, srvProc, cliProc)
 
 	t.Log("[发送] Connect 成功后 Client.Send MsgText GET_FILE")
-	if err := pair.cli.Send(pair.cliCtx, MsgText, []byte("GET_FILE")); err != nil {
+	if err := pair.cli.Send(MsgText, []byte("GET_FILE")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -494,14 +494,28 @@ func TestServerSendUnknownPeer(t *testing.T) {
 	}
 }
 
-// TestClientSendCanceledContext 已取消的 ctx 写入应失败
-func TestClientSendCanceledContext(t *testing.T) {
+// TestClientSendAfterClose 关闭后 Send 应返回 ErrNotConnected
+func TestClientSendAfterClose(t *testing.T) {
 	pair := startPairAsync(t, newChatServerProcessor(), newChatClientProcessor())
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := pair.cli.Send(ctx, MsgText, []byte("x"))
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("应得 context.Canceled，实际 %v", err)
+	if err := pair.cli.Close(CloseNormalClosure, "bye"); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, testWait, func() bool { return !pair.cli.Connected() }, "等待客户端断开超时")
+	err := pair.cli.Send(MsgText, []byte("x"))
+	if !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("应得 ErrNotConnected，实际 %v", err)
+	}
+}
+
+// TestServerSendAfterClose 服务关闭后 Send 应返回 ErrClosed
+func TestServerSendAfterClose(t *testing.T) {
+	pair := startPairAsync(t, newChatServerProcessor(), newChatClientProcessor())
+	if err := pair.srv.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	err := pair.srv.Send("any", MsgText, []byte("x"))
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("应得 ErrClosed，实际 %v", err)
 	}
 }
 

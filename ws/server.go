@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,9 +26,9 @@ type Server interface {
 	// Close 关闭所有会话并停止监听
 	Close(ctx context.Context) error
 
-	// Send 向指定 ConnID 按类型发送
+	// Send 向指定 ConnID 入队发送；成功表示已入队
 	Send(connID string, typ MsgType, data []byte) error
-	// Broadcast 按类型广播
+	// Broadcast 向全部在线连接入队广播；入队时已拆的连接跳过
 	Broadcast(typ MsgType, data []byte) error
 
 	// Len 返回在线会话数
@@ -52,6 +53,8 @@ type server struct {
 	heartbeat             heartbeatSettings        // heartbeat 已 resolve 的心跳
 	writeMax              int                      // writeMax 单条可写上限
 	readMax               int                      // readMax 单条可读上限
+	sendQueueSize         int                      // sendQueueSize 每连接发送队列容量；0 无界
+	queueGCInterval       time.Duration            // queueGCInterval 巡检间隔；0 关闭巡检
 	compress              bool                     // compress 是否启用压缩
 	originPatterns        []string                 // originPatterns 允许的 Origin；空则跳过校验
 	authorize             func(*http.Request) bool // authorize 握手鉴权
@@ -62,6 +65,9 @@ type server struct {
 	closed      atomic.Bool  // closed 表示已关闭
 	started     atomic.Bool  // started 表示已启动
 	activeConns atomic.Int64 // activeConns 当前已占槽的在线连接数
+
+	gcStop     chan struct{} // gcStop 停止队列巡检
+	gcStopOnce sync.Once     // gcStopOnce 保证只关一次
 }
 
 // NewServer 创建入站服务；ConnID 由框架在连通时自动生成
@@ -82,10 +88,13 @@ func NewServer(cfg ServerConfig) (Server, error) {
 		heartbeat:             heartbeatFromResolved(interval, timeout),
 		writeMax:              cfg.ResolvedWriteMaxPayloadSize(),
 		readMax:               cfg.ResolvedReadMaxPayloadSize(),
+		sendQueueSize:         cfg.SendQueueSize,
+		queueGCInterval:       cfg.ResolvedQueueGCInterval(),
 		compress:              cfg.CompressEnabled,
 		originPatterns:        append([]string(nil), cfg.OriginPatterns...),
 		authorize:             cfg.Authorize,
 		hub:                   newHub(),
+		gcStop:                make(chan struct{}),
 	}, nil
 }
 
@@ -155,6 +164,7 @@ func (s *server) start(ctx context.Context, useTLS bool, certFile, keyFile strin
 	go func() {
 		_ = hs.Serve(ln)
 	}()
+	s.startQueueGC()
 	if ctx != nil {
 		go func() {
 			<-ctx.Done()
@@ -189,11 +199,12 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.hub.mu.Unlock()
 
 	conn := newConn(connParams{
-		raw:      raw,
-		remote:   parseNetAddr(r.RemoteAddr),
-		local:    local,
-		writeMax: s.writeMax,
-		readMax:  s.readMax,
+		raw:           raw,
+		remote:        parseNetAddr(r.RemoteAddr),
+		local:         local,
+		writeMax:      s.writeMax,
+		readMax:       s.readMax,
+		sendQueueSize: s.sendQueueSize,
 	})
 	ref.bind(conn)
 	conn.onPayload = func(c *connImpl, p Payload) {
@@ -260,10 +271,13 @@ func (s *server) releaseConn() {
 	s.activeConns.Add(-1)
 }
 
-// Send 向指定 ConnID 按类型发送
+// Send 向指定 ConnID 入队发送；服务已关闭返回 ErrClosed
 func (s *server) Send(connID string, typ MsgType, data []byte) error {
 	if s == nil {
 		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if s.closed.Load() {
+		return errors.Sentinel(ErrClosed)
 	}
 	if connID == "" {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "connID 不能为空")
@@ -272,13 +286,20 @@ func (s *server) Send(connID string, typ MsgType, data []byte) error {
 	if !ok || conn == nil {
 		return errors.Sentinel(ErrUnknownPeer)
 	}
-	return conn.write(context.Background(), typ, data)
+	err := conn.enqueue(typ, data)
+	if errors.Is(err, ErrNotConnected) {
+		return errors.Sentinel(ErrUnknownPeer)
+	}
+	return err
 }
 
-// Broadcast 按类型广播
+// Broadcast 按类型广播入队；服务已关闭返回 ErrClosed；单连接已拆则跳过
 func (s *server) Broadcast(typ MsgType, data []byte) error {
 	if s == nil || s.hub == nil {
 		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if s.closed.Load() {
+		return errors.Sentinel(ErrClosed)
 	}
 	switch typ {
 	case MsgText, MsgBinary:
@@ -305,7 +326,7 @@ func (s *server) Has(connID string) bool {
 	return ok
 }
 
-// Close 先拒绝新登记，再停听，最后踢掉已登记会话
+// Close 先拒绝新登记与入队，再停听，最后踢掉已登记会话
 func (s *server) Close(_ context.Context) error {
 	if s == nil {
 		return nil
@@ -320,6 +341,8 @@ func (s *server) Close(_ context.Context) error {
 	s.httpSrv = nil
 	s.listener = nil
 	s.hub.mu.Unlock()
+
+	s.stopQueueGC()
 
 	var closeErr error
 	if hs != nil {
@@ -344,4 +367,50 @@ func (s *server) ListenAddr() (net.Addr, error) {
 		return nil, errors.Sentinel(ErrNotStarted)
 	}
 	return s.listener.Addr(), nil
+}
+
+// startQueueGC 启动孤儿队列巡检；间隔为 0 时不启动
+func (s *server) startQueueGC() {
+	if s == nil || s.queueGCInterval <= 0 {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(s.queueGCInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.gcStop:
+				return
+			case <-ticker.C:
+				s.purgeDeadQueues()
+			}
+		}
+	}()
+}
+
+// stopQueueGC 停止巡检
+func (s *server) stopQueueGC() {
+	if s == nil {
+		return
+	}
+	s.gcStopOnce.Do(func() {
+		if s.gcStop != nil {
+			close(s.gcStop)
+		}
+	})
+}
+
+// purgeDeadQueues 清理已关闭连接上残留的发送队列
+func (s *server) purgeDeadQueues() {
+	if s == nil || s.hub == nil {
+		return
+	}
+	for _, c := range s.hub.snapshot() {
+		if c == nil || c.sendQ == nil {
+			continue
+		}
+		if c.sendQ.isClosed() {
+			c.sendQ.purgeIfDead()
+		}
+	}
 }

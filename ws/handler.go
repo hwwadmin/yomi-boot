@@ -105,9 +105,9 @@ func (NopClientHandler) OnDisconnect(error) {}
 // OnPayload 空实现
 func (NopClientHandler) OnPayload(PeerContext, Payload) {}
 
-// Sender 是面向当前连接的发送能力
+// Sender 是面向当前连接的发送能力（入队语义与 Client/Server.Send 一致）
 type Sender interface {
-	// Send 按类型发送一条消息
+	// Send 按类型入队发送一条消息
 	Send(typ MsgType, data []byte) error
 }
 
@@ -149,12 +149,12 @@ func (c *peerContext) Session() Session {
 	return c.conn.session
 }
 
-// Send 按类型发送
+// Send 按类型入队发送
 func (c *peerContext) Send(typ MsgType, data []byte) error {
 	if c == nil || c.conn == nil {
 		return errors.Sentinel(ErrNotConnected)
 	}
-	return c.conn.write(c.Context(), typ, data)
+	return c.conn.enqueue(typ, data)
 }
 
 // sessionContext 是 SessionContext 实现

@@ -23,20 +23,25 @@ type Client interface {
 	// Connected 是否持有连接
 	Connected() bool
 
-	// Send 按类型发送
-	Send(ctx context.Context, typ MsgType, data []byte) error
+	// Send 按类型入队发送；成功表示已入队；未连接返回 ErrNotConnected
+	Send(typ MsgType, data []byte) error
 }
 
 // client 是 Client 的默认实现
 type client struct {
-	cfg       ClientConfig
-	handler   ClientHandler
-	heartbeat heartbeatSettings
-	writeMax  int
-	readMax   int
+	cfg             ClientConfig
+	handler         ClientHandler
+	heartbeat       heartbeatSettings
+	writeMax        int
+	readMax         int
+	sendQueueSize   int
+	queueGCInterval time.Duration
 
-	mu   sync.Mutex
-	conn *connImpl
+	mu         sync.Mutex
+	conn       *connImpl
+	gcStop     chan struct{}
+	gcStopOnce sync.Once
+	gcStarted  bool
 }
 
 // NewClient 创建出站客户端
@@ -46,11 +51,14 @@ func NewClient(cfg ClientConfig) (Client, error) {
 	}
 	interval, timeout := cfg.ResolvedHeartbeat()
 	return &client{
-		cfg:       cfg,
-		handler:   cfg.resolveHandler(),
-		heartbeat: heartbeatFromResolved(interval, timeout),
-		writeMax:  cfg.ResolvedWriteMaxPayloadSize(),
-		readMax:   cfg.ResolvedReadMaxPayloadSize(),
+		cfg:             cfg,
+		handler:         cfg.resolveHandler(),
+		heartbeat:       heartbeatFromResolved(interval, timeout),
+		writeMax:        cfg.ResolvedWriteMaxPayloadSize(),
+		readMax:         cfg.ResolvedReadMaxPayloadSize(),
+		sendQueueSize:   cfg.SendQueueSize,
+		queueGCInterval: cfg.ResolvedQueueGCInterval(),
+		gcStop:          make(chan struct{}),
 	}, nil
 }
 
@@ -78,6 +86,7 @@ func (c *client) Connect(ctx context.Context, rawURL string) error {
 	c.mu.Lock()
 	c.conn = conn
 	c.mu.Unlock()
+	c.ensureQueueGC()
 	go conn.serve()
 	return nil
 }
@@ -107,10 +116,11 @@ func (c *client) dial(ctx context.Context, rawURL string) (*connImpl, error) {
 		host = u.Host
 	}
 	conn := newConn(connParams{
-		raw:      raw,
-		remote:   parseNetAddr(host),
-		writeMax: c.writeMax,
-		readMax:  c.readMax,
+		raw:           raw,
+		remote:        parseNetAddr(host),
+		writeMax:      c.writeMax,
+		readMax:       c.readMax,
+		sendQueueSize: c.sendQueueSize,
 	})
 	ref.bind(conn)
 	conn.onPayload = func(cc *connImpl, p Payload) {
@@ -166,13 +176,13 @@ func (c *client) Connected() bool {
 	return c.conn != nil
 }
 
-// Send 按类型发送
-func (c *client) Send(ctx context.Context, typ MsgType, data []byte) error {
+// Send 按类型入队发送
+func (c *client) Send(typ MsgType, data []byte) error {
 	conn, err := c.mustConn()
 	if err != nil {
 		return err
 	}
-	return conn.write(ctx, typ, data)
+	return conn.enqueue(typ, data)
 }
 
 // detach 在对端断开时按连接身份清空当前引用
@@ -195,4 +205,46 @@ func (c *client) mustConn() (*connImpl, error) {
 		return nil, errors.Sentinel(ErrNotConnected)
 	}
 	return c.conn, nil
+}
+
+// ensureQueueGC 启动一次队列巡检（按实例）
+func (c *client) ensureQueueGC() {
+	if c == nil || c.queueGCInterval <= 0 {
+		return
+	}
+	c.mu.Lock()
+	if c.gcStarted {
+		c.mu.Unlock()
+		return
+	}
+	c.gcStarted = true
+	c.mu.Unlock()
+	go func() {
+		ticker := time.NewTicker(c.queueGCInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-c.gcStop:
+				return
+			case <-ticker.C:
+				c.purgeDeadQueue()
+			}
+		}
+	}()
+}
+
+// purgeDeadQueue 清理当前连接上已关闭的发送队列
+func (c *client) purgeDeadQueue() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	conn := c.conn
+	c.mu.Unlock()
+	if conn == nil || conn.sendQ == nil {
+		return
+	}
+	if conn.sendQ.isClosed() {
+		conn.sendQ.purgeIfDead()
+	}
 }

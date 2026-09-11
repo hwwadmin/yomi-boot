@@ -15,7 +15,7 @@ var (
 	// ErrUnknownPeer 服务端找不到指定 ConnID
 	ErrUnknownPeer = errors.NewNoStack("ws: 未知会话")
 
-	// ErrClosed 服务或连接已关闭
+	// ErrClosed 服务已关闭（Server 拒绝新入队）
 	ErrClosed = errors.NewNoStack("ws: 已关闭")
 
 	// ErrNotStarted 服务尚未 Start

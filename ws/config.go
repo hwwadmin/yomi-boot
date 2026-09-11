@@ -41,10 +41,13 @@ const (
 
 	// DefaultHandshakeTimeout 默认握手超时（读入站请求头 + 升级写出）
 	DefaultHandshakeTimeout = 5 * time.Second
+
+	// DefaultQueueGCInterval 默认孤儿发送队列巡检间隔
+	DefaultQueueGCInterval = 30 * time.Second
 )
 
 // Duration 返回 d 的指针，便于配置 HeartbeatInterval / HeartbeatTimeout /
-// MaxConnLifetime / MaxConnLifetimeJitter
+// MaxConnLifetime / MaxConnLifetimeJitter / QueueGCInterval
 func Duration(d time.Duration) *time.Duration {
 	return &d
 }
@@ -81,6 +84,11 @@ type ServerConfig struct {
 	// MaxConnections 同时在线连接上限；0 表示不限制；超过时握手成功后立即以 CloseTryAgainLater 断开
 	MaxConnections int
 
+	// SendQueueSize 每连接发送队列容量；0 表示无界；>0 为有界（满则阻塞入队）
+	SendQueueSize int
+	// QueueGCInterval 孤儿发送队列巡检间隔；nil 表示 DefaultQueueGCInterval；显式 0 表示关闭巡检
+	QueueGCInterval *time.Duration
+
 	// OriginPatterns 允许的 Origin host 模式（path.Match）；空则不做 Origin 校验
 	OriginPatterns []string
 
@@ -111,6 +119,12 @@ func (c ServerConfig) Validate() error {
 	if c.MaxConnections < 0 {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxConnections 不能为负数")
 	}
+	if c.SendQueueSize < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "SendQueueSize 不能为负数")
+	}
+	if err := validateQueueGCInterval(c.QueueGCInterval); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -139,6 +153,11 @@ func (c ServerConfig) ResolvedMaxConnLifetime() (lifetime, jitter time.Duration)
 	return resolveMaxConnLifetime(c.MaxConnLifetime, c.MaxConnLifetimeJitter)
 }
 
+// ResolvedQueueGCInterval 返回生效的队列巡检间隔；0 表示关闭巡检
+func (c ServerConfig) ResolvedQueueGCInterval() time.Duration {
+	return resolveQueueGCInterval(c.QueueGCInterval)
+}
+
 // resolveHandler 解析实际使用的 Handler
 func (c ServerConfig) resolveHandler() ServerHandler {
 	if c.Handler != nil {
@@ -162,6 +181,11 @@ type ClientConfig struct {
 	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
 	HeartbeatTimeout *time.Duration
 
+	// SendQueueSize 发送队列容量；0 表示无界；>0 为有界（满则阻塞入队）
+	SendQueueSize int
+	// QueueGCInterval 孤儿发送队列巡检间隔；nil 表示 DefaultQueueGCInterval；显式 0 表示关闭巡检
+	QueueGCInterval *time.Duration
+
 	RequestHeader http.Header  // RequestHeader 握手额外请求头（如鉴权）
 	TLSConfig     *tls.Config  // TLSConfig wss 时可选 TLS 配置；HTTPClient 非空时忽略
 	HTTPClient    *http.Client // HTTPClient 自定义握手客户端（代理等）；nil 使用带超时的默认 Transport
@@ -179,6 +203,12 @@ func (c ClientConfig) Validate() error {
 		return err
 	}
 	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout, resolveClientHeartbeat); err != nil {
+		return err
+	}
+	if c.SendQueueSize < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "SendQueueSize 不能为负数")
+	}
+	if err := validateQueueGCInterval(c.QueueGCInterval); err != nil {
 		return err
 	}
 	return nil
@@ -202,6 +232,11 @@ func (c ClientConfig) ResolvedHandshakeTimeout() time.Duration {
 // ResolvedHeartbeat 返回生效的心跳间隔与超时
 func (c ClientConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
 	return resolveClientHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
+}
+
+// ResolvedQueueGCInterval 返回生效的队列巡检间隔；0 表示关闭巡检
+func (c ClientConfig) ResolvedQueueGCInterval() time.Duration {
+	return resolveQueueGCInterval(c.QueueGCInterval)
 }
 
 // resolveHandler 解析实际使用的 Handler
@@ -321,6 +356,22 @@ func validateMaxConnLifetime(lifetime, jitter *time.Duration) error {
 	life, jit := resolveMaxConnLifetime(lifetime, jitter)
 	if life > 0 && jit > 0 && jit >= life {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "MaxConnLifetimeJitter 必须小于 MaxConnLifetime")
+	}
+	return nil
+}
+
+// resolveQueueGCInterval 解析队列巡检：nil→默认；显式 0 表示关闭
+func resolveQueueGCInterval(d *time.Duration) time.Duration {
+	if d == nil {
+		return DefaultQueueGCInterval
+	}
+	return *d
+}
+
+// validateQueueGCInterval 校验巡检间隔不能为负
+func validateQueueGCInterval(d *time.Duration) error {
+	if d != nil && *d < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "QueueGCInterval 不能为负数")
 	}
 	return nil
 }

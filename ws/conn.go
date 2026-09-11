@@ -27,6 +27,8 @@ type connImpl struct {
 	writeMax int             // writeMax 是单条可写上限
 	connID   string          // connID 仅服务端在登记后赋值
 
+	sendQ *writeQueue // sendQ 是发送队列；业务与 Ping 经此串行写出
+
 	heartbeat     *heartbeatRunner // heartbeat 是本连接心跳；无心跳时为 nil
 	lifetimeTimer *time.Timer      // lifetimeTimer 是通道最长存活定时器
 
@@ -36,6 +38,7 @@ type connImpl struct {
 	serveOnce   sync.Once          // serveOnce 保证读循环只跑一次
 	serveCtx    context.Context    // serveCtx 在 Close 时取消以唤醒 Read
 	serveCancel context.CancelFunc // serveCancel 取消读循环
+	closeOnce   sync.Once          // closeOnce 保证拆除只跑一次
 }
 
 // connRef 在 Accept/Dial 回调里绑定已创建的连接，供 Ping/Pong 续命
@@ -74,14 +77,15 @@ func (r *connRef) onPong(_ context.Context, _ []byte) {
 
 // connParams 是 newConn 的构造参数
 type connParams struct {
-	raw      *websocket.Conn
-	remote   net.Addr
-	local    net.Addr
-	writeMax int
-	readMax  int
+	raw           *websocket.Conn
+	remote        net.Addr
+	local         net.Addr
+	writeMax      int
+	readMax       int
+	sendQueueSize int // sendQueueSize 是发送队列容量；0 表示无界
 }
 
-// newConn 包装底层连接
+// newConn 包装底层连接并启动写循环
 func newConn(p connParams) *connImpl {
 	if p.writeMax <= 0 {
 		p.writeMax = DefaultWriteMaxPayloadSize
@@ -90,7 +94,7 @@ func newConn(p connParams) *connImpl {
 		p.raw.SetReadLimit(int64(p.readMax))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &connImpl{
+	c := &connImpl{
 		raw:         p.raw,
 		session:     newSession(),
 		remote:      p.remote,
@@ -99,70 +103,51 @@ func newConn(p connParams) *connImpl {
 		serveCtx:    ctx,
 		serveCancel: cancel,
 	}
+	c.sendQ = newWriteQueue(c, p.sendQueueSize)
+	go c.writeLoop()
+	return c
 }
 
-// write 按业务类型写入一条消息
-func (c *connImpl) write(ctx context.Context, typ MsgType, data []byte) error {
-	switch typ {
-	case MsgText:
-		return c.writeMessage(ctx, websocket.MessageText, data)
-	case MsgBinary:
-		return c.writeMessage(ctx, websocket.MessageBinary, data)
-	default:
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "不支持的 MsgType")
+// enqueue 将业务消息交发送队列
+func (c *connImpl) enqueue(typ MsgType, data []byte) error {
+	if c == nil || c.sendQ == nil {
+		return errors.Sentinel(ErrNotConnected)
 	}
+	return c.sendQ.enqueue(typ, data)
 }
 
-// writeMessage 在 ctx 未取消时写入一条完整消息
-func (c *connImpl) writeMessage(ctx context.Context, typ websocket.MessageType, data []byte) error {
-	if c == nil || c.raw == nil {
-		return errors.Sentinel(ErrClosed)
+// enqueuePing 经写队列插队发送 Ping
+func (c *connImpl) enqueuePing(wait time.Duration) error {
+	if c == nil || c.sendQ == nil {
+		return errors.Sentinel(ErrNotConnected)
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if len(data) > c.writeMax {
-		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "超过 WriteMaxPayloadSize")
-	}
-	if err := c.raw.Write(ctx, typ, data); err != nil {
-		return errors.Wrap(err, "ws 写入消息失败")
-	}
-	return nil
+	return c.sendQ.enqueuePing(wait)
 }
 
-// ping 发送 Ping 并等待 Pong
-func (c *connImpl) ping(ctx context.Context) error {
-	if c == nil || c.raw == nil {
-		return errors.Sentinel(ErrClosed)
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := c.raw.Ping(ctx); err != nil {
-		return errors.Wrap(err, "ws Ping 失败")
-	}
-	return nil
-}
-
-// Close 发送关闭帧并断开
+// Close 发送关闭帧并拆除读/写路径；幂等
 func (c *connImpl) Close(code CloseCode, reason string) error {
-	if c == nil || c.raw == nil {
+	if c == nil {
 		return nil
 	}
-	if code == 0 {
-		code = CloseNormalClosure
-	}
-	err := c.raw.Close(websocket.StatusCode(code), reason)
-	if c.serveCancel != nil {
-		c.serveCancel()
-	}
-	if err != nil && !errors.Is(err, net.ErrClosed) {
-		return errors.Wrap(err, "ws 关闭连接失败")
-	}
-	return nil
+	var closeErr error
+	c.closeOnce.Do(func() {
+		if code == 0 {
+			code = CloseNormalClosure
+		}
+		if c.sendQ != nil {
+			c.sendQ.shutdown()
+		}
+		if c.serveCancel != nil {
+			c.serveCancel()
+		}
+		if c.raw != nil {
+			err := c.raw.Close(websocket.StatusCode(code), reason)
+			if err != nil && !errors.Is(err, net.ErrClosed) {
+				closeErr = errors.Wrap(err, "ws 关闭连接失败")
+			}
+		}
+	})
+	return closeErr
 }
 
 // serve 阻塞运行读循环；同一连接仅应调用一次
@@ -178,10 +163,15 @@ func (c *connImpl) serve() {
 			}
 			c.stopHeartbeat()
 			c.stopLifetime()
+			if c.sendQ != nil {
+				c.sendQ.shutdown()
+			}
 			if c.onClose != nil {
 				c.onClose(c, err)
 			}
-			_ = c.raw.CloseNow()
+			if c.raw != nil {
+				_ = c.raw.CloseNow()
+			}
 		}()
 		for {
 			var typ websocket.MessageType

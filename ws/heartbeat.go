@@ -4,7 +4,6 @@
 package ws
 
 import (
-	"context"
 	"sync"
 	"time"
 )
@@ -118,7 +117,7 @@ func (r *heartbeatRunner) Stop() {
 	r.mu.Unlock()
 }
 
-// loop 周期发送 Ping；失败则关闭连接
+// loop 周期经写队列插队发送 Ping；失败则关闭连接
 func (r *heartbeatRunner) loop() {
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
@@ -131,9 +130,7 @@ func (r *heartbeatRunner) loop() {
 			if wait <= 0 {
 				wait = r.interval
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), wait)
-			err := r.conn.ping(ctx)
-			cancel()
+			err := r.conn.enqueuePing(wait)
 			if err != nil {
 				_ = r.conn.Close(CloseGoingAway, "heartbeat ping failed")
 				return

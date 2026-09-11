@@ -14,10 +14,18 @@
 //   - Processor：只负责 OnPayload 消费业务消息（Payload.Type + Data）
 //   - Handler：会话面（启停 + OnPayload）；Config.Handler 为 nil 时用
 //     Default*Handler（启停默认打日志，OnPayload 调用 Processor）
-//   - 发送统一为 Send/Broadcast(typ, data)，类型用 MsgText / MsgBinary
+//   - 发送统一为 Send/Broadcast(typ, data)，类型用 MsgText / MsgBinary；成功表示已入队
 //   - 连通后主动发信由业务在 Connect 成功后自行调用 Client/Server API
 //   - 自定义 Handler 时 Config.Processor 不自动接入；若仍需 Processor，
 //     可嵌入 Default*Handler 并自行赋值 Processor
+//
+// # 发送队列
+//
+// 每连接一条内存发送队列，写循环串行写出；心跳 Ping 相对业务消息插队。
+// SendQueueSize：0=无界；>0=有界（满则阻塞入队）。Server 已关闭时 Send/Broadcast
+// 立即返回 ErrClosed；Client 未连接或连接已关返回 ErrNotConnected。
+// Broadcast 入队时连接已拆则跳过该连接。通道健康只由心跳判定；写出卡住允许存在，
+// 不因发送超时拆线。QueueGCInterval：nil→30s 巡检孤儿队列；显式 0→关闭巡检。
 //
 // # 载荷与文件
 //
