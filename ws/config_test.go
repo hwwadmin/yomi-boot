@@ -162,3 +162,17 @@ func TestListenAddrBeforeStart(t *testing.T) {
 		t.Fatalf("未启动 ListenAddr 应得 ErrNotStarted，实际 %v", err)
 	}
 }
+
+// TestResolveHandlerPropagatesName Handler 为 nil 时 Name 写入 Default*Handler
+func TestResolveHandlerPropagatesName(t *testing.T) {
+	sh := ServerConfig{Name: "srv-a"}.resolveHandler()
+	ds, ok := sh.(DefaultServerHandler)
+	if !ok || ds.Name != "srv-a" {
+		t.Fatalf("Server DefaultHandler Name=%q ok=%v", ds.Name, ok)
+	}
+	ch := ClientConfig{Name: "cli-b"}.resolveHandler()
+	dc, ok := ch.(DefaultClientHandler)
+	if !ok || dc.Name != "cli-b" {
+		t.Fatalf("Client DefaultHandler Name=%q ok=%v", dc.Name, ok)
+	}
+}
