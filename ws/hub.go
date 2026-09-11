@@ -77,28 +77,39 @@ func (h *hub) unregister(id string, c *connImpl) {
 	h.deleteLocked(id, c)
 }
 
-// broadcast 向全部连接入队同一载荷；入队时连接已拆则跳过
+// broadcast 向全部连接并行入队；已拆连接跳过，避免有界队列队头拖死整次广播
 func (h *hub) broadcast(typ MsgType, data []byte) error {
 	if h == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	list := h.snapshot()
-	var firstErr error
+	if len(list) == 0 {
+		return nil
+	}
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
 	for _, c := range list {
 		if c == nil {
 			continue
 		}
-		err := c.enqueue(typ, data)
-		if err == nil {
-			continue
-		}
-		if errors.Is(err, ErrNotConnected) {
-			continue // 入队时连接刚拆：跳过
-		}
-		if firstErr == nil {
-			firstErr = err
-		}
+		wg.Add(1)
+		go func(conn *connImpl) {
+			defer wg.Done()
+			err := conn.enqueue(typ, data)
+			if err == nil || errors.Is(err, ErrNotConnected) {
+				return
+			}
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
+		}(c)
 	}
+	wg.Wait()
 	return firstErr
 }
 

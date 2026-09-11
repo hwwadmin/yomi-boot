@@ -224,9 +224,21 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	conn.connID = connID
 
+	// OnConnect / 启动心跳寿命若 panic，须拆除已登记连接，避免 hub 孤儿
+	enteredServe := false
+	defer func() {
+		if enteredServe {
+			return
+		}
+		if recover() != nil {
+			s.hub.unregister(connID, conn)
+			_ = conn.Close(CloseGoingAway, "connect setup panic")
+		}
+	}()
 	s.handler.OnConnect(&sessionContext{peerContext: peerContext{ctx: context.Background(), conn: conn}})
 	conn.startHeartbeat(s.heartbeat)
 	conn.startLifetime(s.maxConnLifetime, s.maxConnLifetimeJitter)
+	enteredServe = true
 	conn.serve()
 }
 
@@ -276,10 +288,19 @@ func (s *server) Send(connID string, typ MsgType, data []byte) error {
 	}
 	conn, ok := s.hub.get(connID)
 	if !ok || conn == nil {
+		if s.closed.Load() {
+			return errors.Sentinel(ErrClosed)
+		}
 		return errors.Sentinel(ErrUnknownPeer)
+	}
+	if s.closed.Load() {
+		return errors.Sentinel(ErrClosed)
 	}
 	err := conn.enqueue(typ, data)
 	if errors.Is(err, ErrNotConnected) {
+		if s.closed.Load() {
+			return errors.Sentinel(ErrClosed)
+		}
 		return errors.Sentinel(ErrUnknownPeer)
 	}
 	return err
@@ -295,7 +316,11 @@ func (s *server) Broadcast(typ MsgType, data []byte) error {
 	}
 	switch typ {
 	case MsgText, MsgBinary:
-		return s.hub.broadcast(typ, data)
+		err := s.hub.broadcast(typ, data)
+		if s.closed.Load() {
+			return errors.Sentinel(ErrClosed)
+		}
+		return err
 	default:
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "不支持的 MsgType")
 	}

@@ -21,11 +21,12 @@
 //
 // # 发送队列
 //
-// 每连接一条内存发送队列，写循环串行写出；心跳 Ping 相对业务消息插队。
-// SendQueueSize：0=无界；>0=有界（满则阻塞入队）。Server 已关闭时 Send/Broadcast
-// 立即返回 ErrClosed；Client 未连接或连接已关返回 ErrNotConnected。
-// Broadcast 入队时连接已拆则跳过该连接。通道健康只由心跳判定；写出卡住允许存在，
-// 不因发送超时拆线。QueueGCInterval：nil→30s 巡检孤儿队列；显式 0→关闭巡检。
+// 每连接一条内存发送队列，写循环串行写出；心跳 Ping 相对队列中业务消息插队
+// （无法打断进行中的底层 Write）。SendQueueSize：0=无界；>0=有界（满则阻塞入队）。
+// Server 已关闭时 Send/Broadcast 立即返回 ErrClosed；Client 未连接或连接已关返回
+// ErrNotConnected。Broadcast 对各连接并行入队，入队时已拆的连接跳过。
+// 通道健康只由心跳判定；写出卡住允许存在，不因发送超时拆线。
+// QueueGCInterval：nil→30s 巡检孤儿队列；显式 0→关闭巡检。
 //
 // # 载荷与文件
 //

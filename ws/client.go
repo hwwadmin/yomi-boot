@@ -5,6 +5,7 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,7 +19,7 @@ import (
 type Client interface {
 	// Connect 拨号并启动读循环；若已有连接则先关闭再重连
 	Connect(ctx context.Context, url string) error
-	// Close 关闭当前连接
+	// Close 关闭当前连接；并停止本实例的队列巡检
 	Close(code CloseCode, reason string) error
 	// Connected 是否持有连接
 	Connected() bool
@@ -37,11 +38,11 @@ type client struct {
 	sendQueueSize   int
 	queueGCInterval time.Duration
 
-	mu         sync.Mutex
-	conn       *connImpl
-	gcStop     chan struct{}
-	gcStopOnce sync.Once
-	gcStarted  bool
+	mu        sync.Mutex // mu 保护 conn 与 gc 状态
+	connectMu sync.Mutex // connectMu 串行化 Connect，避免并发拨号孤儿连接
+	conn      *connImpl
+	gcStop    chan struct{} // gcStop 非 nil 且未关闭时巡检运行中
+	gcStarted bool
 }
 
 // NewClient 创建出站客户端
@@ -58,11 +59,10 @@ func NewClient(cfg ClientConfig) (Client, error) {
 		readMax:         cfg.ResolvedReadMaxPayloadSize(),
 		sendQueueSize:   cfg.SendQueueSize,
 		queueGCInterval: cfg.ResolvedQueueGCInterval(),
-		gcStop:          make(chan struct{}),
 	}, nil
 }
 
-// Connect 建立连接并启动读循环
+// Connect 建立连接并启动读循环（同一 Client 上串行）
 func (c *client) Connect(ctx context.Context, rawURL string) error {
 	if c == nil {
 		return errors.Sentinel(ErrInvalidArgument)
@@ -70,6 +70,9 @@ func (c *client) Connect(ctx context.Context, rawURL string) error {
 	if rawURL == "" {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "Connect url 不能为空")
 	}
+
+	c.connectMu.Lock()
+	defer c.connectMu.Unlock()
 
 	c.mu.Lock()
 	old := c.conn
@@ -91,8 +94,8 @@ func (c *client) Connect(ctx context.Context, rawURL string) error {
 	return nil
 }
 
-// dial 完成握手并回调 OnConnect；读循环由 Connect 在登记连接后启动
-func (c *client) dial(ctx context.Context, rawURL string) (*connImpl, error) {
+// dial 完成握手并回调 OnConnect；失败或 panic 时关闭已创建连接
+func (c *client) dial(ctx context.Context, rawURL string) (out *connImpl, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -131,6 +134,14 @@ func (c *client) dial(ctx context.Context, rawURL string) (*connImpl, error) {
 		c.handler.OnDisconnect(closeErr)
 	}
 
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = conn.Close(CloseGoingAway, "on_connect panic")
+			out = nil
+			err = errors.Wrap(fmt.Errorf("%v", rec), "ws OnConnect panic")
+		}
+	}()
+
 	c.handler.OnConnect(&peerContext{ctx: context.Background(), conn: conn})
 	conn.startHeartbeat(c.heartbeat)
 	return conn, nil
@@ -151,11 +162,12 @@ func (c *client) httpClient(handshakeTimeout time.Duration) *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-// Close 关闭当前连接
+// Close 关闭当前连接并停止队列巡检
 func (c *client) Close(code CloseCode, reason string) error {
 	if c == nil {
 		return nil
 	}
+	c.stopQueueGC()
 	c.mu.Lock()
 	conn := c.conn
 	c.conn = nil
@@ -207,7 +219,7 @@ func (c *client) mustConn() (*connImpl, error) {
 	return c.conn, nil
 }
 
-// ensureQueueGC 启动一次队列巡检（按实例）
+// ensureQueueGC 启动一次队列巡检；Close 后再次 Connect 可重新启动
 func (c *client) ensureQueueGC() {
 	if c == nil || c.queueGCInterval <= 0 {
 		return
@@ -217,6 +229,8 @@ func (c *client) ensureQueueGC() {
 		c.mu.Unlock()
 		return
 	}
+	stopCh := make(chan struct{})
+	c.gcStop = stopCh
 	c.gcStarted = true
 	c.mu.Unlock()
 	go func() {
@@ -224,13 +238,28 @@ func (c *client) ensureQueueGC() {
 		defer ticker.Stop()
 		for {
 			select {
-			case <-c.gcStop:
+			case <-stopCh:
 				return
 			case <-ticker.C:
 				c.purgeDeadQueue()
 			}
 		}
 	}()
+}
+
+// stopQueueGC 停止巡检；幂等，允许之后再次 ensureQueueGC
+func (c *client) stopQueueGC() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	stopCh := c.gcStop
+	c.gcStop = nil
+	c.gcStarted = false
+	c.mu.Unlock()
+	if stopCh != nil {
+		close(stopCh)
+	}
 }
 
 // purgeDeadQueue 清理当前连接上已关闭的发送队列

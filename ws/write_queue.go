@@ -162,6 +162,11 @@ func (c *connImpl) writeLoop() {
 	if q == nil {
 		return
 	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = c.Close(CloseGoingAway, "write loop panic")
+		}
+	}()
 	for {
 		q.mu.Lock()
 		for !q.closed && !q.pingPending && len(q.tasks) == 0 {
