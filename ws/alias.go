@@ -40,9 +40,11 @@ const (
 	DefaultWriteMaxPayloadSize = wsbase.DefaultWriteMaxPayloadSize
 	MaxWriteMaxPayloadSize     = wsbase.MaxWriteMaxPayloadSize
 
-	DefaultHeartbeatInterval = wsbase.DefaultHeartbeatInterval
-	DefaultHeartbeatTimeout  = wsbase.DefaultHeartbeatTimeout
-	DefaultHandshakeTimeout  = wsbase.DefaultHandshakeTimeout
+	DefaultServerHeartbeatInterval = wsbase.DefaultServerHeartbeatInterval
+	DefaultClientHeartbeatInterval = wsbase.DefaultClientHeartbeatInterval
+	DefaultHeartbeatInterval       = wsbase.DefaultHeartbeatInterval
+	DefaultHeartbeatTimeout        = wsbase.DefaultHeartbeatTimeout
+	DefaultHandshakeTimeout        = wsbase.DefaultHandshakeTimeout
 )
 
 // Duration 返回 d 的指针，便于配置 Heartbeat* 与 MaxConnLifetime* 等 *time.Duration 字段

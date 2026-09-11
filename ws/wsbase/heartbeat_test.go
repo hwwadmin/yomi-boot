@@ -9,28 +9,63 @@ import (
 	"time"
 )
 
-// TestResolveHeartbeat 覆盖 nil / 显式 0 / 自定义
-func TestResolveHeartbeat(t *testing.T) {
+// TestResolveServerHeartbeat 覆盖服务端 nil→默认常量、显式 0、自定义
+func TestResolveServerHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	i, to := resolveHeartbeat(nil, nil)
-	if i != DefaultHeartbeatInterval || to != DefaultHeartbeatTimeout {
-		t.Fatalf("nil/nil => %v/%v, want %v/%v", i, to, DefaultHeartbeatInterval, DefaultHeartbeatTimeout)
+	i, to := resolveServerHeartbeat(nil, nil)
+	if i != DefaultServerHeartbeatInterval || to != DefaultHeartbeatTimeout {
+		t.Fatalf("server nil/nil => %v/%v, want %v/%v", i, to, DefaultServerHeartbeatInterval, DefaultHeartbeatTimeout)
 	}
 
-	i, to = resolveHeartbeat(Duration(0), Duration(0))
+	i, to = resolveServerHeartbeat(Duration(0), Duration(0))
 	if i != 0 || to != 0 {
 		t.Fatalf("0/0 => %v/%v, want 0/0", i, to)
 	}
 
-	i, to = resolveHeartbeat(Duration(5*time.Second), Duration(0))
+	i, to = resolveServerHeartbeat(Duration(5*time.Second), Duration(0))
 	if i != 5*time.Second || to != 0 {
 		t.Fatalf("5s/0 => %v/%v", i, to)
 	}
 
-	i, to = resolveHeartbeat(Duration(0), Duration(20*time.Second))
+	i, to = resolveServerHeartbeat(Duration(0), Duration(20*time.Second))
 	if i != 0 || to != 20*time.Second {
 		t.Fatalf("0/20s => %v/%v", i, to)
+	}
+
+	cfg := ServerConfig{Addr: ":0"}
+	i, to = cfg.ResolvedHeartbeat()
+	if i != DefaultServerHeartbeatInterval || to != DefaultHeartbeatTimeout {
+		t.Fatalf("ServerConfig 默认 Resolved => %v/%v", i, to)
+	}
+}
+
+// TestResolveClientHeartbeat 覆盖客户端 nil→默认常量、显式 0、自定义
+func TestResolveClientHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	i, to := resolveClientHeartbeat(nil, nil)
+	if i != DefaultClientHeartbeatInterval || to != DefaultHeartbeatTimeout {
+		t.Fatalf("client nil/nil => %v/%v, want %v/%v", i, to, DefaultClientHeartbeatInterval, DefaultHeartbeatTimeout)
+	}
+
+	i, to = resolveClientHeartbeat(Duration(0), Duration(0))
+	if i != 0 || to != 0 {
+		t.Fatalf("0/0 => %v/%v, want 0/0", i, to)
+	}
+
+	i, to = resolveClientHeartbeat(Duration(5*time.Second), Duration(0))
+	if i != 5*time.Second || to != 0 {
+		t.Fatalf("5s/0 => %v/%v", i, to)
+	}
+
+	cfg := ClientConfig{}
+	i, to = cfg.ResolvedHeartbeat()
+	if i != DefaultClientHeartbeatInterval || to != DefaultHeartbeatTimeout {
+		t.Fatalf("ClientConfig 默认 Resolved => %v/%v", i, to)
+	}
+	if DefaultHeartbeatInterval != DefaultClientHeartbeatInterval {
+		t.Fatalf("DefaultHeartbeatInterval 应为客户端默认别名")
 	}
 }
 
@@ -38,26 +73,32 @@ func TestResolveHeartbeat(t *testing.T) {
 func TestValidateHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	if err := validateHeartbeat(Duration(-time.Second), nil); err == nil {
+	if err := validateHeartbeat(Duration(-time.Second), nil, resolveServerHeartbeat); err == nil {
 		t.Fatal("负 Interval 应失败")
 	}
-	if err := validateHeartbeat(nil, Duration(-time.Second)); err == nil {
+	if err := validateHeartbeat(nil, Duration(-time.Second), resolveClientHeartbeat); err == nil {
 		t.Fatal("负 Timeout 应失败")
 	}
-	if err := validateHeartbeat(Duration(10*time.Second), Duration(10*time.Second)); err == nil {
+	if err := validateHeartbeat(Duration(10*time.Second), Duration(10*time.Second), resolveClientHeartbeat); err == nil {
 		t.Fatal("Timeout==Interval 应失败")
 	}
-	if err := validateHeartbeat(Duration(10*time.Second), Duration(5*time.Second)); err == nil {
+	if err := validateHeartbeat(Duration(10*time.Second), Duration(5*time.Second), resolveClientHeartbeat); err == nil {
 		t.Fatal("Timeout<Interval 应失败")
 	}
-	if err := validateHeartbeat(nil, nil); err != nil {
-		t.Fatalf("默认应通过: %v", err)
+	if err := validateHeartbeat(nil, nil, resolveServerHeartbeat); err != nil {
+		t.Fatalf("服务端默认应通过: %v", err)
 	}
-	if err := validateHeartbeat(Duration(0), Duration(0)); err != nil {
+	if err := validateHeartbeat(nil, nil, resolveClientHeartbeat); err != nil {
+		t.Fatalf("客户端默认应通过: %v", err)
+	}
+	if err := validateHeartbeat(Duration(0), Duration(0), resolveServerHeartbeat); err != nil {
 		t.Fatalf("双 0 应通过: %v", err)
 	}
-	if err := validateHeartbeat(Duration(10*time.Second), Duration(0)); err != nil {
+	if err := validateHeartbeat(Duration(10*time.Second), Duration(0), resolveServerHeartbeat); err != nil {
 		t.Fatalf("仅 Ping 应通过: %v", err)
+	}
+	if err := (ServerConfig{Addr: ":0"}).Validate(); err != nil {
+		t.Fatalf("ServerConfig 默认应通过: %v", err)
 	}
 	if err := (ServerConfig{Addr: ":0", HeartbeatInterval: Duration(10 * time.Second), HeartbeatTimeout: Duration(30 * time.Second)}).Validate(); err != nil {
 		t.Fatal(err)
@@ -120,5 +161,37 @@ func TestHeartbeatPingKeepsAlive(t *testing.T) {
 	got := env.waitServerMsg()
 	if string(got) != "still-alive" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// TestDefaultServerHeartbeatNoPing 默认服务端不发 Ping，客户端 Ping 可保活服务端 Timeout
+func TestDefaultServerHeartbeatNoPing(t *testing.T) {
+	t.Log("[用例] 服务端 Interval nil→DefaultServerHeartbeatInterval；客户端 Ping 续服务端空闲超时")
+	timeout := Duration(200 * time.Millisecond)
+	interval := Duration(50 * time.Millisecond)
+	env := startServerAndClient(t,
+		ServerConfig{
+			// Interval 走服务端默认常量；显式短 Timeout 便于断言
+			HeartbeatTimeout: timeout,
+		},
+		ClientConfig{
+			HeartbeatInterval: interval,
+			HeartbeatTimeout:  Duration(0),
+		},
+	)
+	defer env.close()
+
+	i, to := (ServerConfig{}).ResolvedHeartbeat()
+	if i != DefaultServerHeartbeatInterval || to != DefaultHeartbeatTimeout {
+		t.Fatalf("文档约定默认 Interval=%v Timeout=%v, got %v/%v", DefaultServerHeartbeatInterval, DefaultHeartbeatTimeout, i, to)
+	}
+
+	select {
+	case <-env.serverClose:
+		t.Fatal("客户端 Ping 保活时服务端不应过早关闭")
+	case <-env.clientClose:
+		t.Fatal("客户端 Ping 保活时客户端不应过早关闭")
+	case <-time.After(600 * time.Millisecond):
+		t.Log("[断言] 仅客户端发 Ping 时服务端空闲超时被续命")
 	}
 }

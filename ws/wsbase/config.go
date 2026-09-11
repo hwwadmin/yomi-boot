@@ -21,10 +21,16 @@ const (
 	// MaxWriteMaxPayloadSize 允许配置的单条可写上限（8MiB）
 	MaxWriteMaxPayloadSize = 8 * 1024 * 1024
 
-	// DefaultHeartbeatInterval 默认心跳 Ping 间隔
-	DefaultHeartbeatInterval = 10 * time.Second
+	// DefaultServerHeartbeatInterval 服务端默认心跳 Ping 间隔（0 = 不主动发 Ping）
+	DefaultServerHeartbeatInterval = time.Duration(0)
 
-	// DefaultHeartbeatTimeout 默认读空闲超时（超时未获任意入站则断开）
+	// DefaultClientHeartbeatInterval 客户端默认心跳 Ping 间隔
+	DefaultClientHeartbeatInterval = 10 * time.Second
+
+	// DefaultHeartbeatInterval 是 DefaultClientHeartbeatInterval 的别名（兼容既有导出）
+	DefaultHeartbeatInterval = DefaultClientHeartbeatInterval
+
+	// DefaultHeartbeatTimeout 默认读空闲超时（超时未获任意入站则断开）；Server/Client 的 Timeout 为 nil 时均使用该值
 	DefaultHeartbeatTimeout = 30 * time.Second
 
 	// DefaultMaxConnLifetime 默认通道最大存活时间（从握手成功起算）
@@ -56,7 +62,7 @@ type ServerConfig struct {
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时（含读 HTTP 请求与升级写出）；0 表示 DefaultHandshakeTimeout
 
-	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultHeartbeatInterval；显式 0 表示不发 Ping
+	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultServerHeartbeatInterval；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
 	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
 	// Timeout>0 时由本包接管该连接的 ReadDeadline；任意入站（消息/Ping/Pong）会刷新
@@ -88,7 +94,7 @@ func (c ServerConfig) Validate() error {
 	if err := validateWriteMaxPayloadSize(c.WriteMaxPayloadSize); err != nil {
 		return err
 	}
-	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout); err != nil {
+	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout, resolveServerHeartbeat); err != nil {
 		return err
 	}
 	if err := validateMaxConnLifetime(c.MaxConnLifetime, c.MaxConnLifetimeJitter); err != nil {
@@ -110,9 +116,9 @@ func (c ServerConfig) ResolvedHandshakeTimeout() time.Duration {
 	return resolveHandshakeTimeout(c.HandshakeTimeout)
 }
 
-// ResolvedHeartbeat 返回生效的心跳间隔与超时
+// ResolvedHeartbeat 返回生效的心跳间隔与超时（nil→服务端默认常量；显式 0 保留为关闭）
 func (c ServerConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
-	return resolveHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
+	return resolveServerHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
 }
 
 // ResolvedMaxConnLifetime 返回生效的通道最大存活时间与波动半宽
@@ -132,7 +138,7 @@ type ClientConfig struct {
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
 	HandshakeTimeout    time.Duration // HandshakeTimeout 握手超时（拨号+升级）；0 表示 DefaultHandshakeTimeout
 
-	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultHeartbeatInterval；显式 0 表示不发 Ping
+	// HeartbeatInterval 主动 Ping 间隔；nil 表示 DefaultClientHeartbeatInterval；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
 	// HeartbeatTimeout 读空闲超时；nil 表示 DefaultHeartbeatTimeout；显式 0 表示不超时踢连接
 	HeartbeatTimeout *time.Duration
@@ -152,7 +158,7 @@ func (c ClientConfig) Validate() error {
 	if err := validateWriteMaxPayloadSize(c.WriteMaxPayloadSize); err != nil {
 		return err
 	}
-	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout); err != nil {
+	if err := validateHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout, resolveClientHeartbeat); err != nil {
 		return err
 	}
 	return nil
@@ -168,9 +174,9 @@ func (c ClientConfig) ResolvedHandshakeTimeout() time.Duration {
 	return resolveHandshakeTimeout(c.HandshakeTimeout)
 }
 
-// ResolvedHeartbeat 返回生效的心跳间隔与超时
+// ResolvedHeartbeat 返回生效的心跳间隔与超时（nil→客户端默认常量；显式 0 保留为关闭）
 func (c ClientConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
-	return resolveHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
+	return resolveClientHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
 }
 
 // validateWriteMaxPayloadSize 校验单条可写上限；0 表示使用默认值故合法
@@ -200,11 +206,11 @@ func resolveHandshakeTimeout(d time.Duration) time.Duration {
 	return d
 }
 
-// resolveHeartbeat 解析心跳：nil→默认；显式 0 保留为关闭对应能力
-func resolveHeartbeat(interval, timeout *time.Duration) (time.Duration, time.Duration) {
+// resolveServerHeartbeat 解析服务端心跳：nil→DefaultServerHeartbeatInterval / DefaultHeartbeatTimeout；显式 0 保留为关闭
+func resolveServerHeartbeat(interval, timeout *time.Duration) (time.Duration, time.Duration) {
 	var i, t time.Duration
 	if interval == nil {
-		i = DefaultHeartbeatInterval
+		i = DefaultServerHeartbeatInterval
 	} else {
 		i = *interval
 	}
@@ -216,15 +222,31 @@ func resolveHeartbeat(interval, timeout *time.Duration) (time.Duration, time.Dur
 	return i, t
 }
 
-// validateHeartbeat 校验心跳配置；两者均 >0 时要求 Timeout > Interval
-func validateHeartbeat(interval, timeout *time.Duration) error {
+// resolveClientHeartbeat 解析客户端心跳：nil→DefaultClientHeartbeatInterval / DefaultHeartbeatTimeout；显式 0 保留为关闭
+func resolveClientHeartbeat(interval, timeout *time.Duration) (time.Duration, time.Duration) {
+	var i, t time.Duration
+	if interval == nil {
+		i = DefaultClientHeartbeatInterval
+	} else {
+		i = *interval
+	}
+	if timeout == nil {
+		t = DefaultHeartbeatTimeout
+	} else {
+		t = *timeout
+	}
+	return i, t
+}
+
+// validateHeartbeat 校验心跳配置；resolve 用于得到生效值，两者均 >0 时要求 Timeout > Interval
+func validateHeartbeat(interval, timeout *time.Duration, resolve func(*time.Duration, *time.Duration) (time.Duration, time.Duration)) error {
 	if interval != nil && *interval < 0 {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatInterval 不能为负数")
 	}
 	if timeout != nil && *timeout < 0 {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatTimeout 不能为负数")
 	}
-	i, t := resolveHeartbeat(interval, timeout)
+	i, t := resolve(interval, timeout)
 	if i > 0 && t > 0 && t <= i {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "HeartbeatTimeout 必须大于 HeartbeatInterval")
 	}

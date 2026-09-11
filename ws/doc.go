@@ -42,7 +42,8 @@
 // # 心跳
 //
 // 传输层心跳由嵌入的 wsbase.ServerConfig / ClientConfig 的 HeartbeatInterval、
-// HeartbeatTimeout 控制（见 wsbase 文档）；也可用本包 Duration / DefaultHeartbeat* 别名。
+// HeartbeatTimeout 控制（见 wsbase 文档）；也可用本包 Duration / Default*Heartbeat* 别名。
+// 默认：服务端 DefaultServerHeartbeatInterval（0）+ 30s 空闲超时；客户端 10s Ping + 30s 超时。
 //
 // # 通道最长存活（仅 Server）
 //

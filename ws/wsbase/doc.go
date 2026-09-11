@@ -22,14 +22,18 @@
 //
 // # 心跳
 //
-// ServerConfig / ClientConfig 支持 HeartbeatInterval 与 HeartbeatTimeout（*time.Duration）：
+// ServerConfig / ClientConfig 均支持 HeartbeatInterval 与 HeartbeatTimeout（*time.Duration），
+// 语义与 MaxConnLifetime 一致：nil→该端默认常量；显式 0→关闭对应能力：
 //
-//   - nil：分别使用 DefaultHeartbeatInterval（10s）与 DefaultHeartbeatTimeout（30s）
-//   - 显式 0：Interval 表示不主动发 Ping；Timeout 表示不因空闲超时踢连接
+//   - Server Interval：nil→DefaultServerHeartbeatInterval（0，不主动发 Ping）
+//   - Client Interval：nil→DefaultClientHeartbeatInterval（10s）
+//   - Timeout（两端）：nil→DefaultHeartbeatTimeout（30s）；显式 0→不因空闲超时踢连接
+//   - Interval 显式 0：不发 Ping
 //   - 两者均 >0 时要求 Timeout > Interval
 //
 // Timeout>0 时本包接管该连接 ReadDeadline；任意入站（消息 / Ping / Pong）会刷新。
 // Interval>0 时周期 WritePing；写失败则关闭连接。CustomizeGWS 勿再与心跳争用 ReadDeadline。
+// 常规用法：客户端发 Ping，服务端只做空闲超时（默认即如此）。
 //
 // # 通道最长存活（仅 Server）
 //
