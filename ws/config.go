@@ -62,7 +62,8 @@ type ServerConfig struct {
 	Name string // Name 实例名，写入默认 Handler 日志；可空
 	Addr string // Addr 是监听地址，必填，如 ":7101" 或 "127.0.0.1:7101"
 
-	CompressEnabled bool // CompressEnabled 是否启用 permessage-deflate
+	// CompressEnabled 是否启用 permessage-deflate；零值 false 表示默认关闭压缩
+	CompressEnabled bool
 
 	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 表示 DefaultReadMaxPayloadSize
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
@@ -189,7 +190,8 @@ func (c ServerConfig) resolveHandler() ServerHandler {
 type ClientConfig struct {
 	Name string // Name 实例名，写入默认 Handler 日志；可空
 
-	CompressEnabled bool // CompressEnabled 是否启用 permessage-deflate
+	// CompressEnabled 是否启用 permessage-deflate；零值 false 表示默认关闭压缩
+	CompressEnabled bool
 
 	ReadMaxPayloadSize  int           // ReadMaxPayloadSize 单条逻辑消息可读最大载荷；0 表示 DefaultReadMaxPayloadSize
 	WriteMaxPayloadSize int           // WriteMaxPayloadSize 单条逻辑消息可写最大载荷；0 表示 DefaultWriteMaxPayloadSize
