@@ -59,7 +59,7 @@ func Duration(d time.Duration) *time.Duration {
 //   - Handler != nil：使用自定义 Handler；Config.Processor 不自动接入
 //     （自定义 Handler 若仍需 Processor，可嵌入 DefaultServerHandler 自行持有）
 type ServerConfig struct {
-	Name string // Name 是实例名；Handler 为 nil 时写入 Default*Handler 日志字段，可空
+	Name string // Name 实例名，写入默认 Handler 日志；可空
 	Addr string // Addr 是监听地址，必填，如 ":7101" 或 "127.0.0.1:7101"
 
 	CompressEnabled bool // CompressEnabled 是否启用 permessage-deflate
@@ -179,7 +179,7 @@ func (c ServerConfig) resolveHandler() ServerHandler {
 
 // ClientConfig 出站 WebSocket 客户端构造参数（Handler / Processor 规则同 ServerConfig）
 type ClientConfig struct {
-	Name string // Name 是实例名；Handler 为 nil 时写入 Default*Handler 日志字段，可空
+	Name string // Name 实例名，写入默认 Handler 日志；可空
 
 	CompressEnabled bool // CompressEnabled 是否启用 permessage-deflate
 

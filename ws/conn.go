@@ -166,7 +166,7 @@ func (c *connImpl) serve() {
 			if c.sendQ != nil {
 				c.sendQ.shutdown()
 			}
-			// 先拆底层，再回调；OnDisconnect panic 不得跳过 CloseNow，也不得打穿 serve goroutine
+			// 先 CloseNow，再回调（回调 panic 不影响拆除）
 			if c.raw != nil {
 				_ = c.raw.CloseNow()
 			}

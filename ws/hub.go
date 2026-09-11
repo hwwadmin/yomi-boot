@@ -77,7 +77,7 @@ func (h *hub) unregister(id string, c *connImpl) {
 	h.deleteLocked(id, c)
 }
 
-// broadcast 向全部连接并行入队；已拆连接跳过，避免有界队列队头拖死整次广播
+// broadcast 并行入队；已拆跳过；有界满队仍可能堵住调用方
 func (h *hub) broadcast(typ MsgType, data []byte) error {
 	if h == nil {
 		return errors.Sentinel(ErrInvalidArgument)

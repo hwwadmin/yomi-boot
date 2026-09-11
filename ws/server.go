@@ -17,24 +17,21 @@ import (
 	"github.com/google/uuid"
 )
 
-// Server 是入站服务：内置连接表，按框架 ConnID 推送
+// Server 是入站服务：按 ConnID 推送
 type Server interface {
-	// Start 非阻塞启动监听；是否 TLS 由 ServerConfig 决定；ctx 取消时关闭服务
+	// Start 非阻塞启动监听；TLS 由 ServerConfig 决定；ctx 取消时关闭
 	Start(ctx context.Context) error
-	// Close 关闭所有会话并停止监听
+	// Close 关闭监听与全部会话，并停止队列巡检
 	Close(ctx context.Context) error
-
 	// Send 向指定 ConnID 入队发送；成功表示已入队
 	Send(connID string, typ MsgType, data []byte) error
-	// Broadcast 向全部在线连接入队广播；入队时已拆的连接跳过
+	// Broadcast 并行入队广播；已拆连接跳过；有界满队时可能阻塞
 	Broadcast(typ MsgType, data []byte) error
-
-	// Len 返回在线会话数
+	// Len 在线会话数
 	Len() int
-	// Has 判断 ConnID 是否在线
+	// Has ConnID 是否在线
 	Has(connID string) bool
-
-	// ListenAddr 返回实际监听地址
+	// ListenAddr 实际监听地址
 	ListenAddr() (net.Addr, error)
 }
 
@@ -224,7 +221,7 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	conn.connID = connID
 
-	// OnConnect / 启动心跳寿命若 panic，须拆除已登记连接，避免 hub 孤儿
+	// OnConnect 等 panic 时拆除已登记连接
 	enteredServe := false
 	defer func() {
 		if enteredServe {
@@ -306,7 +303,7 @@ func (s *server) Send(connID string, typ MsgType, data []byte) error {
 	return err
 }
 
-// Broadcast 按类型广播入队；服务已关闭返回 ErrClosed；单连接已拆则跳过
+// Broadcast 并行入队广播；已关闭返回 ErrClosed
 func (s *server) Broadcast(typ MsgType, data []byte) error {
 	if s == nil || s.hub == nil {
 		return errors.Sentinel(ErrInvalidArgument)
@@ -343,7 +340,7 @@ func (s *server) Has(connID string) bool {
 	return ok
 }
 
-// Close 先拒绝新登记与入队，再停听，最后踢掉已登记会话
+// Close 拒新入队，停听与巡检，再关掉已登记会话
 func (s *server) Close(_ context.Context) error {
 	if s == nil {
 		return nil

@@ -33,8 +33,8 @@ type ClientHandler interface {
 // DefaultServerHandler 是默认服务端 Handler：启停打日志，OnPayload 将消息交 Processor。
 // 自定义 Handler 可嵌入本类型以复用 Processor 消费逻辑。
 type DefaultServerHandler struct {
-	Name      string                 // Name 是实例名，写入启停日志；可空
-	Processor ServerMessageProcessor // Processor 是业务消息处理器；nil 时丢弃消息
+	Name      string                 // Name 实例名，写入日志；可空
+	Processor ServerMessageProcessor // Processor 业务消息处理器；nil 时丢弃消息
 }
 
 // OnConnect 默认打印连接建立日志
@@ -59,8 +59,8 @@ func (h DefaultServerHandler) OnPayload(ctx SessionContext, p Payload) {
 
 // DefaultClientHandler 是默认客户端 Handler（语义同 DefaultServerHandler）
 type DefaultClientHandler struct {
-	Name      string                 // Name 是实例名，写入启停日志；可空
-	Processor ClientMessageProcessor // Processor 是业务消息处理器；nil 时丢弃消息
+	Name      string                 // Name 实例名，写入日志；可空
+	Processor ClientMessageProcessor // Processor 业务消息处理器；nil 时丢弃消息
 }
 
 // OnConnect 默认打印出站连通日志

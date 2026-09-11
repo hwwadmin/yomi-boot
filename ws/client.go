@@ -15,16 +15,15 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// Client 是出站客户端：一个实例至多一条连接
+// Client 是出站客户端：一实例至多一条连接
 type Client interface {
-	// Connect 拨号并启动读循环；若已有连接则先关闭再重连
+	// Connect 拨号并启动读循环；已有连接则先关旧再重连（未写出队列丢弃）
 	Connect(ctx context.Context, url string) error
-	// Close 关闭当前连接；并停止本实例的队列巡检
+	// Close 关闭连接并停止队列巡检
 	Close(code CloseCode, reason string) error
-	// Connected 是否持有连接
+	// Connected 是否已连接
 	Connected() bool
-
-	// Send 按类型入队发送；成功表示已入队；未连接返回 ErrNotConnected
+	// Send 入队发送；成功表示已入队；未连接返回 ErrNotConnected
 	Send(typ MsgType, data []byte) error
 }
 
@@ -62,7 +61,7 @@ func NewClient(cfg ClientConfig) (Client, error) {
 	}, nil
 }
 
-// Connect 建立连接并启动读循环（同一 Client 上串行）
+// Connect 建立连接并启动读循环（同一 Client 串行）
 func (c *client) Connect(ctx context.Context, rawURL string) error {
 	if c == nil {
 		return errors.Sentinel(ErrInvalidArgument)
@@ -94,7 +93,7 @@ func (c *client) Connect(ctx context.Context, rawURL string) error {
 	return nil
 }
 
-// dial 完成握手并回调 OnConnect；失败或 panic 时关闭已创建连接
+// dial 握手并 OnConnect；失败或 panic 时关闭连接
 func (c *client) dial(ctx context.Context, rawURL string) (out *connImpl, err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -188,7 +187,7 @@ func (c *client) Connected() bool {
 	return c.conn != nil
 }
 
-// Send 按类型入队发送
+// Send 入队发送
 func (c *client) Send(typ MsgType, data []byte) error {
 	conn, err := c.mustConn()
 	if err != nil {
@@ -219,7 +218,7 @@ func (c *client) mustConn() (*connImpl, error) {
 	return c.conn, nil
 }
 
-// ensureQueueGC 启动一次队列巡检；Close 后再次 Connect 可重新启动
+// ensureQueueGC 启动队列巡检（可在 Close 后再启）
 func (c *client) ensureQueueGC() {
 	if c == nil || c.queueGCInterval <= 0 {
 		return
@@ -247,7 +246,7 @@ func (c *client) ensureQueueGC() {
 	}()
 }
 
-// stopQueueGC 停止巡检；幂等，允许之后再次 ensureQueueGC
+// stopQueueGC 停止巡检（幂等）
 func (c *client) stopQueueGC() {
 	if c == nil {
 		return
