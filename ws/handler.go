@@ -1,4 +1,4 @@
-// Package ws 定义 Handler、Processor 与会话 Context
+// Package ws 定义 Handler 与会话 Context
 //
 // @author zwei
 package ws
@@ -9,18 +9,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
 )
-
-// ServerMessageProcessor 服务端业务消息处理器；只负责消费 Payload
-type ServerMessageProcessor interface {
-	// OnPayload 处理一条业务载荷
-	OnPayload(ctx SessionContext, p Payload) error
-}
-
-// ClientMessageProcessor 客户端业务消息处理器；只负责消费 Payload
-type ClientMessageProcessor interface {
-	// OnPayload 处理一条业务载荷
-	OnPayload(ctx PeerContext, p Payload) error
-}
 
 // ServerHandler 是服务端会话回调；可通过 SessionContext.ConnID 做框架级推送
 type ServerHandler interface {
