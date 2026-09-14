@@ -17,7 +17,7 @@ import (
 type CacheBackend string
 
 const (
-	// CacheMemory 进程内内存缓存（默认）
+	// CacheMemory 进程内内存缓存
 	CacheMemory CacheBackend = "memory"
 	// CacheRedis Redis 共享缓存（写路径经 distlock）
 	CacheRedis CacheBackend = "redis"
@@ -26,7 +26,7 @@ const (
 	defaultMaxInstructions    = 1_000_000
 	defaultPoolSize           = 8
 	defaultPoolAcquireTimeout = 200 * time.Millisecond
-	defaultScriptCacheSize    = 256
+	defaultProtoCacheSize     = 256
 	defaultCallStackSize      = 64
 	defaultRegistrySize       = 1024 * 64
 	defaultEntryFunc          = "main"
@@ -47,8 +47,8 @@ type Config struct {
 	PoolSize int
 	// PoolAcquireTimeout 借池等待上限；0 则默认 200ms
 	PoolAcquireTimeout time.Duration
-	// ScriptCacheSize 进程内 Proto LRU 容量；0 则默认 256
-	ScriptCacheSize int
+	// ProtoCacheSize 进程内 Proto LRU 容量；0 则默认 256
+	ProtoCacheSize int
 	// CallStackSize gopher-lua 调用栈；0 则默认 64
 	CallStackSize int
 	// RegistrySize gopher-lua registry；0 则默认 64Ki
@@ -66,7 +66,7 @@ type Config struct {
 	// SkipRefreshOnNew 为 true 时 New 不自动普通 Refresh；默认 false（会 Refresh）
 	SkipRefreshOnNew bool
 
-	// CacheBackend 脚本快照缓存；空则 memory
+	// CacheBackend 脚本快照缓存，必须显式指定 memory 或 redis
 	CacheBackend CacheBackend
 	// RedisKeyPrefix Redis 缓存 key 前缀；空则 yomi:golua（仅 redis）
 	RedisKeyPrefix string
@@ -100,16 +100,9 @@ func (c Config) EntryFuncOrDefault() string {
 	return defaultEntryFunc
 }
 
-// CacheBackendOrDefault 返回缓存后端
-func (c Config) CacheBackendOrDefault() CacheBackend {
-	switch CacheBackend(strings.ToLower(strings.TrimSpace(string(c.CacheBackend)))) {
-	case "", CacheMemory:
-		return CacheMemory
-	case CacheRedis:
-		return CacheRedis
-	default:
-		return c.CacheBackend
-	}
+// normalizeCacheBackend 规范化后端标识（小写/去空白）；空串保持为空，须显式选择
+func (c Config) normalizeCacheBackend() CacheBackend {
+	return CacheBackend(strings.ToLower(strings.TrimSpace(string(c.CacheBackend))))
 }
 
 // AllowLibsOrDefault 返回库白名单
@@ -147,8 +140,8 @@ func (c Config) withDefaults() Config {
 	if out.PoolAcquireTimeout <= 0 {
 		out.PoolAcquireTimeout = defaultPoolAcquireTimeout
 	}
-	if out.ScriptCacheSize <= 0 {
-		out.ScriptCacheSize = defaultScriptCacheSize
+	if out.ProtoCacheSize <= 0 {
+		out.ProtoCacheSize = defaultProtoCacheSize
 	}
 	if out.CallStackSize <= 0 {
 		out.CallStackSize = defaultCallStackSize
@@ -166,7 +159,7 @@ func (c Config) withDefaults() Config {
 		out.MaxStringLen = defaultMaxStringLen
 	}
 	out.EntryFunc = out.EntryFuncOrDefault()
-	out.CacheBackend = out.CacheBackendOrDefault()
+	out.CacheBackend = out.normalizeCacheBackend()
 	out.AllowLibs = out.AllowLibsOrDefault()
 	out.DenyBaseFuncs = out.DenyBaseFuncsOrDefault()
 	return out
@@ -187,10 +180,12 @@ func (c Config) Validate() error {
 	if d.PoolAcquireTimeout <= 0 {
 		return errors.New("golua: PoolAcquireTimeout 必须大于 0")
 	}
-	if d.ScriptCacheSize <= 0 {
-		return errors.New("golua: ScriptCacheSize 必须大于 0")
+	if d.ProtoCacheSize <= 0 {
+		return errors.New("golua: ProtoCacheSize 必须大于 0")
 	}
 	switch d.CacheBackend {
+	case "":
+		return errors.New("golua: CacheBackend 必须明确指定为 memory 或 redis")
 	case CacheMemory:
 	case CacheRedis:
 		if d.Redis == nil {

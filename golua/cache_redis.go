@@ -20,10 +20,10 @@ const (
 	defaultRedisLockTTL   = 30 * time.Second
 )
 
-var _ ScriptCache = (*RedisScriptCache)(nil)
+var _ scriptCache = (*redisScriptCache)(nil)
 
-// RedisScriptCache 基于 Redis 的脚本快照缓存（多实例共享；写操作持分布式锁）
-type RedisScriptCache struct {
+// redisScriptCache 基于 Redis 的脚本快照缓存（多实例共享；写操作持分布式锁）
+type redisScriptCache struct {
 	rdb     *redisv9.Client
 	keys    redisKeys
 	factory distlock.DistLockFactory
@@ -31,8 +31,8 @@ type RedisScriptCache struct {
 }
 
 // newRedisScriptCache 创建 Redis 脚本缓存。
-// keyPrefix 空则 yomi:golua；factory 必填，用于 Put/Remove/ReplaceAll/ReplaceAllFrom 跨实例互斥。
-func newRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock.DistLockFactory) (*RedisScriptCache, error) {
+// keyPrefix 空则 yomi:golua；factory 必填，用于写路径跨实例互斥。
+func newRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock.DistLockFactory) (*redisScriptCache, error) {
 	if rdb == nil {
 		return nil, errors.New("golua: redis client 不能为空")
 	}
@@ -43,7 +43,7 @@ func newRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock
 	if prefix == "" {
 		prefix = defaultRedisKeyPrefix
 	}
-	return &RedisScriptCache{
+	return &redisScriptCache{
 		rdb:     rdb,
 		keys:    newRedisKeys(prefix),
 		factory: factory,
@@ -52,7 +52,7 @@ func newRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock
 }
 
 // Get 按 ID 读取（不加锁）
-func (c *RedisScriptCache) Get(ctx context.Context, id string) (*Script, error) {
+func (c *redisScriptCache) Get(ctx context.Context, id string) (*Script, error) {
 	raw, err := c.rdb.Get(ctx, c.keys.script(id)).Bytes()
 	if err != nil {
 		if errors.Is(err, redisv9.Nil) {
@@ -71,7 +71,7 @@ func (c *RedisScriptCache) Get(ctx context.Context, id string) (*Script, error) 
 }
 
 // Has 判断是否存在（不加锁）
-func (c *RedisScriptCache) Has(ctx context.Context, id string) (bool, error) {
+func (c *redisScriptCache) Has(ctx context.Context, id string) (bool, error) {
 	n, err := c.rdb.Exists(ctx, c.keys.script(id)).Result()
 	if err != nil {
 		return false, errors.Wrap(err, "golua: 检查脚本缓存失败")
@@ -80,7 +80,7 @@ func (c *RedisScriptCache) Has(ctx context.Context, id string) (bool, error) {
 }
 
 // Ready current_gen 存在且 index 非空（不加锁）
-func (c *RedisScriptCache) Ready(ctx context.Context) (bool, error) {
+func (c *redisScriptCache) Ready(ctx context.Context) (bool, error) {
 	gen, err := c.rdb.Exists(ctx, c.keys.gen()).Result()
 	if err != nil {
 		return false, errors.Wrap(err, "golua: 检查 current_gen 失败")
@@ -96,28 +96,28 @@ func (c *RedisScriptCache) Ready(ctx context.Context) (bool, error) {
 }
 
 // Put 写入单脚本（持锁）
-func (c *RedisScriptCache) Put(ctx context.Context, script *Script) error {
+func (c *redisScriptCache) Put(ctx context.Context, script *Script) error {
 	return c.withWriteLock(ctx, func(ctx context.Context) error {
 		return c.putLocked(ctx, script)
 	})
 }
 
 // Remove 删除单脚本（持锁）
-func (c *RedisScriptCache) Remove(ctx context.Context, id string) error {
+func (c *redisScriptCache) Remove(ctx context.Context, id string) error {
 	return c.withWriteLock(ctx, func(ctx context.Context) error {
 		return c.removeLocked(ctx, id)
 	})
 }
 
 // ReplaceAll 全量替换并 reconcile（持锁）
-func (c *RedisScriptCache) ReplaceAll(ctx context.Context, scripts []*Script) error {
+func (c *redisScriptCache) ReplaceAll(ctx context.Context, scripts []*Script) error {
 	return c.withWriteLock(ctx, func(ctx context.Context) error {
 		return c.replaceAllLocked(ctx, scripts)
 	})
 }
 
 // ReplaceAllFrom 持锁回源再全量替换，与 Load 共用同一把写锁
-func (c *RedisScriptCache) ReplaceAllFrom(ctx context.Context, load func(context.Context) ([]*Script, error)) error {
+func (c *redisScriptCache) ReplaceAllFrom(ctx context.Context, load func(context.Context) ([]*Script, error)) error {
 	if load == nil {
 		return errors.New("golua: load 不能为空")
 	}
@@ -130,8 +130,31 @@ func (c *RedisScriptCache) ReplaceAllFrom(ctx context.Context, load func(context
 	})
 }
 
+// UpsertFrom 持锁回源单脚本：成功则 Put；NotFound 且 removeOnNotFound 则 Remove
+func (c *redisScriptCache) UpsertFrom(ctx context.Context, id string, removeOnNotFound bool, load func(context.Context) (*Script, error)) error {
+	if load == nil {
+		return errors.New("golua: load 不能为空")
+	}
+	return c.withWriteLock(ctx, func(ctx context.Context) error {
+		script, err := load(ctx)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				if !removeOnNotFound {
+					return errors.Sentinel(ErrNotFound)
+				}
+				return c.removeLocked(ctx, id)
+			}
+			return err
+		}
+		if script == nil {
+			return errors.New("golua: load 返回空脚本")
+		}
+		return c.putLocked(ctx, script)
+	})
+}
+
 // withWriteLock 获取写锁后执行 fn（启用看门狗，避免长 ReplaceAll 丢锁）
-func (c *RedisScriptCache) withWriteLock(ctx context.Context, fn func(context.Context) error) error {
+func (c *redisScriptCache) withWriteLock(ctx context.Context, fn func(context.Context) error) error {
 	lock := c.factory.GetLock(
 		c.keys.lock(),
 		distlock.WithTTL(c.lockTTL),
@@ -153,7 +176,7 @@ func (c *RedisScriptCache) withWriteLock(ctx context.Context, fn func(context.Co
 }
 
 // putLocked 已持锁写入
-func (c *RedisScriptCache) putLocked(ctx context.Context, script *Script) error {
+func (c *redisScriptCache) putLocked(ctx context.Context, script *Script) error {
 	if script == nil {
 		return errors.New("golua: 脚本不能为空")
 	}
@@ -176,7 +199,7 @@ func (c *RedisScriptCache) putLocked(ctx context.Context, script *Script) error 
 }
 
 // removeLocked 已持锁删除
-func (c *RedisScriptCache) removeLocked(ctx context.Context, id string) error {
+func (c *redisScriptCache) removeLocked(ctx context.Context, id string) error {
 	pipe := c.rdb.TxPipeline()
 	pipe.Del(ctx, c.keys.script(id))
 	pipe.SRem(ctx, c.keys.index(), id)
@@ -188,7 +211,7 @@ func (c *RedisScriptCache) removeLocked(ctx context.Context, id string) error {
 }
 
 // replaceAllLocked 已持锁全量替换
-func (c *RedisScriptCache) replaceAllLocked(ctx context.Context, scripts []*Script) error {
+func (c *redisScriptCache) replaceAllLocked(ctx context.Context, scripts []*Script) error {
 	normalized := make([]*Script, 0, len(scripts))
 	idSet := make(map[string]struct{}, len(scripts))
 	for _, sc := range scripts {

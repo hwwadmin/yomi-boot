@@ -25,7 +25,7 @@ type StoreLoad interface {
 	RefreshScriptForce(ctx context.Context, id string) error
 }
 
-// StoreQuery 执行侧只读视图；由 golua 实现，只读 ScriptCache
+// StoreQuery 执行侧只读视图；由 golua 实现，只读脚本快照缓存
 type StoreQuery interface {
 	// Get 按 ID 读缓存；miss 返回 ErrNotFound，不回源
 	Get(ctx context.Context, id string) (*Script, error)

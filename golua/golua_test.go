@@ -66,11 +66,12 @@ func (m *memoryAdapter) delete(id string) {
 
 func testCfg() Config {
 	return Config{
+		CacheBackend:       CacheMemory,
 		ExecTimeout:        200 * time.Millisecond,
 		MaxInstructions:    1_000_000,
 		PoolSize:           2,
 		PoolAcquireTimeout: 200 * time.Millisecond,
-		ScriptCacheSize:    16,
+		ProtoCacheSize:     16,
 		SkipRefreshOnNew:   true,
 	}
 }
@@ -99,6 +100,17 @@ func newTestComp(t *testing.T, adapter StoreLoadAdapter, cfg Config) *Components
 	}
 	t.Cleanup(func() { _ = comp.Close() })
 	return comp
+}
+
+// TestNew_RequiresCacheBackend 验证必须显式指定 CacheBackend
+func TestNew_RequiresCacheBackend(t *testing.T) {
+	_, err := New(context.Background(), Config{}, newMemoryAdapter())
+	if err == nil {
+		t.Fatal("期望未指定 CacheBackend 时报错")
+	}
+	if !strings.Contains(err.Error(), "CacheBackend") {
+		t.Fatalf("期望提示 CacheBackend，实际 %v", err)
+	}
 }
 
 // TestNew_RedisRequiresDeps 验证 redis 后端依赖必填
@@ -356,8 +368,8 @@ func TestRedisScriptCache_BusinessErrNotWrappedAsLock(t *testing.T) {
 	}
 }
 
-// TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad 验证 Load 在写锁内执行
-func TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
+// TestRedisCache_ReplaceAllFromHoldsLockAcrossLoad 验证全量 Load 在写锁内执行
+func TestRedisCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
 	cfg := redisTestCfg(t, "yomi:golua:test:from")
 	cache, err := newRedisScriptCache(cfg.Redis, cfg.RedisKeyPrefix, cfg.DistLockFactory)
 	if err != nil {
@@ -379,7 +391,6 @@ func TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
 	}()
 
 	<-loadStarted
-	// Load 期间另一把同 key 锁应拿不到（短超时）
 	other := cfg.DistLockFactory.GetLock(cfg.RedisKeyPrefix+":lock", distlock.WithTTL(5*time.Second))
 	tryCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -387,6 +398,43 @@ func TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
 		_ = other.Unlock(context.Background())
 		close(loadContinue)
 		t.Fatal("Load 进行中期望写锁仍被占用")
+	}
+	close(loadContinue)
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRedisCache_UpsertFromHoldsLockAcrossLoad 验证单脚本 LoadByID 在写锁内执行
+func TestRedisCache_UpsertFromHoldsLockAcrossLoad(t *testing.T) {
+	cfg := redisTestCfg(t, "yomi:golua:test:upsert")
+	cache, err := newRedisScriptCache(cfg.Redis, cfg.RedisKeyPrefix, cfg.DistLockFactory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loadStarted := make(chan struct{})
+	loadContinue := make(chan struct{})
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- cache.UpsertFrom(context.Background(), "u1", false, func(ctx context.Context) (*Script, error) {
+			close(loadStarted)
+			<-loadContinue
+			return &Script{
+				ID: "u1", Source: `function main(args) return 1 end`, Version: "1",
+			}, nil
+		})
+	}()
+
+	<-loadStarted
+	other := cfg.DistLockFactory.GetLock(cfg.RedisKeyPrefix+":lock", distlock.WithTTL(5*time.Second))
+	tryCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := other.Lock(tryCtx); err == nil {
+		_ = other.Unlock(context.Background())
+		close(loadContinue)
+		t.Fatal("LoadByID 进行中期望写锁仍被占用")
 	}
 	close(loadContinue)
 	if err := <-errCh; err != nil {

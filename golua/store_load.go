@@ -1,4 +1,4 @@
-// Package golua StoreLoad 实现（Adapter → ScriptCache + 本地失效）
+// Package golua StoreLoad 实现（Adapter → scriptCache + 本地失效）
 //
 // @author zwei
 package golua
@@ -16,13 +16,13 @@ var _ StoreLoad = (*storeLoad)(nil)
 // storeLoad 是 StoreLoad 的默认实现
 type storeLoad struct {
 	adapter     StoreLoadAdapter
-	cache       ScriptCache
+	cache       scriptCache
 	invalidator ScriptInvalidator
 	mu          sync.Mutex
 }
 
 // newStoreLoad 创建缓存灌入实现
-func newStoreLoad(adapter StoreLoadAdapter, cache ScriptCache, invalidator ScriptInvalidator) StoreLoad {
+func newStoreLoad(adapter StoreLoadAdapter, cache scriptCache, invalidator ScriptInvalidator) StoreLoad {
 	return &storeLoad{
 		adapter:     adapter,
 		cache:       cache,
@@ -121,32 +121,28 @@ func (s *storeLoad) refreshAllLocked(ctx context.Context) error {
 	return nil
 }
 
-// refreshOneLocked 单脚本回源
+// refreshOneLocked 单脚本回源（UpsertFrom：Redis 下 LoadByID 与 Put/Remove 同一把 distlock）
 func (s *storeLoad) refreshOneLocked(ctx context.Context, id string, deleteOnNotFound bool) error {
-	script, err := s.adapter.LoadByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			if !deleteOnNotFound {
-				return errors.Sentinel(ErrNotFound)
+	invalidateID := id
+	err := s.cache.UpsertFrom(ctx, id, deleteOnNotFound, func(ctx context.Context) (*Script, error) {
+		script, err := s.adapter.LoadByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil, errors.Sentinel(ErrNotFound)
 			}
-			if err := s.cache.Remove(ctx, id); err != nil {
-				return err
-			}
-			if s.invalidator != nil {
-				s.invalidator.InvalidateScripts(id)
-			}
-			return nil
+			return nil, errors.Wrap(err, "golua: Adapter.LoadByID 失败")
 		}
-		return errors.Wrap(err, "golua: Adapter.LoadByID 失败")
-	}
-	if script == nil {
-		return errors.New("golua: Adapter.LoadByID 返回空脚本")
-	}
-	if err := s.cache.Put(ctx, script); err != nil {
+		if script == nil {
+			return nil, errors.New("golua: Adapter.LoadByID 返回空脚本")
+		}
+		invalidateID = script.ID
+		return script, nil
+	})
+	if err != nil {
 		return err
 	}
 	if s.invalidator != nil {
-		s.invalidator.InvalidateScripts(script.ID)
+		s.invalidator.InvalidateScripts(invalidateID)
 	}
 	return nil
 }

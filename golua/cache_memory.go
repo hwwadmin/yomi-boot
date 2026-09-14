@@ -10,24 +10,24 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-var _ ScriptCache = (*MemoryScriptCache)(nil)
+var _ scriptCache = (*memoryScriptCache)(nil)
 
-// MemoryScriptCache 进程内脚本快照缓存（单机）
-type MemoryScriptCache struct {
+// memoryScriptCache 进程内脚本快照缓存（单机）
+type memoryScriptCache struct {
 	mu      sync.RWMutex
 	ready   bool
 	scripts map[string]*Script
 }
 
 // newMemoryScriptCache 创建空的内存脚本缓存
-func newMemoryScriptCache() *MemoryScriptCache {
-	return &MemoryScriptCache{
+func newMemoryScriptCache() *memoryScriptCache {
+	return &memoryScriptCache{
 		scripts: make(map[string]*Script),
 	}
 }
 
 // Get 按 ID 读取
-func (c *MemoryScriptCache) Get(_ context.Context, id string) (*Script, error) {
+func (c *memoryScriptCache) Get(_ context.Context, id string) (*Script, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	s, ok := c.scripts[id]
@@ -39,7 +39,7 @@ func (c *MemoryScriptCache) Get(_ context.Context, id string) (*Script, error) {
 }
 
 // Has 判断是否存在
-func (c *MemoryScriptCache) Has(_ context.Context, id string) (bool, error) {
+func (c *memoryScriptCache) Has(_ context.Context, id string) (bool, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	_, ok := c.scripts[id]
@@ -47,14 +47,14 @@ func (c *MemoryScriptCache) Has(_ context.Context, id string) (bool, error) {
 }
 
 // Ready 已灌库且非空
-func (c *MemoryScriptCache) Ready(_ context.Context) (bool, error) {
+func (c *memoryScriptCache) Ready(_ context.Context) (bool, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.ready && len(c.scripts) > 0, nil
 }
 
 // Put 写入单脚本
-func (c *MemoryScriptCache) Put(_ context.Context, script *Script) error {
+func (c *memoryScriptCache) Put(_ context.Context, script *Script) error {
 	if script == nil {
 		return errors.New("golua: 脚本不能为空")
 	}
@@ -70,7 +70,7 @@ func (c *MemoryScriptCache) Put(_ context.Context, script *Script) error {
 }
 
 // Remove 删除单脚本
-func (c *MemoryScriptCache) Remove(_ context.Context, id string) error {
+func (c *memoryScriptCache) Remove(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.scripts, id)
@@ -78,7 +78,7 @@ func (c *MemoryScriptCache) Remove(_ context.Context, id string) error {
 }
 
 // ReplaceAll 全量替换
-func (c *MemoryScriptCache) ReplaceAll(_ context.Context, scripts []*Script) error {
+func (c *memoryScriptCache) ReplaceAll(_ context.Context, scripts []*Script) error {
 	next := make(map[string]*Script, len(scripts))
 	for _, sc := range scripts {
 		if sc == nil {
@@ -100,8 +100,8 @@ func (c *MemoryScriptCache) ReplaceAll(_ context.Context, scripts []*Script) err
 	return nil
 }
 
-// ReplaceAllFrom 先 load 再全量替换（单机由 StoreLoad.mu 串行，此处无需额外锁跨越 load）
-func (c *MemoryScriptCache) ReplaceAllFrom(ctx context.Context, load func(context.Context) ([]*Script, error)) error {
+// ReplaceAllFrom 先 load 再全量替换（单机由 StoreLoad.mu 串行）
+func (c *memoryScriptCache) ReplaceAllFrom(ctx context.Context, load func(context.Context) ([]*Script, error)) error {
 	if load == nil {
 		return errors.New("golua: load 不能为空")
 	}
@@ -110,4 +110,25 @@ func (c *MemoryScriptCache) ReplaceAllFrom(ctx context.Context, load func(contex
 		return err
 	}
 	return c.ReplaceAll(ctx, scripts)
+}
+
+// UpsertFrom 回源后写入或按需删除（单机无跨进程锁）
+func (c *memoryScriptCache) UpsertFrom(ctx context.Context, id string, removeOnNotFound bool, load func(context.Context) (*Script, error)) error {
+	if load == nil {
+		return errors.New("golua: load 不能为空")
+	}
+	script, err := load(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			if !removeOnNotFound {
+				return errors.Sentinel(ErrNotFound)
+			}
+			return c.Remove(ctx, id)
+		}
+		return err
+	}
+	if script == nil {
+		return errors.New("golua: load 返回空脚本")
+	}
+	return c.Put(ctx, script)
 }

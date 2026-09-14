@@ -2,7 +2,7 @@
 //
 // # 用法
 //
-//	comp := golua.MustNew(ctx, golua.Config{}, adapter) // 默认内存缓存
+//	comp := golua.MustNew(ctx, golua.Config{CacheBackend: golua.CacheMemory}, adapter)
 //	// 或多实例 Redis：
 //	comp = golua.MustNew(ctx, golua.Config{
 //		CacheBackend:    golua.CacheRedis,
@@ -17,8 +17,8 @@
 // # 职责拆分
 //
 //   - StoreLoadAdapter：业务实现，全量/按 ID 拉取脚本原文，不碰缓存
-//   - ScriptCache：由 Config.CacheBackend 在库内装配（memory / redis+distlock）
-//   - StoreLoad / StoreQuery：本包实现，读写 ScriptCache
+//   - 脚本快照缓存：由 Config.CacheBackend 在库内装配（memory / redis+distlock）
+//   - StoreLoad / StoreQuery：本包实现，读写快照缓存
 //   - Engine：只经 StoreQuery 读缓存后沙箱执行
 //
 // # 热更新与池

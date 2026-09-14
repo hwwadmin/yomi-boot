@@ -53,8 +53,8 @@ func New(ctx context.Context, cfg Config, adapter StoreLoadAdapter) (*Components
 }
 
 // newScriptCache 按后端创建脚本快照缓存
-func newScriptCache(cfg Config) (ScriptCache, error) {
-	switch cfg.CacheBackendOrDefault() {
+func newScriptCache(cfg Config) (scriptCache, error) {
+	switch cfg.CacheBackend {
 	case CacheMemory:
 		return newMemoryScriptCache(), nil
 	case CacheRedis:

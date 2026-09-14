@@ -1,4 +1,4 @@
-// Package golua StoreQuery 实现（只读 ScriptCache）
+// Package golua StoreQuery 实现（只读脚本快照缓存）
 //
 // @author zwei
 package golua
@@ -13,11 +13,11 @@ var _ StoreQuery = (*storeQuery)(nil)
 
 // storeQuery 是 StoreQuery 的默认实现
 type storeQuery struct {
-	cache ScriptCache
+	cache scriptCache
 }
 
 // newStoreQuery 创建只读查询实现
-func newStoreQuery(cache ScriptCache) StoreQuery {
+func newStoreQuery(cache scriptCache) StoreQuery {
 	return &storeQuery{cache: cache}
 }
 

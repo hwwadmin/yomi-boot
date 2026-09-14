@@ -35,7 +35,7 @@ type protoCache struct {
 // newProtoCache 创建指定容量的 Proto 缓存
 func newProtoCache(capacity int) *protoCache {
 	if capacity <= 0 {
-		capacity = defaultScriptCacheSize
+		capacity = defaultProtoCacheSize
 	}
 	return &protoCache{
 		capacity: capacity,

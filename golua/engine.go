@@ -47,7 +47,7 @@ func newEngine(cfg Config, query StoreQuery) (*engine, error) {
 	e := &engine{
 		cfg:   cfg,
 		query: query,
-		cache: newProtoCache(cfg.ScriptCacheSize),
+		cache: newProtoCache(cfg.ProtoCacheSize),
 	}
 	e.pool = newStatePool(cfg, func() (*lua.LState, error) {
 		return newSandboxedState(cfg)
