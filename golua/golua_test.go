@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/redis/redistest"
 )
@@ -63,46 +64,43 @@ func (m *memoryAdapter) delete(id string) {
 	delete(m.scripts, id)
 }
 
-func enabledCfg() Config {
-	enabled := true
-	refresh := false
+func testCfg() Config {
 	return Config{
-		Enabled:              &enabled,
-		RefreshOnStart:       &refresh,
-		ExecTimeoutMS:        200,
-		MaxInstructions:      1_000_000,
-		PoolSize:             2,
-		PoolAcquireTimeoutMS: 200,
-		ScriptCacheSize:      16,
+		ExecTimeout:        200 * time.Millisecond,
+		MaxInstructions:    1_000_000,
+		PoolSize:           2,
+		PoolAcquireTimeout: 200 * time.Millisecond,
+		ScriptCacheSize:    16,
+		SkipRefreshOnNew:   true,
 	}
 }
 
-// TestNew_Disabled 验证未启用时返回 ErrDisabled
-func TestNew_Disabled(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-	_, err := New(context.Background(), Config{}, newMemoryAdapter(), rdb)
-	if !errors.Is(err, ErrDisabled) {
-		t.Fatalf("期望 ErrDisabled，实际 %v", err)
+func newTestComp(t *testing.T, adapter StoreLoadAdapter, cache ScriptCache, cfg Config) *Components {
+	t.Helper()
+	comp, err := New(context.Background(), cfg, adapter, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = comp.Close() })
+	return comp
+}
+
+// TestNew_RequiresCache 验证 ScriptCache 必填
+func TestNew_RequiresCache(t *testing.T) {
+	_, err := New(context.Background(), Config{}, newMemoryAdapter(), nil)
+	if err == nil {
+		t.Fatal("期望 ScriptCache 为空时报错")
 	}
 }
 
-// TestExecute_Basic 验证灌库后执行 main 返回结果
+// TestExecute_Basic 验证内存缓存灌库后执行
 func TestExecute_Basic(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(&Script{
 		ID:      "add",
 		Source:  `function main(args) return args.a + args.b end`,
 		Version: "1",
 	})
-	comp, err := New(context.Background(), enabledCfg(), adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
-
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -117,20 +115,12 @@ func TestExecute_Basic(t *testing.T) {
 
 // TestRefresh_SkipWhenReady 验证普通 Refresh 在缓存非空时跳过
 func TestRefresh_SkipWhenReady(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(&Script{
 		ID:      "s1",
 		Source:  `function main(args) return 1 end`,
 		Version: "1",
 	})
-	comp, err := New(context.Background(), enabledCfg(), adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
-
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -151,22 +141,14 @@ func TestRefresh_SkipWhenReady(t *testing.T) {
 	}
 }
 
-// TestRefreshScriptForce_UpdateAndInvalidate 验证强制单脚本刷新后执行新逻辑
+// TestRefreshScriptForce_UpdateAndInvalidate 验证强制单脚本刷新
 func TestRefreshScriptForce_UpdateAndInvalidate(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(&Script{
 		ID:      "s1",
 		Source:  `function main(args) return 1 end`,
 		Version: "1",
 	})
-	comp, err := New(context.Background(), enabledCfg(), adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
-
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -187,22 +169,14 @@ func TestRefreshScriptForce_UpdateAndInvalidate(t *testing.T) {
 	}
 }
 
-// TestRefreshScriptForce_NotFoundDeletesCache 验证数据源删除后强制刷新清理缓存
+// TestRefreshScriptForce_NotFoundDeletesCache 验证删除脚本
 func TestRefreshScriptForce_NotFoundDeletesCache(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(&Script{
 		ID:      "gone",
 		Source:  `function main(args) return 1 end`,
 		Version: "1",
 	})
-	comp, err := New(context.Background(), enabledCfg(), adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
-
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -210,144 +184,88 @@ func TestRefreshScriptForce_NotFoundDeletesCache(t *testing.T) {
 	if err := comp.StoreLoad.RefreshScriptForce(context.Background(), "gone"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = comp.Engine.Execute(context.Background(), "gone", nil)
+	_, err := comp.Engine.Execute(context.Background(), "gone", nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("期望 ErrNotFound，实际 %v", err)
 	}
 }
 
-// TestExecute_Timeout 验证死循环触发执行超时
+// TestExecute_Timeout 验证死循环超时
 func TestExecute_Timeout(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(&Script{
 		ID:      "loop",
 		Source:  `function main(args) while true do end end`,
 		Version: "1",
 	})
-	cfg := enabledCfg()
-	cfg.ExecTimeoutMS = 50
-	comp, err := New(context.Background(), cfg, adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
+	cfg := testCfg()
+	cfg.ExecTimeout = 50 * time.Millisecond
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-
 	start := time.Now()
-	_, err = comp.Engine.Execute(context.Background(), "loop", nil)
-	elapsed := time.Since(start)
+	_, err := comp.Engine.Execute(context.Background(), "loop", nil)
 	if !errors.Is(err, ErrTimeout) {
 		t.Fatalf("期望 ErrTimeout，实际 %v", err)
 	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("超时应较快返回，实际 %v", elapsed)
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("超时应较快返回")
 	}
 }
 
-// TestSandbox_NoOS 验证 os 库不可用
+// TestSandbox_NoOS 验证 os 不可用
 func TestSandbox_NoOS(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(&Script{
 		ID:      "os",
 		Source:  `function main(args) return os.time() end`,
 		Version: "1",
 	})
-	comp, err := New(context.Background(), enabledCfg(), adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	_, err = comp.Engine.Execute(context.Background(), "os", nil)
+	_, err := comp.Engine.Execute(context.Background(), "os", nil)
 	if err == nil {
-		t.Fatal("期望沙箱拒绝 os，实际成功")
+		t.Fatal("期望沙箱拒绝 os")
 	}
 	if !errors.Is(err, ErrRuntime) {
 		t.Fatalf("期望 ErrRuntime，实际 %v", err)
 	}
 }
 
-// TestExecute_NoGlobalPollution 验证池复用时不会串用上一脚本的 main
+// TestExecute_NoGlobalPollution 验证不串用旧 main
 func TestExecute_NoGlobalPollution(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(
-		&Script{
-			ID:      "a",
-			Source:  `function main(args) return 1 end`,
-			Version: "1",
-		},
-		&Script{
-			ID:      "b",
-			Source:  `local x = 1`, // 故意不定义 main
-			Version: "1",
-		},
+		&Script{ID: "a", Source: `function main(args) return 1 end`, Version: "1"},
+		&Script{ID: "b", Source: `local x = 1`, Version: "1"},
 	)
-	cfg := enabledCfg()
+	cfg := testCfg()
 	cfg.PoolSize = 1
-	comp, err := New(context.Background(), cfg, adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-
-	got, err := comp.Engine.Execute(context.Background(), "a", nil)
-	if err != nil {
+	if _, err := comp.Engine.Execute(context.Background(), "a", nil); err != nil {
 		t.Fatal(err)
 	}
-	if got.(float64) != 1 {
-		t.Fatalf("脚本 a 期望 1，实际 %v", got)
-	}
-
-	_, err = comp.Engine.Execute(context.Background(), "b", nil)
-	if err == nil {
-		t.Fatal("脚本 b 无 main 时应失败，不能复用 a 的 main")
-	}
-	if strings.Contains(err.Error(), "入口函数不存在") == false {
-		t.Fatalf("期望入口不存在错误，实际 %v", err)
+	_, err := comp.Engine.Execute(context.Background(), "b", nil)
+	if err == nil || !strings.Contains(err.Error(), "入口函数不存在") {
+		t.Fatalf("期望入口不存在，实际 %v", err)
 	}
 }
 
-// TestExecute_NoGWritePollution 验证经 _G 赋值不会污染后续请求
+// TestExecute_NoGWritePollution 验证 _G 不跨请求泄漏
 func TestExecute_NoGWritePollution(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
 	adapter := newMemoryAdapter(
-		&Script{
-			ID:      "writer",
-			Source:  `_G.leak = 42; function main(args) return 1 end`,
-			Version: "1",
-		},
-		&Script{
-			ID:      "reader",
-			Source:  `function main(args) return _G.leak end`,
-			Version: "1",
-		},
+		&Script{ID: "writer", Source: `_G.leak = 42; function main(args) return 1 end`, Version: "1"},
+		&Script{ID: "reader", Source: `function main(args) return _G.leak end`, Version: "1"},
 	)
-	cfg := enabledCfg()
+	cfg := testCfg()
 	cfg.PoolSize = 1
-	comp, err := New(context.Background(), cfg, adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-
 	if _, err := comp.Engine.Execute(context.Background(), "writer", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -356,37 +274,136 @@ func TestExecute_NoGWritePollution(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got != nil {
-		t.Fatalf("期望 _G.leak 未跨请求泄漏，实际 %v", got)
+		t.Fatalf("期望无泄漏，实际 %v", got)
 	}
 }
 
-// TestRefreshOnStart 验证启动普通刷新灌库
-func TestRefreshOnStart(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-
-	enabled := true
-	refresh := true
-	cfg := enabledCfg()
-	cfg.Enabled = &enabled
-	cfg.RefreshOnStart = &refresh
-
+// TestRefreshOnNew 验证 New 默认普通 Refresh
+func TestRefreshOnNew(t *testing.T) {
 	adapter := newMemoryAdapter(&Script{
 		ID:      "boot",
 		Source:  `function main(args) return "ok" end`,
 		Version: "1",
 	})
-	comp, err := New(context.Background(), cfg, adapter, rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer comp.Close()
-
+	cfg := testCfg()
+	cfg.SkipRefreshOnNew = false
+	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
 	got, err := comp.Engine.Execute(context.Background(), "boot", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.(string) != "ok" {
 		t.Fatalf("期望 ok，实际 %v", got)
+	}
+}
+
+// TestRedisScriptCache_Execute 验证 Redis 缓存路径（写路径带 distlock）
+func TestRedisScriptCache_Execute(t *testing.T) {
+	rdb, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(rdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache, err := NewRedisScriptCache(rdb, "yomi:golua:test", factory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := newMemoryAdapter(&Script{
+		ID:      "r1",
+		Source:  `function main(args) return 7 end`,
+		Version: "1",
+	})
+	comp := newTestComp(t, adapter, cache, testCfg())
+	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := comp.Engine.Execute(context.Background(), "r1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.(float64) != 7 {
+		t.Fatalf("期望 7，实际 %v", got)
+	}
+}
+
+// TestNewRedisScriptCache_RequiresFactory 验证 DistLockFactory 必填
+func TestNewRedisScriptCache_RequiresFactory(t *testing.T) {
+	rdb, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	_, err := NewRedisScriptCache(rdb, "", nil)
+	if err == nil {
+		t.Fatal("期望 DistLockFactory 为空时报错")
+	}
+}
+
+// TestRedisScriptCache_BusinessErrNotWrappedAsLock 验证临界区业务错误不伪装成写锁失败
+func TestRedisScriptCache_BusinessErrNotWrappedAsLock(t *testing.T) {
+	rdb, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(rdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache, err := NewRedisScriptCache(rdb, "yomi:golua:test:bizerr", factory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cache.ReplaceAll(context.Background(), []*Script{
+		{ID: "dup", Source: `function main(args) return 1 end`, Version: "1"},
+		{ID: "dup", Source: `function main(args) return 2 end`, Version: "2"},
+	})
+	if err == nil {
+		t.Fatal("期望 id 重复报错")
+	}
+	if strings.Contains(err.Error(), "写锁失败") {
+		t.Fatalf("业务错误不应包装成写锁失败: %v", err)
+	}
+	if !strings.Contains(err.Error(), "脚本 id 重复") {
+		t.Fatalf("期望包含 id 重复信息，实际 %v", err)
+	}
+}
+
+// TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad 验证 Load 在写锁内执行
+func TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
+	rdb, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(rdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := "yomi:golua:test:from"
+	cache, err := NewRedisScriptCache(rdb, prefix, factory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loadStarted := make(chan struct{})
+	loadContinue := make(chan struct{})
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- cache.ReplaceAllFrom(context.Background(), func(ctx context.Context) ([]*Script, error) {
+			close(loadStarted)
+			<-loadContinue
+			return []*Script{{
+				ID: "f1", Source: `function main(args) return 1 end`, Version: "1",
+			}}, nil
+		})
+	}()
+
+	<-loadStarted
+	// Load 期间另一把同 key 锁应拿不到（短超时）
+	other := factory.GetLock(prefix+":lock", distlock.WithTTL(5*time.Second))
+	tryCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := other.Lock(tryCtx); err == nil {
+		_ = other.Unlock(context.Background())
+		close(loadContinue)
+		t.Fatal("Load 进行中期望写锁仍被占用")
+	}
+	close(loadContinue)
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
 	}
 }

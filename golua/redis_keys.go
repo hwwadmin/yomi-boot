@@ -29,3 +29,8 @@ func (k redisKeys) index() string {
 func (k redisKeys) script(id string) string {
 	return fmt.Sprintf("%s:script:%s", k.prefix, id)
 }
+
+// lock 返回写路径分布式锁 key
+func (k redisKeys) lock() string {
+	return fmt.Sprintf("%s:lock", k.prefix)
+}

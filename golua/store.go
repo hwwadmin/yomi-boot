@@ -15,7 +15,7 @@ type StoreLoadAdapter interface {
 
 // StoreLoad 缓存灌入与热更新；由 golua 实现，暴露给业务调用
 type StoreLoad interface {
-	// Refresh 普通全量：缓存非空（current_gen + index）则跳过
+	// Refresh 普通全量：缓存 Ready 则跳过
 	Refresh(ctx context.Context) error
 	// RefreshForce 强制全量：回源覆盖并 reconcile 孤儿
 	RefreshForce(ctx context.Context) error
@@ -25,7 +25,7 @@ type StoreLoad interface {
 	RefreshScriptForce(ctx context.Context, id string) error
 }
 
-// StoreQuery 执行侧只读视图；由 golua 实现，只读 Redis
+// StoreQuery 执行侧只读视图；由 golua 实现，只读 ScriptCache
 type StoreQuery interface {
 	// Get 按 ID 读缓存；miss 返回 ErrNotFound，不回源
 	Get(ctx context.Context, id string) (*Script, error)

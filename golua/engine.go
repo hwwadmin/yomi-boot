@@ -81,8 +81,8 @@ func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]a
 
 	execCtx := ctx
 	cancel := func() {}
-	if e.cfg.ExecTimeout() > 0 {
-		execCtx, cancel = context.WithTimeout(ctx, e.cfg.ExecTimeout())
+	if e.cfg.ExecTimeoutOrDefault() > 0 {
+		execCtx, cancel = context.WithTimeout(ctx, e.cfg.ExecTimeoutOrDefault())
 	}
 	defer cancel()
 	st.L.SetContext(execCtx)

@@ -69,7 +69,7 @@ func (p *statePool) borrow(ctx context.Context) (*pooledState, error) {
 	if p.closed.Load() {
 		return nil, errors.Sentinel(ErrPoolClosed)
 	}
-	timer := time.NewTimer(p.cfg.PoolAcquireTimeout())
+	timer := time.NewTimer(p.cfg.PoolAcquireTimeoutOrDefault())
 	defer timer.Stop()
 	select {
 	case <-p.tokens:

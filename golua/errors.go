@@ -6,8 +6,6 @@ package golua
 import "gitee.com/hq_project/yomi-boot/errors"
 
 var (
-	// ErrDisabled 表示 golua 未启用
-	ErrDisabled = errors.NewNoStack("golua: 未启用")
 	// ErrNotFound 表示脚本不存在（缓存或数据源）
 	ErrNotFound = errors.NewNoStack("golua: 脚本不存在")
 	// ErrTimeout 表示执行墙钟超时或父 ctx 取消导致的截止

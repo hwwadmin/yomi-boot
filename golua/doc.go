@@ -1,25 +1,32 @@
-// Package golua 基于 gopher-lua 提供受信业务 Lua 脚本执行能力。
+// Package golua 基于 gopher-lua 提供受信业务 Lua 脚本执行能力（按需构造，不进 bootstrap）。
+//
+// # 用法
+//
+//	cache := golua.NewMemoryScriptCache()
+//	// 或多实例：
+//	factory := distlock.MustNewFactory(rdb)
+//	cache, _ := golua.NewRedisScriptCache(rdb, "yomi:golua", factory)
+//	comp := golua.MustNew(ctx, golua.Config{}, adapter, cache)
+//	defer comp.Close()
+//	_ = comp.StoreLoad.RefreshScriptForce(ctx, id) // 业务数据变更后
+//	out, err := comp.Engine.Execute(ctx, id, args)
 //
 // # 职责拆分
 //
 //   - StoreLoadAdapter：业务实现，全量/按 ID 拉取脚本原文，不碰缓存
-//   - StoreLoad：本包实现，普通/强制刷新写入 Redis，并失效本地编译缓存与 LState 池世代
-//   - StoreQuery：本包实现，仅读 Redis；Engine 只依赖本接口
+//   - ScriptCache：内存或 Redis，由业务注入
+//   - StoreLoad / StoreQuery：本包实现，读写 ScriptCache
+//   - Engine：只经 StoreQuery 读缓存后沙箱执行
 //
 // # 热更新与池
 //
-// 强制刷新不打断进行中的 Execute；成功写入 Redis 后立即丢弃空闲旧 Proto / 旧 LState；
-// inflight 使用的旧对象在归还时丢弃，禁止回池复用。
+// 强制刷新不打断进行中的 Execute；写缓存成功后立即丢弃空闲旧 Proto / 旧 LState；
+// inflight 归还时丢弃，禁止回池复用。
 //
 // # 沙箱
 //
-// 默认拒绝 os/io/package/debug 等库；每请求独立 env（env._G=env），并冻结共享全局只读。
-// 执行使用 context 墙钟超时（gopher-lua 在每条 VM 指令处检查）。上游无 sethook 时，
-// max_instructions 仅作配置项保留，硬限制以 exec_timeout_ms 为准。
-//
-// # 启用
-//
-// golua.enabled 未配置默认 false，不启动。
+// 默认拒绝 os/io/package/debug；每请求独立 env（env._G=env），共享全局只读冻结；
+// 硬超时以 Config.ExecTimeout 为准。
 //
 // @author zwei
 package golua
