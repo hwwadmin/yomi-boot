@@ -45,6 +45,7 @@ build/
 # AI workflow temporary documents
 /_task-doc/
 /_ipc-doc/
+/_feat-doc/
 
 # log ignore
 *catalina.home*/
