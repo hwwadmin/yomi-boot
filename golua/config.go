@@ -1,4 +1,4 @@
-// Package golua 构造配置（按需库，不读 YAML、不进 bootstrap）
+// Package golua 构造配置
 //
 // @author zwei
 package golua
@@ -19,7 +19,7 @@ type CacheBackend string
 const (
 	// CacheMemory 进程内内存缓存
 	CacheMemory CacheBackend = "memory"
-	// CacheRedis Redis 共享缓存（写路径经 distlock）
+	// CacheRedis Redis 共享缓存
 	CacheRedis CacheBackend = "redis"
 
 	defaultExecTimeout        = 500 * time.Millisecond
@@ -41,13 +41,13 @@ type Config struct {
 	EntryFunc string
 	// ExecTimeout 墙钟执行超时；0 则默认 500ms
 	ExecTimeout time.Duration
-	// MaxInstructions 指令预算配置项；当前上游无 hook，运行时以 ExecTimeout 为准；0 则默认 1e6
+	// MaxInstructions 指令预算；0 则默认 1e6
 	MaxInstructions int
 	// PoolSize LState 池大小；0 则默认 8
 	PoolSize int
 	// PoolAcquireTimeout 借池等待上限；0 则默认 200ms
 	PoolAcquireTimeout time.Duration
-	// ProtoCacheSize 进程内 Proto LRU 容量；0 则默认 256
+	// ProtoCacheSize Proto LRU 容量；0 则默认 256
 	ProtoCacheSize int
 	// CallStackSize gopher-lua 调用栈；0 则默认 64
 	CallStackSize int
@@ -63,16 +63,16 @@ type Config struct {
 	MaxTableSize int
 	// MaxStringLen 字符串长度上限；0 则默认 1MiB
 	MaxStringLen int
-	// SkipRefreshOnNew 为 true 时 New 不自动普通 Refresh；默认 false（会 Refresh）
+	// SkipRefreshOnNew 为 true 时 New 跳过自动 Refresh
 	SkipRefreshOnNew bool
 
-	// CacheBackend 脚本快照缓存，必须显式指定 memory 或 redis
+	// CacheBackend 快照缓存后端，须为 memory 或 redis
 	CacheBackend CacheBackend
-	// RedisKeyPrefix Redis 缓存 key 前缀；空则 yomi:golua（仅 redis）
+	// RedisKeyPrefix Redis key 前缀；空则 yomi:golua
 	RedisKeyPrefix string
-	// Redis Redis 客户端（CacheBackend=redis 时必填）
+	// Redis Redis 客户端；CacheBackend=redis 时必填
 	Redis *redisv9.Client
-	// DistLockFactory 分布式锁工厂（CacheBackend=redis 时必填）
+	// DistLockFactory 分布式锁工厂；CacheBackend=redis 时必填
 	DistLockFactory distlock.DistLockFactory
 }
 
@@ -100,7 +100,7 @@ func (c Config) EntryFuncOrDefault() string {
 	return defaultEntryFunc
 }
 
-// normalizeCacheBackend 规范化后端标识（小写/去空白）；空串保持为空，须显式选择
+// normalizeCacheBackend 规范化 CacheBackend：小写并去空白
 func (c Config) normalizeCacheBackend() CacheBackend {
 	return CacheBackend(strings.ToLower(strings.TrimSpace(string(c.CacheBackend))))
 }

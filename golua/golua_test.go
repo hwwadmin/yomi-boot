@@ -325,7 +325,7 @@ func TestRefreshOnNew(t *testing.T) {
 	}
 }
 
-// TestRedisScriptCache_Execute 验证 Redis 缓存路径（写路径带 distlock）
+// TestRedisScriptCache_Execute 验证 Redis 缓存执行路径
 func TestRedisScriptCache_Execute(t *testing.T) {
 	cfg := redisTestCfg(t, "yomi:golua:test")
 	adapter := newMemoryAdapter(&Script{
@@ -346,7 +346,7 @@ func TestRedisScriptCache_Execute(t *testing.T) {
 	}
 }
 
-// TestRedisScriptCache_BusinessErrNotWrappedAsLock 验证临界区业务错误不伪装成写锁失败
+// TestRedisScriptCache_BusinessErrNotWrappedAsLock 验证临界区业务错误不包装为写锁失败
 func TestRedisScriptCache_BusinessErrNotWrappedAsLock(t *testing.T) {
 	cfg := redisTestCfg(t, "yomi:golua:test:bizerr")
 	cache, err := newRedisScriptCache(cfg.Redis, cfg.RedisKeyPrefix, cfg.DistLockFactory)
@@ -442,7 +442,7 @@ func TestRedisCache_UpsertFromHoldsLockAcrossLoad(t *testing.T) {
 	}
 }
 
-// TestExecute_ContentHashIgnoresStaleVersion 同 Version 改 Source 须重编
+// TestExecute_ContentHashIgnoresStaleVersion 验证源码变更后按 content hash 重编
 func TestExecute_ContentHashIgnoresStaleVersion(t *testing.T) {
 	adapter := newMemoryAdapter(&Script{
 		ID: "s", Source: `function main(args) return 1 end`, Version: "v1",
@@ -473,7 +473,7 @@ func TestExecute_ContentHashIgnoresStaleVersion(t *testing.T) {
 	}
 }
 
-// TestRedis_PeerExecuteSeesForceWithoutLocalRefresh 他机 Force 后本机无需 Refresh 即对齐
+// TestRedis_PeerExecuteSeesForceWithoutLocalRefresh 验证他机 Force 后本机 Execute 可对齐
 func TestRedis_PeerExecuteSeesForceWithoutLocalRefresh(t *testing.T) {
 	rdb, cleanup := redistest.NewClient(t)
 	defer cleanup()

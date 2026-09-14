@@ -12,14 +12,14 @@ import (
 
 var _ scriptCache = (*memoryScriptCache)(nil)
 
-// memoryScriptCache 进程内脚本快照缓存（单机）
+// memoryScriptCache 进程内脚本快照缓存
 type memoryScriptCache struct {
 	mu      sync.RWMutex
 	ready   bool
 	scripts map[string]*Script
 }
 
-// newMemoryScriptCache 创建空的内存脚本缓存
+// newMemoryScriptCache 创建内存快照缓存
 func newMemoryScriptCache() *memoryScriptCache {
 	return &memoryScriptCache{
 		scripts: make(map[string]*Script),
@@ -38,13 +38,13 @@ func (c *memoryScriptCache) Get(_ context.Context, id string) (*Script, error) {
 	return &cp, nil
 }
 
-// GetWithGen 内存后端不追踪代际
+// GetWithGen 读取脚本；无共享代际
 func (c *memoryScriptCache) GetWithGen(ctx context.Context, id string) (*Script, uint64, bool, error) {
 	script, err := c.Get(ctx, id)
 	return script, 0, false, err
 }
 
-// CurrentGen 内存后端不追踪代际
+// CurrentGen 无共享代际
 func (c *memoryScriptCache) CurrentGen(context.Context) (uint64, bool, error) {
 	return 0, false, nil
 }
@@ -57,7 +57,7 @@ func (c *memoryScriptCache) Has(_ context.Context, id string) (bool, error) {
 	return ok, nil
 }
 
-// Ready 已灌库且非空
+// Ready 是否已灌库且非空
 func (c *memoryScriptCache) Ready(_ context.Context) (bool, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -111,7 +111,7 @@ func (c *memoryScriptCache) ReplaceAll(_ context.Context, scripts []*Script) err
 	return nil
 }
 
-// ReplaceAllFrom 先 load 再全量替换（单机由 StoreLoad.mu 串行）
+// ReplaceAllFrom 回源后全量替换
 func (c *memoryScriptCache) ReplaceAllFrom(ctx context.Context, load func(context.Context) ([]*Script, error)) error {
 	if load == nil {
 		return errors.New("golua: load 不能为空")
@@ -123,7 +123,7 @@ func (c *memoryScriptCache) ReplaceAllFrom(ctx context.Context, load func(contex
 	return c.ReplaceAll(ctx, scripts)
 }
 
-// UpsertFrom 回源后写入或按需删除（单机无跨进程锁）
+// UpsertFrom 回源后写入；NotFound 且 removeOnNotFound 时删除
 func (c *memoryScriptCache) UpsertFrom(ctx context.Context, id string, removeOnNotFound bool, load func(context.Context) (*Script, error)) error {
 	if load == nil {
 		return errors.New("golua: load 不能为空")

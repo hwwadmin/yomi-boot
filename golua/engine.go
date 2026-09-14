@@ -1,4 +1,4 @@
-// Package golua Engine 执行入口（含 Redis 代际自愈）
+// Package golua Engine 与执行入口
 //
 // @author zwei
 package golua
@@ -21,24 +21,24 @@ var (
 
 // Engine 脚本执行引擎
 type Engine interface {
-	// Execute 按脚本 ID 从快照缓存读取（含 gen 对齐）后沙箱执行
+	// Execute 按脚本 ID 读取快照并沙箱执行
 	Execute(ctx context.Context, scriptID string, args map[string]any) (any, error)
-	// Close 关闭池
+	// Close 关闭执行池
 	Close() error
 }
 
-// engine 是 Engine / ScriptInvalidator 的默认实现
+// engine Engine 默认实现
 type engine struct {
 	cfg          Config
 	cache        scriptCache
 	pool         *statePool
 	proto        *protoCache
 	closed       atomic.Bool
-	genSync      bool // Redis 后端启用 current_gen 水位线
+	genSync      bool // 是否对齐共享代际
 	genWatermark atomic.Uint64
 }
 
-// newEngine 创建引擎（不触发 Refresh）
+// newEngine 创建引擎
 func newEngine(cfg Config, cache scriptCache) (*engine, error) {
 	if cache == nil {
 		return nil, errors.New("golua: scriptCache 不能为空")
@@ -60,7 +60,7 @@ func newEngine(cfg Config, cache scriptCache) (*engine, error) {
 	return e, nil
 }
 
-// Execute 从快照缓存读取脚本（Redis 下含 current_gen 对齐），再沙箱执行
+// Execute 读取快照、对齐代际、编译并执行入口函数
 func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]any) (any, error) {
 	if e == nil || e.closed.Load() {
 		return nil, errors.Sentinel(ErrPoolClosed)
@@ -95,7 +95,6 @@ func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]a
 	defer cancel()
 	st.L.SetContext(execCtx)
 
-	// 每请求隔离 env：脚本全局写不进池内 _G，避免串剧本
 	env := newExecEnv(st.L)
 	fn := st.L.NewFunctionFromProto(proto)
 	st.L.SetFEnv(fn, env)
@@ -126,7 +125,7 @@ func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]a
 	return fromLuaValue(ret, e.cfg, 0)
 }
 
-// alignGeneration Redis 代际落后时全量失效本地 Proto/池
+// alignGeneration 共享代际超前时清空本地 Proto 与空闲池
 func (e *engine) alignGeneration(ctx context.Context, remoteGen uint64, genOK bool) {
 	if e == nil || !e.genSync {
 		return
@@ -147,7 +146,7 @@ func (e *engine) alignGeneration(ctx context.Context, remoteGen uint64, genOK bo
 	}
 }
 
-// ObserveGeneration 抬高本机代际水位（不回退）
+// ObserveGeneration 记录已对齐的共享代际
 func (e *engine) ObserveGeneration(gen uint64) {
 	if e == nil || !e.genSync {
 		return
@@ -163,7 +162,7 @@ func (e *engine) ObserveGeneration(gen uint64) {
 	}
 }
 
-// InvalidateScripts 丢弃指定脚本编译缓存并 bump 池世代
+// InvalidateScripts 丢弃指定脚本 Proto 并提升池世代
 func (e *engine) InvalidateScripts(ids ...string) {
 	if e == nil {
 		return
@@ -172,7 +171,7 @@ func (e *engine) InvalidateScripts(ids ...string) {
 	e.pool.bumpEpoch()
 }
 
-// InvalidateAllScripts 丢弃全部编译缓存并 bump 池世代
+// InvalidateAllScripts 清空 Proto 并提升池世代
 func (e *engine) InvalidateAllScripts() {
 	if e == nil {
 		return
@@ -181,7 +180,7 @@ func (e *engine) InvalidateAllScripts() {
 	e.pool.bumpEpoch()
 }
 
-// Close 关闭引擎；可重复调用
+// Close 关闭引擎
 func (e *engine) Close() error {
 	if e == nil {
 		return nil
@@ -194,7 +193,7 @@ func (e *engine) Close() error {
 	return nil
 }
 
-// mapExecErr 将 gopher-lua / context 错误映射为包内哨兵
+// mapExecErr 映射执行期错误为包内哨兵
 func mapExecErr(err error) error {
 	if err == nil {
 		return nil

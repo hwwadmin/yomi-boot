@@ -1,4 +1,4 @@
-// Package golua Go 与 Lua 值转换（带尺寸限制）
+// Package golua Go 与 Lua 值转换
 //
 // @author zwei
 package golua
@@ -11,7 +11,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// toLuaValue 将 Go 值转为 Lua 值，受嵌套深度与尺寸上限约束
+// toLuaValue 将 Go 值转为 Lua 值
 func toLuaValue(L *lua.LState, v any, cfg Config, depth int) (lua.LValue, error) {
 	if depth > cfg.MaxTableDepth {
 		return nil, errors.Sentinel(ErrSandbox)

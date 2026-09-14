@@ -1,4 +1,4 @@
-// Package golua Fail Fast 初始化
+// Package golua Must 构造入口
 //
 // @author zwei
 package golua
@@ -9,7 +9,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/logger"
 )
 
-// MustNew 装配 golua 组件，失败时 log + panic
+// MustNew 装配组件；失败时记录日志并 panic
 func MustNew(ctx context.Context, cfg Config, adapter StoreLoadAdapter) *Components {
 	comp, err := New(ctx, cfg, adapter)
 	if err != nil {

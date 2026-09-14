@@ -1,4 +1,4 @@
-// Package golua 沙箱构建与每请求执行环境
+// Package golua 沙箱与每请求执行环境
 //
 // @author zwei
 package golua
@@ -11,7 +11,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// newSandboxedState 创建已应用库白名单、base 剔除与全局只读冻结的 LState
+// newSandboxedState 创建沙箱 LState
 func newSandboxedState(cfg Config) (*lua.LState, error) {
 	L := lua.NewState(lua.Options{
 		SkipOpenLibs:        true,
@@ -44,7 +44,6 @@ func openAllowedLibs(L *lua.LState, libs []string) error {
 		case "coroutine":
 			lua.OpenCoroutine(L)
 		case "utf8":
-			// gopher-lua 无独立 utf8 库时跳过
 			if err := tryOpenUTF8(L); err != nil {
 				return err
 			}
@@ -55,13 +54,13 @@ func openAllowedLibs(L *lua.LState, libs []string) error {
 	return nil
 }
 
-// tryOpenUTF8 尝试打开 utf8；当前上游版本无此库时忽略
+// tryOpenUTF8 打开 utf8；不可用时忽略
 func tryOpenUTF8(L *lua.LState) error {
 	_ = L
 	return nil
 }
 
-// denyBaseFuncs 从全局表剔除危险 base 函数
+// denyBaseFuncs 从全局表剔除指定函数
 func denyBaseFuncs(L *lua.LState, names []string) {
 	for _, name := range names {
 		name = strings.TrimSpace(name)
@@ -72,7 +71,7 @@ func denyBaseFuncs(L *lua.LState, names []string) {
 	}
 }
 
-// freezeSharedGlobals 禁止向池内共享 _G 写入，防止跨请求污染
+// freezeSharedGlobals 将共享 _G 设为只读
 func freezeSharedGlobals(L *lua.LState) {
 	g, ok := L.Get(lua.GlobalsIndex).(*lua.LTable)
 	if !ok || g == nil {
@@ -87,14 +86,13 @@ func freezeSharedGlobals(L *lua.LState) {
 	L.SetMetatable(g, mt)
 }
 
-// newExecEnv 创建每请求隔离环境：读回落共享 _G，写只落在 env；env._G 指向自身
+// newExecEnv 创建每请求隔离环境；读回落共享 _G，写落在 env
 func newExecEnv(L *lua.LState) *lua.LTable {
 	env := L.NewTable()
 	mt := L.NewTable()
 	mt.RawSetString("__index", L.Get(lua.GlobalsIndex))
 	mt.RawSetString("__metatable", lua.LString("locked"))
 	L.SetMetatable(env, mt)
-	// 使 _G.x = v 写入 env，而非共享全局
 	env.RawSetString("_G", env)
 	return env
 }

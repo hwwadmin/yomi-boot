@@ -1,4 +1,4 @@
-// Package golua LState 池（epoch 淘汰 + 信号量限流）
+// Package golua LState 池
 //
 // @author zwei
 package golua
@@ -14,13 +14,13 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// pooledState 池内单个 LState 及其创建世代
+// pooledState 池内 LState 及其创建世代
 type pooledState struct {
 	L     *lua.LState
 	epoch uint64
 }
 
-// statePool 可复用 LState 池；Force 刷新后 bump epoch 丢弃空闲旧实例
+// statePool 可复用 LState 池
 type statePool struct {
 	cfg    Config
 	epoch  atomic.Uint64
@@ -31,7 +31,7 @@ type statePool struct {
 	create func() (*lua.LState, error)
 }
 
-// newStatePool 创建容量为 PoolSize 的状态池
+// newStatePool 创建状态池
 func newStatePool(cfg Config, create func() (*lua.LState, error)) *statePool {
 	tokens := make(chan struct{}, cfg.PoolSize)
 	for i := 0; i < cfg.PoolSize; i++ {
@@ -90,7 +90,7 @@ func (p *statePool) borrow(ctx context.Context) (*pooledState, error) {
 	return st, nil
 }
 
-// takeOrCreate 从空闲队列取出或新建 State（新建在锁外，避免长时间占锁）
+// takeOrCreate 从空闲队列取出或新建 State
 func (p *statePool) takeOrCreate() (*pooledState, error) {
 	p.mu.Lock()
 	cur := p.epoch.Load()
@@ -157,13 +157,13 @@ func (p *statePool) close() {
 	p.idle = nil
 }
 
-// resetState 清除执行上下文与临时全局，供归还前调用
+// resetState 清除执行上下文与临时全局
 func resetState(L *lua.LState) {
 	if L == nil {
 		return
 	}
 	L.RemoveContext()
-	// 共享 _G 已冻结，须 RawSet，避免触发 __newindex
+	// 共享 _G 只读，用 RawSet 清临时键
 	if g, ok := L.Get(lua.GlobalsIndex).(*lua.LTable); ok && g != nil {
 		g.RawSetString("args", lua.LNil)
 		g.RawSetString("__golua_result", lua.LNil)

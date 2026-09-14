@@ -11,14 +11,14 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// Script 表示一条脚本不可变快照（缓存与执行共用）
+// Script 脚本快照
 type Script struct {
-	ID      string `json:"id"`      // ID 是业务脚本标识
-	Source  string `json:"source"`  // Source 是 Lua 源码
-	Version string `json:"version"` // Version 是业务版本语义；空则 normalize 时写入源码 hash
+	ID      string `json:"id"`      // 业务脚本标识
+	Source  string `json:"source"`  // Lua 源码
+	Version string `json:"version"` // 业务版本；空则填入源码 hash
 }
 
-// ContentHash 返回源码 sha256 hex，用作进程内 Proto 缓存键（与业务 Version 无关）
+// ContentHash 返回源码 sha256 hex
 func (s *Script) ContentHash() string {
 	if s == nil {
 		return ""
@@ -27,7 +27,7 @@ func (s *Script) ContentHash() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// EffectiveVersion 返回业务版本；Version 为空时回落为源码 hash（供快照字段填充，非 Proto 键）
+// EffectiveVersion 返回业务版本；为空时使用源码 hash
 func (s *Script) EffectiveVersion() string {
 	if s == nil {
 		return ""
@@ -38,7 +38,7 @@ func (s *Script) EffectiveVersion() string {
 	return s.ContentHash()
 }
 
-// normalize 校验并规范化脚本字段
+// normalize 校验并规范化字段
 func (s *Script) normalize() error {
 	if s == nil {
 		return errors.New("golua: 脚本不能为空")

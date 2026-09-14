@@ -1,4 +1,4 @@
-// Package golua StoreLoad 实现（Adapter → scriptCache + 本地失效）
+// Package golua StoreLoad 实现
 //
 // @author zwei
 package golua
@@ -13,7 +13,7 @@ import (
 
 var _ StoreLoad = (*storeLoad)(nil)
 
-// storeLoad 是 StoreLoad 的默认实现
+// storeLoad StoreLoad 默认实现
 type storeLoad struct {
 	adapter     StoreLoadAdapter
 	cache       scriptCache
@@ -21,7 +21,7 @@ type storeLoad struct {
 	mu          sync.Mutex
 }
 
-// newStoreLoad 创建缓存灌入实现
+// newStoreLoad 创建 StoreLoad
 func newStoreLoad(adapter StoreLoadAdapter, cache scriptCache, invalidator ScriptInvalidator) StoreLoad {
 	return &storeLoad{
 		adapter:     adapter,
@@ -30,7 +30,7 @@ func newStoreLoad(adapter StoreLoadAdapter, cache scriptCache, invalidator Scrip
 	}
 }
 
-// Refresh 普通全量：缓存 Ready 则跳过
+// Refresh 全量灌入；Ready 则跳过
 func (s *storeLoad) Refresh(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -47,7 +47,7 @@ func (s *storeLoad) Refresh(ctx context.Context) error {
 	return s.refreshAllLocked(ctx)
 }
 
-// RefreshForce 强制全量
+// RefreshForce 强制全量回源
 func (s *storeLoad) RefreshForce(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -57,7 +57,7 @@ func (s *storeLoad) RefreshForce(ctx context.Context) error {
 	return s.refreshAllLocked(ctx)
 }
 
-// RefreshScript 普通单脚本：已存在则跳过
+// RefreshScript 单脚本灌入；已存在则跳过
 func (s *storeLoad) RefreshScript(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,7 +78,7 @@ func (s *storeLoad) RefreshScript(ctx context.Context, id string) error {
 	return s.refreshOneLocked(ctx, id, false)
 }
 
-// RefreshScriptForce 强制单脚本；数据源 NotFound 则删缓存
+// RefreshScriptForce 强制单脚本回源；NotFound 时删除缓存
 func (s *storeLoad) RefreshScriptForce(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -92,7 +92,7 @@ func (s *storeLoad) RefreshScriptForce(ctx context.Context, id string) error {
 	return s.refreshOneLocked(ctx, id, true)
 }
 
-// ensureReady 校验依赖
+// ensureReady 校验依赖已就绪
 func (s *storeLoad) ensureReady() error {
 	if s == nil || s.cache == nil {
 		return errors.New("golua: StoreLoad 未初始化")
@@ -103,7 +103,7 @@ func (s *storeLoad) ensureReady() error {
 	return nil
 }
 
-// refreshAllLocked 全量回源写入缓存（ReplaceAllFrom：Redis 下 Load 与写入同一把 distlock）
+// refreshAllLocked 全量回源并写入缓存
 func (s *storeLoad) refreshAllLocked(ctx context.Context) error {
 	err := s.cache.ReplaceAllFrom(ctx, func(ctx context.Context) ([]*Script, error) {
 		scripts, err := s.adapter.Load(ctx)
@@ -119,7 +119,7 @@ func (s *storeLoad) refreshAllLocked(ctx context.Context) error {
 	return nil
 }
 
-// refreshOneLocked 单脚本回源（UpsertFrom：Redis 下 LoadByID 与 Put/Remove 同一把 distlock）
+// refreshOneLocked 单脚本回源并写入或删除缓存
 func (s *storeLoad) refreshOneLocked(ctx context.Context, id string, deleteOnNotFound bool) error {
 	invalidateID := id
 	err := s.cache.UpsertFrom(ctx, id, deleteOnNotFound, func(ctx context.Context) (*Script, error) {
@@ -143,7 +143,7 @@ func (s *storeLoad) refreshOneLocked(ctx context.Context, id string, deleteOnNot
 	return nil
 }
 
-// afterCacheWrite 本机失效并回填共享代际水位
+// afterCacheWrite 失效本地编译缓存并记录共享代际
 func (s *storeLoad) afterCacheWrite(ctx context.Context, scriptID string) {
 	if s.invalidator == nil {
 		return

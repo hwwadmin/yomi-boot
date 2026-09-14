@@ -1,4 +1,4 @@
-// Package golua StoreQuery 实现（只读脚本快照缓存）
+// Package golua StoreQuery 实现
 //
 // @author zwei
 package golua
@@ -11,17 +11,17 @@ import (
 
 var _ StoreQuery = (*storeQuery)(nil)
 
-// storeQuery 是 StoreQuery 的默认实现
+// storeQuery StoreQuery 默认实现
 type storeQuery struct {
 	cache scriptCache
 }
 
-// newStoreQuery 创建只读查询实现
+// newStoreQuery 创建 StoreQuery
 func newStoreQuery(cache scriptCache) StoreQuery {
 	return &storeQuery{cache: cache}
 }
 
-// Get 按 ID 读缓存
+// Get 按 ID 读快照
 func (q *storeQuery) Get(ctx context.Context, id string) (*Script, error) {
 	if q == nil || q.cache == nil {
 		return nil, errors.New("golua: StoreQuery 未初始化")
