@@ -5,7 +5,7 @@ package golua
 
 import "context"
 
-// ScriptCache 脚本快照缓存（内存或 Redis 等）；与进程内 Proto LRU 无关
+// ScriptCache 脚本快照缓存（由 Config.CacheBackend 在库内装配）；与进程内 Proto LRU 无关
 type ScriptCache interface {
 	// Get 按 ID 读取；不存在返回 ErrNotFound
 	Get(ctx context.Context, id string) (*Script, error)

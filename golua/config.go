@@ -7,10 +7,21 @@ import (
 	"strings"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/errors"
+
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
+// CacheBackend 脚本快照缓存后端
+type CacheBackend string
+
 const (
+	// CacheMemory 进程内内存缓存（默认）
+	CacheMemory CacheBackend = "memory"
+	// CacheRedis Redis 共享缓存（写路径经 distlock）
+	CacheRedis CacheBackend = "redis"
+
 	defaultExecTimeout        = 500 * time.Millisecond
 	defaultMaxInstructions    = 1_000_000
 	defaultPoolSize           = 8
@@ -54,6 +65,15 @@ type Config struct {
 	MaxStringLen int
 	// SkipRefreshOnNew 为 true 时 New 不自动普通 Refresh；默认 false（会 Refresh）
 	SkipRefreshOnNew bool
+
+	// CacheBackend 脚本快照缓存；空则 memory
+	CacheBackend CacheBackend
+	// RedisKeyPrefix Redis 缓存 key 前缀；空则 yomi:golua（仅 redis）
+	RedisKeyPrefix string
+	// Redis Redis 客户端（CacheBackend=redis 时必填）
+	Redis *redisv9.Client
+	// DistLockFactory 分布式锁工厂（CacheBackend=redis 时必填）
+	DistLockFactory distlock.DistLockFactory
 }
 
 // ExecTimeoutOrDefault 返回执行超时
@@ -78,6 +98,18 @@ func (c Config) EntryFuncOrDefault() string {
 		return v
 	}
 	return defaultEntryFunc
+}
+
+// CacheBackendOrDefault 返回缓存后端
+func (c Config) CacheBackendOrDefault() CacheBackend {
+	switch CacheBackend(strings.ToLower(strings.TrimSpace(string(c.CacheBackend)))) {
+	case "", CacheMemory:
+		return CacheMemory
+	case CacheRedis:
+		return CacheRedis
+	default:
+		return c.CacheBackend
+	}
 }
 
 // AllowLibsOrDefault 返回库白名单
@@ -134,6 +166,7 @@ func (c Config) withDefaults() Config {
 		out.MaxStringLen = defaultMaxStringLen
 	}
 	out.EntryFunc = out.EntryFuncOrDefault()
+	out.CacheBackend = out.CacheBackendOrDefault()
 	out.AllowLibs = out.AllowLibsOrDefault()
 	out.DenyBaseFuncs = out.DenyBaseFuncsOrDefault()
 	return out
@@ -156,6 +189,18 @@ func (c Config) Validate() error {
 	}
 	if d.ScriptCacheSize <= 0 {
 		return errors.New("golua: ScriptCacheSize 必须大于 0")
+	}
+	switch d.CacheBackend {
+	case CacheMemory:
+	case CacheRedis:
+		if d.Redis == nil {
+			return errors.New("golua: CacheBackend=redis 时 Redis 客户端不能为空")
+		}
+		if d.DistLockFactory == nil {
+			return errors.New("golua: CacheBackend=redis 时 DistLockFactory 不能为空")
+		}
+	default:
+		return errors.Newf("golua: 不支持的 CacheBackend: %s", d.CacheBackend)
 	}
 	unsafe := map[string]struct{}{
 		"os": {}, "io": {}, "package": {}, "debug": {}, "channel": {},

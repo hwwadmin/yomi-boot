@@ -10,8 +10,8 @@ import (
 )
 
 // MustNew 装配 golua 组件，失败时 log + panic
-func MustNew(ctx context.Context, cfg Config, adapter StoreLoadAdapter, cache ScriptCache) *Components {
-	comp, err := New(ctx, cfg, adapter, cache)
+func MustNew(ctx context.Context, cfg Config, adapter StoreLoadAdapter) *Components {
+	comp, err := New(ctx, cfg, adapter)
 	if err != nil {
 		logger.ErrorWithoutCtx("golua 初始化失败", "error", err)
 		panic(err)

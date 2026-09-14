@@ -19,8 +19,8 @@ type MemoryScriptCache struct {
 	scripts map[string]*Script
 }
 
-// NewMemoryScriptCache 创建空的内存脚本缓存
-func NewMemoryScriptCache() *MemoryScriptCache {
+// newMemoryScriptCache 创建空的内存脚本缓存
+func newMemoryScriptCache() *MemoryScriptCache {
 	return &MemoryScriptCache{
 		scripts: make(map[string]*Script),
 	}

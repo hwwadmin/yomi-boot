@@ -16,17 +16,18 @@ type Components struct {
 	StoreQuery StoreQuery // StoreQuery 是只读缓存视图（一般无需业务直调）
 }
 
-// New 校验配置并装配 Engine / StoreLoad / StoreQuery。
+// New 按 Config.CacheBackend 装配缓存，并创建 Engine / StoreLoad / StoreQuery。
 // 默认会执行一次普通 Refresh；cfg.SkipRefreshOnNew=true 时可跳过。
-func New(ctx context.Context, cfg Config, adapter StoreLoadAdapter, cache ScriptCache) (*Components, error) {
+func New(ctx context.Context, cfg Config, adapter StoreLoadAdapter) (*Components, error) {
 	if adapter == nil {
 		return nil, errors.New("golua: StoreLoadAdapter 不能为空")
 	}
-	if cache == nil {
-		return nil, errors.New("golua: ScriptCache 不能为空")
-	}
 	cfg = cfg.withDefaults()
 	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	cache, err := newScriptCache(cfg)
+	if err != nil {
 		return nil, err
 	}
 
@@ -49,6 +50,18 @@ func New(ctx context.Context, cfg Config, adapter StoreLoadAdapter, cache Script
 		StoreLoad:  loader,
 		StoreQuery: query,
 	}, nil
+}
+
+// newScriptCache 按后端创建脚本快照缓存
+func newScriptCache(cfg Config) (ScriptCache, error) {
+	switch cfg.CacheBackendOrDefault() {
+	case CacheMemory:
+		return newMemoryScriptCache(), nil
+	case CacheRedis:
+		return newRedisScriptCache(cfg.Redis, cfg.RedisKeyPrefix, cfg.DistLockFactory)
+	default:
+		return nil, errors.Newf("golua: 不支持的 CacheBackend: %s", cfg.CacheBackend)
+	}
 }
 
 // Close 关闭引擎

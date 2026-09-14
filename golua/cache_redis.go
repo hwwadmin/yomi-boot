@@ -30,9 +30,9 @@ type RedisScriptCache struct {
 	lockTTL time.Duration
 }
 
-// NewRedisScriptCache 创建 Redis 脚本缓存。
+// newRedisScriptCache 创建 Redis 脚本缓存。
 // keyPrefix 空则 yomi:golua；factory 必填，用于 Put/Remove/ReplaceAll/ReplaceAllFrom 跨实例互斥。
-func NewRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock.DistLockFactory) (*RedisScriptCache, error) {
+func newRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock.DistLockFactory) (*RedisScriptCache, error) {
 	if rdb == nil {
 		return nil, errors.New("golua: redis client 不能为空")
 	}

@@ -75,9 +75,25 @@ func testCfg() Config {
 	}
 }
 
-func newTestComp(t *testing.T, adapter StoreLoadAdapter, cache ScriptCache, cfg Config) *Components {
+func redisTestCfg(t *testing.T, prefix string) Config {
 	t.Helper()
-	comp, err := New(context.Background(), cfg, adapter, cache)
+	rdb, cleanup := redistest.NewClient(t)
+	t.Cleanup(cleanup)
+	factory, err := distlock.NewFactory(rdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := testCfg()
+	cfg.CacheBackend = CacheRedis
+	cfg.Redis = rdb
+	cfg.DistLockFactory = factory
+	cfg.RedisKeyPrefix = prefix
+	return cfg
+}
+
+func newTestComp(t *testing.T, adapter StoreLoadAdapter, cfg Config) *Components {
+	t.Helper()
+	comp, err := New(context.Background(), cfg, adapter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,11 +101,11 @@ func newTestComp(t *testing.T, adapter StoreLoadAdapter, cache ScriptCache, cfg 
 	return comp
 }
 
-// TestNew_RequiresCache 验证 ScriptCache 必填
-func TestNew_RequiresCache(t *testing.T) {
-	_, err := New(context.Background(), Config{}, newMemoryAdapter(), nil)
+// TestNew_RedisRequiresDeps 验证 redis 后端依赖必填
+func TestNew_RedisRequiresDeps(t *testing.T) {
+	_, err := New(context.Background(), Config{CacheBackend: CacheRedis}, newMemoryAdapter())
 	if err == nil {
-		t.Fatal("期望 ScriptCache 为空时报错")
+		t.Fatal("期望 CacheBackend=redis 缺依赖时报错")
 	}
 }
 
@@ -100,7 +116,7 @@ func TestExecute_Basic(t *testing.T) {
 		Source:  `function main(args) return args.a + args.b end`,
 		Version: "1",
 	})
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
+	comp := newTestComp(t, adapter, testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +136,7 @@ func TestRefresh_SkipWhenReady(t *testing.T) {
 		Source:  `function main(args) return 1 end`,
 		Version: "1",
 	})
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
+	comp := newTestComp(t, adapter, testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +164,7 @@ func TestRefreshScriptForce_UpdateAndInvalidate(t *testing.T) {
 		Source:  `function main(args) return 1 end`,
 		Version: "1",
 	})
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
+	comp := newTestComp(t, adapter, testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +192,7 @@ func TestRefreshScriptForce_NotFoundDeletesCache(t *testing.T) {
 		Source:  `function main(args) return 1 end`,
 		Version: "1",
 	})
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
+	comp := newTestComp(t, adapter, testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +215,7 @@ func TestExecute_Timeout(t *testing.T) {
 	})
 	cfg := testCfg()
 	cfg.ExecTimeout = 50 * time.Millisecond
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
+	comp := newTestComp(t, adapter, cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +236,7 @@ func TestSandbox_NoOS(t *testing.T) {
 		Source:  `function main(args) return os.time() end`,
 		Version: "1",
 	})
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), testCfg())
+	comp := newTestComp(t, adapter, testCfg())
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +257,7 @@ func TestExecute_NoGlobalPollution(t *testing.T) {
 	)
 	cfg := testCfg()
 	cfg.PoolSize = 1
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
+	comp := newTestComp(t, adapter, cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +278,7 @@ func TestExecute_NoGWritePollution(t *testing.T) {
 	)
 	cfg := testCfg()
 	cfg.PoolSize = 1
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
+	comp := newTestComp(t, adapter, cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +303,7 @@ func TestRefreshOnNew(t *testing.T) {
 	})
 	cfg := testCfg()
 	cfg.SkipRefreshOnNew = false
-	comp := newTestComp(t, adapter, NewMemoryScriptCache(), cfg)
+	comp := newTestComp(t, adapter, cfg)
 	got, err := comp.Engine.Execute(context.Background(), "boot", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -299,22 +315,13 @@ func TestRefreshOnNew(t *testing.T) {
 
 // TestRedisScriptCache_Execute 验证 Redis 缓存路径（写路径带 distlock）
 func TestRedisScriptCache_Execute(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-	factory, err := distlock.NewFactory(rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cache, err := NewRedisScriptCache(rdb, "yomi:golua:test", factory)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := redisTestCfg(t, "yomi:golua:test")
 	adapter := newMemoryAdapter(&Script{
 		ID:      "r1",
 		Source:  `function main(args) return 7 end`,
 		Version: "1",
 	})
-	comp := newTestComp(t, adapter, cache, testCfg())
+	comp := newTestComp(t, adapter, cfg)
 	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -327,25 +334,10 @@ func TestRedisScriptCache_Execute(t *testing.T) {
 	}
 }
 
-// TestNewRedisScriptCache_RequiresFactory 验证 DistLockFactory 必填
-func TestNewRedisScriptCache_RequiresFactory(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-	_, err := NewRedisScriptCache(rdb, "", nil)
-	if err == nil {
-		t.Fatal("期望 DistLockFactory 为空时报错")
-	}
-}
-
 // TestRedisScriptCache_BusinessErrNotWrappedAsLock 验证临界区业务错误不伪装成写锁失败
 func TestRedisScriptCache_BusinessErrNotWrappedAsLock(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-	factory, err := distlock.NewFactory(rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cache, err := NewRedisScriptCache(rdb, "yomi:golua:test:bizerr", factory)
+	cfg := redisTestCfg(t, "yomi:golua:test:bizerr")
+	cache, err := newRedisScriptCache(cfg.Redis, cfg.RedisKeyPrefix, cfg.DistLockFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,14 +358,8 @@ func TestRedisScriptCache_BusinessErrNotWrappedAsLock(t *testing.T) {
 
 // TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad 验证 Load 在写锁内执行
 func TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
-	rdb, cleanup := redistest.NewClient(t)
-	defer cleanup()
-	factory, err := distlock.NewFactory(rdb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prefix := "yomi:golua:test:from"
-	cache, err := NewRedisScriptCache(rdb, prefix, factory)
+	cfg := redisTestCfg(t, "yomi:golua:test:from")
+	cache, err := newRedisScriptCache(cfg.Redis, cfg.RedisKeyPrefix, cfg.DistLockFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +380,7 @@ func TestRedisScriptCache_ReplaceAllFromHoldsLockAcrossLoad(t *testing.T) {
 
 	<-loadStarted
 	// Load 期间另一把同 key 锁应拿不到（短超时）
-	other := factory.GetLock(prefix+":lock", distlock.WithTTL(5*time.Second))
+	other := cfg.DistLockFactory.GetLock(cfg.RedisKeyPrefix+":lock", distlock.WithTTL(5*time.Second))
 	tryCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	if err := other.Lock(tryCtx); err == nil {
