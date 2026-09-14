@@ -25,7 +25,7 @@ type StoreLoad interface {
 	RefreshScriptForce(ctx context.Context, id string) error
 }
 
-// StoreQuery 执行侧只读视图；由 golua 实现，只读脚本快照缓存
+// StoreQuery 快照只读视图；由 golua 实现，供业务按需直读（Engine 执行路径不经过本接口）
 type StoreQuery interface {
 	// Get 按 ID 读缓存；miss 返回 ErrNotFound，不回源
 	Get(ctx context.Context, id string) (*Script, error)
@@ -37,4 +37,6 @@ type ScriptInvalidator interface {
 	InvalidateScripts(ids ...string)
 	// InvalidateAllScripts 丢弃全部编译缓存并 bump 池世代
 	InvalidateAllScripts()
+	// ObserveGeneration 对齐共享代际水位（Redis）；本机 Refresh 后回填，避免多余全量失效
+	ObserveGeneration(gen uint64)
 }

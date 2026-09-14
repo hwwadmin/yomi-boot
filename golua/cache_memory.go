@@ -38,6 +38,17 @@ func (c *memoryScriptCache) Get(_ context.Context, id string) (*Script, error) {
 	return &cp, nil
 }
 
+// GetWithGen 内存后端不追踪代际
+func (c *memoryScriptCache) GetWithGen(ctx context.Context, id string) (*Script, uint64, bool, error) {
+	script, err := c.Get(ctx, id)
+	return script, 0, false, err
+}
+
+// CurrentGen 内存后端不追踪代际
+func (c *memoryScriptCache) CurrentGen(context.Context) (uint64, bool, error) {
+	return 0, false, nil
+}
+
 // Has 判断是否存在
 func (c *memoryScriptCache) Has(_ context.Context, id string) (bool, error) {
 	c.mu.RLock()

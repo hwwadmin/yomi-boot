@@ -15,10 +15,19 @@ import (
 type Script struct {
 	ID      string `json:"id"`      // ID 是业务脚本标识
 	Source  string `json:"source"`  // Source 是 Lua 源码
-	Version string `json:"version"` // Version 是业务版本；空则由源码 hash 派生
+	Version string `json:"version"` // Version 是业务版本语义；空则 normalize 时写入源码 hash
 }
 
-// EffectiveVersion 返回用于编译缓存键的版本；Version 为空时对 Source 做 sha256
+// ContentHash 返回源码 sha256 hex，用作进程内 Proto 缓存键（与业务 Version 无关）
+func (s *Script) ContentHash() string {
+	if s == nil {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(s.Source))
+	return hex.EncodeToString(sum[:])
+}
+
+// EffectiveVersion 返回业务版本；Version 为空时回落为源码 hash（供快照字段填充，非 Proto 键）
 func (s *Script) EffectiveVersion() string {
 	if s == nil {
 		return ""
@@ -26,8 +35,7 @@ func (s *Script) EffectiveVersion() string {
 	if v := strings.TrimSpace(s.Version); v != "" {
 		return v
 	}
-	sum := sha256.Sum256([]byte(s.Source))
-	return hex.EncodeToString(sum[:])
+	return s.ContentHash()
 }
 
 // normalize 校验并规范化脚本字段
@@ -44,7 +52,7 @@ func (s *Script) normalize() error {
 	}
 	s.Version = strings.TrimSpace(s.Version)
 	if s.Version == "" {
-		s.Version = s.EffectiveVersion()
+		s.Version = s.ContentHash()
 	}
 	return nil
 }

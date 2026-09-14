@@ -441,3 +441,89 @@ func TestRedisCache_UpsertFromHoldsLockAcrossLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestExecute_ContentHashIgnoresStaleVersion 同 Version 改 Source 须重编
+func TestExecute_ContentHashIgnoresStaleVersion(t *testing.T) {
+	adapter := newMemoryAdapter(&Script{
+		ID: "s", Source: `function main(args) return 1 end`, Version: "v1",
+	})
+	comp := newTestComp(t, adapter, testCfg())
+	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := comp.Engine.Execute(context.Background(), "s", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.(float64) != 1 {
+		t.Fatalf("期望 1，实际 %v", got)
+	}
+	adapter.put(&Script{
+		ID: "s", Source: `function main(args) return 2 end`, Version: "v1",
+	})
+	if err := comp.StoreLoad.RefreshScriptForce(context.Background(), "s"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = comp.Engine.Execute(context.Background(), "s", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.(float64) != 2 {
+		t.Fatalf("期望 2，实际 %v", got)
+	}
+}
+
+// TestRedis_PeerExecuteSeesForceWithoutLocalRefresh 他机 Force 后本机无需 Refresh 即对齐
+func TestRedis_PeerExecuteSeesForceWithoutLocalRefresh(t *testing.T) {
+	rdb, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(rdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := "yomi:golua:test:peer"
+	adapter := newMemoryAdapter(&Script{
+		ID: "p1", Source: `function main(args) return 1 end`, Version: "v1",
+	})
+
+	cfgA := testCfg()
+	cfgA.CacheBackend = CacheRedis
+	cfgA.Redis = rdb
+	cfgA.DistLockFactory = factory
+	cfgA.RedisKeyPrefix = prefix
+	compA := newTestComp(t, adapter, cfgA)
+	if err := compA.StoreLoad.RefreshForce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgB := testCfg()
+	cfgB.CacheBackend = CacheRedis
+	cfgB.Redis = rdb
+	cfgB.DistLockFactory = factory
+	cfgB.RedisKeyPrefix = prefix
+	cfgB.SkipRefreshOnNew = true
+	compB := newTestComp(t, newMemoryAdapter(), cfgB)
+
+	got, err := compB.Engine.Execute(context.Background(), "p1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.(float64) != 1 {
+		t.Fatalf("期望 1，实际 %v", got)
+	}
+
+	adapter.put(&Script{
+		ID: "p1", Source: `function main(args) return 2 end`, Version: "v1",
+	})
+	if err := compA.StoreLoad.RefreshScriptForce(context.Background(), "p1"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = compB.Engine.Execute(context.Background(), "p1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.(float64) != 2 {
+		t.Fatalf("他机 Force 后期望 2，实际 %v", got)
+	}
+}

@@ -53,21 +53,70 @@ func newRedisScriptCache(rdb *redisv9.Client, keyPrefix string, factory distlock
 
 // Get 按 ID 读取（不加锁）
 func (c *redisScriptCache) Get(ctx context.Context, id string) (*Script, error) {
-	raw, err := c.rdb.Get(ctx, c.keys.script(id)).Bytes()
+	script, _, _, err := c.GetWithGen(ctx, id)
+	return script, err
+}
+
+// GetWithGen 同轮 pipeline 读取脚本与 current_gen
+func (c *redisScriptCache) GetWithGen(ctx context.Context, id string) (*Script, uint64, bool, error) {
+	pipe := c.rdb.Pipeline()
+	scriptCmd := pipe.Get(ctx, c.keys.script(id))
+	genCmd := pipe.Get(ctx, c.keys.gen())
+	_, pipeErr := pipe.Exec(ctx)
+	_ = pipeErr // 单命令失败体现在各 Cmd
+
+	raw, err := scriptCmd.Bytes()
 	if err != nil {
 		if errors.Is(err, redisv9.Nil) {
-			return nil, errors.Sentinel(ErrNotFound)
+			return nil, 0, false, errors.Sentinel(ErrNotFound)
 		}
-		return nil, errors.Wrap(err, "golua: 读取脚本缓存失败")
+		return nil, 0, false, errors.Wrap(err, "golua: 读取脚本缓存失败")
 	}
 	var script Script
 	if err := json.Unmarshal(raw, &script); err != nil {
-		return nil, errors.Wrap(err, "golua: 解析脚本缓存失败")
+		return nil, 0, false, errors.Wrap(err, "golua: 解析脚本缓存失败")
 	}
 	if err := script.normalize(); err != nil {
-		return nil, err
+		return nil, 0, false, err
 	}
-	return &script, nil
+
+	gen, genOK := parseRedisGen(genCmd)
+	return &script, gen, genOK, nil
+}
+
+// CurrentGen 读取共享代际
+func (c *redisScriptCache) CurrentGen(ctx context.Context) (uint64, bool, error) {
+	cmd := c.rdb.Get(ctx, c.keys.gen())
+	if err := cmd.Err(); err != nil {
+		if errors.Is(err, redisv9.Nil) {
+			return 0, true, nil
+		}
+		return 0, false, errors.Wrap(err, "golua: 读取 current_gen 失败")
+	}
+	gen, genOK := parseRedisGen(cmd)
+	if !genOK {
+		return 0, false, errors.New("golua: current_gen 非法")
+	}
+	return gen, true, nil
+}
+
+// parseRedisGen 解析 gen 命令；key 不存在视为 0 且可用；解析失败 genOK=false
+func parseRedisGen(cmd *redisv9.StringCmd) (gen uint64, genOK bool) {
+	if cmd == nil {
+		return 0, false
+	}
+	err := cmd.Err()
+	if err != nil {
+		if errors.Is(err, redisv9.Nil) {
+			return 0, true
+		}
+		return 0, false
+	}
+	n, err := cmd.Uint64()
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // Has 判断是否存在（不加锁）

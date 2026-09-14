@@ -32,7 +32,7 @@ func New(ctx context.Context, cfg Config, adapter StoreLoadAdapter) (*Components
 	}
 
 	query := newStoreQuery(cache)
-	eng, err := newEngine(cfg, query)
+	eng, err := newEngine(cfg, cache)
 	if err != nil {
 		return nil, err
 	}

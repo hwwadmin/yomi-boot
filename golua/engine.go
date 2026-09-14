@@ -1,4 +1,4 @@
-// Package golua Engine 执行入口
+// Package golua Engine 执行入口（含 Redis 代际自愈）
 //
 // @author zwei
 package golua
@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -20,7 +21,7 @@ var (
 
 // Engine 脚本执行引擎
 type Engine interface {
-	// Execute 按脚本 ID 从 StoreQuery 读取并执行
+	// Execute 按脚本 ID 从快照缓存读取（含 gen 对齐）后沙箱执行
 	Execute(ctx context.Context, scriptID string, args map[string]any) (any, error)
 	// Close 关闭池
 	Close() error
@@ -28,26 +29,30 @@ type Engine interface {
 
 // engine 是 Engine / ScriptInvalidator 的默认实现
 type engine struct {
-	cfg    Config
-	query  StoreQuery
-	pool   *statePool
-	cache  *protoCache
-	closed atomic.Bool
+	cfg          Config
+	cache        scriptCache
+	pool         *statePool
+	proto        *protoCache
+	closed       atomic.Bool
+	genSync      bool // Redis 后端启用 current_gen 水位线
+	genWatermark atomic.Uint64
 }
 
 // newEngine 创建引擎（不触发 Refresh）
-func newEngine(cfg Config, query StoreQuery) (*engine, error) {
-	if query == nil {
-		return nil, errors.New("golua: StoreQuery 不能为空")
+func newEngine(cfg Config, cache scriptCache) (*engine, error) {
+	if cache == nil {
+		return nil, errors.New("golua: scriptCache 不能为空")
 	}
 	cfg = cfg.withDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	_, genSync := cache.(*redisScriptCache)
 	e := &engine{
-		cfg:   cfg,
-		query: query,
-		cache: newProtoCache(cfg.ProtoCacheSize),
+		cfg:     cfg,
+		cache:   cache,
+		proto:   newProtoCache(cfg.ProtoCacheSize),
+		genSync: genSync,
 	}
 	e.pool = newStatePool(cfg, func() (*lua.LState, error) {
 		return newSandboxedState(cfg)
@@ -55,7 +60,7 @@ func newEngine(cfg Config, query StoreQuery) (*engine, error) {
 	return e, nil
 }
 
-// Execute 执行脚本
+// Execute 从快照缓存读取脚本（Redis 下含 current_gen 对齐），再沙箱执行
 func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]any) (any, error) {
 	if e == nil || e.closed.Load() {
 		return nil, errors.Sentinel(ErrPoolClosed)
@@ -64,11 +69,14 @@ func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]a
 	if scriptID == "" {
 		return nil, errors.New("golua: 脚本 id 不能为空")
 	}
-	script, err := e.query.Get(ctx, scriptID)
+
+	script, gen, genOK, err := e.cache.GetWithGen(ctx, scriptID)
 	if err != nil {
 		return nil, err
 	}
-	proto, err := e.cache.getOrCompile(script.ID, script.EffectiveVersion(), script.Source)
+	e.alignGeneration(ctx, gen, genOK)
+
+	proto, err := e.proto.getOrCompile(script.ID, script.ContentHash(), script.Source)
 	if err != nil {
 		return nil, errors.Wrap(errors.Sentinel(ErrCompile), "%s", err.Error())
 	}
@@ -118,12 +126,49 @@ func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]a
 	return fromLuaValue(ret, e.cfg, 0)
 }
 
+// alignGeneration Redis 代际落后时全量失效本地 Proto/池
+func (e *engine) alignGeneration(ctx context.Context, remoteGen uint64, genOK bool) {
+	if e == nil || !e.genSync {
+		return
+	}
+	if !genOK {
+		logger.Warn(ctx, "golua: 读取 current_gen 失败，依赖源码哈希对齐编译缓存")
+		return
+	}
+	for {
+		local := e.genWatermark.Load()
+		if remoteGen <= local {
+			return
+		}
+		e.InvalidateAllScripts()
+		if e.genWatermark.CompareAndSwap(local, remoteGen) {
+			return
+		}
+	}
+}
+
+// ObserveGeneration 抬高本机代际水位（不回退）
+func (e *engine) ObserveGeneration(gen uint64) {
+	if e == nil || !e.genSync {
+		return
+	}
+	for {
+		local := e.genWatermark.Load()
+		if gen <= local {
+			return
+		}
+		if e.genWatermark.CompareAndSwap(local, gen) {
+			return
+		}
+	}
+}
+
 // InvalidateScripts 丢弃指定脚本编译缓存并 bump 池世代
 func (e *engine) InvalidateScripts(ids ...string) {
 	if e == nil {
 		return
 	}
-	e.cache.removeIDs(ids...)
+	e.proto.removeIDs(ids...)
 	e.pool.bumpEpoch()
 }
 
@@ -132,7 +177,7 @@ func (e *engine) InvalidateAllScripts() {
 	if e == nil {
 		return
 	}
-	e.cache.clear()
+	e.proto.clear()
 	e.pool.bumpEpoch()
 }
 
@@ -145,7 +190,7 @@ func (e *engine) Close() error {
 		return nil
 	}
 	e.pool.close()
-	e.cache.clear()
+	e.proto.clear()
 	return nil
 }
 

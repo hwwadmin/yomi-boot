@@ -115,9 +115,7 @@ func (s *storeLoad) refreshAllLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if s.invalidator != nil {
-		s.invalidator.InvalidateAllScripts()
-	}
+	s.afterCacheWrite(ctx, "")
 	return nil
 }
 
@@ -141,8 +139,23 @@ func (s *storeLoad) refreshOneLocked(ctx context.Context, id string, deleteOnNot
 	if err != nil {
 		return err
 	}
-	if s.invalidator != nil {
-		s.invalidator.InvalidateScripts(invalidateID)
-	}
+	s.afterCacheWrite(ctx, invalidateID)
 	return nil
+}
+
+// afterCacheWrite 本机失效并回填共享代际水位
+func (s *storeLoad) afterCacheWrite(ctx context.Context, scriptID string) {
+	if s.invalidator == nil {
+		return
+	}
+	if scriptID == "" {
+		s.invalidator.InvalidateAllScripts()
+	} else {
+		s.invalidator.InvalidateScripts(scriptID)
+	}
+	gen, ok, err := s.cache.CurrentGen(ctx)
+	if err != nil || !ok {
+		return
+	}
+	s.invalidator.ObserveGeneration(gen)
 }

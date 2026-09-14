@@ -18,13 +18,16 @@
 //
 //   - StoreLoadAdapter：业务实现，全量/按 ID 拉取脚本原文，不碰缓存
 //   - 脚本快照缓存：由 Config.CacheBackend 在库内装配（memory / redis+distlock）
-//   - StoreLoad / StoreQuery：本包实现，读写快照缓存
-//   - Engine：只经 StoreQuery 读缓存后沙箱执行
+//   - StoreLoad：本包实现，回源写入快照缓存并触发本机失效
+//   - StoreQuery：本包只读视图，供业务按需直读快照（Engine 不经过此接口）
+//   - Engine：直读快照缓存（含 gen）后沙箱执行；Proto 键为源码 content hash
 //
 // # 热更新与池
 //
-// 强制刷新不打断进行中的 Execute；写缓存成功后立即丢弃空闲旧 Proto / 旧 LState；
+// 强制刷新不打断进行中的 Execute；写缓存成功后立即丢弃本机空闲旧 Proto / 旧 LState；
 // inflight 归还时丢弃，禁止回池复用。
+// Redis 后端下其它进程在后续 Execute 中通过 current_gen 水位线自动失效本地编译缓存与池，
+// 并以源码哈希作为 Proto 键，业务无需逐副本广播刷新。
 //
 // # 沙箱
 //

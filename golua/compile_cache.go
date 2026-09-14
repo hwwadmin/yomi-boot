@@ -1,4 +1,4 @@
-// Package golua 进程内 Proto LRU
+// Package golua 进程内 Proto LRU（键为 id + 源码 content hash）
 //
 // @author zwei
 package golua
@@ -12,10 +12,10 @@ import (
 	"github.com/yuin/gopher-lua/parse"
 )
 
-// protoCacheKey 编译缓存键（脚本 id + 版本）
+// protoCacheKey 编译缓存键（脚本 id + 源码哈希）
 type protoCacheKey struct {
-	id      string
-	version string
+	id          string
+	contentHash string
 }
 
 // protoCacheEntry LRU 节点值
@@ -44,9 +44,9 @@ func newProtoCache(capacity int) *protoCache {
 	}
 }
 
-// getOrCompile 命中则返回缓存 Proto，否则编译并写入 LRU
-func (c *protoCache) getOrCompile(id, version, source string) (*lua.FunctionProto, error) {
-	key := protoCacheKey{id: id, version: version}
+// getOrCompile 命中则返回缓存 Proto，否则编译并写入 LRU（contentHash 须与 source 对应）
+func (c *protoCache) getOrCompile(id, contentHash, source string) (*lua.FunctionProto, error) {
+	key := protoCacheKey{id: id, contentHash: contentHash}
 	c.mu.Lock()
 	if el, ok := c.items[key]; ok {
 		c.ll.MoveToFront(el)
@@ -75,7 +75,7 @@ func (c *protoCache) getOrCompile(id, version, source string) (*lua.FunctionProt
 	return proto, nil
 }
 
-// removeIDs 按脚本 id 删除全部版本的编译缓存
+// removeIDs 按脚本 id 删除全部 contentHash 的编译缓存
 func (c *protoCache) removeIDs(ids ...string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -9,6 +9,10 @@ import "context"
 type scriptCache interface {
 	// Get 按 ID 读取；不存在返回 ErrNotFound
 	Get(ctx context.Context, id string) (*Script, error)
+	// GetWithGen 读取脚本并附带共享代际；genOK=false 表示 gen 不可用（仍可能返回 script）
+	GetWithGen(ctx context.Context, id string) (script *Script, gen uint64, genOK bool, err error)
+	// CurrentGen 返回共享代际；ok=false 表示本后端不追踪代际
+	CurrentGen(ctx context.Context) (gen uint64, ok bool, err error)
 	// Has 判断 id 是否在缓存中
 	Has(ctx context.Context, id string) (bool, error)
 	// Ready 普通全量 Refresh 判空：已初始化且 index 非空
