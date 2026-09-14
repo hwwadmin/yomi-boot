@@ -68,7 +68,6 @@ func testCfg() Config {
 	return Config{
 		CacheBackend:       CacheMemory,
 		ExecTimeout:        200 * time.Millisecond,
-		MaxInstructions:    1_000_000,
 		PoolSize:           2,
 		PoolAcquireTimeout: 200 * time.Millisecond,
 		ProtoCacheSize:     16,
@@ -525,5 +524,79 @@ func TestRedis_PeerExecuteSeesForceWithoutLocalRefresh(t *testing.T) {
 	}
 	if got.(float64) != 2 {
 		t.Fatalf("他机 Force 后期望 2，实际 %v", got)
+	}
+}
+
+// TestExecute_SourceExceedsMaxStringLen 验证源码超长被沙箱拒绝
+func TestExecute_SourceExceedsMaxStringLen(t *testing.T) {
+	adapter := newMemoryAdapter(&Script{
+		ID: "big", Source: `function main(args) return 1 end`, Version: "1",
+	})
+	cfg := testCfg()
+	cfg.MaxStringLen = 8
+	comp := newTestComp(t, adapter, cfg)
+	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, err := comp.Engine.Execute(context.Background(), "big", nil)
+	if err == nil || !errors.Is(err, ErrSandbox) {
+		t.Fatalf("期望 ErrSandbox，实际 %v", err)
+	}
+}
+
+// TestExecute_MixedTableRejected 验证混合 table 返回被拒绝
+func TestExecute_MixedTableRejected(t *testing.T) {
+	adapter := newMemoryAdapter(&Script{
+		ID: "mix",
+		Source: `function main(args)
+  local t = {1, 2}
+  t.key = "x"
+  return t
+end`,
+		Version: "1",
+	})
+	comp := newTestComp(t, adapter, testCfg())
+	if err := comp.StoreLoad.RefreshForce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, err := comp.Engine.Execute(context.Background(), "mix", nil)
+	if err == nil || !errors.Is(err, ErrSandbox) {
+		t.Fatalf("期望 ErrSandbox，实际 %v", err)
+	}
+}
+
+// TestParseRedisGenValue 验证代际解析
+func TestParseRedisGenValue(t *testing.T) {
+	gen, ok := parseRedisGenValue(nil)
+	if !ok || gen != 0 {
+		t.Fatalf("nil 期望 0,true 实际 %d,%v", gen, ok)
+	}
+	gen, ok = parseRedisGenValue("42")
+	if !ok || gen != 42 {
+		t.Fatalf("期望 42,true 实际 %d,%v", gen, ok)
+	}
+	_, ok = parseRedisGenValue("x")
+	if ok {
+		t.Fatal("非法字符串期望 genOK=false")
+	}
+}
+
+// TestProtoCache_EvictOldestKeepsValidMapping 验证淘汰孤儿节点不误删有效映射
+func TestProtoCache_EvictOldestKeepsValidMapping(t *testing.T) {
+	c := newProtoCache(1)
+	key := protoCacheKey{id: "a", contentHash: "h1"}
+	proto, err := compileSource("a", `function main(args) return 1 end`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = c.ll.PushBack(&protoCacheEntry{key: key, proto: nil})
+	valid := c.ll.PushFront(&protoCacheEntry{key: key, proto: proto})
+	c.items[key] = valid
+	c.evictOldest()
+	if c.items[key] != valid {
+		t.Fatal("淘汰孤儿后应保留有效映射")
+	}
+	if c.ll.Len() != 1 {
+		t.Fatalf("期望链表长度 1，实际 %d", c.ll.Len())
 	}
 }

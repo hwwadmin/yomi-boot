@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
@@ -112,11 +113,13 @@ func (s *storeLoad) refreshAllLocked(ctx context.Context) error {
 		}
 		return scripts, nil
 	})
-	if err != nil {
-		return err
+	if cacheWriteApplied(err) {
+		s.afterCacheWrite(ctx, "")
 	}
-	s.afterCacheWrite(ctx, "")
-	return nil
+	if onlyLockLost(err) {
+		return nil
+	}
+	return err
 }
 
 // refreshOneLocked 单脚本回源并写入或删除缓存
@@ -136,11 +139,39 @@ func (s *storeLoad) refreshOneLocked(ctx context.Context, id string, deleteOnNot
 		invalidateID = script.ID
 		return script, nil
 	})
-	if err != nil {
-		return err
+	if cacheWriteApplied(err) {
+		s.afterCacheWrite(ctx, invalidateID)
 	}
-	s.afterCacheWrite(ctx, invalidateID)
-	return nil
+	if onlyLockLost(err) {
+		return nil
+	}
+	return err
+}
+
+// cacheWriteApplied 判断缓存写是否已生效（成功或仅锁丢失）
+func cacheWriteApplied(err error) bool {
+	return err == nil || onlyLockLost(err)
+}
+
+// onlyLockLost 错误链仅含锁丢失（无其它业务错误）
+func onlyLockLost(err error) bool {
+	if err == nil || !errors.Is(err, distlock.ErrLockLost) {
+		return false
+	}
+	type multi interface{ Unwrap() []error }
+	var m multi
+	if errors.As(err, &m) {
+		for _, e := range m.Unwrap() {
+			if e == nil {
+				continue
+			}
+			if !errors.Is(e, distlock.ErrLockLost) {
+				return false
+			}
+		}
+		return true
+	}
+	return true
 }
 
 // afterCacheWrite 失效本地编译缓存并记录共享代际

@@ -6,6 +6,7 @@ package golua
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,30 +57,31 @@ func (c *redisScriptCache) Get(ctx context.Context, id string) (*Script, error) 
 	return script, err
 }
 
-// GetWithGen 读取脚本与共享代际
+// GetWithGen 读取脚本与共享代际；MGET 单命令保证原子同读
 func (c *redisScriptCache) GetWithGen(ctx context.Context, id string) (*Script, uint64, bool, error) {
-	pipe := c.rdb.Pipeline()
-	scriptCmd := pipe.Get(ctx, c.keys.script(id))
-	genCmd := pipe.Get(ctx, c.keys.gen())
-	_, pipeErr := pipe.Exec(ctx)
-	_ = pipeErr // 单命令失败体现在各 Cmd
-
-	raw, err := scriptCmd.Bytes()
+	vals, err := c.rdb.MGet(ctx, c.keys.script(id), c.keys.gen()).Result()
 	if err != nil {
-		if errors.Is(err, redisv9.Nil) {
-			return nil, 0, false, errors.Sentinel(ErrNotFound)
-		}
 		return nil, 0, false, errors.Wrap(err, "golua: 读取脚本缓存失败")
 	}
+	if len(vals) < 2 {
+		return nil, 0, false, errors.New("golua: 读取脚本缓存结果不完整")
+	}
+	if vals[0] == nil {
+		return nil, 0, false, errors.Sentinel(ErrNotFound)
+	}
+	raw, ok := vals[0].(string)
+	if !ok {
+		return nil, 0, false, errors.New("golua: 脚本缓存类型非法")
+	}
 	var script Script
-	if err := json.Unmarshal(raw, &script); err != nil {
+	if err := json.Unmarshal([]byte(raw), &script); err != nil {
 		return nil, 0, false, errors.Wrap(err, "golua: 解析脚本缓存失败")
 	}
 	if err := script.normalize(); err != nil {
 		return nil, 0, false, err
 	}
 
-	gen, genOK := parseRedisGen(genCmd)
+	gen, genOK := parseRedisGenValue(vals[1])
 	return &script, gen, genOK, nil
 }
 
@@ -92,26 +94,26 @@ func (c *redisScriptCache) CurrentGen(ctx context.Context) (uint64, bool, error)
 		}
 		return 0, false, errors.Wrap(err, "golua: 读取 current_gen 失败")
 	}
-	gen, genOK := parseRedisGen(cmd)
+	gen, genOK := parseRedisGenValue(cmd.Val())
 	if !genOK {
 		return 0, false, errors.New("golua: current_gen 非法")
 	}
 	return gen, true, nil
 }
 
-// parseRedisGen 解析代际值；键不存在视为 0
-func parseRedisGen(cmd *redisv9.StringCmd) (gen uint64, genOK bool) {
-	if cmd == nil {
+// parseRedisGenValue 解析代际值；nil/空视为 0 且有效
+func parseRedisGenValue(v any) (gen uint64, genOK bool) {
+	if v == nil {
+		return 0, true
+	}
+	s, ok := v.(string)
+	if !ok {
 		return 0, false
 	}
-	err := cmd.Err()
-	if err != nil {
-		if errors.Is(err, redisv9.Nil) {
-			return 0, true
-		}
-		return 0, false
+	if s == "" {
+		return 0, true
 	}
-	n, err := cmd.Uint64()
+	n, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
 		return 0, false
 	}
@@ -216,8 +218,8 @@ func (c *redisScriptCache) withWriteLock(ctx context.Context, fn func(context.Co
 	if err == nil {
 		return nil
 	}
-	// 未进入临界区为加锁失败；锁丢失单独返回；其余为业务错误
-	if !entered || errors.Is(err, distlock.ErrLockLost) {
+	// 未进入临界区为加锁失败；已进入则原样返回（含 ErrLockLost 与业务错误）
+	if !entered {
 		return errors.Wrap(err, "golua: 脚本缓存写锁失败")
 	}
 	return err

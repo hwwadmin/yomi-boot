@@ -5,8 +5,11 @@ package golua
 
 import (
 	"container/list"
+	"context"
 	"strings"
 	"sync"
+
+	"golang.org/x/sync/singleflight"
 
 	lua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
@@ -30,6 +33,7 @@ type protoCache struct {
 	capacity int
 	ll       *list.List
 	items    map[protoCacheKey]*list.Element
+	sf       singleflight.Group
 }
 
 // newProtoCache 创建 Proto 缓存
@@ -45,34 +49,71 @@ func newProtoCache(capacity int) *protoCache {
 }
 
 // getOrCompile 命中返回缓存 Proto，否则编译并写入 LRU
-func (c *protoCache) getOrCompile(id, contentHash, source string) (*lua.FunctionProto, error) {
+func (c *protoCache) getOrCompile(ctx context.Context, id, contentHash, source string) (*lua.FunctionProto, error) {
 	key := protoCacheKey{id: id, contentHash: contentHash}
-	c.mu.Lock()
-	if el, ok := c.items[key]; ok {
-		c.ll.MoveToFront(el)
-		proto := el.Value.(*protoCacheEntry).proto
-		c.mu.Unlock()
+	if proto := c.lookup(key); proto != nil {
 		return proto, nil
 	}
-	c.mu.Unlock()
 
-	proto, err := compileSource(id, source)
-	if err != nil {
-		return nil, err
+	flightKey := id + "\x00" + contentHash
+	type flightResult struct {
+		proto *lua.FunctionProto
+		err   error
 	}
+	ch := make(chan flightResult, 1)
+	go func() {
+		v, err, _ := c.sf.Do(flightKey, func() (any, error) {
+			if proto := c.lookup(key); proto != nil {
+				return proto, nil
+			}
+			proto, err := compileSource(id, source)
+			if err != nil {
+				return nil, err
+			}
+			c.store(key, proto)
+			return proto, nil
+		})
+		if err != nil {
+			ch <- flightResult{err: err}
+			return
+		}
+		ch <- flightResult{proto: v.(*lua.FunctionProto)}
+	}()
 
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-ch:
+		return r.proto, r.err
+	}
+}
+
+// lookup 读取缓存；命中时提升 LRU
+func (c *protoCache) lookup(key protoCacheKey) *lua.FunctionProto {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	el, ok := c.items[key]
+	if !ok {
+		return nil
+	}
+	c.ll.MoveToFront(el)
+	return el.Value.(*protoCacheEntry).proto
+}
+
+// store 写入 LRU
+func (c *protoCache) store(key protoCacheKey, proto *lua.FunctionProto) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[key]; ok {
 		c.ll.MoveToFront(el)
-		return el.Value.(*protoCacheEntry).proto, nil
+		el.Value.(*protoCacheEntry).proto = proto
+		return
 	}
 	el := c.ll.PushFront(&protoCacheEntry{key: key, proto: proto})
 	c.items[key] = el
 	for c.ll.Len() > c.capacity {
 		c.evictOldest()
 	}
-	return proto, nil
 }
 
 // removeIDs 按脚本 id 删除相关编译缓存
@@ -113,7 +154,9 @@ func (c *protoCache) evictOldest() {
 	}
 	c.ll.Remove(el)
 	ent := el.Value.(*protoCacheEntry)
-	delete(c.items, ent.key)
+	if cur, ok := c.items[ent.key]; ok && cur == el {
+		delete(c.items, ent.key)
+	}
 }
 
 // compileSource 将 Lua 源码编译为 FunctionProto

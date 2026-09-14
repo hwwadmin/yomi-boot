@@ -76,8 +76,21 @@ func (e *engine) Execute(ctx context.Context, scriptID string, args map[string]a
 	}
 	e.alignGeneration(ctx, gen, genOK)
 
-	proto, err := e.proto.getOrCompile(script.ID, script.ContentHash(), script.Source)
+	if len(script.Source) > e.cfg.MaxStringLen {
+		return nil, errors.Wrap(errors.Sentinel(ErrSandbox), "golua: 源码超过 MaxStringLen")
+	}
+
+	compileCtx := ctx
+	cancelCompile := func() {}
+	if e.cfg.ExecTimeoutOrDefault() > 0 {
+		compileCtx, cancelCompile = context.WithTimeout(ctx, e.cfg.ExecTimeoutOrDefault())
+	}
+	proto, err := e.proto.getOrCompile(compileCtx, script.ID, script.ContentHash(), script.Source)
+	cancelCompile()
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return nil, errors.Wrap(errors.Sentinel(ErrTimeout), "%s", err.Error())
+		}
 		return nil, errors.Wrap(errors.Sentinel(ErrCompile), "%s", err.Error())
 	}
 
@@ -203,9 +216,6 @@ func mapExecErr(err error) error {
 		strings.Contains(msg, context.DeadlineExceeded.Error()) ||
 		strings.Contains(msg, context.Canceled.Error()) {
 		return errors.Wrap(errors.Sentinel(ErrTimeout), "%s", msg)
-	}
-	if strings.Contains(msg, "instruction") {
-		return errors.Wrap(errors.Sentinel(ErrInstructionLimit), "%s", msg)
 	}
 	return errors.Wrap(errors.Sentinel(ErrRuntime), "%s", msg)
 }

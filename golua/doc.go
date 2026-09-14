@@ -28,7 +28,7 @@
 //
 // # 沙箱
 //
-// 默认拒绝 os/io/package/debug；每请求独立 env；共享全局只读；以 ExecTimeout 为硬超时。
+// 默认拒绝 os/io/package/debug；每请求独立 env；共享全局只读；以 ExecTimeout 为编译与执行硬超时。
 //
 // @author zwei
 package golua

@@ -20,6 +20,4 @@ var (
 	ErrPoolClosed = errors.NewNoStack("golua: 已关闭")
 	// ErrPoolAcquireTimeout 借 LState 超时
 	ErrPoolAcquireTimeout = errors.NewNoStack("golua: 获取执行状态超时")
-	// ErrInstructionLimit 指令预算耗尽
-	ErrInstructionLimit = errors.NewNoStack("golua: 指令上限")
 )

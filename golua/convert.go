@@ -114,7 +114,9 @@ func tableToGo(tbl *lua.LTable, cfg Config, depth int) (any, error) {
 	}
 	maxN := tbl.MaxN()
 	if maxN > 0 {
-		// 数组风格
+		if tableHasNonArrayKey(tbl, maxN) {
+			return nil, errors.Sentinel(ErrSandbox)
+		}
 		out := make([]any, 0, maxN)
 		for i := 1; i <= maxN; i++ {
 			if len(out) >= cfg.MaxTableSize {
@@ -153,6 +155,26 @@ func tableToGo(tbl *lua.LTable, cfg Config, depth int) (any, error) {
 		return nil, walkErr
 	}
 	return out, nil
+}
+
+// tableHasNonArrayKey 判断 table 是否含非 1..maxN 整数键
+func tableHasNonArrayKey(tbl *lua.LTable, maxN int) bool {
+	has := false
+	tbl.ForEach(func(k, _ lua.LValue) {
+		if has {
+			return
+		}
+		num, ok := k.(lua.LNumber)
+		if !ok {
+			has = true
+			return
+		}
+		n := int(num)
+		if float64(n) != float64(num) || n < 1 || n > maxN {
+			has = true
+		}
+	})
+	return has
 }
 
 // luaValueKey 将 Lua 键转为字符串

@@ -23,7 +23,6 @@ const (
 	CacheRedis CacheBackend = "redis"
 
 	defaultExecTimeout        = 500 * time.Millisecond
-	defaultMaxInstructions    = 1_000_000
 	defaultPoolSize           = 8
 	defaultPoolAcquireTimeout = 200 * time.Millisecond
 	defaultProtoCacheSize     = 256
@@ -39,10 +38,8 @@ const (
 type Config struct {
 	// EntryFunc 入口函数名；空则 main
 	EntryFunc string
-	// ExecTimeout 墙钟执行超时；0 则默认 500ms
+	// ExecTimeout 墙钟超时（编译与执行）；0 则默认 500ms
 	ExecTimeout time.Duration
-	// MaxInstructions 指令预算；0 则默认 1e6
-	MaxInstructions int
 	// PoolSize LState 池大小；0 则默认 8
 	PoolSize int
 	// PoolAcquireTimeout 借池等待上限；0 则默认 200ms
@@ -131,9 +128,6 @@ func (c Config) withDefaults() Config {
 	if out.ExecTimeout <= 0 {
 		out.ExecTimeout = defaultExecTimeout
 	}
-	if out.MaxInstructions <= 0 {
-		out.MaxInstructions = defaultMaxInstructions
-	}
 	if out.PoolSize <= 0 {
 		out.PoolSize = defaultPoolSize
 	}
@@ -170,9 +164,6 @@ func (c Config) Validate() error {
 	d := c.withDefaults()
 	if d.ExecTimeout <= 0 {
 		return errors.New("golua: ExecTimeout 必须大于 0")
-	}
-	if d.MaxInstructions <= 0 {
-		return errors.New("golua: MaxInstructions 必须大于 0")
 	}
 	if d.PoolSize <= 0 {
 		return errors.New("golua: PoolSize 必须大于 0")
