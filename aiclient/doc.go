@@ -1,9 +1,10 @@
-// Package aiclient 提供协议无关的大模型对话门面，支持 OpenAI Chat Completions 与 Anthropic Messages。
+// Package aiclient 提供协议无关的大模型对话与向量化门面。
 //
-// 本包不对内泄漏官方客户端类型；业务只依赖 New / MustNew / AIClient 与本包哨兵。
+// 对话支持 OpenAI Chat Completions 与 Anthropic Messages；向量化首版仅 OpenAI Embeddings。
+// 本包不对内泄漏官方客户端类型；业务只依赖 New / MustNew / AIClient、NewEmbedding / MustNewEmbedding / EmbeddingClient 与本包哨兵。
 // 不进 bootstrap、不读 YAML、不做配额限流与重试。配置来源由调用方自行组装。
 //
-// # 基本用法
+// # 基本用法（对话）
 //
 //	cli, err := aiclient.New(aiclient.Config{
 //	    Protocol:     aiclient.ProtocolOpenAI,
@@ -39,16 +40,34 @@
 //	    _ = chunk.Delta
 //	}
 //
+// # 基本用法（向量化）
+//
+// EmbeddingClient 与 AIClient 相互独立；协议类型也分开，勿混用对话 Protocol。
+// 首版仅 EmbeddingProtocolOpenAI。Anthropic 无 embeddings API。
+// 模型由 EmbeddingConfig.Model 锁定；换模型请另 NewEmbedding 一个实例。
+// Dimensions：配置与请求皆空则不传上游（不设缺省维度）；请求指针非空则覆盖配置；若设置必须 >0。
+// 一次 Embed 整批成功或整包失败。
+//
+//	emb, err := aiclient.NewEmbedding(aiclient.EmbeddingConfig{
+//	    Protocol: aiclient.EmbeddingProtocolOpenAI,
+//	    APIURL:   "https://api.openai.com/v1",
+//	    APIKey:   apiKey,
+//	    Model:    "text-embedding-3-small",
+//	})
+//	vec, err := emb.Embed(ctx, aiclient.EmbeddingRequest{
+//	    Inputs: []string{"hello", "world"},
+//	})
+//
 // # BaseURL（APIURL 原样注入，本包不拼接路径）
 //
-//   - OpenAI：官方为 `https://api.openai.com/v1`。不要写成 `.../v1/v1`。
+//   - OpenAI Chat / Embeddings：官方为 `https://api.openai.com/v1`。不要写成 `.../v1/v1`。
 //     兼容网关按其文档填写（通常同样带 `/v1` 前缀）。
 //   - Anthropic：官方为 `https://api.anthropic.com`（不要再加 `/v1`，SDK 会请求 `v1/messages`）。
 //
 // # HTTPClient
 //
-// 可选；仅提供 Transport / 代理。建议 Client.Timeout=0，由本包 Config.Timeout（0 则 60s）
-// 以请求级 context.WithTimeout 控制整段墙钟（含流式）。New 之后再改该 Client 视为未定义行为。
+// 可选；仅提供 Transport / 代理。建议 Client.Timeout=0，由本包 Timeout（0 则 60s）
+// 以请求级 context.WithTimeout 控制整段墙钟（含流式）。New / NewEmbedding 之后再改该 Client 视为未定义行为。
 // 高强度调用建议自定义 Transport，提高 MaxIdleConnsPerHost 等连接池参数。本包不做限流。
 //
 // # Anthropic 轮次与 system

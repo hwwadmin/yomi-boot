@@ -29,7 +29,16 @@ var testConfig2 = Config{
 	Timeout:  60 * time.Second,
 }
 
-// liveCases 返回两套实网配置
+// testEmbeddingConfig 实网 OpenAI Embeddings 配置；测前填 APIURL、APIKey、Model
+var testEmbeddingConfig = EmbeddingConfig{
+	Protocol: EmbeddingProtocolOpenAI,
+	APIURL:   "https://api.openai.com/v1",
+	APIKey:   "",
+	Model:    "text-embedding-3-small",
+	Timeout:  60 * time.Second,
+}
+
+// liveCases 返回两套实网对话配置
 func liveCases() []struct {
 	name string
 	cfg  Config
@@ -48,6 +57,15 @@ func requireLiveConfig(t *testing.T, cfg Config) Config {
 	t.Helper()
 	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.APIURL) == "" {
 		t.Skip("填写对应配置的 APIURL 与 APIKey 后再跑")
+	}
+	return cfg
+}
+
+// requireLiveEmbeddingConfig 校验向量化实网配置已填密钥与地址；未填则跳过
+func requireLiveEmbeddingConfig(t *testing.T, cfg EmbeddingConfig) EmbeddingConfig {
+	t.Helper()
+	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.APIURL) == "" {
+		t.Skip("填写 testEmbeddingConfig 的 APIURL 与 APIKey 后再跑")
 	}
 	return cfg
 }
@@ -115,4 +133,27 @@ func TestChatStream(t *testing.T) {
 			t.Logf("protocol=%s model=%s content=%q", tc.cfg.Protocol, model, got.String())
 		})
 	}
+}
+
+// TestEmbed 用 OpenAI Embeddings 配置发起同步向量化
+func TestEmbed(t *testing.T) {
+	cli, err := NewEmbedding(requireLiveEmbeddingConfig(t, testEmbeddingConfig))
+	if err != nil {
+		t.Fatalf("NewEmbedding: %v", err)
+	}
+	resp, err := cli.Embed(context.Background(), EmbeddingRequest{
+		Inputs: []string{"hello", "world"},
+	})
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if resp == nil || len(resp.Vectors) != 2 {
+		t.Fatalf("resp=%+v", resp)
+	}
+	for i, v := range resp.Vectors {
+		if len(v) == 0 {
+			t.Fatalf("empty vector at %d", i)
+		}
+	}
+	t.Logf("model=%s dim=%d usage=%+v", resp.Model, len(resp.Vectors[0]), resp.Usage)
 }
