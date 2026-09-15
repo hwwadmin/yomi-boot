@@ -108,7 +108,7 @@ func (c *anthropicClient) ChatStream(ctx context.Context, req ChatRequest) (Chat
 	return newChatStream(ctx, cancel, &anthropicPump{stream: stream, mapErr: c.mapErr}), nil
 }
 
-// buildParams 映射请求并校验 Anthropic 轮次；MaxTokens 按请求、配置、4096 依次回退
+// buildParams 映射请求并校验 Anthropic 轮次；MaxTokens 请求覆盖配置缺省
 func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewParams, error) {
 	if err := validateChatRequest(req); err != nil {
 		return anthropic.MessageNewParams{}, err
@@ -129,7 +129,7 @@ func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewPara
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.cfg.Model),
 		Messages:  msgs,
-		MaxTokens: defaultAnthropicMaxTokens,
+		MaxTokens: int64(defaultMaxTokens),
 	}
 	// 系统提示不进入轮次，按出现顺序拼到系统字段
 	if sys := joinSystemPrompts(req.Messages); sys != "" {

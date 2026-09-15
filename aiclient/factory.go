@@ -22,6 +22,8 @@ func New(cfg Config) (AIClient, error) {
 	copied.Temperature = cloneFloat64(cfg.Temperature)
 	copied.MaxTokens = cloneInt(cfg.MaxTokens)
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
+	// 温度为 nil 时填 1.0，最大令牌为 nil 时填 4096
+	applyGenerationDefaults(&copied)
 	switch copied.Protocol {
 	case ProtocolOpenAI:
 		return newOpenAIClient(copied)

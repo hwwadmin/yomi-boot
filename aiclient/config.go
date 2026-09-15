@@ -24,8 +24,10 @@ const (
 	defaultTimeout = 60 * time.Second
 	// defaultAnthropicVersion 未配置 AnthropicVersion 时的协议版本头
 	defaultAnthropicVersion = "2023-06-01"
-	// defaultAnthropicMaxTokens 请求与配置均未设置 MaxTokens 时 Anthropic 的必填回退值
-	defaultAnthropicMaxTokens = 4096
+	// defaultTemperature 未配置 Temperature 时的缺省采样温度
+	defaultTemperature = 1.0
+	// defaultMaxTokens 未配置 MaxTokens 时的缺省最大输出令牌
+	defaultMaxTokens = 4096
 )
 
 // Config 创建 AIClient 的构造配置；本包不读 YAML
@@ -34,8 +36,8 @@ type Config struct {
 	APIURL           string            // APIURL 原样注入官方客户端 BaseURL，本包不拼接路径
 	APIKey           string            // APIKey 是鉴权密钥；日志与错误正文不得回显完整值
 	Model            string            // Model 是本实例锁定的模型名；构造期 trim 后不得为空
-	Temperature      *float64          // Temperature 是默认采样温度；空且请求也空则不传；0 为合法值
-	MaxTokens        *int              // MaxTokens 是默认最大输出令牌；空且请求也空时 OpenAI 不传、Anthropic 回退 4096；若设置必须 >0
+	Temperature      *float64          // Temperature 是默认采样温度；空则 1.0；0 为合法值
+	MaxTokens        *int              // MaxTokens 是默认最大输出令牌；空则 4096；若设置必须 >0
 	Timeout          time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
 	HTTPClient       *http.Client      // HTTPClient 可选，仅传输层/代理；New 之后再改视为未定义行为
 	AnthropicVersion string            // AnthropicVersion 仅 anthropic；空则 2023-06-01
@@ -135,4 +137,16 @@ func cloneInt(src *int) *int {
 	}
 	v := *src
 	return &v
+}
+
+// applyGenerationDefaults 为空的温度与最大令牌数填入缺省值
+func applyGenerationDefaults(cfg *Config) {
+	if cfg.Temperature == nil {
+		v := defaultTemperature
+		cfg.Temperature = &v
+	}
+	if cfg.MaxTokens == nil {
+		v := defaultMaxTokens
+		cfg.MaxTokens = &v
+	}
 }
