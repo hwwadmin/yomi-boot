@@ -25,7 +25,7 @@ type EmbeddingConfig struct {
 	APIURL       string            // APIURL 原样注入官方客户端 BaseURL，本包不拼接路径
 	APIKey       string            // APIKey 可选；空表示不带鉴权，供本地或免费网关；非空时日志与错误正文不得回显完整值
 	Model        string            // Model 是本实例锁定的向量模型名；构造期 trim 后不得为空
-	Dimensions   *int              // Dimensions 是默认输出维度；空则不传；若设置必须 >0
+	Dimensions   *int              // Dimensions 是默认输出维度；空则不传；若设置必须 >0；仅部分模型支持，不支持的网关会 400
 	Timeout      time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
 	HTTPClient   *http.Client      // HTTPClient 可选，仅传输层/代理；NewEmbedding 之后再改视为未定义行为
 	ExtraHeaders map[string]string // ExtraHeaders 网关扩展头；NewEmbedding 时拷贝；不得含保留键
