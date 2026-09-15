@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/utils/ptrutil"
 )
 
 // testConfig 实网 OpenAI 兼容配置；测前填 APIURL、APIKey、Model
@@ -31,11 +33,12 @@ var testConfig2 = Config{
 
 // testEmbeddingConfig 实网 OpenAI Embeddings 配置；测前填 APIURL、Model；APIKey 可空
 var testEmbeddingConfig = EmbeddingConfig{
-	Protocol: EmbeddingProtocolOpenAI,
-	APIURL:   "",
-	APIKey:   "",
-	Model:    "text-embedding-3-small",
-	Timeout:  60 * time.Second,
+	Protocol:   EmbeddingProtocolOpenAI,
+	APIURL:     "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+	APIKey:     "",
+	Model:      "bge-m3",
+	Dimensions: ptrutil.Ptr(1024),
+	Timeout:    60 * time.Second,
 }
 
 // liveCases 返回两套实网对话配置

@@ -32,3 +32,8 @@ func PtrFromInt64(value int64) *int64 {
 
 	return &value
 }
+
+// Ptr 返回指向 v 的指针；零值仍返回非空指针，与 PtrFromInt64 的非正数回 nil 不同
+func Ptr[T any](v T) *T {
+	return &v
+}
