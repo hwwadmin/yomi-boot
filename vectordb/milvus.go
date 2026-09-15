@@ -107,7 +107,9 @@ func (s *milvusStore) DropCollection(ctx context.Context, name string) error {
 	if !has {
 		return nil
 	}
-	if err := s.cli.DropCollection(ctx, milvusclient.NewDropCollectionOption(n)); err != nil {
+	if err := retryOnRateLimit(ctx, func() error {
+		return s.cli.DropCollection(ctx, milvusclient.NewDropCollectionOption(n))
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
 	return nil
@@ -240,10 +242,12 @@ func (s *milvusStore) Get(ctx context.Context, collection string, ids []string) 
 		seen[id] = struct{}{}
 		trimmed = append(trimmed, id)
 	}
-	rs, err := s.cli.Query(ctx, milvusclient.NewQueryOption(n).
-		WithIDs(column.NewColumnVarChar(fieldID, trimmed)).
-		WithOutputFields(fieldID, fieldVector, fieldMetadata).
-		WithConsistencyLevel(entity.ClStrong))
+	rs, err := retryOnRateLimitVal(ctx, func() (milvusclient.ResultSet, error) {
+		return s.cli.Query(ctx, milvusclient.NewQueryOption(n).
+			WithIDs(column.NewColumnVarChar(fieldID, trimmed)).
+			WithOutputFields(fieldID, fieldVector, fieldMetadata).
+			WithConsistencyLevel(entity.ClStrong))
+	})
 	if err != nil {
 		return nil, mapMilvusErr(err)
 	}
@@ -312,7 +316,10 @@ func (s *milvusStore) DeleteByFilter(ctx context.Context, collection string, fil
 	if err != nil {
 		return err
 	}
-	if _, err := s.cli.Delete(ctx, milvusclient.NewDeleteOption(n).WithExpr(expr)); err != nil {
+	if err := retryOnRateLimit(ctx, func() error {
+		_, err := s.cli.Delete(ctx, milvusclient.NewDeleteOption(n).WithExpr(expr))
+		return err
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
 	return s.flush(ctx, n)
@@ -353,7 +360,9 @@ func (s *milvusStore) Search(ctx context.Context, collection string, q SearchQue
 		}
 		opt = opt.WithFilter(expr)
 	}
-	sets, err := s.cli.Search(ctx, opt)
+	sets, err := retryOnRateLimitVal(ctx, func() ([]milvusclient.ResultSet, error) {
+		return s.cli.Search(ctx, opt)
+	})
 	if err != nil {
 		return nil, mapMilvusErr(err)
 	}
@@ -398,7 +407,9 @@ func (s *milvusStore) errIfClosed() error {
 
 // has 调用 SDK HasCollection
 func (s *milvusStore) has(ctx context.Context, name string) (bool, error) {
-	ok, err := s.cli.HasCollection(ctx, milvusclient.NewHasCollectionOption(name))
+	ok, err := retryOnRateLimitVal(ctx, func() (bool, error) {
+		return s.cli.HasCollection(ctx, milvusclient.NewHasCollectionOption(name))
+	})
 	if err != nil {
 		return false, mapMilvusErr(err)
 	}
@@ -411,7 +422,9 @@ func (s *milvusStore) createReady(ctx context.Context, name string) error {
 		WithField(entity.NewField().WithName(fieldID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(int64(maxIDLen)).WithIsPrimaryKey(true)).
 		WithField(entity.NewField().WithName(fieldVector).WithDataType(entity.FieldTypeFloatVector).WithDim(int64(s.dim))).
 		WithField(entity.NewField().WithName(fieldMetadata).WithDataType(entity.FieldTypeJSON))
-	if err := s.cli.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(name, schema)); err != nil {
+	if err := retryOnRateLimit(ctx, func() error {
+		return s.cli.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(name, schema))
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
 	if err := s.createIndex(ctx, name); err != nil {
@@ -427,7 +440,9 @@ func (s *milvusStore) createReady(ctx context.Context, name string) error {
 
 // ensureReady 补齐缺失索引并 load；已 load 则跳过
 func (s *milvusStore) ensureReady(ctx context.Context, name string) error {
-	state, err := s.cli.GetLoadState(ctx, milvusclient.NewGetLoadStateOption(name))
+	state, err := retryOnRateLimitVal(ctx, func() (entity.LoadState, error) {
+		return s.cli.GetLoadState(ctx, milvusclient.NewGetLoadStateOption(name))
+	})
 	if err != nil {
 		return mapMilvusErr(err)
 	}
@@ -443,7 +458,12 @@ func (s *milvusStore) ensureReady(ctx context.Context, name string) error {
 // createIndex 按 Store 锁定的索引类型建索引；已存在视为成功
 func (s *milvusStore) createIndex(ctx context.Context, name string) error {
 	idx := s.newVectorIndex()
-	task, err := s.cli.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, fieldVector, idx))
+	var task *milvusclient.CreateIndexTask
+	err := retryOnRateLimit(ctx, func() error {
+		var err error
+		task, err = s.cli.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, fieldVector, idx))
+		return err
+	})
 	if err != nil {
 		mapped := mapMilvusErr(err)
 		if errors.Is(mapped, ErrAlreadyExists) {
@@ -451,7 +471,9 @@ func (s *milvusStore) createIndex(ctx context.Context, name string) error {
 		}
 		return mapped
 	}
-	if err := task.Await(ctx); err != nil {
+	if err := retryOnRateLimit(ctx, func() error {
+		return task.Await(ctx)
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
 	return nil
@@ -474,16 +496,24 @@ func (s *milvusStore) newVectorIndex() index.Index {
 
 // dropQuiet 补偿删除；忽略错误以免掩盖主因
 func (s *milvusStore) dropQuiet(ctx context.Context, name string) {
-	_ = s.cli.DropCollection(ctx, milvusclient.NewDropCollectionOption(name))
+	_ = retryOnRateLimit(ctx, func() error {
+		return s.cli.DropCollection(ctx, milvusclient.NewDropCollectionOption(name))
+	})
 }
 
 // load 加载集合并等待完成
 func (s *milvusStore) load(ctx context.Context, name string) error {
-	task, err := s.cli.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
-	if err != nil {
+	var task milvusclient.LoadTask
+	if err := retryOnRateLimit(ctx, func() error {
+		var err error
+		task, err = s.cli.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
+		return err
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
-	if err := task.Await(ctx); err != nil {
+	if err := retryOnRateLimit(ctx, func() error {
+		return task.Await(ctx)
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
 	return nil
@@ -491,11 +521,17 @@ func (s *milvusStore) load(ctx context.Context, name string) error {
 
 // flush 刷盘并等待完成
 func (s *milvusStore) flush(ctx context.Context, name string) error {
-	task, err := s.cli.Flush(ctx, milvusclient.NewFlushOption(name))
-	if err != nil {
+	var task *milvusclient.FlushTask
+	if err := retryOnRateLimit(ctx, func() error {
+		var err error
+		task, err = s.cli.Flush(ctx, milvusclient.NewFlushOption(name))
+		return err
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
-	if err := task.Await(ctx); err != nil {
+	if err := retryOnRateLimit(ctx, func() error {
+		return task.Await(ctx)
+	}); err != nil {
 		return mapMilvusErr(err)
 	}
 	return nil
@@ -521,11 +557,13 @@ func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []
 			}
 			metas[i] = raw
 		}
-		_, err := s.cli.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(name).
-			WithVarcharColumn(fieldID, ids).
-			WithFloatVectorColumn(fieldVector, s.dim, vecs).
-			WithColumns(column.NewColumnJSONBytes(fieldMetadata, metas)))
-		if err != nil {
+		if err := retryOnRateLimit(ctx, func() error {
+			_, err := s.cli.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(name).
+				WithVarcharColumn(fieldID, ids).
+				WithFloatVectorColumn(fieldVector, s.dim, vecs).
+				WithColumns(column.NewColumnJSONBytes(fieldMetadata, metas)))
+			return err
+		}); err != nil {
 			return mapMilvusErr(err)
 		}
 	}
@@ -534,16 +572,20 @@ func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []
 
 // idsNotIn 列出集合中不在 keep 内的主键
 func (s *milvusStore) idsNotIn(ctx context.Context, name string, keep map[string]struct{}) ([]string, error) {
-	iter, err := s.cli.QueryIterator(ctx, milvusclient.NewQueryIteratorOption(name).
-		WithOutputFields(fieldID).
-		WithBatchSize(1000).
-		WithConsistencyLevel(entity.ClStrong))
+	iter, err := retryOnRateLimitVal(ctx, func() (milvusclient.QueryIterator, error) {
+		return s.cli.QueryIterator(ctx, milvusclient.NewQueryIteratorOption(name).
+			WithOutputFields(fieldID).
+			WithBatchSize(1000).
+			WithConsistencyLevel(entity.ClStrong))
+	})
 	if err != nil {
 		return nil, mapMilvusErr(err)
 	}
 	var stale []string
 	for {
-		rs, err := iter.Next(ctx)
+		rs, err := retryOnRateLimitVal(ctx, func() (milvusclient.ResultSet, error) {
+			return iter.Next(ctx)
+		})
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -570,7 +612,10 @@ func (s *milvusStore) deleteIDs(ctx context.Context, name string, ids []string) 
 		if end > len(ids) {
 			end = len(ids)
 		}
-		if _, err := s.cli.Delete(ctx, milvusclient.NewDeleteOption(name).WithStringIDs(fieldID, ids[start:end])); err != nil {
+		if err := retryOnRateLimit(ctx, func() error {
+			_, err := s.cli.Delete(ctx, milvusclient.NewDeleteOption(name).WithStringIDs(fieldID, ids[start:end]))
+			return err
+		}); err != nil {
 			return mapMilvusErr(err)
 		}
 	}
