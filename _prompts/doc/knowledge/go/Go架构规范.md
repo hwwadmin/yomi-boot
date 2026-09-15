@@ -212,6 +212,7 @@ services/{domain}/
 | `config` | 配置加载抽象（Section/Registry/Document）、严格根 key、环境变量展开；`MustLoad` / `MustLoadDocument` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
+| `aiclient` | 统一 LLM Chat 门面（OpenAI / Anthropic）；`New`/`MustNew`；不进 bootstrap、不读 YAML、不做限流 |
 
 **平台共享 DDL**（与封装同包维护，**无**独立 `gitee.com/hq_project/yomi-boot/sql/` 目录）：
 
