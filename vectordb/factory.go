@@ -19,6 +19,10 @@ func New(cfg Config) (Store, error) {
 	copied.Milvus.Address = strings.TrimSpace(cfg.Milvus.Address)
 	copied.Milvus.DBName = strings.TrimSpace(cfg.Milvus.DBName)
 	copied.Milvus.Username = strings.TrimSpace(cfg.Milvus.Username)
+	copied.Milvus.IndexType = indexTypeOrDefault(cfg.Milvus.IndexType)
+	copied.Milvus.IndexNlist = indexNlistOrDefault(cfg.Milvus.IndexNlist)
+	copied.Milvus.IndexM = indexMOrDefault(cfg.Milvus.IndexM)
+	copied.Milvus.IndexEFConstruct = indexEFConstructOrDefault(cfg.Milvus.IndexEFConstruct)
 	switch copied.Provider {
 	case ProviderMemory:
 		return newMemoryStore(copied), nil

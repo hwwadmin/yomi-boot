@@ -1,7 +1,8 @@
 // Package vectordb 提供统一向量库门面，支持 milvus 与 memory。
 //
 // 配置只在 New / MustNew 传入；本包不读 YAML、不进 bootstrap、不注册配置根段。
-// 一个 Store 锁定 Dimension 与 Metric（空则 COSINE）；集合名每次调用传入，用于动态新增、删除、覆盖索引。
+// 一个 Store 锁定 Dimension 与 Metric（空则 COSINE）；milvus 还锁定 IndexType（空则 HNSW）。
+// 集合名每次调用传入，用于动态新增、删除、覆盖索引。已存在集合不会因改 IndexType 而重建索引。
 // 业务禁止直引 github.com/milvus-io/milvus/client/v2。
 //
 //	store, err := vectordb.New(vectordb.Config{

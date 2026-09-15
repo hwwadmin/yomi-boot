@@ -29,12 +29,16 @@ var _ Store = (*milvusStore)(nil)
 
 // milvusStore 基于官方 client/v2 的 Store 实现
 type milvusStore struct {
-	mu      sync.Mutex
-	closed  bool
-	cli     *milvusclient.Client
-	dim     int
-	metric  Metric
-	timeout time.Duration
+	mu               sync.Mutex
+	closed           bool
+	cli              *milvusclient.Client
+	dim              int
+	metric           Metric
+	timeout          time.Duration
+	indexType        IndexType
+	indexNlist       int
+	indexM           int
+	indexEFConstruct int
 }
 
 // newMilvusStore 建连并构造 milvus Store
@@ -53,10 +57,14 @@ func newMilvusStore(cfg Config) (*milvusStore, error) {
 		return nil, wrapSentinel(ErrUnavailable, err)
 	}
 	return &milvusStore{
-		cli:     cli,
-		dim:     cfg.Dimension,
-		metric:  metricOrDefault(cfg.Metric),
-		timeout: timeoutOrDefault(cfg.Timeout),
+		cli:              cli,
+		dim:              cfg.Dimension,
+		metric:           metricOrDefault(cfg.Metric),
+		timeout:          timeoutOrDefault(cfg.Timeout),
+		indexType:        indexTypeOrDefault(cfg.Milvus.IndexType),
+		indexNlist:       indexNlistOrDefault(cfg.Milvus.IndexNlist),
+		indexM:           indexMOrDefault(cfg.Milvus.IndexM),
+		indexEFConstruct: indexEFConstructOrDefault(cfg.Milvus.IndexEFConstruct),
 	}, nil
 }
 
@@ -432,9 +440,9 @@ func (s *milvusStore) ensureReady(ctx context.Context, name string) error {
 	return s.load(ctx, name)
 }
 
-// createIndex 为向量字段建 HNSW；已存在视为成功
+// createIndex 按 Store 锁定的索引类型建索引；已存在视为成功
 func (s *milvusStore) createIndex(ctx context.Context, name string) error {
-	idx := index.NewHNSWIndex(toEntityMetric(s.metric), 16, 64)
+	idx := s.newVectorIndex()
 	task, err := s.cli.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, fieldVector, idx))
 	if err != nil {
 		mapped := mapMilvusErr(err)
@@ -447,6 +455,21 @@ func (s *milvusStore) createIndex(ctx context.Context, name string) error {
 		return mapMilvusErr(err)
 	}
 	return nil
+}
+
+// newVectorIndex 按配置构造 SDK 索引；不导出 SDK 类型
+func (s *milvusStore) newVectorIndex() index.Index {
+	m := toEntityMetric(s.metric)
+	switch s.indexType {
+	case IndexIVFFlat:
+		return index.NewIvfFlatIndex(m, s.indexNlist)
+	case IndexAuto:
+		return index.NewAutoIndex(m)
+	case IndexFlat:
+		return index.NewFlatIndex(m)
+	default:
+		return index.NewHNSWIndex(m, s.indexM, s.indexEFConstruct)
+	}
 }
 
 // dropQuiet 补偿删除；忽略错误以免掩盖主因
