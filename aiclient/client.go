@@ -27,11 +27,13 @@ type AIClient interface {
 	// Chat 发起同步对话
 	//
 	// 入参 Messages 至少 1 条；模型由构造配置锁定，本请求不再选型。
+	// Temperature / MaxTokens 空则回退 Config 同名字段。
 	// 超时或取消返回上下文错误（可包装）；空助手文本返回 ErrBadResponse。
 	Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)
 	// ChatStream 开启流式对话；调用方须 defer Close
 	//
 	// 建连失败（含超时/取消）在返回前失败，不返回半开流。
+	// Temperature / MaxTokens 回退规则与 Chat 相同。
 	ChatStream(ctx context.Context, req ChatRequest) (ChatStream, error)
 }
 
@@ -56,8 +58,8 @@ type Message struct {
 // ChatRequest 同步与流式共用入参；模型由 Config.Model 锁定
 type ChatRequest struct {
 	Messages    []Message // Messages 至少 1 条
-	Temperature *float64  // Temperature 可选；本包不校验区间
-	MaxTokens   *int      // MaxTokens 可选；若设置必须 >0
+	Temperature *float64  // Temperature 可选；空则回退 Config.Temperature；本包不校验区间
+	MaxTokens   *int      // MaxTokens 可选；空则回退 Config.MaxTokens；若设置必须 >0
 }
 
 // ChatResponse 同步完整回复；Message.Role 恒为助手
@@ -82,7 +84,7 @@ type ChatChunk struct {
 	Delta string // Delta 是增量文本；调用方可忽略空增量
 }
 
-// validateChatRequest 校验消息列表、角色与最大令牌数；非法返回 ErrInvalidArgument
+// validateChatRequest 校验消息列表、角色与请求侧最大令牌数；非法返回 ErrInvalidArgument
 func validateChatRequest(req ChatRequest) error {
 	// 消息列表不可为空
 	if len(req.Messages) == 0 {
@@ -101,6 +103,22 @@ func validateChatRequest(req ChatRequest) error {
 		}
 	}
 	return nil
+}
+
+// resolveTemperature 请求非空则用之，否则回退配置默认；皆空则不传上游
+func resolveTemperature(req, def *float64) *float64 {
+	if req != nil {
+		return req
+	}
+	return def
+}
+
+// resolveMaxTokens 请求非空则用之，否则回退配置默认；皆空则由适配层决定是否传或协议回退
+func resolveMaxTokens(req, def *int) *int {
+	if req != nil {
+		return req
+	}
+	return def
 }
 
 // validateAnthropicTurns 校验抽掉系统提示后的轮次：非空、用户开头、用户与助手严格交替

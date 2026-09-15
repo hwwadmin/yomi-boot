@@ -14,11 +14,13 @@ func New(cfg Config) (AIClient, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	// 拷贝配置，避免调用方事后修改扩展头影响已构造客户端
+	// 拷贝配置，避免调用方事后修改扩展头或可选指针影响已构造客户端
 	copied := cfg
 	copied.APIURL = strings.TrimSpace(cfg.APIURL)
 	copied.APIKey = strings.TrimSpace(cfg.APIKey)
 	copied.Model = strings.TrimSpace(cfg.Model)
+	copied.Temperature = cloneFloat64(cfg.Temperature)
+	copied.MaxTokens = cloneInt(cfg.MaxTokens)
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
 	switch copied.Protocol {
 	case ProtocolOpenAI:

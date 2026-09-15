@@ -24,7 +24,7 @@ const (
 	defaultTimeout = 60 * time.Second
 	// defaultAnthropicVersion 未配置 AnthropicVersion 时的协议版本头
 	defaultAnthropicVersion = "2023-06-01"
-	// defaultAnthropicMaxTokens 请求未设置 MaxTokens 时 Anthropic 的必填回退值
+	// defaultAnthropicMaxTokens 请求与配置均未设置 MaxTokens 时 Anthropic 的必填回退值
 	defaultAnthropicMaxTokens = 4096
 )
 
@@ -34,6 +34,8 @@ type Config struct {
 	APIURL           string            // APIURL 原样注入官方客户端 BaseURL，本包不拼接路径
 	APIKey           string            // APIKey 是鉴权密钥；日志与错误正文不得回显完整值
 	Model            string            // Model 是本实例锁定的模型名；构造期 trim 后不得为空
+	Temperature      *float64          // Temperature 是默认采样温度；空且请求也空则不传；0 为合法值
+	MaxTokens        *int              // MaxTokens 是默认最大输出令牌；空且请求也空时 OpenAI 不传、Anthropic 回退 4096；若设置必须 >0
 	Timeout          time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
 	HTTPClient       *http.Client      // HTTPClient 可选，仅传输层/代理；New 之后再改视为未定义行为
 	AnthropicVersion string            // AnthropicVersion 仅 anthropic；空则 2023-06-01
@@ -57,7 +59,7 @@ func (c Config) anthropicVersionOrDefault() string {
 	return v
 }
 
-// validate 校验协议、修剪后的地址与密钥、模型名、超时与扩展头保留键
+// validate 校验协议、修剪后的地址与密钥、模型名、默认最大令牌数、超时与扩展头保留键
 //
 // 返回值：
 //   - error: 非法时为 ErrInvalidArgument；通过时为 nil
@@ -76,6 +78,10 @@ func (c Config) validate() error {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	if strings.TrimSpace(c.Model) == "" {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	// 默认最大令牌数若设置则必须大于 0
+	if c.MaxTokens != nil && *c.MaxTokens <= 0 {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	// 超时不得为负
@@ -111,4 +117,22 @@ func copyExtraHeaders(src map[string]string) map[string]string {
 		dst[k] = v
 	}
 	return dst
+}
+
+// cloneFloat64 拷贝可选浮点，避免与调用方共享指针；空则返回空
+func cloneFloat64(src *float64) *float64 {
+	if src == nil {
+		return nil
+	}
+	v := *src
+	return &v
+}
+
+// cloneInt 拷贝可选整数，避免与调用方共享指针；空则返回空
+func cloneInt(src *int) *int {
+	if src == nil {
+		return nil
+	}
+	v := *src
+	return &v
 }

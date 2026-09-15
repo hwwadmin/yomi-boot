@@ -108,7 +108,7 @@ func (c *anthropicClient) ChatStream(ctx context.Context, req ChatRequest) (Chat
 	return newChatStream(ctx, cancel, &anthropicPump{stream: stream, mapErr: c.mapErr}), nil
 }
 
-// buildParams 映射请求并校验 Anthropic 轮次；未设 MaxTokens 时回退 4096
+// buildParams 映射请求并校验 Anthropic 轮次；MaxTokens 按请求、配置、4096 依次回退
 func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewParams, error) {
 	if err := validateChatRequest(req); err != nil {
 		return anthropic.MessageNewParams{}, err
@@ -135,11 +135,11 @@ func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewPara
 	if sys := joinSystemPrompts(req.Messages); sys != "" {
 		params.System = []anthropic.TextBlockParam{{Text: sys}}
 	}
-	if req.Temperature != nil {
-		params.Temperature = anthropic.Float(*req.Temperature)
+	if temp := resolveTemperature(req.Temperature, c.cfg.Temperature); temp != nil {
+		params.Temperature = anthropic.Float(*temp)
 	}
-	if req.MaxTokens != nil {
-		params.MaxTokens = int64(*req.MaxTokens)
+	if maxTok := resolveMaxTokens(req.MaxTokens, c.cfg.MaxTokens); maxTok != nil {
+		params.MaxTokens = int64(*maxTok)
 	}
 	return params, nil
 }

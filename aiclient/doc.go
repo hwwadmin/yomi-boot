@@ -13,6 +13,8 @@
 //	})
 //
 // 模型由 Config.Model 锁定；换模型请另 New 一个实例。请求侧不再选型。
+// Temperature / MaxTokens：Config 为默认，请求指针非空则覆盖；皆空时 OpenAI 不传，
+// Anthropic 的 MaxTokens 再回退 4096（协议必填）。
 //
 //	resp, err := cli.Chat(ctx, aiclient.ChatRequest{
 //	    Messages: []aiclient.Message{{Role: aiclient.RoleUser, Content: "hello"}},
@@ -55,7 +57,7 @@
 // ErrInvalidArgument。全部 system 文本按出现顺序换行拼入 SDK system 字段。
 // 交错写在对话中间的 system 抽到顶部后，与 OpenAI「插在对话中间的 system」不完全等价；
 // 换协议只保证仍调用 Chat/ChatStream，不保证任意 Messages 两协议都能发出。
-// Anthropic 的 MaxTokens 为 SDK 必填：请求未设置时本包默认 4096；需要更长输出时请显式传入。
+// Anthropic 的 MaxTokens 为 SDK 必填：请求与 Config 均未设置时本包默认 4096；需要更长输出时请显式传入。
 //
 // # 错误
 //

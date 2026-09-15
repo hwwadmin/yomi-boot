@@ -130,11 +130,11 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 		Messages: msgs,
 		Model:    shared.ChatModel(c.cfg.Model),
 	}
-	if req.Temperature != nil {
-		params.Temperature = openai.Float(*req.Temperature)
+	if temp := resolveTemperature(req.Temperature, c.cfg.Temperature); temp != nil {
+		params.Temperature = openai.Float(*temp)
 	}
-	if req.MaxTokens != nil {
-		params.MaxTokens = openai.Int(int64(*req.MaxTokens))
+	if maxTok := resolveMaxTokens(req.MaxTokens, c.cfg.MaxTokens); maxTok != nil {
+		params.MaxTokens = openai.Int(int64(*maxTok))
 	}
 	return params, nil
 }
