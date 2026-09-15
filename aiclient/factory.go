@@ -18,6 +18,7 @@ func New(cfg Config) (AIClient, error) {
 	copied := cfg
 	copied.APIURL = strings.TrimSpace(cfg.APIURL)
 	copied.APIKey = strings.TrimSpace(cfg.APIKey)
+	copied.Model = strings.TrimSpace(cfg.Model)
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
 	switch copied.Protocol {
 	case ProtocolOpenAI:

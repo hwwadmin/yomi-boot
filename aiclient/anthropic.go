@@ -110,8 +110,7 @@ func (c *anthropicClient) ChatStream(ctx context.Context, req ChatRequest) (Chat
 
 // buildParams 映射请求并校验 Anthropic 轮次；未设 MaxTokens 时回退 4096
 func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewParams, error) {
-	model, err := validateChatRequest(req, c.cfg.DefaultModel)
-	if err != nil {
+	if err := validateChatRequest(req); err != nil {
 		return anthropic.MessageNewParams{}, err
 	}
 	// 抽掉系统提示后的轮次必须由用户开头且严格交替
@@ -128,7 +127,7 @@ func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewPara
 		}
 	}
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
+		Model:     anthropic.Model(c.cfg.Model),
 		Messages:  msgs,
 		MaxTokens: defaultAnthropicMaxTokens,
 	}

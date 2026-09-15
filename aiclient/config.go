@@ -33,7 +33,7 @@ type Config struct {
 	Protocol         Protocol          // Protocol 是协议标识，仅 openai / anthropic
 	APIURL           string            // APIURL 原样注入官方客户端 BaseURL，本包不拼接路径
 	APIKey           string            // APIKey 是鉴权密钥；日志与错误正文不得回显完整值
-	DefaultModel     string            // DefaultModel 是请求未指定 model 时的回退；构造期可空
+	Model            string            // Model 是本实例锁定的模型名；构造期 trim 后不得为空
 	Timeout          time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
 	HTTPClient       *http.Client      // HTTPClient 可选，仅传输层/代理；New 之后再改视为未定义行为
 	AnthropicVersion string            // AnthropicVersion 仅 anthropic；空则 2023-06-01
@@ -57,7 +57,7 @@ func (c Config) anthropicVersionOrDefault() string {
 	return v
 }
 
-// validate 校验协议、修剪后的地址与密钥、超时与扩展头保留键
+// validate 校验协议、修剪后的地址与密钥、模型名、超时与扩展头保留键
 //
 // 返回值：
 //   - error: 非法时为 ErrInvalidArgument；通过时为 nil
@@ -68,11 +68,14 @@ func (c Config) validate() error {
 	default:
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	// 地址与密钥修剪后不得为空
+	// 地址、密钥与模型名修剪后不得为空
 	if strings.TrimSpace(c.APIURL) == "" {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	if strings.TrimSpace(c.APIKey) == "" {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if strings.TrimSpace(c.Model) == "" {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	// 超时不得为负

@@ -10,17 +10,17 @@ import (
 	"time"
 )
 
-// testConfig 实网测试配置；测前填 APIURL、APIKey、DefaultModel
+// testConfig 实网测试配置；测前填 APIURL、APIKey、Model
 //
 // Protocol 取 ProtocolOpenAI 或 ProtocolAnthropic。APIKey 为空则跳过。示例：
 //   - openai: ProtocolOpenAI, APIURL https://api.openai.com/v1
 //   - anthropic: ProtocolAnthropic, APIURL https://api.anthropic.com
 var testConfig = Config{
-	Protocol:     ProtocolOpenAI,
-	APIURL:       "https://api.openai.com/v1",
-	APIKey:       "",
-	DefaultModel: "gpt-4o-mini",
-	Timeout:      60 * time.Second,
+	Protocol: ProtocolOpenAI,
+	APIURL:   "https://api.openai.com/v1",
+	APIKey:   "",
+	Model:    "gpt-4o-mini",
+	Timeout:  60 * time.Second,
 }
 
 // requireTestConfig 返回已填写的测试配置；未填密钥或地址则跳过

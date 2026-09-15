@@ -26,7 +26,7 @@ const (
 type AIClient interface {
 	// Chat 发起同步对话
 	//
-	// 入参 Messages 至少 1 条；Model 空则回退 DefaultModel；二者皆空返回 ErrInvalidArgument。
+	// 入参 Messages 至少 1 条；模型由构造配置锁定，本请求不再选型。
 	// 超时或取消返回上下文错误（可包装）；空助手文本返回 ErrBadResponse。
 	Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)
 	// ChatStream 开启流式对话；调用方须 defer Close
@@ -53,9 +53,8 @@ type Message struct {
 	Content string // Content 允许空串
 }
 
-// ChatRequest 同步与流式共用入参
+// ChatRequest 同步与流式共用入参；模型由 Config.Model 锁定
 type ChatRequest struct {
-	Model       string    // Model 空则使用 DefaultModel
 	Messages    []Message // Messages 至少 1 条
 	Temperature *float64  // Temperature 可选；本包不校验区间
 	MaxTokens   *int      // MaxTokens 可选；若设置必须 >0
@@ -83,42 +82,25 @@ type ChatChunk struct {
 	Delta string // Delta 是增量文本；调用方可忽略空增量
 }
 
-// resolveModel 解析最终模型名；请求与 DefaultModel 皆空则返回 ErrInvalidArgument
-func resolveModel(req ChatRequest, defaultModel string) (string, error) {
-	model := strings.TrimSpace(req.Model)
-	// 请求未指定时回退默认模型
-	if model == "" {
-		model = strings.TrimSpace(defaultModel)
-	}
-	if model == "" {
-		return "", errors.Sentinel(ErrInvalidArgument)
-	}
-	return model, nil
-}
-
-// validateChatRequest 校验消息列表、角色、最大令牌数，并解析最终模型名
-//
-// 返回值：
-//   - string: 解析后的模型名
-//   - error: 非法时为 ErrInvalidArgument
-func validateChatRequest(req ChatRequest, defaultModel string) (string, error) {
+// validateChatRequest 校验消息列表、角色与最大令牌数；非法返回 ErrInvalidArgument
+func validateChatRequest(req ChatRequest) error {
 	// 消息列表不可为空
 	if len(req.Messages) == 0 {
-		return "", errors.Sentinel(ErrInvalidArgument)
+		return errors.Sentinel(ErrInvalidArgument)
 	}
 	// 若设置最大令牌数则必须大于 0
 	if req.MaxTokens != nil && *req.MaxTokens <= 0 {
-		return "", errors.Sentinel(ErrInvalidArgument)
+		return errors.Sentinel(ErrInvalidArgument)
 	}
 	for _, m := range req.Messages {
 		switch m.Role {
 		case RoleSystem, RoleUser, RoleAssistant:
 		default:
 			// 未知角色不得发往上游
-			return "", errors.Sentinel(ErrInvalidArgument)
+			return errors.Sentinel(ErrInvalidArgument)
 		}
 	}
-	return resolveModel(req, defaultModel)
+	return nil
 }
 
 // validateAnthropicTurns 校验抽掉系统提示后的轮次：非空、用户开头、用户与助手严格交替

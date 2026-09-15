@@ -9,8 +9,10 @@
 //	    Protocol:     aiclient.ProtocolOpenAI,
 //	    APIURL:       "https://api.openai.com/v1",
 //	    APIKey:       apiKey,
-//	    DefaultModel: "gpt-4o",
+//	    Model:        "gpt-4o",
 //	})
+//
+// 模型由 Config.Model 锁定；换模型请另 New 一个实例。请求侧不再选型。
 //
 //	resp, err := cli.Chat(ctx, aiclient.ChatRequest{
 //	    Messages: []aiclient.Message{{Role: aiclient.RoleUser, Content: "hello"}},

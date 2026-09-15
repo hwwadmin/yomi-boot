@@ -111,8 +111,7 @@ func (c *openaiClient) ChatStream(ctx context.Context, req ChatRequest) (ChatStr
 
 // buildParams 将门面请求映射为官方客户端参数；入参非法返回 ErrInvalidArgument
 func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewParams, error) {
-	model, err := validateChatRequest(req, c.cfg.DefaultModel)
-	if err != nil {
+	if err := validateChatRequest(req); err != nil {
 		return openai.ChatCompletionNewParams{}, err
 	}
 	msgs := make([]openai.ChatCompletionMessageParamUnion, 0, len(req.Messages))
@@ -129,7 +128,7 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 	}
 	params := openai.ChatCompletionNewParams{
 		Messages: msgs,
-		Model:    shared.ChatModel(model),
+		Model:    shared.ChatModel(c.cfg.Model),
 	}
 	if req.Temperature != nil {
 		params.Temperature = openai.Float(*req.Temperature)
