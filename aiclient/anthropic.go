@@ -77,11 +77,7 @@ func (c *anthropicClient) Chat(ctx context.Context, req ChatRequest) (*ChatRespo
 			Role:    RoleAssistant,
 			Content: text,
 		},
-		Usage: &TokenUsage{
-			PromptTokens:     int(resp.Usage.InputTokens),
-			CompletionTokens: int(resp.Usage.OutputTokens),
-			TotalTokens:      int(resp.Usage.InputTokens + resp.Usage.OutputTokens),
-		},
+		Usage: anthropicUsage(resp.Usage.InputTokens, resp.Usage.OutputTokens),
 	}
 	// 无助手文本视为协议异常
 	if text == "" {
@@ -156,6 +152,18 @@ func collectAnthropicText(blocks []anthropic.ContentBlockUnion) string {
 	return b.String()
 }
 
+// anthropicUsage 用量全 0 时返回空，与 OpenAI 同步口径对齐
+func anthropicUsage(in, out int64) *TokenUsage {
+	if in <= 0 && out <= 0 {
+		return nil
+	}
+	return &TokenUsage{
+		PromptTokens:     int(in),
+		CompletionTokens: int(out),
+		TotalTokens:      int(in + out),
+	}
+}
+
 // mapErr 映射 Anthropic 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
 func (c *anthropicClient) mapErr(err error) error {
 	if err == nil {
@@ -167,9 +175,9 @@ func (c *anthropicClient) mapErr(err error) error {
 	}
 	var apiErr *anthropic.Error
 	if stderrors.As(err, &apiErr) {
-		return mapStatusError(apiErr.StatusCode, err, false)
+		return mapStatusError(apiErr.StatusCode, err)
 	}
-	return mapStatusError(0, err, false)
+	return mapStatusError(0, err)
 }
 
 // anthropicPump 适配 Anthropic 服务端推送流
@@ -177,20 +185,26 @@ type anthropicPump struct {
 	stream *ssestream.Stream[anthropic.MessageStreamEventUnion] // stream 是官方流读取器
 	mapErr func(error) error                                    // mapErr 将官方错误映射为本包哨兵
 	once   sync.Once                                            // once 保证 close 只执行一次
+	id     string                                               // id 来自 message_start
+	model  string                                               // model 来自 message_start
 }
 
-// next 读取文本增量；流结束返回 io.EOF
+// next 读取文本增量；先记下会话标识与模型名再透出增量
 func (p *anthropicPump) next() (*ChatChunk, error) {
 	for p.stream.Next() {
 		evt := p.stream.Current()
 		switch v := evt.AsAny().(type) {
+		case anthropic.MessageStartEvent:
+			p.id = v.Message.ID
+			p.model = string(v.Message.Model)
+			continue
 		case anthropic.ContentBlockDeltaEvent:
 			delta, ok := v.Delta.AsAny().(anthropic.TextDelta)
 			// 仅透出文本增量，其它增量类型跳过
 			if !ok || delta.Text == "" {
 				continue
 			}
-			return &ChatChunk{Delta: delta.Text}, nil
+			return &ChatChunk{ID: p.id, Model: p.model, Delta: delta.Text}, nil
 		default:
 			continue
 		}

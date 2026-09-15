@@ -25,29 +25,24 @@ func wrapSentinel(sentinel, cause error) error {
 // 参数：
 //   - status: HTTP 状态码；0 表示无法取出
 //   - cause: 上游错误
-//   - assistantEmpty: 响应或流结束时无助手文本
-func mapStatusError(status int, cause error, assistantEmpty bool) error {
+func mapStatusError(status int, cause error) error {
 	if cause == nil {
 		return nil
 	}
 	if stderrors.Is(cause, context.Canceled) || stderrors.Is(cause, context.DeadlineExceeded) {
 		return wrapCtxErr(cause)
 	}
-	// 能取出状态码时按最低集合映射哨兵
+	// 能取出状态码时按最低集合映射哨兵；HTTP 400 归协议异常，与本包入参校验分开
 	if status != 0 {
 		switch status {
 		case http.StatusUnauthorized, http.StatusForbidden:
 			return wrapSentinel(ErrUnauthorized, cause)
 		case http.StatusTooManyRequests:
 			return wrapSentinel(ErrRateLimited, cause)
-		case http.StatusBadRequest:
-			return wrapSentinel(ErrInvalidArgument, cause)
 		}
 	}
-	if assistantEmpty || status != 0 {
-		return wrapSentinel(ErrBadResponse, cause)
-	}
-	return errors.Wrap(cause, "aiclient: 上游调用失败")
+	// 其它 HTTP 状态、无状态码读失败（含 SSE error）均为协议异常
+	return wrapSentinel(ErrBadResponse, cause)
 }
 
 // wrapCtxErr 包装取消或超时，保持可按错误链识别标准库错误；已包装则透传

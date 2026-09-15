@@ -134,7 +134,10 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 		params.Temperature = openai.Float(*temp)
 	}
 	if maxTok := resolveMaxTokens(req.MaxTokens, c.cfg.MaxTokens); maxTok != nil {
-		params.MaxTokens = openai.Int(int64(*maxTok))
+		n := int64(*maxTok)
+		// 同时写入新旧字段：兼容网关用 max_tokens，reasoning 模型用 max_completion_tokens
+		params.MaxTokens = openai.Int(n)
+		params.MaxCompletionTokens = openai.Int(n)
 	}
 	return params, nil
 }
@@ -150,9 +153,9 @@ func (c *openaiClient) mapErr(err error) error {
 	}
 	var apiErr *openai.Error
 	if stderrors.As(err, &apiErr) {
-		return mapStatusError(apiErr.StatusCode, err, false)
+		return mapStatusError(apiErr.StatusCode, err)
 	}
-	return mapStatusError(0, err, false)
+	return mapStatusError(0, err)
 }
 
 // openaiPump 适配 OpenAI 服务端推送流

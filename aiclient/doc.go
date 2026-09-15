@@ -14,6 +14,7 @@
 //
 // 模型由 Config.Model 锁定；换模型请另 New 一个实例。请求侧不再选型。
 // Temperature / MaxTokens：Config 空则缺省 1.0 / 4096；请求指针非空则覆盖。
+// OpenAI 协议会同时写入 max_tokens 与 max_completion_tokens，兼顾兼容网关与 reasoning 模型。
 //
 //	resp, err := cli.Chat(ctx, aiclient.ChatRequest{
 //	    Messages: []aiclient.Message{{Role: aiclient.RoleUser, Content: "hello"}},
@@ -60,6 +61,7 @@
 // # 错误
 //
 // 包内哨兵：ErrInvalidArgument / ErrUnauthorized / ErrRateLimited / ErrBadResponse。
+// ErrInvalidArgument 仅本包校验失败；上游 HTTP 400 与无状态码读失败走 ErrBadResponse。
 // 正常结束的 Recv 返回未包装 io.EOF；当次超时/取消返回 ctx.Err()（可 Wrap），禁止改写成 EOF。
 //
 // @author zwei
