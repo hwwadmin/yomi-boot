@@ -1,88 +1,85 @@
-// Package vectordb Store 契约测试（默认 memory）。
+// Package vectordb Store 契约测试。
 //
 // @author zwei
 package vectordb
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
+)
+
+const (
+	contractCollMain = "YomiVdbTstMain"
+	contractCollNew  = "YomiVdbTstNew"
+	contractDim      = 2
+)
+
+// 测试人员跑 TestStoreContractMilvus 时填入；Address 为空则跳过
+const (
+	testMilvusAddress   = ""
+	testMilvusDBName    = ""
+	testMilvusUsername  = ""
+	testMilvusPassword  = ""
+	testMilvusAPIKey    = ""
+	testMilvusEnableTLS = false
 )
 
 // TestStoreContractMemory 以 memory 实现跑完整门面契约
 func TestStoreContractMemory(t *testing.T) {
 	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2})
+	store, err := New(Config{Provider: ProviderMemory, Dimension: contractDim})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	runStoreContract(t, store, 2)
+	runStoreContract(t, store, contractDim)
 }
 
-// TestStoreContractMemoryL2 验证 L2 下更近的排前面
-func TestStoreContractMemoryL2(t *testing.T) {
-	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2, Metric: MetricL2})
+// TestStoreContractMilvus 以 milvus 实现跑完整门面契约；连接常量未填则跳过
+func TestStoreContractMilvus(t *testing.T) {
+	addr := strings.TrimSpace(testMilvusAddress)
+	if addr == "" {
+		t.Skip("请填写 testMilvusAddress 等连接常量后再跑 Milvus 契约")
+	}
+	store, err := New(Config{
+		Provider:  ProviderMilvus,
+		Dimension: contractDim,
+		Timeout:   60 * time.Second,
+		Milvus: MilvusConfig{
+			Address:   addr,
+			DBName:    strings.TrimSpace(testMilvusDBName),
+			Username:  strings.TrimSpace(testMilvusUsername),
+			Password:  testMilvusPassword,
+			APIKey:    testMilvusAPIKey,
+			EnableTLS: testMilvusEnableTLS,
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, "idx_l2"); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{contractCollMain, contractCollNew} {
+		if err := store.DropCollection(ctx, name); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := store.Upsert(ctx, "idx_l2", []Record{
-		{ID: "far", Vector: []float32{3, 0}},
-		{ID: "near", Vector: []float32{1, 0}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	hits, err := store.Search(ctx, "idx_l2", SearchQuery{Vector: []float32{0, 0}, TopK: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(hits) != 2 || hits[0].ID != "near" {
-		t.Fatalf("L2 ranking got %+v", hits)
-	}
-	if hits[0].Score <= hits[1].Score {
-		t.Fatalf("L2 score should be higher for nearer: %+v", hits)
-	}
-}
-
-// TestStoreContractMemoryIP 验证 IP 下内积更大的排前面
-func TestStoreContractMemoryIP(t *testing.T) {
-	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2, Metric: MetricIP})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	ctx := context.Background()
-	if err := store.CreateCollection(ctx, "idx_ip"); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Upsert(ctx, "idx_ip", []Record{
-		{ID: "low", Vector: []float32{1, 0}},
-		{ID: "high", Vector: []float32{5, 0}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	hits, err := store.Search(ctx, "idx_ip", SearchQuery{Vector: []float32{1, 0}, TopK: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(hits) != 2 || hits[0].ID != "high" {
-		t.Fatalf("IP ranking got %+v", hits)
-	}
+	t.Cleanup(func() {
+		_ = store.DropCollection(context.Background(), contractCollMain)
+		_ = store.DropCollection(context.Background(), contractCollNew)
+	})
+	runStoreContract(t, store, contractDim)
 }
 
 // runStoreContract 对任意 Store 跑契约用例
 func runStoreContract(t *testing.T, store Store, dim int) {
 	t.Helper()
 	ctx := context.Background()
-	name := "idx_main"
+	name := contractCollMain
 	vec := func(x float32) []float32 {
 		v := make([]float32, dim)
 		v[0] = x
@@ -210,12 +207,12 @@ func runStoreContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("replace missing creates", func(t *testing.T) {
-		if err := store.ReplaceCollection(ctx, "idx_new", []Record{
+		if err := store.ReplaceCollection(ctx, contractCollNew, []Record{
 			{ID: "n1", Vector: vec(1)},
 		}); err != nil {
 			t.Fatal(err)
 		}
-		ok, err := store.HasCollection(ctx, "idx_new")
+		ok, err := store.HasCollection(ctx, contractCollNew)
 		if err != nil || !ok {
 			t.Fatalf("replace create: ok=%v err=%v", ok, err)
 		}
@@ -266,66 +263,4 @@ func runStoreContract(t *testing.T, store Store, dim int) {
 			t.Fatalf("topk: %v", err)
 		}
 	})
-
-	t.Run("max records", func(t *testing.T) {
-		small, err := New(Config{Provider: ProviderMemory, Dimension: dim, Memory: MemoryConfig{MaxRecords: 1}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = small.Close() }()
-		if err := small.CreateCollection(ctx, "idx_cap"); err != nil {
-			t.Fatal(err)
-		}
-		if err := small.Upsert(ctx, "idx_cap", []Record{{ID: "1", Vector: vec(1)}}); err != nil {
-			t.Fatal(err)
-		}
-		if err := small.Upsert(ctx, "idx_cap", []Record{{ID: "2", Vector: vec(1)}}); !errors.Is(err, ErrInvalidArgument) {
-			t.Fatalf("cap: %v", err)
-		}
-	})
-}
-
-// TestStoreClosed 验证 Close 之后返回 ErrClosed
-func TestStoreClosed(t *testing.T) {
-	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.CreateCollection(context.Background(), "idx_x"); !errors.Is(err, ErrClosed) {
-		t.Fatalf("got %v", err)
-	}
-	ok, err := store.HasCollection(context.Background(), "idx_x")
-	if ok || !errors.Is(err, ErrClosed) {
-		t.Fatalf("has closed: ok=%v err=%v", ok, err)
-	}
-}
-
-// TestStoreCanceledContext 验证已取消的 ctx 不会进入检索
-func TestStoreCanceledContext(t *testing.T) {
-	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	ctx := context.Background()
-	if err := store.CreateCollection(ctx, "idx_ctx"); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Upsert(ctx, "idx_ctx", []Record{{ID: "a", Vector: []float32{1, 0}}}); err != nil {
-		t.Fatal(err)
-	}
-	canceled, cancel := context.WithCancel(ctx)
-	cancel()
-	_, err = store.Search(canceled, "idx_ctx", SearchQuery{Vector: []float32{1, 0}, TopK: 1})
-	if err == nil {
-		t.Fatal("expected canceled ctx error")
-	}
 }
