@@ -36,7 +36,7 @@ func newAnthropicClient(cfg Config) (*anthropicClient, error) {
 		option.WithAPIKey(cfg.APIKey),
 		option.WithBaseURL(cfg.APIURL),
 		option.WithMaxRetries(0),
-		option.WithRequestTimeout(cfg.timeoutOrDefault()),
+		option.WithRequestTimeout(timeoutOrDefault(cfg.Timeout)),
 		option.WithHeader("anthropic-version", cfg.anthropicVersionOrDefault()),
 	}
 	if cfg.HTTPClient != nil {
@@ -48,7 +48,7 @@ func newAnthropicClient(cfg Config) (*anthropicClient, error) {
 	return &anthropicClient{
 		sdk:     anthropic.NewClient(opts...),
 		cfg:     cfg,
-		timeout: cfg.timeoutOrDefault(),
+		timeout: timeoutOrDefault(cfg.Timeout),
 	}, nil
 }
 

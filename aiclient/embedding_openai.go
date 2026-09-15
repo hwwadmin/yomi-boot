@@ -5,7 +5,6 @@ package aiclient
 
 import (
 	"context"
-	stderrors "errors"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -32,7 +31,7 @@ func newOpenAIEmbeddingClient(cfg EmbeddingConfig) (*openaiEmbeddingClient, erro
 		option.WithAPIKey(cfg.APIKey),
 		option.WithBaseURL(cfg.APIURL),
 		option.WithMaxRetries(0),
-		option.WithRequestTimeout(cfg.timeoutOrDefault()),
+		option.WithRequestTimeout(timeoutOrDefault(cfg.Timeout)),
 	}
 	if cfg.HTTPClient != nil {
 		opts = append(opts, option.WithHTTPClient(cfg.HTTPClient))
@@ -43,7 +42,7 @@ func newOpenAIEmbeddingClient(cfg EmbeddingConfig) (*openaiEmbeddingClient, erro
 	return &openaiEmbeddingClient{
 		sdk:     openai.NewClient(opts...),
 		cfg:     cfg,
-		timeout: cfg.timeoutOrDefault(),
+		timeout: timeoutOrDefault(cfg.Timeout),
 	}, nil
 }
 
@@ -58,7 +57,7 @@ func (c *openaiEmbeddingClient) Embed(ctx context.Context, req EmbeddingRequest)
 	defer cancel()
 	resp, err := c.sdk.Embeddings.New(ctx, params)
 	if err != nil {
-		return nil, c.mapErr(err)
+		return nil, mapOpenAIErr(err)
 	}
 	if resp == nil {
 		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 空 embedding 响应"))
@@ -123,19 +122,4 @@ func embeddingUsage(prompt, total int64) *TokenUsage {
 		PromptTokens: int(prompt),
 		TotalTokens:  int(total),
 	}
-}
-
-// mapErr 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
-func (c *openaiEmbeddingClient) mapErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	if stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded) {
-		return wrapCtxErr(err)
-	}
-	var apiErr *openai.Error
-	if stderrors.As(err, &apiErr) {
-		return mapStatusError(apiErr.StatusCode, err)
-	}
-	return mapStatusError(0, err)
 }

@@ -36,7 +36,7 @@ func newOpenAIClient(cfg Config) (*openaiClient, error) {
 		option.WithAPIKey(cfg.APIKey),
 		option.WithBaseURL(cfg.APIURL),
 		option.WithMaxRetries(0),
-		option.WithRequestTimeout(cfg.timeoutOrDefault()),
+		option.WithRequestTimeout(timeoutOrDefault(cfg.Timeout)),
 	}
 	if cfg.HTTPClient != nil {
 		opts = append(opts, option.WithHTTPClient(cfg.HTTPClient))
@@ -47,7 +47,7 @@ func newOpenAIClient(cfg Config) (*openaiClient, error) {
 	return &openaiClient{
 		sdk:     openai.NewClient(opts...),
 		cfg:     cfg,
-		timeout: cfg.timeoutOrDefault(),
+		timeout: timeoutOrDefault(cfg.Timeout),
 	}, nil
 }
 
@@ -62,7 +62,7 @@ func (c *openaiClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse
 	defer cancel()
 	resp, err := c.sdk.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, c.mapErr(err)
+		return nil, mapOpenAIErr(err)
 	}
 	// 空选项列表视为协议异常
 	if resp == nil || len(resp.Choices) == 0 {
@@ -104,9 +104,9 @@ func (c *openaiClient) ChatStream(ctx context.Context, req ChatRequest) (ChatStr
 	if err := stream.Err(); err != nil {
 		cancel()
 		_ = stream.Close()
-		return nil, c.mapErr(err)
+		return nil, mapOpenAIErr(err)
 	}
-	return newChatStream(ctx, cancel, &openaiPump{stream: stream, mapErr: c.mapErr}), nil
+	return newChatStream(ctx, cancel, &openaiPump{stream: stream, mapErr: mapOpenAIErr}), nil
 }
 
 // buildParams 将门面请求映射为官方客户端参数；入参非法返回 ErrInvalidArgument
@@ -142,8 +142,8 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 	return params, nil
 }
 
-// mapErr 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
-func (c *openaiClient) mapErr(err error) error {
+// mapOpenAIErr 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
+func mapOpenAIErr(err error) error {
 	if err == nil {
 		return nil
 	}

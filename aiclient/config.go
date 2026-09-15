@@ -44,12 +44,12 @@ type Config struct {
 	ExtraHeaders     map[string]string // ExtraHeaders 网关扩展头；New 时拷贝；不得含保留键
 }
 
-// timeoutOrDefault 返回请求超时；Timeout 为 0 时回退 60s
-func (c Config) timeoutOrDefault() time.Duration {
-	if c.Timeout == 0 {
+// timeoutOrDefault 将超时时长回退为默认墙钟；0 表示 60s
+func timeoutOrDefault(d time.Duration) time.Duration {
+	if d == 0 {
 		return defaultTimeout
 	}
-	return c.Timeout
+	return d
 }
 
 // anthropicVersionOrDefault 返回 anthropic-version 头；空白则回退默认版本

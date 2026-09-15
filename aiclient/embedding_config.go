@@ -27,16 +27,8 @@ type EmbeddingConfig struct {
 	Model        string            // Model 是本实例锁定的向量模型名；构造期 trim 后不得为空
 	Dimensions   *int              // Dimensions 是默认输出维度；空则不传；若设置必须 >0
 	Timeout      time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
-	HTTPClient   *http.Client      // HTTPClient 可选，仅传输层/代理；New 之后再改视为未定义行为
-	ExtraHeaders map[string]string // ExtraHeaders 网关扩展头；New 时拷贝；不得含保留键
-}
-
-// timeoutOrDefault 返回请求超时；Timeout 为 0 时回退 60s
-func (c EmbeddingConfig) timeoutOrDefault() time.Duration {
-	if c.Timeout == 0 {
-		return defaultTimeout
-	}
-	return c.Timeout
+	HTTPClient   *http.Client      // HTTPClient 可选，仅传输层/代理；NewEmbedding 之后再改视为未定义行为
+	ExtraHeaders map[string]string // ExtraHeaders 网关扩展头；NewEmbedding 时拷贝；不得含保留键
 }
 
 // validate 校验协议、修剪后的地址与密钥、模型名、默认维度、超时与扩展头保留键
