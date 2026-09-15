@@ -32,7 +32,6 @@ func TestNewEmbeddingRejectsInvalidConfig(t *testing.T) {
 		{"empty protocol", func(c *EmbeddingConfig) { c.Protocol = "" }},
 		{"unknown protocol", func(c *EmbeddingConfig) { c.Protocol = EmbeddingProtocol("anthropic") }},
 		{"empty url", func(c *EmbeddingConfig) { c.APIURL = "  " }},
-		{"empty key", func(c *EmbeddingConfig) { c.APIKey = "" }},
 		{"empty model", func(c *EmbeddingConfig) { c.Model = "\t" }},
 		{"non-positive dimensions", func(c *EmbeddingConfig) { z := 0; c.Dimensions = &z }},
 		{"negative timeout", func(c *EmbeddingConfig) { c.Timeout = -time.Second }},
@@ -76,6 +75,24 @@ func TestNewEmbeddingCopiesConfig(t *testing.T) {
 	}
 	if impl.cfg.ExtraHeaders["X-Gateway"] != "a" {
 		t.Fatalf("headers=%v", impl.cfg.ExtraHeaders)
+	}
+}
+
+// TestNewEmbeddingAllowsEmptyAPIKey 验证密钥为空或仅空白时仍可构造
+func TestNewEmbeddingAllowsEmptyAPIKey(t *testing.T) {
+	t.Parallel()
+	cfg := validEmbeddingCfg()
+	cfg.APIKey = "  "
+	cli, err := NewEmbedding(cfg)
+	if err != nil {
+		t.Fatalf("NewEmbedding: %v", err)
+	}
+	impl, ok := cli.(*openaiEmbeddingClient)
+	if !ok {
+		t.Fatalf("type=%T", cli)
+	}
+	if impl.cfg.APIKey != "" {
+		t.Fatalf("APIKey=%q", impl.cfg.APIKey)
 	}
 }
 

@@ -29,10 +29,10 @@ var testConfig2 = Config{
 	Timeout:  60 * time.Second,
 }
 
-// testEmbeddingConfig 实网 OpenAI Embeddings 配置；测前填 APIURL、APIKey、Model
+// testEmbeddingConfig 实网 OpenAI Embeddings 配置；测前填 APIURL、Model；APIKey 可空
 var testEmbeddingConfig = EmbeddingConfig{
 	Protocol: EmbeddingProtocolOpenAI,
-	APIURL:   "https://api.openai.com/v1",
+	APIURL:   "",
 	APIKey:   "",
 	Model:    "text-embedding-3-small",
 	Timeout:  60 * time.Second,
@@ -61,11 +61,11 @@ func requireLiveConfig(t *testing.T, cfg Config) Config {
 	return cfg
 }
 
-// requireLiveEmbeddingConfig 校验向量化实网配置已填密钥与地址；未填则跳过
+// requireLiveEmbeddingConfig 校验已填 APIURL；未填则跳过。APIKey 可空
 func requireLiveEmbeddingConfig(t *testing.T, cfg EmbeddingConfig) EmbeddingConfig {
 	t.Helper()
-	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.APIURL) == "" {
-		t.Skip("填写 testEmbeddingConfig 的 APIURL 与 APIKey 后再跑")
+	if strings.TrimSpace(cfg.APIURL) == "" {
+		t.Skip("填写 testEmbeddingConfig 的 APIURL 后再跑；APIKey 可空")
 	}
 	return cfg
 }

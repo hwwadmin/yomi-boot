@@ -45,6 +45,7 @@
 // EmbeddingClient 与 AIClient 相互独立；协议类型也分开，勿混用对话 Protocol。
 // 首版仅 EmbeddingProtocolOpenAI。Anthropic 无 embeddings API。
 // 模型由 EmbeddingConfig.Model 锁定；换模型请另 NewEmbedding 一个实例。
+// APIKey 可空，供本地或免费、免鉴权网关；空则不带 Authorization。
 // Dimensions：配置与请求皆空则不传上游（不设缺省维度）；请求指针非空则覆盖配置；若设置必须 >0。
 // 一次 Embed 整批成功或整包失败。
 //

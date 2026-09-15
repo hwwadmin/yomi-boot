@@ -26,13 +26,14 @@ var _ EmbeddingClient = (*openaiEmbeddingClient)(nil)
 //
 // 官方客户端仅持有不可变选项，每次请求独立执行，同一实例可并发 Embed。
 func newOpenAIEmbeddingClient(cfg EmbeddingConfig) (*openaiEmbeddingClient, error) {
-	// 密钥与地址原样注入；关闭官方默认重试
+	// 地址原样注入；关闭官方默认重试
 	opts := []option.RequestOption{
-		option.WithAPIKey(cfg.APIKey),
 		option.WithBaseURL(cfg.APIURL),
 		option.WithMaxRetries(0),
 		option.WithRequestTimeout(timeoutOrDefault(cfg.Timeout)),
 	}
+	// 密钥可空：空也注入，避免官方客户端回落到环境变量；空则不带 Authorization
+	opts = append(opts, option.WithAPIKey(cfg.APIKey))
 	if cfg.HTTPClient != nil {
 		opts = append(opts, option.WithHTTPClient(cfg.HTTPClient))
 	}
