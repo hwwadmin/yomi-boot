@@ -97,7 +97,7 @@
 
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
-- `gitee.com/hq_project/yomi-boot/` 提供 config、plugin（生命周期框架）、各库 `*/plugin` 内置生命周期实现、logger、db、redis、router、runner、consul、dtm、rpc、distlock、errors、traceid、token、kafka、**redisstream**、httprecord、snowflake、**pprof**、**idempotency**、**ratelimit**、**bc**、**event**、**roundrobin**、**cronjob**、**appctx**、**banner**、**worker**、**testclient** 等能力；**上述能力按配置按需启用**，并非每个进程都必须全部启动。
+- `gitee.com/hq_project/yomi-boot/` 提供 config、plugin（生命周期框架）、各库 `*/plugin` 内置生命周期实现、logger、db、redis、router、runner、consul、dtm、rpc、distlock、errors、traceid、token、kafka、**redisstream**、httprecord、snowflake、**pprof**、**idempotency**、**ratelimit**、**bc**、**event**、**roundrobin**、**cronjob**、**appctx**、**banner**、**worker**、**testclient**、**aiclient**、**vectordb** 等能力；**上述能力按配置按需启用**，并非每个进程都必须全部启动。`aiclient` / `vectordb` / `ws` / `golua` 不进默认插件链。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/ratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -213,6 +213,7 @@ services/{domain}/
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
 | `aiclient` | 统一 LLM 门面：Chat（OpenAI / Anthropic）与 Embedding（OpenAI Embeddings）；`New`/`MustNew`、`NewEmbedding`/`MustNewEmbedding`；一实例一模型；不进 bootstrap、不读 YAML、不做限流 |
+| `vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
 
 **平台共享 DDL**（与封装同包维护，**无**独立 `gitee.com/hq_project/yomi-boot/sql/` 目录）：
 
