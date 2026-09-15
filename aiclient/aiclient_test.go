@@ -1,4 +1,4 @@
-// Package aiclient 按填写的 testConfig 实网调用门面
+// Package aiclient 按填写的实网配置调用门面
 //
 // @author zwei
 package aiclient
@@ -10,43 +10,58 @@ import (
 	"time"
 )
 
-// testConfig 实网测试配置；测前填 APIURL、APIKey、Model
-//
-// Protocol 取 ProtocolOpenAI 或 ProtocolAnthropic。APIKey 为空则跳过。示例：
-//   - openai: ProtocolOpenAI, APIURL https://api.openai.com/v1
-//   - anthropic: ProtocolAnthropic, APIURL https://api.anthropic.com
+// testConfig 实网 OpenAI 兼容配置；测前填 APIURL、APIKey、Model
 var testConfig = Config{
 	Protocol: ProtocolOpenAI,
-	APIURL:   "https://api.openai.com/v1",
+	APIURL:   "https://api.deepseek.com",
 	APIKey:   "",
-	Model:    "gpt-4o-mini",
+	Model:    "deepseek-flash",
 	Timeout:  60 * time.Second,
 }
 
-// requireTestConfig 返回已填写的测试配置；未填密钥或地址则跳过
-func requireTestConfig(t *testing.T) Config {
+// testConfig2 实网 Anthropic 兼容配置；测前填 APIURL、APIKey、Model
+var testConfig2 = Config{
+	Protocol: ProtocolAnthropic,
+	APIURL:   "https://api.deepseek.com/anthropic",
+	APIKey:   "",
+	Model:    "deepseek-flash",
+	Timeout:  60 * time.Second,
+}
+
+// requireLiveConfig 校验实网配置已填密钥与地址；未填则跳过当前子测试
+func requireLiveConfig(t *testing.T, cfg Config) Config {
 	t.Helper()
-	cfg := testConfig
 	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.APIURL) == "" {
-		t.Skip("填写 testConfig 的 APIURL 与 APIKey 后再跑")
+		t.Skip("填写对应配置的 APIURL 与 APIKey 后再跑")
 	}
 	return cfg
 }
 
-// TestChat 用 testConfig 构造 AIClient 并发起同步 Chat
+// TestChat 分别用 OpenAI 与 Anthropic 两套配置发起同步 Chat
 func TestChat(t *testing.T) {
-	cli, err := New(requireTestConfig(t))
-	if err != nil {
-		t.Fatalf("New: %v", err)
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"openai", testConfig},
+		{"anthropic", testConfig2},
 	}
-	resp, err := cli.Chat(context.Background(), ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "ping"}},
-	})
-	if err != nil {
-		t.Fatalf("Chat: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cli, err := New(requireLiveConfig(t, tc.cfg))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			resp, err := cli.Chat(context.Background(), ChatRequest{
+				Messages: []Message{{Role: RoleUser, Content: "ping"}},
+			})
+			if err != nil {
+				t.Fatalf("Chat: %v", err)
+			}
+			if resp == nil || resp.Message.Role != RoleAssistant || strings.TrimSpace(resp.Message.Content) == "" {
+				t.Fatalf("resp=%+v", resp)
+			}
+			t.Logf("protocol=%s model=%s content=%q", tc.cfg.Protocol, resp.Model, resp.Message.Content)
+		})
 	}
-	if resp == nil || resp.Message.Role != RoleAssistant || strings.TrimSpace(resp.Message.Content) == "" {
-		t.Fatalf("resp=%+v", resp)
-	}
-	t.Logf("protocol=%s model=%s content=%q", testConfig.Protocol, resp.Model, resp.Message.Content)
 }
