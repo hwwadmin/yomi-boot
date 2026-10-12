@@ -212,7 +212,7 @@ services/{domain}/
 | `config` | 配置加载抽象（Section/Registry/Document）、严格根 key、环境变量展开；`MustLoad` / `MustLoadDocument` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
-| `aiclient` | 统一 LLM 门面：Chat（OpenAI / Anthropic）与 Embedding（OpenAI Embeddings）；`New`/`MustNew`、`NewEmbedding`/`MustNewEmbedding`；一实例一模型；不进 bootstrap、不读 YAML、不做限流 |
+| `aiclient` | 统一 LLM 门面：Chat（OpenAI / Anthropic）、Embedding（OpenAI Embeddings）、Jev 决策（System One）；`New`/`MustNew`、`NewEmbedding`/`MustNewEmbedding`、`NewJev`/`MustNewJev`；三套 Client 配置互不混用；一实例一模型；不进 bootstrap、不读 YAML、不做限流 |
 | `vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
 
 **平台共享 DDL**（与封装同包维护，**无**独立 `gitee.com/hq_project/yomi-boot/sql/` 目录）：

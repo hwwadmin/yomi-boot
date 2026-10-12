@@ -1,7 +1,9 @@
-// Package aiclient 提供协议无关的大模型对话与向量化门面。
+// Package aiclient 提供协议无关的大模型对话、向量化与 Jev 决策门面。
 //
-// 对话支持 OpenAI Chat Completions 与 Anthropic Messages；向量化首版仅 OpenAI Embeddings。
-// 本包不对内泄漏官方客户端类型；业务只依赖 New / MustNew / AIClient、NewEmbedding / MustNewEmbedding / EmbeddingClient 与本包哨兵。
+// 对话支持 OpenAI Chat Completions 与 Anthropic Messages；向量化首版仅 OpenAI Embeddings；
+// Jev 首版为 TypeSafe System One 兼容 HTTP（如 OpenCode Zen /zen/v1/systemone）。
+// 本包不对内泄漏官方客户端类型；业务只依赖 New / MustNew / AIClient、NewEmbedding / MustNewEmbedding /
+// EmbeddingClient、NewJev / MustNewJev / JevClient 与本包哨兵。
 // 不进 bootstrap、不读 YAML、不做配额限流与重试。配置来源由调用方自行组装。
 //
 // # 基本用法（对话）
@@ -59,11 +61,31 @@
 //	    Inputs: []string{"hello", "world"},
 //	})
 //
+// # 基本用法（Jev 决策）
+//
+// JevClient 与 AIClient / EmbeddingClient 相互独立；配置与协议类型勿混用。
+// 首版仅 JevProtocolSystemOne。APIURL 为完整 POST 地址（非 Chat 的 BaseURL 惯例）。
+// OpenCode 免费示例：`https://opencode.ai/zen/v1/systemone`，模型 `jev-1.13-free`；APIKey 可空。
+//
+//	jev, err := aiclient.NewJev(aiclient.JevConfig{
+//	    Protocol: aiclient.JevProtocolSystemOne,
+//	    APIURL:   "https://opencode.ai/zen/v1/systemone",
+//	    APIKey:   apiKey,
+//	    Model:    "jev-1.13-free",
+//	})
+//	out, err := jev.Decide(ctx, aiclient.JevDecideRequest{
+//	    State: aiclient.JevStateString("support note"),
+//	    Questions: map[string]aiclient.JevQuestion{
+//	        "urgent": {Type: aiclient.JevQuestionNoul, Instructions: "是否紧急？"},
+//	    },
+//	})
+//
 // # BaseURL（APIURL 原样注入，本包不拼接路径）
 //
 //   - OpenAI Chat / Embeddings：官方为 `https://api.openai.com/v1`。不要写成 `.../v1/v1`。
 //     兼容网关按其文档填写（通常同样带 `/v1` 前缀）。
 //   - Anthropic：官方为 `https://api.anthropic.com`（不要再加 `/v1`，SDK 会请求 `v1/messages`）。
+//   - Jev（System One）：填完整 POST URL，例如 OpenCode `https://opencode.ai/zen/v1/systemone`。
 //
 // # HTTPClient
 //

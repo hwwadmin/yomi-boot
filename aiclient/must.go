@@ -24,3 +24,13 @@ func MustNewEmbedding(cfg EmbeddingConfig) EmbeddingClient {
 	}
 	return cli
 }
+
+// MustNewJev 创建 JevClient，失败时记录错误日志并立即崩溃；日志不得包含完整密钥
+func MustNewJev(cfg JevConfig) JevClient {
+	cli, err := NewJev(cfg)
+	if err != nil {
+		logger.ErrorWithoutCtx("aiclient jev 初始化失败", "error", err, "protocol", string(cfg.Protocol))
+		panic(err)
+	}
+	return cli
+}
