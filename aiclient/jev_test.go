@@ -192,8 +192,25 @@ func TestJevDecideMock(t *testing.T) {
 		t.Fatalf("Decide: %v", err)
 	}
 	if resp.Answers["is_urgent"].Noul == nil || *resp.Answers["is_urgent"].Noul != 0.9 {
-		t.Fatalf("resp=%+v", resp)
+		logJevDecideResponse(t, "mock response", resp)
+		t.Fatalf("unexpected answers")
 	}
+	logJevDecideResponse(t, "mock response", resp)
+}
+
+// logJevDecideResponse 将完整决策响应以 JSON 写入测试日志（需 -v）
+func logJevDecideResponse(t *testing.T, label string, resp *JevDecideResponse) {
+	t.Helper()
+	if resp == nil {
+		t.Logf("%s: null", label)
+		return
+	}
+	b, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		t.Logf("%s: json.MarshalIndent failed: %v\nresp=%+v", label, err, resp)
+		return
+	}
+	t.Logf("%s:\n%s", label, string(b))
 }
 
 // TestJevDecide 用 OpenCode systemone 发起同步决策
@@ -212,11 +229,12 @@ func TestJevDecide(t *testing.T) {
 		},
 	})
 	if err != nil {
+		t.Logf("Decide error (full): %+v", err)
 		t.Fatalf("Decide: %v", err)
 	}
+	logJevDecideResponse(t, "Decide response", resp)
 	ans, ok := resp.Answers["is_urgent"]
 	if !ok || ans.Type != "noul" || ans.Noul == nil {
-		t.Fatalf("resp=%+v", resp)
+		t.Fatalf("missing or invalid is_urgent answer")
 	}
-	t.Logf("model=%s noul=%v usage=%+v", resp.Model, *ans.Noul, resp.Usage)
 }
