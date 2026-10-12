@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -131,7 +130,7 @@ func TestMustNewJevPanics(t *testing.T) {
 	MustNewJev(JevConfig{})
 }
 
-// testJevConfig OpenCode Zen 免费 Jev；实网测前设环境变量 AICLIENT_JEV_API_KEY（可空则走免鉴权路由）
+// testJevConfig OpenCode Zen Jev；实网测前填 APIURL、APIKey、Model
 var testJevConfig = JevConfig{
 	Protocol: JevProtocolSystemOne,
 	APIURL:   "https://opencode.ai/zen/v1/systemone",
@@ -140,19 +139,11 @@ var testJevConfig = JevConfig{
 	Timeout:  60 * time.Second,
 }
 
-// requireLiveJevConfig 实网 Jev：须填 APIURL，且设置 AICLIENT_JEV_LIVE=1 或 AICLIENT_JEV_API_KEY
+// requireLiveJevConfig 校验实网配置已填密钥与地址；未填则跳过当前子测试
 func requireLiveJevConfig(t *testing.T, cfg JevConfig) JevConfig {
 	t.Helper()
-	if strings.TrimSpace(cfg.APIURL) == "" {
-		t.Skip("填写 testJevConfig 的 APIURL 后再跑")
-	}
-	key := strings.TrimSpace(os.Getenv("AICLIENT_JEV_API_KEY"))
-	live := strings.TrimSpace(os.Getenv("AICLIENT_JEV_LIVE")) == "1"
-	if !live && key == "" {
-		t.Skip("设置 AICLIENT_JEV_LIVE=1（免鉴权试跑）或 AICLIENT_JEV_API_KEY 后再跑实网")
-	}
-	if key != "" {
-		cfg.APIKey = key
+	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.APIURL) == "" {
+		t.Skip("填写 testJevConfig 的 APIURL 与 APIKey 后再跑")
 	}
 	return cfg
 }
