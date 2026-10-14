@@ -65,13 +65,13 @@
 //
 // JevClient 与 AIClient / EmbeddingClient 相互独立；配置与协议类型勿混用。
 // 首版仅 JevProtocolSystemOne。APIURL 为完整 POST 地址（非 Chat 的 BaseURL 惯例）。
-// OpenCode 免费示例：`https://opencode.ai/zen/v1/systemone`，模型 `jev-1.13-free`；APIKey 可空。
+// 千问决策模型示例：`https://maas.qianwenaiapi.com/compatible-mode/v1/systemone`，模型 `decision-model-preview`。
 //
 //	jev, err := aiclient.NewJev(aiclient.JevConfig{
 //	    Protocol: aiclient.JevProtocolSystemOne,
-//	    APIURL:   "https://opencode.ai/zen/v1/systemone",
+//	    APIURL:   "https://maas.qianwenaiapi.com/compatible-mode/v1/systemone",
 //	    APIKey:   apiKey,
-//	    Model:    "jev-1.13-free",
+//	    Model:    "decision-model-preview",
 //	})
 //	out, err := jev.Decide(ctx, aiclient.JevDecideRequest{
 //	    State: aiclient.JevStateString("support note"),
@@ -85,7 +85,7 @@
 //   - OpenAI Chat / Embeddings：官方为 `https://api.openai.com/v1`。不要写成 `.../v1/v1`。
 //     兼容网关按其文档填写（通常同样带 `/v1` 前缀）。
 //   - Anthropic：官方为 `https://api.anthropic.com`（不要再加 `/v1`，SDK 会请求 `v1/messages`）。
-//   - Jev（System One）：填完整 POST URL，例如 OpenCode `https://opencode.ai/zen/v1/systemone`。
+//   - Jev（System One）：填完整 POST URL，例如千问 `https://maas.qianwenaiapi.com/compatible-mode/v1/systemone`。
 //
 // # HTTPClient
 //

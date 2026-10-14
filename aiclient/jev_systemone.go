@@ -123,7 +123,7 @@ type systemoneAnswer struct {
 	Choice        *string         `json:"choice"`
 	Score         *float64        `json:"score"`
 	Confidence    *float64        `json:"confidence"`
-	Legend        []string        `json:"legend"`
+	Legend        json.RawMessage `json:"legend"`
 	Probabilities json.RawMessage `json:"probabilities"`
 }
 

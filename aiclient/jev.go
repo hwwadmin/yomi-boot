@@ -59,7 +59,7 @@ type JevAnswer struct {
 	Choice        *string         // Choice 为选中选项 key
 	Score         *float64        // Score 为量表得分
 	Confidence    *float64        // Confidence 为 0–1，choice/score 常见
-	Legend        []string        // Legend 为 score 等级说明
+	Legend        json.RawMessage // Legend 为 score 等级说明（数组或对象，依上游而定）
 	Probabilities json.RawMessage // Probabilities 为对象或数组，依题型而定
 }
 

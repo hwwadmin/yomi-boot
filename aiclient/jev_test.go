@@ -130,12 +130,12 @@ func TestMustNewJevPanics(t *testing.T) {
 	MustNewJev(JevConfig{})
 }
 
-// testJevConfig OpenCode Zen Jev；实网测前填 APIURL、APIKey、Model
+// testJevConfig 千问决策模型（System One）；实网测前填 APIURL、APIKey、Model
 var testJevConfig = JevConfig{
 	Protocol: JevProtocolSystemOne,
-	APIURL:   "https://opencode.ai/zen/v1/systemone",
+	APIURL:   "https://maas.qianwenaiapi.com/compatible-mode/v1/systemone",
 	APIKey:   "",
-	Model:    "jev-1.13-free",
+	Model:    "decision-model-preview",
 	Timeout:  60 * time.Second,
 }
 
@@ -213,18 +213,28 @@ func logJevDecideResponse(t *testing.T, label string, resp *JevDecideResponse) {
 	t.Logf("%s:\n%s", label, string(b))
 }
 
-// TestJevDecide 用 OpenCode systemone 发起同步决策
+// TestJevDecide 千问 decision-model-preview 实网决策（与官方 curl 示例同形）
 func TestJevDecide(t *testing.T) {
 	cli, err := NewJev(requireLiveJevConfig(t, testJevConfig))
 	if err != nil {
 		t.Fatalf("NewJev: %v", err)
 	}
 	resp, err := cli.Decide(context.Background(), JevDecideRequest{
-		State: JevStateString("付款已经失败三天，请尽快处理。"),
+		State: json.RawMessage(`{"ticket_id":"T-1001","content":"订单支付后超过 24 小时仍未到账，用户无法继续使用核心服务，要求立即处理。"}`),
 		Questions: map[string]JevQuestion{
-			"is_urgent": {
+			"department": {
+				Type:         JevQuestionChoice,
+				Instructions: "应该由哪个团队处理？",
+				Criteria:     json.RawMessage(`{"billing":"支付、退款和账单问题","technical":"产品故障和集成问题"}`),
+			},
+			"escalate": {
 				Type:         JevQuestionNoul,
-				Instructions: "是否需要紧急处理？",
+				Instructions: "是否需要立即通知值班人员？",
+			},
+			"severity": {
+				Type:         JevQuestionScore,
+				Instructions: "这个问题有多严重？",
+				Criteria:     json.RawMessage(`["轻微问题，不影响功能","部分功能受影响，但存在替代方案","核心功能不可用，没有替代方案","造成严重业务或安全影响"]`),
 			},
 		},
 	})
@@ -233,8 +243,15 @@ func TestJevDecide(t *testing.T) {
 		t.Fatalf("Decide: %v", err)
 	}
 	logJevDecideResponse(t, "Decide response", resp)
-	ans, ok := resp.Answers["is_urgent"]
-	if !ok || ans.Type != "noul" || ans.Noul == nil {
-		t.Fatalf("missing or invalid is_urgent answer")
+	if len(resp.Answers) != 3 {
+		t.Fatalf("expected 3 answers, got %d", len(resp.Answers))
+	}
+	dept, ok := resp.Answers["department"]
+	if !ok || dept.Type != "choice" || dept.Choice == nil {
+		t.Fatalf("missing or invalid department answer")
+	}
+	esc, ok := resp.Answers["escalate"]
+	if !ok || esc.Type != "noul" || esc.Noul == nil {
+		t.Fatalf("missing or invalid escalate answer")
 	}
 }
