@@ -156,7 +156,7 @@ err := db.Exec(ctx, r.DB).Raw(complexReportSQL, status, since).Scan(&results).Er
 
 ### 3.3 Entity 与 Model 映射规则
 
-Entity（domain/contract）与 Model（repo/db，包内私有）分离；Mapper 收口 Entity ↔ Model 转换；repository 对外只返回 Entity。架构边界见 [Go业务分层规范](./Go业务分层规范.md) §3.1.3；Entity 默认贫血、按需充血见同规范 §3.1.2。
+Entity（domain/contract）与 Model（repo/db，包内私有）分离；Mapper 收口 Entity ↔ Model 转换；repository 对外只返回 Entity。架构边界见 [Go业务分层规范](./Go业务分层规范.md) §3.2、§3.4；Entity 默认贫血、按需充血见同规范 §3.1.2。
 
 #### 3.3.1 Entity 定义（domain/contract 层）
 
