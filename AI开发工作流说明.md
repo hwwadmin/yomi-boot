@@ -12,6 +12,25 @@
 
 核心原则：**审核不通过，不写一行代码**。主闭环在 `do_spec` 结束；其后可用可选指令生成质量文档或做代码巡检。
 
+本套母版**不含前端规程**（`_prompts` 内无 React/前端知识库与前端巡检技能）；`create_spec` 会在 spec 中描述**前端业务流程**（页面清单 / 功能点明细 / 用户操作步骤 / UI 提醒）供前端实现参考，`do_spec` 的落地范围为 Go 后端。
+
+`_prompts` 分三层：**指令**（`commands/`，IDE 入口）→ **Skill**（`skills/`，执行型工作流）→ **知识库**（`knowledge/`，静态规范）；执行时 AI 按指令直接加载对应 Skill 与其声明的知识文档，不设 Agent / 规则 / 索引中间层。
+
+---
+
+## `_prompts` 如何被找到
+
+AI 执行任一指令前须定位 `_prompts`（与各 command 第 1 步一致），按顺序尝试：
+
+1. 当前打开工程的根目录 `_prompts/`
+2. 环境变量 `YOMI_PROMPTS_ROOT`（指向含 `_prompts` 的 `yomi-boot` 仓库根或其父路径）
+3. Git submodule / 同级克隆的 `yomi-boot/_prompts/`
+4. 依赖库 `yomi-boot`（`gitee.com/hq_project/yomi-boot`，经 go.mod / `replace` / module cache 解析到仓库根）包内的 `_prompts/`
+
+均未找到则终止并列出已尝试路径。定位成功后：**Skill / knowledge 均相对该 `_prompts` 根**；**PRD、spec、tasks 等产物写入当前业务工程根**（boot 库维护场景下即本仓库根）。
+
+业务工程可按需将本仓 `_prompts` 拷入工程、挂成 submodule，或直接使用依赖库解析结果。
+
 ---
 
 ## 指令速查
@@ -24,6 +43,7 @@
 | `do_spec` | 主路径 | 落地代码 | `_task-doc/{需求名称}/tasks.md` + 代码变更 |
 | `quality_doc` | **可选** | 生成测试用例与产品验收文档 | `_quality-doc/{YYYYMMDD}_{需求名称}/test.md` + `accept.md` |
 | `check_code` | **可选** | 代码质量巡检 | `_ipc-doc/{YYYYMMDD}_{需求名称}-ipc.md` |
+| `deep_think` | **可选** | 对当前问题做第一性原理 + 对抗性审查 | 对话结论（不落盘） |
 
 ---
 
@@ -35,7 +55,7 @@
 prd_spec
 ```
 
-AI 基于当前会话中已确认的需求、决策与补充说明生成产品业务需求文档，并参考 `_prompts/doc/` 中已有文档保持业务口径一致。产物保存到：
+AI 基于当前会话中已确认的需求、决策与补充说明生成产品业务需求文档，并参考 `_prompts/knowledge/` 中已有文档保持业务口径一致。产物保存到：
 
 > `_doc/{YYYYMMDD}_{需求名称}-prd.md`
 
@@ -58,7 +78,7 @@ AI 自动加载项目规范文档，生成技术方案到：
 
 > `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md`
 
-产物包含：SQL 表设计、领域模型、UseCase 编排、API 接口、前端页面等全量技术方案。
+产物包含：SQL 表设计、领域模型、UseCase 编排、API 接口等全量技术方案。
 
 ---
 

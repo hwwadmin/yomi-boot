@@ -19,10 +19,10 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | `token/`、`bc/` | 安全、令牌与密码学 |
 | `filestorage/`、`aiclient/`、`vectordb/`、`pprof/` | 对象存储、LLM 门面、向量库与可观测 |
 | `errors/`、`shared/`、`utils/`、`testclient/` | 错误、共享模型与工具 |
-| `_prompts/` | Agent / Skill / 知识库与规范文档 |
+| `_prompts/` | 指令（commands） / Skill / 知识库与规范文档 |
 | `LICENSE` | Apache License 2.0 全文 |
 
-能力职责与落位速查见 [基础库能力索引](./_prompts/doc/基础库能力索引.md)。
+能力职责与落位速查见 [Go架构规范](./_prompts/knowledge/Go架构规范.md) §3.3。
 
 ## 中间件推荐适配版本
 
