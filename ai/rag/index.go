@@ -15,8 +15,9 @@ import (
 
 // preparedDocument 切分后的文档
 type preparedDocument struct {
-	doc    Document
-	chunks []string
+	doc     Document
+	chunks  []string
+	version string // version 是本次写入的文档版本
 }
 
 // idBatchSize 是按 ID 读写时的单批上限，避免一次请求携带过多主键
@@ -57,7 +58,11 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 		if len(chunks) > maxChunksPerDoc {
 			return nil, errors.Sentinel(ErrInvalidArgument)
 		}
-		prepared = append(prepared, preparedDocument{doc: doc, chunks: chunks})
+		version, err := newVersion()
+		if err != nil {
+			return nil, wrapSentinel(ErrBadResponse, err)
+		}
+		prepared = append(prepared, preparedDocument{doc: doc, chunks: chunks, version: version})
 	}
 	result := &IndexResult{}
 	// 按块预算分组写入，避免一次请求把全部向量与记录同时放在内存
@@ -110,7 +115,7 @@ func (e *Engine) indexGroup(ctx context.Context, collection string, group docGro
 			records = append(records, vectordb.Record{
 				ID:       chunkID(p.doc.ID, i),
 				Vector:   toFloat32(vectors[offset+i]),
-				Metadata: chunkMetadata(p.doc, i, len(p.chunks), content),
+				Metadata: chunkMetadata(p.doc, i, len(p.chunks), p.version, content),
 			})
 		}
 		offset += len(p.chunks)
@@ -153,15 +158,16 @@ func (e *Engine) DeleteDocument(ctx context.Context, collection, docID string) e
 	return err
 }
 
-// chunkMetadata 合并文档元数据与保留键；total 是文档当前版本的块总数
-func chunkMetadata(doc Document, index, total int, content string) map[string]string {
-	md := make(map[string]string, len(doc.Metadata)+5)
+// chunkMetadata 合并文档元数据与保留键；total 是块总数，version 是本次写入版本
+func chunkMetadata(doc Document, index, total int, version, content string) map[string]string {
+	md := make(map[string]string, len(doc.Metadata)+6)
 	for k, v := range doc.Metadata {
 		md[k] = v
 	}
 	md[MetadataKeyDocumentID] = doc.ID
 	md[MetadataKeyChunkIndex] = strconv.Itoa(index)
 	md[MetadataKeyChunkCount] = strconv.Itoa(total)
+	md[MetadataKeyVersion] = version
 	md[MetadataKeySource] = doc.Source
 	md[MetadataKeyContent] = content
 	return md

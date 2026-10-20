@@ -31,7 +31,7 @@ var _ Client = (*anthropicClient)(nil)
 // newAnthropicClient 构造 Anthropic 协议客户端
 //
 // 官方客户端仅持有不可变选项，每次请求独立执行，同一实例可并发 Chat / ChatStream。
-func newAnthropicClient(cfg Config) (*anthropicClient, error) {
+func newAnthropicClient(cfg Config) *anthropicClient {
 	// 密钥与地址原样注入；关闭官方默认重试，并写入协议版本头
 	opts := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
@@ -50,7 +50,7 @@ func newAnthropicClient(cfg Config) (*anthropicClient, error) {
 		sdk:     anthropic.NewClient(opts...),
 		cfg:     cfg,
 		timeout: timeoutOrDefault(cfg.Timeout),
-	}, nil
+	}
 }
 
 // Chat 发起同步对话；空响应或无助手文本返回 ErrBadResponse

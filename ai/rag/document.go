@@ -16,6 +16,8 @@ const (
 	MetadataKeyContent = "rag_content"
 	// MetadataKeyChunkCount 文档当前版本的块总数；用于检索侧过滤更新窗口内的旧块
 	MetadataKeyChunkCount = "rag_chunk_count"
+	// MetadataKeyVersion 文档当前写入版本；检索侧据此丢弃旧版本块
+	MetadataKeyVersion = "rag_version"
 )
 
 // Document 待入库的原始文档
@@ -53,7 +55,7 @@ type IndexResult struct {
 // RetrieveRequest 检索入参
 type RetrieveRequest struct {
 	Query    string            // Query 是检索问题；trim 后非空
-	TopK     int               // TopK 是返回条数；必须 >0 且不超过 vectordb.MaxTopK
+	TopK     int               // TopK 是向向量库请求的最大条数；阈值/空块/旧块过滤后可能更少；必须 >0 且不超过 vectordb.MaxTopK
 	MinScore float32           // MinScore 是最低相似度；0 表示不设阈值；NaN 非法
 	Filter   map[string]string // Filter 可选；元数据等值 AND，可用保留键过滤
 }

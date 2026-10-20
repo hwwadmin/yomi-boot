@@ -34,6 +34,7 @@ type Config struct {
 	APIKey       string            // APIKey 可选；空表示不带鉴权，供本地或免费网关；非空时日志与错误正文不得回显完整值
 	Model        string            // Model 是本实例锁定的向量模型名；构造期 trim 后不得为空
 	Dimensions   *int              // Dimensions 是默认输出维度；空则不传；若设置必须 >0；仅部分模型支持，不支持的网关会 400
+	MaxBatch     int               // MaxBatch 是单次上游请求的输入条数上限；0 表示 2048；负数非法
 	Timeout      time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
 	HTTPClient   *http.Client      // HTTPClient 可选，仅传输层/代理；New 之后再改视为未定义行为
 	ExtraHeaders map[string]string // ExtraHeaders 网关扩展头；New 时拷贝；不得含保留键
@@ -67,6 +68,10 @@ func (c Config) validate() error {
 	}
 	// 默认维度若设置则必须大于 0；空表示不传上游
 	if c.Dimensions != nil && *c.Dimensions <= 0 {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	// 批量上限 0 表示默认，负数非法
+	if c.MaxBatch < 0 {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	// 超时不得为负

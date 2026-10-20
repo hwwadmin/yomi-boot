@@ -30,7 +30,7 @@ const (
 // Config 创建 Client 的构造配置；本包不读 YAML
 type Config struct {
 	Protocol     Protocol          // Protocol 是协议标识，首版仅 systemone
-	APIURL       string            // APIURL 为完整 POST 地址（如 OpenCode https://opencode.ai/zen/v1/systemone）
+	Endpoint     string            // Endpoint 为完整 POST 地址（如 OpenCode https://opencode.ai/zen/v1/systemone）
 	APIKey       string            // APIKey 可空（如 jev-1.13-free 免鉴权路由）；非空时带 Bearer
 	Model        string            // Model 是本实例锁定的决策模型名；构造期 trim 后不得为空
 	Timeout      time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
@@ -53,7 +53,7 @@ func (c Config) validate() error {
 	default:
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	if err := validateAPIURL(c.APIURL); err != nil {
+	if err := validateEndpoint(c.Endpoint); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.Model) == "" {
@@ -77,8 +77,8 @@ func (c Config) validate() error {
 	return nil
 }
 
-// validateAPIURL 校验地址为 http/https 绝对地址
-func validateAPIURL(raw string) error {
+// validateEndpoint 校验完整地址为 http/https 绝对地址
+func validateEndpoint(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return errors.Sentinel(ErrInvalidArgument)

@@ -17,13 +17,13 @@ func New(cfg Config) (Client, error) {
 	}
 	// 拷贝配置，避免调用方事后修改扩展头影响已构造客户端
 	copied := cfg
-	copied.APIURL = strings.TrimSpace(cfg.APIURL)
+	copied.Endpoint = strings.TrimSpace(cfg.Endpoint)
 	copied.APIKey = strings.TrimSpace(cfg.APIKey)
 	copied.Model = strings.TrimSpace(cfg.Model)
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
 	switch copied.Protocol {
 	case ProtocolSystemOne:
-		return newSystemOneClient(copied)
+		return newSystemOneClient(copied), nil
 	default:
 		// validate 已覆盖，此处为防御
 		return nil, errors.Sentinel(ErrInvalidArgument)

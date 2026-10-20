@@ -37,6 +37,7 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 		{"bad scheme", func(c *Config) { c.APIURL = "ftp://example.com" }},
 		{"empty model", func(c *Config) { c.Model = "\t" }},
 		{"non-positive dimensions", func(c *Config) { z := 0; c.Dimensions = &z }},
+		{"negative max batch", func(c *Config) { c.MaxBatch = -1 }},
 		{"negative timeout", func(c *Config) { c.Timeout = -time.Second }},
 		{"reserved header", func(c *Config) { c.ExtraHeaders = map[string]string{"Authorization": "x"} }},
 		{"blank header key", func(c *Config) { c.ExtraHeaders = map[string]string{" ": "x"} }},

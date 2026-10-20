@@ -47,10 +47,18 @@ func validateRecords(records []Record, dim int) error {
 		if len(records[i].Vector) != dim {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
+		trimmedKeys := make(map[string]struct{}, len(records[i].Metadata))
 		for k := range records[i].Metadata {
-			if strings.TrimSpace(k) == "" {
+			key := strings.TrimSpace(k)
+			// 过滤侧拒绝引号/反斜杠；写入侧必须同样拒绝，避免写入后无法按该键过滤
+			if key == "" || strings.ContainsAny(key, `"\`) {
 				return errors.Sentinel(ErrInvalidArgument)
 			}
+			// trim 后重名会静默覆盖，直接拒绝
+			if _, ok := trimmedKeys[key]; ok {
+				return errors.Sentinel(ErrInvalidArgument)
+			}
+			trimmedKeys[key] = struct{}{}
 		}
 	}
 	return nil

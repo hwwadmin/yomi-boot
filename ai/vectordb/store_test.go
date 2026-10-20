@@ -6,6 +6,7 @@ package vectordb
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,9 +21,11 @@ const (
 	contractDim     = 2
 )
 
-// 测试人员跑 Milvus 契约时填入；Address 为空则跳过
+// Milvus 契约地址；默认空则跳过，运行前设置 YOMI_TEST_MILVUS_ADDRESS
+var testMilvusAddress = strings.TrimSpace(os.Getenv("YOMI_TEST_MILVUS_ADDRESS"))
+
+// 测试人员跑 Milvus 契约时填入
 const (
-	testMilvusAddress   = "192.168.110.209:19530"
 	testMilvusDBName    = ""
 	testMilvusUsername  = ""
 	testMilvusPassword  = ""
@@ -227,6 +230,16 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 			{ID: "dup", Vector: vec(1)},
 		}); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("dup id: %v", err)
+		}
+		if err := store.Upsert(ctx, name, []Record{{
+			ID: "bad-meta-quote", Vector: vec(1), Metadata: map[string]string{`a"b`: "x"},
+		}}); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("bad metadata key: %v", err)
+		}
+		if err := store.Upsert(ctx, name, []Record{{
+			ID: "bad-meta-dup", Vector: vec(1), Metadata: map[string]string{"k": "1", " k ": "2"},
+		}}); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("duplicate normalized metadata key: %v", err)
 		}
 	})
 }

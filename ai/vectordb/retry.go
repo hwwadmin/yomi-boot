@@ -50,6 +50,16 @@ func retryOnRateLimitVal[T any](ctx context.Context, fn func() (T, error)) (T, e
 		if err == nil || !isRateLimitErr(err) {
 			return last, err
 		}
+		// 最后一次失败后不再等待，避免无意义地多睡一个退避周期
+		if attempt == maxRateLimitAttempts-1 {
+			select {
+			case <-ctx.Done():
+				var zero T
+				return zero, wrapCtxErr(ctx.Err())
+			default:
+				return last, err
+			}
+		}
 		select {
 		case <-ctx.Done():
 			var zero T

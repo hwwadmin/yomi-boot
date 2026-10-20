@@ -34,7 +34,7 @@ type systemOneClient struct {
 var _ Client = (*systemOneClient)(nil)
 
 // newSystemOneClient 构造 System One 协议客户端
-func newSystemOneClient(cfg Config) (*systemOneClient, error) {
+func newSystemOneClient(cfg Config) *systemOneClient {
 	hc := cfg.HTTPClient
 	if hc == nil {
 		hc = &http.Client{Timeout: 0}
@@ -43,7 +43,7 @@ func newSystemOneClient(cfg Config) (*systemOneClient, error) {
 		cfg:        cfg,
 		httpClient: hc,
 		timeout:    timeoutOrDefault(cfg.Timeout),
-	}, nil
+	}
 }
 
 // Decide 发起同步决策请求
@@ -57,7 +57,7 @@ func (c *systemOneClient) Decide(ctx context.Context, req DecideRequest) (*Decid
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.APIURL, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.Endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, wrapSentinel(ErrBadResponse, err)
 	}
@@ -202,11 +202,22 @@ func formatHTTPErrorBody(status int, raw []byte) string {
 	if body == "" {
 		return fmt.Sprintf("HTTP %d", status)
 	}
-	runes := []rune(body)
-	if len(runes) > maxErrorBodyRunes {
-		return string(runes[:maxErrorBodyRunes]) + fmt.Sprintf("（已截断，原文 %d 字节）", len(raw))
+	if offset, ok := runeCutOffset(body, maxErrorBodyRunes); ok {
+		return body[:offset] + fmt.Sprintf("（已截断，原文 %d 字节）", len(raw))
 	}
 	return body
+}
+
+// runeCutOffset 返回第 n 个 rune 之前的字节偏移；不足 n 个 rune 时返回 false
+func runeCutOffset(s string, n int) (int, bool) {
+	count := 0
+	for offset := range s {
+		if count == n {
+			return offset, true
+		}
+		count++
+	}
+	return 0, false
 }
 
 // mapHTTPDoErr 映射传输层错误；取消/超时保持上下文错误

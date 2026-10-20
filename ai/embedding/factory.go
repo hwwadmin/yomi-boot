@@ -24,7 +24,7 @@ func New(cfg Config) (Client, error) {
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
 	switch copied.Protocol {
 	case ProtocolOpenAI:
-		return newOpenAIClient(copied)
+		return newOpenAIClient(copied), nil
 	default:
 		// validate 已覆盖，此处为防御
 		return nil, errors.Sentinel(ErrInvalidArgument)

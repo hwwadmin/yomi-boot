@@ -81,6 +81,22 @@ func fakeVector(text string, dim int) []float64 {
 	return v
 }
 
+// getErrStore 让 Get 返回不可用，用于验证检索辅助查询的降级
+type getErrStore struct{ vectordb.Store }
+
+// Get 模拟辅助版本/计数查询失败
+func (s getErrStore) Get(ctx context.Context, collection string, ids []string) ([]vectordb.Record, error) {
+	return nil, errors.Sentinel(vectordb.ErrUnavailable)
+}
+
+// ctxErrStore 让 Get 返回 context.Canceled，用于验证取消不降级
+type ctxErrStore struct{ vectordb.Store }
+
+// Get 模拟辅助查询遇到上下文取消
+func (s ctxErrStore) Get(ctx context.Context, collection string, ids []string) ([]vectordb.Record, error) {
+	return nil, context.Canceled
+}
+
 // stubSplitter 返回固定块，用于验证自定义策略注入
 type stubSplitter struct {
 	chunks []string
@@ -317,7 +333,7 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 		old[i] = vectordb.Record{
 			ID:       chunkID("doc", i),
 			Vector:   []float32{1, 0, 0},
-			Metadata: chunkMetadata(doc, i, len(old), "旧内容"),
+			Metadata: chunkMetadata(doc, i, len(old), "old", "旧内容"),
 		}
 	}
 	if err := store.CreateCollection(ctx, testCollection); err != nil {
@@ -332,7 +348,7 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 		fresh[i] = vectordb.Record{
 			ID:       chunkID("doc", i),
 			Vector:   []float32{1, 0, 0},
-			Metadata: chunkMetadata(doc, i, len(fresh), "新内容"),
+			Metadata: chunkMetadata(doc, i, len(fresh), "new", "新内容"),
 		}
 	}
 	if err := store.Upsert(ctx, testCollection, fresh); err != nil {
@@ -349,6 +365,110 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 		if chunk.Index >= len(fresh) || chunk.Content != "新内容" {
 			t.Fatalf("命中旧块: %+v", chunk)
 		}
+	}
+}
+
+// TestRetrieveFiltersOldVersionAfterGrowthPartialWrite 验证新版块数变多且只写入部分新块时，旧版本块仍被过滤
+func TestRetrieveFiltersOldVersionAfterGrowthPartialWrite(t *testing.T) {
+	t.Parallel()
+	e, _, store := newTestEngine(t)
+	ctx := context.Background()
+	doc := Document{ID: "doc", Content: "苹果"}
+	old := make([]vectordb.Record, 3)
+	for i := range old {
+		old[i] = vectordb.Record{
+			ID:       chunkID("doc", i),
+			Vector:   []float32{1, 0, 0},
+			Metadata: chunkMetadata(doc, i, len(old), "old", "旧内容"),
+		}
+	}
+	if err := store.CreateCollection(ctx, testCollection); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Upsert(ctx, testCollection, old); err != nil {
+		t.Fatal(err)
+	}
+	// 新版共 8 块，但只写入 0..1；旧块 2 仍在
+	fresh := make([]vectordb.Record, 2)
+	for i := range fresh {
+		fresh[i] = vectordb.Record{
+			ID:       chunkID("doc", i),
+			Vector:   []float32{1, 0, 0},
+			Metadata: chunkMetadata(doc, i, 8, "new", "新内容"),
+		}
+	}
+	if err := store.Upsert(ctx, testCollection, fresh); err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != len(fresh) {
+		t.Fatalf("chunks=%d %+v", len(chunks), chunks)
+	}
+	for _, chunk := range chunks {
+		if chunk.Index >= len(fresh) || chunk.Content != "新内容" {
+			t.Fatalf("命中旧版本块: %+v", chunk)
+		}
+	}
+}
+
+// TestRetrieveDegradesWhenChunkStateFails 验证版本/计数查询失败时降级为不过滤而不是检索失败
+func TestRetrieveDegradesWhenChunkStateFails(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t, testDimension)
+	e, err := New(Config{Embedder: &fakeEmbedder{dim: testDimension}, Store: getErrStore{Store: store}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	doc := Document{ID: "doc", Content: "苹果"}
+	if err := store.CreateCollection(ctx, testCollection); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Upsert(ctx, testCollection, []vectordb.Record{{
+		ID:       chunkID("doc", 0),
+		Vector:   []float32{1, 0, 0},
+		Metadata: chunkMetadata(doc, 0, 1, "v1", "苹果"),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
+	if err != nil {
+		t.Fatalf("版本/计数查询失败不应导致检索失败: %v", err)
+	}
+	if len(chunks) != 1 || chunks[0].DocumentID != "doc" {
+		t.Fatalf("chunks=%+v", chunks)
+	}
+}
+
+// TestRetrieveReturnsContextErrorFromChunkStateQuery 验证辅助查询遇到取消时上抛而不是降级
+func TestRetrieveReturnsContextErrorFromChunkStateQuery(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t, testDimension)
+	e, err := New(Config{Embedder: &fakeEmbedder{dim: testDimension}, Store: ctxErrStore{Store: store}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	doc := Document{ID: "doc", Content: "苹果"}
+	if err := store.CreateCollection(ctx, testCollection); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Upsert(ctx, testCollection, []vectordb.Record{{
+		ID:       chunkID("doc", 0),
+		Vector:   []float32{1, 0, 0},
+		Metadata: chunkMetadata(doc, 0, 1, "v1", "苹果"),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("期望 context.Canceled，实际 %v", err)
+	}
+	if chunks != nil {
+		t.Fatalf("取消时不应返回结果: %+v", chunks)
 	}
 }
 

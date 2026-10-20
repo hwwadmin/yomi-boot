@@ -20,7 +20,7 @@ import (
 func validCfg() Config {
 	return Config{
 		Protocol: ProtocolSystemOne,
-		APIURL:   "https://opencode.ai/zen/v1/systemone",
+		Endpoint: "https://opencode.ai/zen/v1/systemone",
 		APIKey:   "sk-test",
 		Model:    "jev-1.13-free",
 	}
@@ -35,9 +35,9 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 	}{
 		{"empty protocol", func(c *Config) { c.Protocol = "" }},
 		{"unknown protocol", func(c *Config) { c.Protocol = Protocol("openai") }},
-		{"empty url", func(c *Config) { c.APIURL = "  " }},
-		{"bad url", func(c *Config) { c.APIURL = "not-a-url" }},
-		{"bad scheme", func(c *Config) { c.APIURL = "ftp://example.com" }},
+		{"empty url", func(c *Config) { c.Endpoint = "  " }},
+		{"bad url", func(c *Config) { c.Endpoint = "not-a-url" }},
+		{"bad scheme", func(c *Config) { c.Endpoint = "ftp://example.com" }},
 		{"empty model", func(c *Config) { c.Model = "\t" }},
 		{"negative timeout", func(c *Config) { c.Timeout = -time.Second }},
 		{"reserved header", func(c *Config) { c.ExtraHeaders = map[string]string{"Authorization": "x"} }},
@@ -158,7 +158,7 @@ func TestDecideRejectsMissingOrMismatchedAnswers(t *testing.T) {
 				})
 			}))
 			defer srv.Close()
-			cli, err := New(Config{Protocol: ProtocolSystemOne, APIURL: srv.URL, Model: "jev-mock"})
+			cli, err := New(Config{Protocol: ProtocolSystemOne, Endpoint: srv.URL, Model: "jev-mock"})
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
@@ -194,7 +194,7 @@ func TestDecideErrorBodyTruncated(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
-			cli, err := New(Config{Protocol: ProtocolSystemOne, APIURL: srv.URL, Model: "jev-mock"})
+			cli, err := New(Config{Protocol: ProtocolSystemOne, Endpoint: srv.URL, Model: "jev-mock"})
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
@@ -256,7 +256,7 @@ func TestDecideMock(t *testing.T) {
 	defer srv.Close()
 	cli, err := New(Config{
 		Protocol: ProtocolSystemOne,
-		APIURL:   srv.URL,
+		Endpoint: srv.URL,
 		Model:    "jev-mock",
 	})
 	if err != nil {

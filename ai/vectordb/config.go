@@ -35,6 +35,7 @@ const (
 
 const (
 	defaultTimeout          = 10 * time.Second
+	compensateTimeout       = 3 * time.Second // 失败补偿的独立超时，避免失败路径过度延长
 	defaultMaxRecords       = 100000
 	defaultIndexNlist       = 1024
 	defaultIndexM           = 16

@@ -1,7 +1,7 @@
 // Package llm 提供协议无关的大模型对话门面，支持 OpenAI Chat Completions 与 Anthropic Messages。
 //
 // 本包不对内泄漏官方客户端类型；业务只依赖 New / MustNew / Client 与本包哨兵。
-// 不进 bootstrap、不读 YAML、不做配额限流与重试。配置来源由调用方自行组装。
+// 不进 bootstrap、不读 YAML、不做配额限流；除 max token 字段适配外不做失败重试。配置来源由调用方自行组装。
 //
 // # 基本用法
 //
@@ -17,6 +17,7 @@
 // OpenAI 协议只写 max_tokens 或 max_completion_tokens 之一（两者互斥，同时发送会被官方拒绝）；
 // Config.MaxTokensField 为空时按模型名自动选择：o1/o3/o4/gpt-5 系列用 max_completion_tokens，
 // 其余用 max_tokens。兼容网关的别名模型可通过 MaxTokensField 显式指定。
+// 若上游 400 拒绝当前字段，会切换另一字段重发一次；别名模型建议显式设置 MaxTokensField，避免每次调用多发一次请求。
 //
 //	resp, err := cli.Chat(ctx, llm.ChatRequest{
 //	    Messages: []llm.Message{{Role: llm.RoleUser, Content: "hello"}},

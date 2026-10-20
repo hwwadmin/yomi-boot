@@ -27,9 +27,9 @@ func New(cfg Config) (Client, error) {
 	applyGenerationDefaults(&copied)
 	switch copied.Protocol {
 	case ProtocolOpenAI:
-		return newOpenAIClient(copied)
+		return newOpenAIClient(copied), nil
 	case ProtocolAnthropic:
-		return newAnthropicClient(copied)
+		return newAnthropicClient(copied), nil
 	default:
 		// validate 已覆盖，此处为防御
 		return nil, errors.Sentinel(ErrInvalidArgument)

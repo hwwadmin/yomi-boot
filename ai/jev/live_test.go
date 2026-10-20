@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// liveJevConfig 千问决策模型（System One）；实网测前填 APIURL、APIKey、Model
+// liveJevConfig 千问决策模型（System One）；实网测前填 Endpoint、APIKey、Model
 var liveJevConfig = Config{
 	Protocol: ProtocolSystemOne,
-	APIURL:   "https://maas.qianwenaiapi.com/compatible-mode/v1/systemone",
+	Endpoint: "https://maas.qianwenaiapi.com/compatible-mode/v1/systemone",
 	APIKey:   "",
 	Model:    "decision-model-preview",
 	Timeout:  60 * time.Second,
@@ -24,8 +24,8 @@ var liveJevConfig = Config{
 // requireLiveJevConfig 校验实网配置已填密钥与地址；未填则跳过当前子测试
 func requireLiveJevConfig(t *testing.T, cfg Config) Config {
 	t.Helper()
-	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.APIURL) == "" {
-		t.Skip("填写 liveJevConfig 的 APIURL 与 APIKey 后再跑")
+	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.Endpoint) == "" {
+		t.Skip("填写 liveJevConfig 的 Endpoint 与 APIKey 后再跑")
 	}
 	return cfg
 }

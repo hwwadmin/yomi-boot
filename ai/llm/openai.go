@@ -33,7 +33,7 @@ var _ Client = (*openaiClient)(nil)
 // newOpenAIClient 构造 OpenAI 协议客户端
 //
 // 官方客户端仅持有不可变选项，每次请求独立执行，同一实例可并发 Chat / ChatStream。
-func newOpenAIClient(cfg Config) (*openaiClient, error) {
+func newOpenAIClient(cfg Config) *openaiClient {
 	// 密钥与地址原样注入；关闭官方默认重试
 	opts := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
@@ -51,7 +51,7 @@ func newOpenAIClient(cfg Config) (*openaiClient, error) {
 		sdk:     openai.NewClient(opts...),
 		cfg:     cfg,
 		timeout: timeoutOrDefault(cfg.Timeout),
-	}, nil
+	}
 }
 
 // Chat 发起同步对话；空选项列表或空助手文本返回 ErrBadResponse
@@ -168,7 +168,7 @@ func (c *openaiClient) buildParamsWithField(req ChatRequest, field MaxTokensFiel
 
 // maxTokensRetryParams 在上游 400 明确拒绝当前 max token 字段时，返回改用另一字段的参数
 func (c *openaiClient) maxTokensRetryParams(req ChatRequest, err error) (openai.ChatCompletionNewParams, bool) {
-	if !isMaxTokensFieldRejected(err) {
+	if !c.isMaxTokensFieldRejected(err) {
 		return openai.ChatCompletionNewParams{}, false
 	}
 	field := MaxTokensFieldCompletion
@@ -183,13 +183,27 @@ func (c *openaiClient) maxTokensRetryParams(req ChatRequest, err error) (openai.
 }
 
 // isMaxTokensFieldRejected 判断 400 是否由当前 max token 字段不受支持导致
-func isMaxTokensFieldRejected(err error) bool {
+//
+// 模型名明确属于 reasoning 系列时，字段大概率用错，允许按正文纠正；其余模型只在
+// 上游明确表示字段不支持/未知/不允许时纠正，避免把 "too large" 等参数值错误误判。
+func (c *openaiClient) isMaxTokensFieldRejected(err error) bool {
 	var apiErr *openai.Error
 	if !stderrors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
 		return false
 	}
 	msg := strings.ToLower(apiErr.Error())
-	return strings.Contains(msg, "max_tokens") || strings.Contains(msg, "max_completion_tokens")
+	if !strings.Contains(msg, "max_tokens") && !strings.Contains(msg, "max_completion_tokens") {
+		return false
+	}
+	if isReasoningModel(c.cfg.Model) {
+		return true
+	}
+	for _, marker := range []string{"unsupported", "not supported", "does not support", "not allowed", "unknown", "unrecognized"} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // mapOpenAIError 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误

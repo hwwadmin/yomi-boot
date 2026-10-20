@@ -61,6 +61,22 @@ func sseResponse(req *http.Request) *http.Response {
 	}
 }
 
+// failMsgShim 固定返回 400 错误正文，用于验证启发式误判
+type failMsgShim struct {
+	mu    sync.Mutex
+	calls int
+	msg   string
+}
+
+// RoundTrip 返回带指定 message 的 400
+func (s *failMsgShim) RoundTrip(req *http.Request) (*http.Response, error) {
+	s.mu.Lock()
+	s.calls++
+	msg := s.msg
+	s.mu.Unlock()
+	return jsonResponse(req, http.StatusBadRequest, `{"error":{"message":"`+msg+`"}}`), nil
+}
+
 // newRetryClient 构造面向别名网关的客户端
 func newRetryClient(t *testing.T, shim *maxTokensFieldShim) Client {
 	t.Helper()
@@ -99,6 +115,31 @@ func TestChatRetriesWithAlternateMaxTokensField(t *testing.T) {
 	}
 	if strings.Contains(shim.bodies[1], `"max_tokens"`) || !strings.Contains(shim.bodies[1], `"max_completion_tokens"`) {
 		t.Fatalf("second body=%s", shim.bodies[1])
+	}
+}
+
+// TestChatDoesNotRetryOnMaxTokensValueError 验证 max_tokens 值错误不会触发字段切换重试
+func TestChatDoesNotRetryOnMaxTokensValueError(t *testing.T) {
+	t.Parallel()
+	shim := &failMsgShim{msg: "max_tokens is too large"}
+	cli, err := New(Config{
+		Protocol:   ProtocolOpenAI,
+		APIURL:     "https://gateway.example/v1",
+		APIKey:     "sk-test",
+		Model:      "gateway-alias",
+		HTTPClient: &http.Client{Transport: shim},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, err = cli.Chat(context.Background(), ChatRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}})
+	if !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("err=%v", err)
+	}
+	shim.mu.Lock()
+	defer shim.mu.Unlock()
+	if shim.calls != 1 {
+		t.Fatalf("calls=%d", shim.calls)
 	}
 }
 

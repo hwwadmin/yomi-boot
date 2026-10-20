@@ -1,7 +1,7 @@
 // Package jev 提供协议无关的 Jev 结构化决策门面，首版为 TypeSafe System One 兼容 HTTP。
 //
 // 本包与 ai/llm、ai/embedding 相互独立，配置与协议类型互不混用。
-// 首版仅 ProtocolSystemOne。APIURL 为完整 POST 地址（非 Chat 的 BaseURL 惯例）。
+// 首版仅 ProtocolSystemOne。Endpoint 为完整 POST 地址（非 Chat 的 BaseURL 惯例）。
 // 模型由 Config.Model 锁定。无流式。不进 bootstrap、不读 YAML、不做限流。
 //
 // 千问决策模型示例：`https://maas.qianwenaiapi.com/compatible-mode/v1/systemone`，
@@ -11,7 +11,7 @@
 //
 //	cli, err := jev.New(jev.Config{
 //	    Protocol: jev.ProtocolSystemOne,
-//	    APIURL:   "https://maas.qianwenaiapi.com/compatible-mode/v1/systemone",
+//	    Endpoint: "https://maas.qianwenaiapi.com/compatible-mode/v1/systemone",
 //	    APIKey:   apiKey,
 //	    Model:    "decision-model-preview",
 //	})

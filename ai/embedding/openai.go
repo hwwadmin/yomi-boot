@@ -15,14 +15,15 @@ import (
 	"github.com/openai/openai-go/v3/option"
 )
 
-// maxEmbedBatch 是单次上游请求的输入条数上限（OpenAI Embeddings）
-const maxEmbedBatch = 2048
+// defaultMaxBatch 是未配置 MaxBatch 时的单次输入条数上限（OpenAI Embeddings）
+const defaultMaxBatch = 2048
 
 // openaiClient OpenAI 协议的 Client 实现
 type openaiClient struct {
-	sdk     openai.Client // sdk 是官方客户端，选项不可变，可并发调用
-	cfg     Config        // cfg 是构造期拷贝后的配置
-	timeout time.Duration // timeout 是整段墙钟超时（0 已回退为 60s）
+	sdk      openai.Client // sdk 是官方客户端，选项不可变，可并发调用
+	cfg      Config        // cfg 是构造期拷贝后的配置
+	timeout  time.Duration // timeout 是整段墙钟超时（0 已回退为 60s）
+	maxBatch int           // maxBatch 是单次请求的输入条数上限
 }
 
 var _ Client = (*openaiClient)(nil)
@@ -30,7 +31,7 @@ var _ Client = (*openaiClient)(nil)
 // newOpenAIClient 构造 OpenAI 协议向量化客户端
 //
 // 官方客户端仅持有不可变选项，每次请求独立执行，同一实例可并发 Embed。
-func newOpenAIClient(cfg Config) (*openaiClient, error) {
+func newOpenAIClient(cfg Config) *openaiClient {
 	// 地址原样注入；关闭官方默认重试
 	opts := []option.RequestOption{
 		option.WithBaseURL(cfg.APIURL),
@@ -45,11 +46,16 @@ func newOpenAIClient(cfg Config) (*openaiClient, error) {
 	for k, v := range cfg.ExtraHeaders {
 		opts = append(opts, option.WithHeader(k, v))
 	}
+	maxBatch := cfg.MaxBatch
+	if maxBatch == 0 {
+		maxBatch = defaultMaxBatch
+	}
 	return &openaiClient{
-		sdk:     openai.NewClient(opts...),
-		cfg:     cfg,
-		timeout: timeoutOrDefault(cfg.Timeout),
-	}, nil
+		sdk:      openai.NewClient(opts...),
+		cfg:      cfg,
+		timeout:  timeoutOrDefault(cfg.Timeout),
+		maxBatch: maxBatch,
+	}
 }
 
 // Embed 发起同步向量化；超过 2048 条时内部自动分批；空结果或下标不齐返回 ErrBadResponse
@@ -63,8 +69,8 @@ func (c *openaiClient) Embed(ctx context.Context, req Request) (*Response, error
 	vectors := make([][]float64, len(req.Inputs))
 	model := ""
 	var promptTokens, totalTokens int64
-	for start := 0; start < len(req.Inputs); start += maxEmbedBatch {
-		end := start + maxEmbedBatch
+	for start := 0; start < len(req.Inputs); start += c.maxBatch {
+		end := start + c.maxBatch
 		if end > len(req.Inputs) {
 			end = len(req.Inputs)
 		}

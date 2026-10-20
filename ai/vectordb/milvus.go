@@ -112,7 +112,12 @@ func (s *milvusStore) DropCollection(ctx context.Context, name string) error {
 	if err := retryOnRateLimit(ctx, func() error {
 		return s.cli.DropCollection(ctx, milvusclient.NewDropCollectionOption(n))
 	}); err != nil {
-		return mapMilvusErr(err)
+		mapped := mapMilvusErr(err)
+		// 并发删除时另一个调用可能已先删；Drop 返回 not found 仍视为幂等成功
+		if errors.Is(mapped, ErrNotFound) {
+			return nil
+		}
+		return mapped
 	}
 	return nil
 }
@@ -138,8 +143,14 @@ func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, record
 		return err
 	}
 	if !has {
-		if err := s.createReady(ctx, n); err != nil && !errors.Is(err, ErrAlreadyExists) {
-			return err
+		if err := s.createReady(ctx, n); err != nil {
+			if !errors.Is(err, ErrAlreadyExists) {
+				return err
+			}
+			// 并发创建者可能尚未完成索引/load，补一次 ready 再写
+			if err := s.ensureReady(ctx, n); err != nil {
+				return err
+			}
 		}
 	} else if err := s.ensureReady(ctx, n); err != nil {
 		return err
@@ -482,6 +493,7 @@ func (s *milvusStore) createReady(ctx context.Context, name string) error {
 		WithField(entity.NewField().WithName(fieldID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(int64(maxIDLen)).WithIsPrimaryKey(true)).
 		WithField(entity.NewField().WithName(fieldVector).WithDataType(entity.FieldTypeFloatVector).WithDim(int64(s.dim))).
 		WithField(entity.NewField().WithName(fieldMetadata).WithDataType(entity.FieldTypeJSON))
+	// 建集本身失败时不主动 Drop：无法区分是否由并发创建者成功创建，避免误删
 	if err := retryOnRateLimit(ctx, func() error {
 		return s.cli.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(name, schema))
 	}); err != nil {
@@ -560,7 +572,11 @@ func (s *milvusStore) dropQuiet(ctx context.Context, name string) {
 	if base == nil {
 		base = context.Background()
 	}
-	dropCtx, cancel := context.WithTimeout(context.WithoutCancel(base), timeoutOrDefault(s.timeout))
+	timeout := timeoutOrDefault(s.timeout)
+	if timeout > compensateTimeout {
+		timeout = compensateTimeout
+	}
+	dropCtx, cancel := context.WithTimeout(context.WithoutCancel(base), timeout)
 	defer cancel()
 	if err := retryOnRateLimit(dropCtx, func() error {
 		return s.cli.DropCollection(dropCtx, milvusclient.NewDropCollectionOption(name))

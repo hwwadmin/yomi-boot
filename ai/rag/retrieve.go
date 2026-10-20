@@ -12,6 +12,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 )
 
 // Retrieve 在指定集合中检索最相关的块；集合不存在或为空时返回空切片与 nil
@@ -62,36 +63,51 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 		}
 		return nil, err
 	}
-	// 读取命中文档当前块总数，过滤索引更新窗口内尚未删除的旧块
-	counts, err := e.currentChunkCounts(ctx, collection, hits)
+	candidates := make([]vectordb.Hit, 0, len(hits))
+	for _, hit := range hits {
+		if req.MinScore != 0 && hit.Score < req.MinScore {
+			continue
+		}
+		if strings.TrimSpace(hit.Metadata[MetadataKeyContent]) == "" {
+			continue
+		}
+		candidates = append(candidates, hit)
+	}
+	// 读取命中文档当前版本与块总数，过滤更新窗口内尚未删除的旧块
+	states, err := e.currentChunkStates(ctx, collection, candidates)
 	if err != nil {
 		if errors.Is(err, vectordb.ErrNotFound) {
 			return []Chunk{}, nil
 		}
 		return nil, err
 	}
-	out := make([]Chunk, 0, len(hits))
-	for _, hit := range hits {
-		if req.MinScore != 0 && hit.Score < req.MinScore {
-			continue
-		}
-		if count, ok := counts[strings.TrimSpace(hit.Metadata[MetadataKeyDocumentID])]; ok {
+	out := make([]Chunk, 0, len(candidates))
+	for _, hit := range candidates {
+		if state, ok := states[strings.TrimSpace(hit.Metadata[MetadataKeyDocumentID])]; ok {
 			index, err := strconv.Atoi(strings.TrimSpace(hit.Metadata[MetadataKeyChunkIndex]))
-			if err == nil && index >= count {
-				continue
+			if err == nil {
+				version := strings.TrimSpace(hit.Metadata[MetadataKeyVersion])
+				if state.version != "" && version != state.version {
+					continue
+				}
+				if index >= state.total {
+					continue
+				}
 			}
 		}
-		content := strings.TrimSpace(hit.Metadata[MetadataKeyContent])
-		if content == "" {
-			continue
-		}
-		out = append(out, hitToChunk(hit, content))
+		out = append(out, hitToChunk(hit, strings.TrimSpace(hit.Metadata[MetadataKeyContent])))
 	}
 	return out, nil
 }
 
-// currentChunkCounts 读取命中文档当前版本的块总数；用于过滤更新窗口内的旧块
-func (e *Engine) currentChunkCounts(ctx context.Context, collection string, hits []vectordb.Hit) (map[string]int, error) {
+// chunkState 是一次写入的版本与块总数
+type chunkState struct {
+	total   int
+	version string
+}
+
+// currentChunkStates 读取命中文档当前版本与块总数；辅助查询失败时降级为不过滤
+func (e *Engine) currentChunkStates(ctx context.Context, collection string, hits []vectordb.Hit) (map[string]chunkState, error) {
 	ids := make([]string, 0, len(hits))
 	seen := make(map[string]struct{}, len(hits))
 	for _, hit := range hits {
@@ -109,23 +125,44 @@ func (e *Engine) currentChunkCounts(ctx context.Context, collection string, hits
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	records, err := e.store.Get(ctx, collection, ids)
-	if err != nil {
-		return nil, err
-	}
-	counts := make(map[string]int, len(records))
-	for _, record := range records {
-		docID := strings.TrimSpace(record.Metadata[MetadataKeyDocumentID])
-		if docID == "" {
-			continue
+	states := make(map[string]chunkState, len(ids))
+	for start := 0; start < len(ids); start += idBatchSize {
+		end := start + idBatchSize
+		if end > len(ids) {
+			end = len(ids)
 		}
-		total, err := strconv.Atoi(strings.TrimSpace(record.Metadata[MetadataKeyChunkCount]))
-		if err != nil || total <= 0 {
-			continue
+		records, err := e.store.Get(ctx, collection, ids[start:end])
+		if err != nil {
+			// 取消/超时必须上抛，不能把 ctx 失效降级成正常结果
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			if errors.Is(err, vectordb.ErrNotFound) {
+				return nil, err
+			}
+			// 其他辅助查询失败时降级为不过滤，避免检索整体失败
+			logger.Warn(ctx, "ai/rag 读取文档版本失败，降级为不过滤旧块", "collection", collection, "error", err)
+			return nil, nil
 		}
-		counts[docID] = total
+		for _, record := range records {
+			docID := strings.TrimSpace(record.Metadata[MetadataKeyDocumentID])
+			if docID == "" {
+				continue
+			}
+			total, err := strconv.Atoi(strings.TrimSpace(record.Metadata[MetadataKeyChunkCount]))
+			if err != nil || total <= 0 {
+				continue
+			}
+			states[docID] = chunkState{
+				total:   total,
+				version: strings.TrimSpace(record.Metadata[MetadataKeyVersion]),
+			}
+		}
 	}
-	return counts, nil
+	return states, nil
 }
 
 // hitToChunk 将向量库命中转为块，并剥离保留元数据键
