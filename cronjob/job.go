@@ -1,6 +1,7 @@
-// Package cronjob Job 定义与参数校验
+// Job 定义与参数校验
 //
 // @author zwei
+
 package cronjob
 
 import (
@@ -21,8 +22,11 @@ type Handler func(ctx context.Context) error
 
 // Job 业务定时任务定义
 type Job struct {
-	Name string // Name 集群内唯一，用作锁 Key 后缀；建议带服务前缀
-	Spec string // Spec 6 段 cron：秒 分 时 日 月 周（robfig WithSeconds）
+	// Name 集群内唯一，用作锁 Key 后缀；建议带服务前缀。同一进程内重复启动同名 Job 会输出 Warn
+	Name string
+
+	// Spec 是 6 段 cron（秒 分 时 日 月 周）；也支持 @daily 等描述符与 TZ=/CRON_TZ= 时区前缀
+	Spec string
 
 	// MaxRunDuration 单次 Handler 最长执行时间；0 表示不限制。
 	// 到期后 cancel Handler ctx 并停止续锁，Handler 须尊重 ctx 才能及时退出。

@@ -1,11 +1,14 @@
-// Package cronjob 调度启动与触发执行
+// 调度启动与触发执行
 //
 // @author zwei
+
 package cronjob
 
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
+	"sync"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/appctx"
@@ -21,20 +24,57 @@ const (
 	execLockKeyPrefix  = "cronjob:lock:"  // 执行锁 Key 前缀
 )
 
+// activeJobNames 进程内活跃 Job 名引用计数，用于提示重复 Name
+var (
+	activeJobNamesMu sync.Mutex
+	activeJobNames   = make(map[string]int)
+)
+
 // Start 校验后在后台按 Spec 触发；ctx 取消时停止调度并退出。
-// 非法参数或 Spec 无法解析时打 Error 日志并直接返回。
-func Start(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) {
+// 非法参数或 Spec 无法解析时打 Error 日志并返回已关闭的 done。
+// 返回的 done 在调度停止且所有在途 Handler 结束后关闭。
+func Start(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) <-chan struct{} {
 	if err := job.validate(h, factory); err != nil {
-		logger.ErrorWithoutCtx("cronjob.start.invalid", "error", err)
-		return
+		logger.ErrorWithoutCtx("cronjob.start.invalid", "name", job.Name, "spec", job.Spec, "error", err)
+		return closedDone()
 	}
+	return startScheduler(ctx, job, h, factory)
+}
+
+// MustStart 与 Start 相同，但启动参数非法时 panic；供启动装配阶段 Fail Fast 使用
+func MustStart(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) <-chan struct{} {
+	if err := job.validate(h, factory); err != nil {
+		logger.ErrorWithoutCtx("cronjob.must_start.invalid", "name", job.Name, "spec", job.Spec, "error", err)
+		panic(errors.Wrap(err, "cronjob 启动参数非法"))
+	}
+	return startScheduler(ctx, job, h, factory)
+}
+
+// startScheduler 在后台启动调度，返回调度与在途 Handler 全部结束的信号
+func startScheduler(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) <-chan struct{} {
 	ctx = appctx.OrBackground(ctx)
-	go runScheduler(ctx, job, h, factory)
+	if n := acquireJobName(job.Name); n > 1 {
+		logger.Warn(ctx, "cronjob.start.duplicate_name", "name", job.Name, "active", n)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer releaseJobName(job.Name)
+		runScheduler(ctx, job, h, factory)
+	}()
+	return done
+}
+
+// closedDone 返回已关闭的调度结束信号
+func closedDone() <-chan struct{} {
+	done := make(chan struct{})
+	close(done)
+	return done
 }
 
 // runScheduler 创建 cron、注册任务，直至 ctx 取消后 Stop
 func runScheduler(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) {
-	c := cron.New(cron.WithSeconds(), cron.WithLocation(time.Local))
+	c := cron.New(cron.WithSeconds())
 	_, err := c.AddFunc(job.Spec, func() {
 		fire(ctx, job, h, factory)
 	})
@@ -75,7 +115,12 @@ func fire(ctx context.Context, job Job, h Handler, factory distlock.DistLockFact
 		unlockCtx, cancel := appctx.BackgroundWithTimeout(5 * time.Second)
 		defer cancel()
 		unlockErr := lock.Unlock(unlockCtx)
-		if unlockErr != nil && !errors.Is(unlockErr, distlock.ErrLockNotHeld) {
+		switch {
+		case unlockErr == nil:
+		case errors.Is(unlockErr, distlock.ErrLockNotHeld):
+			// 本调用点必然获取过锁，NotHeld 说明锁已在 Redis 侧丢失
+			logger.Warn(ctx, "cronjob.unlock.lock_not_held", "name", job.Name)
+		default:
 			logger.Error(ctx, "cronjob.unlock.failed", "name", job.Name, "error", unlockErr)
 		}
 	}()
@@ -101,6 +146,7 @@ func runHandlerSafely(ctx context.Context, name string, h Handler) {
 		if r := recover(); r != nil {
 			logger.Error(ctx, fmt.Sprintf("CronJob[%s] panic.", name),
 				"panic", r,
+				"stack", string(debug.Stack()),
 				"duration", time.Since(start).String(),
 			)
 		}
@@ -117,4 +163,23 @@ func runHandlerSafely(ctx context.Context, name string, h Handler) {
 // execLockKey 构造执行锁 Redis Key
 func execLockKey(name string) string {
 	return execLockKeyPrefix + name
+}
+
+// acquireJobName 记录进程内活跃 Job 名并返回同名数量
+func acquireJobName(name string) int {
+	activeJobNamesMu.Lock()
+	defer activeJobNamesMu.Unlock()
+	activeJobNames[name]++
+	return activeJobNames[name]
+}
+
+// releaseJobName 释放进程内活跃 Job 名引用
+func releaseJobName(name string) {
+	activeJobNamesMu.Lock()
+	defer activeJobNamesMu.Unlock()
+	if activeJobNames[name] <= 1 {
+		delete(activeJobNames, name)
+		return
+	}
+	activeJobNames[name]--
 }

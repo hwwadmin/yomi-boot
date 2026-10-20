@@ -1,6 +1,7 @@
-// Package cronjob 业务日历定时任务测试
+// 业务日历定时任务测试
 //
 // @author zwei
+
 package cronjob
 
 import (
@@ -60,18 +61,32 @@ func TestJob_validate(t *testing.T) {
 	}
 }
 
-// TestStart_invalid 校验非法参数时 Start 不启动调度
+// TestStart_invalid 校验非法参数时 Start 返回已关闭的 done 且不启动调度
 func TestStart_invalid(t *testing.T) {
 	var runs atomic.Int32
-	Start(context.Background(), Job{}, func(context.Context) error {
+	done := Start(context.Background(), Job{}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, nil)
 
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+	default:
+		t.Fatal("invalid start should return closed done")
+	}
 	if runs.Load() != 0 {
 		t.Fatal("invalid start should not run handler")
 	}
+}
+
+// TestMustStart_invalidPanics 校验 MustStart 对非法参数 panic
+func TestMustStart_invalidPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("MustStart should panic on invalid job")
+		}
+	}()
+	MustStart(context.Background(), Job{}, func(context.Context) error { return nil }, nil)
 }
 
 // TestStart_malformedTZSpecDoesNotPanic 校验畸形 TZ 前缀 Spec 不会让 Start panic
@@ -84,12 +99,16 @@ func TestStart_malformedTZSpecDoesNotPanic(t *testing.T) {
 	}
 
 	var runs atomic.Int32
-	Start(context.Background(), Job{Name: "test-tz", Spec: "TZ=Asia/Shanghai"}, func(context.Context) error {
+	done := Start(context.Background(), Job{Name: "test-tz", Spec: "TZ=Asia/Shanghai"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
 
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+	default:
+		t.Fatal("malformed tz spec should return closed done")
+	}
 	if runs.Load() != 0 {
 		t.Fatal("malformed tz spec should not run handler")
 	}
@@ -159,6 +178,28 @@ func TestStart_contextCancelStops(t *testing.T) {
 	if runs.Load() > after+1 {
 		// 允许 Stop 等待窗口内至多再完成一次已触发的 fire
 		t.Fatalf("expected scheduling to stop, before=%d after=%d", after, runs.Load())
+	}
+}
+
+// TestStart_doneClosesAfterCancel 校验 cancel 后 Start 返回的 done 关闭
+func TestStart_doneClosesAfterCancel(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := Start(ctx, Job{Name: "test-start-done", Spec: "*/1 * * * * *"}, func(context.Context) error {
+		return nil
+	}, factory)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("done channel did not close after cancel")
 	}
 }
 
@@ -290,4 +331,21 @@ func TestExecLockKey(t *testing.T) {
 	if got := execLockKey("svc:job"); got != "cronjob:lock:svc:job" {
 		t.Fatalf("got %s", got)
 	}
+}
+
+// TestJobNameRegistry 校验同名 Job 引用计数与释放
+func TestJobNameRegistry(t *testing.T) {
+	name := "test-registry"
+	if n := acquireJobName(name); n != 1 {
+		t.Fatalf("first acquire = %d, want 1", n)
+	}
+	if n := acquireJobName(name); n != 2 {
+		t.Fatalf("second acquire = %d, want 2", n)
+	}
+	releaseJobName(name)
+	releaseJobName(name)
+	if n := acquireJobName(name); n != 1 {
+		t.Fatalf("acquire after release = %d, want 1", n)
+	}
+	releaseJobName(name)
 }
