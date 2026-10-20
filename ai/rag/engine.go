@@ -16,35 +16,42 @@ import (
 // embedBatchSize 是单次向量化的文本条数上限
 const embedBatchSize = 64
 
-// Engine 检索增强引擎；构造后不可变，可并发调用；请勿复制值
+// Engine 检索增强引擎；同一实例可并发服务多个集合；构造后不可变，请勿复制值
 type Engine struct {
 	embedder        embedding.Client
 	store           vectordb.Store
-	collection      string
 	defaultSplitter Splitter
 	dimension       atomic.Int64
 }
 
 // EnsureCollection 确保集合存在；已存在时返回 nil
-func (e *Engine) EnsureCollection(ctx context.Context) error {
-	return e.ensureCollection(orBackground(ctx))
+func (e *Engine) EnsureCollection(ctx context.Context, collection string) error {
+	name, err := normalizeCollection(collection)
+	if err != nil {
+		return err
+	}
+	return e.ensureCollection(orBackground(ctx), name)
 }
 
 // DropCollection 删除集合；不存在时返回 nil
-func (e *Engine) DropCollection(ctx context.Context) error {
-	return e.store.DropCollection(orBackground(ctx), e.collection)
+func (e *Engine) DropCollection(ctx context.Context, collection string) error {
+	name, err := normalizeCollection(collection)
+	if err != nil {
+		return err
+	}
+	return e.store.DropCollection(orBackground(ctx), name)
 }
 
 // ensureCollection 查询并按需创建集合；并发创建撞车时视为成功
-func (e *Engine) ensureCollection(ctx context.Context) error {
-	has, err := e.store.HasCollection(ctx, e.collection)
+func (e *Engine) ensureCollection(ctx context.Context, collection string) error {
+	has, err := e.store.HasCollection(ctx, collection)
 	if err != nil {
 		return err
 	}
 	if has {
 		return nil
 	}
-	if err := e.store.CreateCollection(ctx, e.collection); err != nil {
+	if err := e.store.CreateCollection(ctx, collection); err != nil {
 		if errors.Is(err, vectordb.ErrAlreadyExists) {
 			return nil
 		}

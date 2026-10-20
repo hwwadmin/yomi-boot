@@ -105,19 +105,11 @@ func newTestStore(t *testing.T, dim int) vectordb.Store {
 }
 
 // newTestEngine 创建默认测试引擎
-func newTestEngine(t *testing.T, mutate ...func(*Config)) (*Engine, *fakeEmbedder, vectordb.Store) {
+func newTestEngine(t *testing.T) (*Engine, *fakeEmbedder, vectordb.Store) {
 	t.Helper()
 	store := newTestStore(t, testDimension)
 	emb := &fakeEmbedder{dim: testDimension}
-	cfg := Config{
-		Embedder:   emb,
-		Store:      store,
-		Collection: testCollection,
-	}
-	for _, fn := range mutate {
-		fn(&cfg)
-	}
-	e, err := New(cfg)
+	e, err := New(Config{Embedder: emb, Store: store})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +121,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 	t.Parallel()
 	e, emb, _ := newTestEngine(t)
 	ctx := context.Background()
-	res, err := e.Index(ctx, IndexRequest{Documents: []Document{
+	res, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{
 			ID:       "doc-apple",
 			Content:  "苹果是一种水果。苹果富含维生素。",
@@ -144,11 +136,11 @@ func TestIndexAndRetrieve(t *testing.T) {
 	if res.Documents != 2 || res.Chunks != 2 || res.Tokens != 2 {
 		t.Fatalf("入库结果: %+v", res)
 	}
-	has, err := e.store.HasCollection(ctx, e.collection)
+	has, err := e.store.HasCollection(ctx, testCollection)
 	if err != nil || !has {
 		t.Fatalf("集合未创建: has=%v err=%v", has, err)
 	}
-	chunks, err := e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 10})
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +167,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 		t.Fatalf("向量化调用 = %d，期望 2", emb.callCount())
 	}
 
-	chunks, err = e.Retrieve(ctx, RetrieveRequest{
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
 		Query:  "水果",
 		TopK:   10,
 		Filter: map[string]string{MetadataKeySource: "fruit/banana.md"},
@@ -183,7 +175,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 	if err != nil || len(chunks) != 1 || chunks[0].DocumentID != "doc-banana" {
 		t.Fatalf("来源过滤: %+v err=%v", chunks, err)
 	}
-	chunks, err = e.Retrieve(ctx, RetrieveRequest{
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
 		Query:  "水果",
 		TopK:   10,
 		Filter: map[string]string{"lang": "zh"},
@@ -191,17 +183,60 @@ func TestIndexAndRetrieve(t *testing.T) {
 	if err != nil || len(chunks) != 1 || chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("自定义元数据过滤: %+v err=%v", chunks, err)
 	}
-	chunks, err = e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.5})
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.5})
 	if err != nil || len(chunks) != 1 || chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("阈值过滤: %+v err=%v", chunks, err)
 	}
-	chunks, err = e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 10})
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10})
 	if err != nil || len(chunks) != 2 {
 		t.Fatalf("不设阈值: %+v err=%v", chunks, err)
 	}
-	chunks, err = e.Retrieve(ctx, RetrieveRequest{Query: "水果", TopK: 1})
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "水果", TopK: 1})
 	if err != nil || len(chunks) != 1 {
 		t.Fatalf("TopK 生效: %+v err=%v", chunks, err)
+	}
+}
+
+// TestMultipleCollections 覆盖同一 Engine 下多业务集合的数据隔离
+func TestMultipleCollections(t *testing.T) {
+	t.Parallel()
+	e, _, store := newTestEngine(t)
+	ctx := context.Background()
+	if _, err := e.Index(ctx, "kb_sales", IndexRequest{Documents: []Document{
+		{ID: "sales-1", Content: "苹果报价。"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Index(ctx, "kb_hr", IndexRequest{Documents: []Document{
+		{ID: "hr-1", Content: "香蕉福利。"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	sales, err := e.Retrieve(ctx, "kb_sales", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.5})
+	if err != nil || len(sales) != 0 {
+		t.Fatalf("销售库不应命中人事文档: %+v err=%v", sales, err)
+	}
+	hr, err := e.Retrieve(ctx, "kb_hr", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.5})
+	if err != nil || len(hr) != 1 || hr[0].DocumentID != "hr-1" {
+		t.Fatalf("人事库命中: %+v err=%v", hr, err)
+	}
+	if err := e.DeleteDocument(ctx, "kb_sales", "sales-1"); err != nil {
+		t.Fatal(err)
+	}
+	hr, err = e.Retrieve(ctx, "kb_hr", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.5})
+	if err != nil || len(hr) != 1 {
+		t.Fatalf("删除销售库文档不应影响人事库: %+v err=%v", hr, err)
+	}
+	if err := e.DropCollection(ctx, "kb_sales"); err != nil {
+		t.Fatal(err)
+	}
+	hasSales, err := store.HasCollection(ctx, "kb_sales")
+	if err != nil || hasSales {
+		t.Fatalf("销售库未删除: has=%v err=%v", hasSales, err)
+	}
+	hasHR, err := store.HasCollection(ctx, "kb_hr")
+	if err != nil || !hasHR {
+		t.Fatalf("人事库应保留: has=%v err=%v", hasHR, err)
 	}
 }
 
@@ -209,7 +244,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 func TestRetrieveEmptyCollection(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
-	chunks, err := e.Retrieve(context.Background(), RetrieveRequest{Query: "苹果", TopK: 5})
+	chunks, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +262,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	res, err := e.Index(ctx, IndexRequest{
+	res, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。苹果。苹果。苹果。"}},
 		Splitter:  splitter,
 	})
@@ -238,7 +273,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 		t.Fatalf("首次切块 = %d，期望至少 3", res.Chunks)
 	}
 	oldCount := res.Chunks
-	res, err = e.Index(ctx, IndexRequest{
+	res, err = e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。"}},
 		Splitter:  splitter,
 	})
@@ -248,21 +283,21 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	if res.Chunks != 1 {
 		t.Fatalf("二次切块 = %d，期望 1", res.Chunks)
 	}
-	got, err := store.Get(ctx, e.collection, []string{chunkID("doc", 0), chunkID("doc", 1)})
+	got, err := store.Get(ctx, testCollection, []string{chunkID("doc", 0), chunkID("doc", 1)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].ID != chunkID("doc", 0) {
 		t.Fatalf("旧块未清理: %+v", got)
 	}
-	got, err = store.Get(ctx, e.collection, []string{chunkID("doc", oldCount-1)})
+	got, err = store.Get(ctx, testCollection, []string{chunkID("doc", oldCount-1)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 0 {
 		t.Fatalf("尾部旧块仍存在: %+v", got)
 	}
-	chunks, err := e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 20})
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 20})
 	if err != nil || len(chunks) != 1 || chunks[0].DocumentID != "doc" {
 		t.Fatalf("重复入库后检索: %+v err=%v", chunks, err)
 	}
@@ -273,25 +308,25 @@ func TestDeleteDocument(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.DeleteDocument(ctx, "missing"); err != nil {
+	if err := e.DeleteDocument(ctx, testCollection, "missing"); err != nil {
 		t.Fatalf("集合不存在时应幂等: %v", err)
 	}
-	if err := e.DeleteDocument(ctx, " "); !errors.Is(err, ErrInvalidArgument) {
+	if err := e.DeleteDocument(ctx, testCollection, " "); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("非法文档 ID: %v", err)
 	}
-	if _, err := e.Index(ctx, IndexRequest{Documents: []Document{
+	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.DeleteDocument(ctx, "doc"); err != nil {
+	if err := e.DeleteDocument(ctx, testCollection, "doc"); err != nil {
 		t.Fatal(err)
 	}
-	chunks, err := e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 5})
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
 	if err != nil || len(chunks) != 0 {
 		t.Fatalf("删除后检索: %+v err=%v", chunks, err)
 	}
-	if err := e.DeleteDocument(ctx, "doc"); err != nil {
+	if err := e.DeleteDocument(ctx, testCollection, "doc"); err != nil {
 		t.Fatalf("重复删除应幂等: %v", err)
 	}
 }
@@ -301,25 +336,52 @@ func TestCollectionLifecycle(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.EnsureCollection(ctx); err != nil {
+	if err := e.EnsureCollection(ctx, testCollection); err != nil {
 		t.Fatal(err)
 	}
-	has, err := e.store.HasCollection(ctx, e.collection)
+	has, err := e.store.HasCollection(ctx, testCollection)
 	if err != nil || !has {
 		t.Fatalf("集合未创建: has=%v err=%v", has, err)
 	}
-	if err := e.EnsureCollection(ctx); err != nil {
+	if err := e.EnsureCollection(ctx, testCollection); err != nil {
 		t.Fatalf("重复创建: %v", err)
 	}
-	if err := e.DropCollection(ctx); err != nil {
+	if err := e.DropCollection(ctx, testCollection); err != nil {
 		t.Fatal(err)
 	}
-	has, err = e.store.HasCollection(ctx, e.collection)
+	has, err = e.store.HasCollection(ctx, testCollection)
 	if err != nil || has {
 		t.Fatalf("集合未删除: has=%v err=%v", has, err)
 	}
-	if err := e.DropCollection(ctx); err != nil {
+	if err := e.DropCollection(ctx, testCollection); err != nil {
 		t.Fatalf("重复删除: %v", err)
+	}
+}
+
+// TestCollectionValidation 覆盖集合名校验
+func TestCollectionValidation(t *testing.T) {
+	t.Parallel()
+	e, emb, _ := newTestEngine(t)
+	ctx := context.Background()
+	if _, err := e.Index(ctx, "", IndexRequest{Documents: []Document{
+		{ID: "doc", Content: "x"},
+	}}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("空集合名: %v", err)
+	}
+	if _, err := e.Retrieve(ctx, "bad-name", RetrieveRequest{Query: "x", TopK: 5}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("非法集合名: %v", err)
+	}
+	if err := e.DeleteDocument(ctx, "1bad", "doc"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("非法集合名: %v", err)
+	}
+	if err := e.EnsureCollection(ctx, "  "); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("空白集合名: %v", err)
+	}
+	if err := e.DropCollection(ctx, "bad-name"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("非法集合名: %v", err)
+	}
+	if emb.callCount() != 0 {
+		t.Fatalf("非法集合名不应向量化，实际 %d 次", emb.callCount())
 	}
 }
 
@@ -327,16 +389,9 @@ func TestCollectionLifecycle(t *testing.T) {
 func TestNewMinimal(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
-	e, err := New(Config{
-		Embedder:   &fakeEmbedder{dim: testDimension},
-		Store:      store,
-		Collection: "rag_default",
-	})
+	e, err := New(Config{Embedder: &fakeEmbedder{dim: testDimension}, Store: store})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if e.collection != "rag_default" {
-		t.Fatalf("集合名 = %q", e.collection)
 	}
 	recursive, ok := e.defaultSplitter.(*recursiveSplitter)
 	if !ok {
@@ -355,17 +410,13 @@ func TestNewInvalidConfig(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
 	emb := &fakeEmbedder{dim: testDimension}
-	base := Config{Embedder: emb, Store: store, Collection: "rag_base"}
 	cases := []struct {
 		name string
 		cfg  Config
 	}{
-		{"nil embedder", Config{Store: store, Collection: "rag_base"}},
-		{"nil store", Config{Embedder: emb, Collection: "rag_base"}},
-		{"empty collection", Config{Embedder: emb, Store: store}},
-		{"blank collection", withConfig(base, func(c *Config) { c.Collection = "  " })},
-		{"bad collection", withConfig(base, func(c *Config) { c.Collection = "1bad" })},
-		{"hyphen collection", withConfig(base, func(c *Config) { c.Collection = "bad-name" })},
+		{"nil embedder", Config{Store: store}},
+		{"nil store", Config{Embedder: emb}},
+		{"nil both", Config{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -374,13 +425,6 @@ func TestNewInvalidConfig(t *testing.T) {
 			}
 		})
 	}
-}
-
-// withConfig 复制配置并应用修改
-func withConfig(base Config, mutate func(*Config)) Config {
-	copied := base
-	mutate(&copied)
-	return copied
 }
 
 // TestMustNewPanics 覆盖 Fail Fast 构造
@@ -427,12 +471,12 @@ func TestIndexInvalidRequests(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := e.Index(ctx, tc.req); !errors.Is(err, ErrInvalidArgument) {
+			if _, err := e.Index(ctx, testCollection, tc.req); !errors.Is(err, ErrInvalidArgument) {
 				t.Fatalf("期望 ErrInvalidArgument，实际 %v", err)
 			}
 		})
 	}
-	has, err := e.store.HasCollection(ctx, e.collection)
+	has, err := e.store.HasCollection(ctx, testCollection)
 	if err != nil || has {
 		t.Fatalf("非法请求不应创建集合: has=%v err=%v", has, err)
 	}
@@ -460,7 +504,7 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := e.Retrieve(ctx, tc.req); !errors.Is(err, ErrInvalidArgument) {
+			if _, err := e.Retrieve(ctx, testCollection, tc.req); !errors.Is(err, ErrInvalidArgument) {
 				t.Fatalf("期望 ErrInvalidArgument，实际 %v", err)
 			}
 		})
@@ -475,16 +519,16 @@ func TestDimensionLock(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
 	emb := &fakeEmbedder{dim: testDimension}
-	e, err := New(Config{Embedder: emb, Store: store, Collection: "rag_dim"})
+	e, err := New(Config{Embedder: emb, Store: store})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 5}); err != nil {
+	if _, err := e.Retrieve(ctx, "rag_dim", RetrieveRequest{Query: "苹果", TopK: 5}); err != nil {
 		t.Fatal(err)
 	}
 	emb.setDim(testDimension - 1)
-	if _, err := e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 5}); !errors.Is(err, ErrDimensionMismatch) {
+	if _, err := e.Retrieve(ctx, "rag_dim", RetrieveRequest{Query: "苹果", TopK: 5}); !errors.Is(err, ErrDimensionMismatch) {
 		t.Fatalf("期望 ErrDimensionMismatch，实际 %v", err)
 	}
 }
@@ -494,14 +538,13 @@ func TestIndexEmbedError(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
 	e, err := New(Config{
-		Embedder:   &fakeEmbedder{dim: testDimension, err: embedding.ErrRateLimited},
-		Store:      store,
-		Collection: "rag_embed_err",
+		Embedder: &fakeEmbedder{dim: testDimension, err: embedding.ErrRateLimited},
+		Store:    store,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = e.Index(context.Background(), IndexRequest{Documents: []Document{
+	_, err = e.Index(context.Background(), "rag_embed_err", IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果"},
 	}})
 	if !errors.Is(err, embedding.ErrRateLimited) {
@@ -518,7 +561,7 @@ func TestIndexBatchEmbed(t *testing.T) {
 	for i := range chunks {
 		chunks[i] = "苹果"
 	}
-	res, err := e.Index(context.Background(), IndexRequest{
+	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
 		Splitter:  &stubSplitter{chunks: chunks},
 	})
@@ -538,15 +581,15 @@ func TestRetrieveSkipsForeignChunks(t *testing.T) {
 	t.Parallel()
 	e, _, store := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.EnsureCollection(ctx); err != nil {
+	if err := e.EnsureCollection(ctx, testCollection); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Upsert(ctx, e.collection, []vectordb.Record{
+	if err := store.Upsert(ctx, testCollection, []vectordb.Record{
 		{ID: "foreign", Vector: []float32{1, 0, 0}, Metadata: map[string]string{"foo": "bar"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	chunks, err := e.Retrieve(ctx, RetrieveRequest{Query: "苹果", TopK: 5})
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +603,7 @@ func TestIndexCustomSplitter(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	custom := &stubSplitter{chunks: []string{"自定义块一", "自定义块二"}}
-	res, err := e.Index(context.Background(), IndexRequest{
+	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
 		Splitter:  custom,
 	})
@@ -570,7 +613,7 @@ func TestIndexCustomSplitter(t *testing.T) {
 	if res.Chunks != 2 || custom.calls != 1 {
 		t.Fatalf("自定义切块结果: %+v calls=%d", res, custom.calls)
 	}
-	chunks, err := e.Retrieve(context.Background(), RetrieveRequest{Query: "自定义", TopK: 10})
+	chunks, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{Query: "自定义", TopK: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +638,7 @@ func TestIndexCustomSplitterInvalid(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e, _, _ := newTestEngine(t)
-			_, err := e.Index(context.Background(), IndexRequest{
+			_, err := e.Index(context.Background(), testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "原始文本"}},
 				Splitter:  tc.splitter,
 			})
@@ -611,7 +654,7 @@ func TestEngineConcurrentRetrieve(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	ctx := context.Background()
-	if _, err := e.Index(ctx, IndexRequest{Documents: []Document{
+	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
 	}}); err != nil {
 		t.Fatal(err)
@@ -625,7 +668,7 @@ func TestEngineConcurrentRetrieve(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < rounds; j++ {
-				chunks, err := e.Retrieve(context.Background(), RetrieveRequest{Query: "苹果", TopK: 5})
+				chunks, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
 				if err != nil {
 					errs <- err
 					return

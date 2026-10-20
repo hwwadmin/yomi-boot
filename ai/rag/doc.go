@@ -1,24 +1,27 @@
 // Package rag 提供基于 ai/embedding 与 vectordb 的检索增强数据能力。
 //
 // 覆盖切块、向量化、写入、检索与删除，不包含大模型问答。
-// 一个 Engine 绑定一个向量集合与一个 Embedder；集合名在构造期锁定，其余运行期参数由请求传入。
+// Config 只保留 Embedder 与 Store；集合名与其余运行期参数都按调用传入，
+// 同一个 Engine 可并发服务多个集合（不同业务使用不同集合名即可）。
 // 配置只在 New / MustNew 传入；本包不读 YAML、不进 bootstrap、不注册配置根段。
 // 本包不持有 Embedder / Store 的关闭权，进程退出时由调用方自行关闭。
 //
 // # 基本用法
 //
-//	engine, err := rag.New(rag.Config{
-//	    Embedder:   emb,   // embedding.Client
-//	    Store:      store, // vectordb.Store
-//	    Collection: "knowledge",
-//	})
+//	engine, err := rag.New(rag.Config{Embedder: emb, Store: store})
 //	splitter, err := rag.NewSplitter(rag.SplitConfig{Strategy: rag.StrategyMarkdown})
-//	_, err = engine.Index(ctx, rag.IndexRequest{
+//	_, err = engine.Index(ctx, "kb_sales", rag.IndexRequest{
 //	    Documents: []rag.Document{{ID: "doc-1", Content: text, Source: "manual.md"}},
 //	    Splitter:  splitter,
 //	})
-//	chunks, err := engine.Retrieve(ctx, rag.RetrieveRequest{Query: "如何退款", TopK: 5})
-//	err = engine.DeleteDocument(ctx, "doc-1")
+//	chunks, err := engine.Retrieve(ctx, "kb_sales", rag.RetrieveRequest{Query: "如何退款", TopK: 5})
+//	err = engine.DeleteDocument(ctx, "kb_sales", "doc-1")
+//
+// # 多集合
+//
+// 集合名每次调用传入；Index 对不存在的集合自动创建，Retrieve 在集合不存在时返回空切片，
+// DeleteDocument 在集合不存在时返回 nil。不同业务共用同一个 Engine 时，用不同集合名隔离数据即可；
+// 所有集合共用同一 Store 的向量维度与 Metric。
 //
 // # 切块策略
 //
@@ -34,18 +37,18 @@
 //
 // # 运行期参数
 //
-//   - IndexRequest.Splitter 与 RetrieveRequest.TopK、MinScore、Filter 都按调用传入
+//   - 集合名、IndexRequest.Splitter、RetrieveRequest.TopK/MinScore/Filter 都按调用传入
 //   - RetrieveRequest.TopK 必填；MinScore 为 0 表示不设阈值
 //   - Engine 不内置超时，使用调用方 ctx 控制
 //   - 向量维度在首次向量化后锁定；Embedder 输出变化返回 ErrDimensionMismatch
-//   - Store 的 Dimension 必须与向量化输出一致，否则由 vectordb 返回其错误
+//   - Store 的维度与 Metric 由 Store 构造配置决定，其下所有集合一致
 //
 // # 写入
 //
 //   - 块主键为 "文档ID#序号"；内容与切分信息写入保留元数据键，文档自定义元数据原样合并
 //   - 同一文档重复 Index 会覆盖同序号块，并删除序号超出新块数的旧块；失败时可能留下部分新块，重试即可
 //   - 旧块清理依据块上的 rag_chunk_count，仅对由本库写入的块生效
-//   - 同一文档的 Index 需调用方串行；不同文档可并发
+//   - 同一文档的 Index 需调用方串行；不同文档、不同集合可并发
 //   - 保留元数据键见 MetadataKeyDocumentID 等常量，Document.Metadata 不得使用
 //
 // # 检索与删除

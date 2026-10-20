@@ -21,9 +21,15 @@ type preparedDocument struct {
 // idBatchSize 是按 ID 读写时的单批上限，避免一次请求携带过多主键
 const idBatchSize = 500
 
-// Index 切分、向量化并写入文档；同一 ID 重复写入会覆盖并清理多余旧块
-func (e *Engine) Index(ctx context.Context, req IndexRequest) (*IndexResult, error) {
+// Index 切分、向量化并写入指定集合；集合不存在时自动创建
+//
+// 同一 ID 重复写入会覆盖并清理多余旧块。
+func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error) {
 	ctx = orBackground(ctx)
+	name, err := normalizeCollection(collection)
+	if err != nil {
+		return nil, err
+	}
 	docs, err := prepareDocuments(req.Documents)
 	if err != nil {
 		return nil, err
@@ -51,11 +57,11 @@ func (e *Engine) Index(ctx context.Context, req IndexRequest) (*IndexResult, err
 		prepared = append(prepared, preparedDocument{doc: doc, chunks: chunks})
 		texts = append(texts, chunks...)
 	}
-	if err := e.ensureCollection(ctx); err != nil {
+	if err := e.ensureCollection(ctx, name); err != nil {
 		return nil, err
 	}
 	// 写入前读取旧块数，写入后据此清理尾部旧块
-	oldCounts, err := e.oldChunkCounts(ctx, docs)
+	oldCounts, err := e.oldChunkCounts(ctx, name, docs)
 	if err != nil {
 		return nil, err
 	}
@@ -75,25 +81,29 @@ func (e *Engine) Index(ctx context.Context, req IndexRequest) (*IndexResult, err
 		}
 		offset += len(p.chunks)
 	}
-	if err := e.store.Upsert(ctx, e.collection, records); err != nil {
+	if err := e.store.Upsert(ctx, name, records); err != nil {
 		return nil, err
 	}
 	for _, p := range prepared {
-		if err := e.deleteStaleChunks(ctx, p.doc.ID, oldCounts[p.doc.ID], len(p.chunks)); err != nil {
+		if err := e.deleteStaleChunks(ctx, name, p.doc.ID, oldCounts[p.doc.ID], len(p.chunks)); err != nil {
 			return nil, err
 		}
 	}
 	return &IndexResult{Documents: len(prepared), Chunks: len(texts), Tokens: tokens}, nil
 }
 
-// DeleteDocument 删除文档的所有块；集合不存在时返回 nil
-func (e *Engine) DeleteDocument(ctx context.Context, docID string) error {
+// DeleteDocument 删除指定集合中文档的所有块；集合不存在时返回 nil
+func (e *Engine) DeleteDocument(ctx context.Context, collection, docID string) error {
 	ctx = orBackground(ctx)
+	name, err := normalizeCollection(collection)
+	if err != nil {
+		return err
+	}
 	id := strings.TrimSpace(docID)
 	if err := validateDocID(id); err != nil {
 		return err
 	}
-	err := e.store.DeleteByFilter(ctx, e.collection, map[string]string{MetadataKeyDocumentID: id})
+	err = e.store.DeleteByFilter(ctx, name, map[string]string{MetadataKeyDocumentID: id})
 	if errors.Is(err, vectordb.ErrNotFound) {
 		return nil
 	}
@@ -114,8 +124,8 @@ func chunkMetadata(doc Document, index, count int, content string) map[string]st
 	return md
 }
 
-// oldChunkCounts 读取各文档第 0 块的块数；集合不存在时返回空表
-func (e *Engine) oldChunkCounts(ctx context.Context, docs []Document) (map[string]int, error) {
+// oldChunkCounts 读取指定集合中各文档第 0 块的块数；集合不存在时返回空表
+func (e *Engine) oldChunkCounts(ctx context.Context, collection string, docs []Document) (map[string]int, error) {
 	ids := make([]string, len(docs))
 	for i := range docs {
 		ids[i] = chunkID(docs[i].ID, 0)
@@ -126,7 +136,7 @@ func (e *Engine) oldChunkCounts(ctx context.Context, docs []Document) (map[strin
 		if end > len(ids) {
 			end = len(ids)
 		}
-		records, err := e.store.Get(ctx, e.collection, ids[start:end])
+		records, err := e.store.Get(ctx, collection, ids[start:end])
 		if err != nil {
 			if errors.Is(err, vectordb.ErrNotFound) {
 				return map[string]int{}, nil
@@ -151,8 +161,8 @@ func (e *Engine) oldChunkCounts(ctx context.Context, docs []Document) (map[strin
 	return out, nil
 }
 
-// deleteStaleChunks 删除序号超出新块数的旧块
-func (e *Engine) deleteStaleChunks(ctx context.Context, docID string, oldCount, newCount int) error {
+// deleteStaleChunks 删除指定集合中序号超出新块数的旧块
+func (e *Engine) deleteStaleChunks(ctx context.Context, collection, docID string, oldCount, newCount int) error {
 	if oldCount <= newCount || oldCount > maxChunksPerDoc {
 		return nil
 	}
@@ -165,7 +175,7 @@ func (e *Engine) deleteStaleChunks(ctx context.Context, docID string, oldCount, 
 		if end > len(ids) {
 			end = len(ids)
 		}
-		if err := e.store.Delete(ctx, e.collection, ids[start:end]); err != nil {
+		if err := e.store.Delete(ctx, collection, ids[start:end]); err != nil {
 			return err
 		}
 	}

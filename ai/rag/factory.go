@@ -8,10 +8,6 @@ func New(cfg Config) (*Engine, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	collection, err := normalizeCollection(cfg.Collection)
-	if err != nil {
-		return nil, err
-	}
 	defaultSplitter, err := NewSplitter(SplitConfig{})
 	if err != nil {
 		return nil, err
@@ -19,7 +15,6 @@ func New(cfg Config) (*Engine, error) {
 	return &Engine{
 		embedder:        cfg.Embedder,
 		store:           cfg.Store,
-		collection:      collection,
 		defaultSplitter: defaultSplitter,
 	}, nil
 }

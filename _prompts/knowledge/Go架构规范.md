@@ -214,7 +214,7 @@ services/{domain}/
 | `ai/llm` | 统一大模型对话门面：Chat / 流式（OpenAI / Anthropic）；`New`/`MustNew`；一实例一模型；独立哨兵 `AI_LLM_*`；不进 bootstrap、不读 YAML、不做限流 |
 | `ai/embedding` | 统一文本向量化门面：OpenAI Embeddings；`New`/`MustNew`；APIKey 可空；独立哨兵 `AI_EMBEDDING_*`；与 llm / jev 零依赖；不进 bootstrap、不读 YAML、不做限流 |
 | `ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进 bootstrap、不读 YAML、不做限流 |
-| `ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `ai/embedding` + `vectordb`；一个 Engine 绑定一个集合；独立哨兵 `AI_RAG_*`；不含问答；不进 bootstrap、不读 YAML、不做限流 |
+| `ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `ai/embedding` + `vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进 bootstrap、不读 YAML、不做限流 |
 | `vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
 | `oss` | 统一对象存储抽象（MinIO / AWS S3 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
 | `golua` | 按需 Lua 脚本引擎（gopher-lua，受信规则场景）：须显式 CacheBackend（memory/redis）；变更后 `Refresh*Force`；不进 bootstrap |
@@ -502,7 +502,7 @@ kafka: ...
 | 调用大模型 Chat / 流式 | `ai/llm`（`New`/`MustNew`；OpenAI / Anthropic；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
 | 文本向量化 Embedding | `ai/embedding`（`New`/`MustNew`；OpenAI Embeddings；APIKey 可空；勿直引官方 SDK；不做限流） |
 | Jev 结构化决策 | `ai/jev`（`New`/`MustNew`；System One；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
-| RAG 切块 / 入库 / 检索 / 删除 | `ai/rag`（`New`/`MustNew`；一个 Engine 绑定一个集合；内置 recursive / fixed / sentence / markdown，可注入自定义 `Splitter`；基于 `ai/embedding` + `vectordb`；不含问答；不读 YAML） |
+| RAG 切块 / 入库 / 检索 / 删除 | `ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；内置 recursive / fixed / sentence / markdown，可注入自定义 `Splitter`；基于 `ai/embedding` + `vectordb`；不含问答；不读 YAML） |
 | 向量写入 / ANN 检索 / 动态索引 | `vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
 | 业务 Lua 脚本（受信规则） | `golua`（须显式 CacheBackend；变更后 `Refresh*Force`） |
 | 雪花 ID | `snowflake` |

@@ -9,7 +9,7 @@ import "gitee.com/hq_project/yomi-boot/logger"
 func MustNew(cfg Config) *Engine {
 	engine, err := New(cfg)
 	if err != nil {
-		logger.ErrorWithoutCtx("ai/rag 初始化失败", "error", err, "collection", cfg.Collection)
+		logger.ErrorWithoutCtx("ai/rag 初始化失败", "error", err)
 		panic(err)
 	}
 	return engine

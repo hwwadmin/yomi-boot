@@ -13,13 +13,17 @@ import (
 	"gitee.com/hq_project/yomi-boot/vectordb"
 )
 
-// Retrieve 按问题检索最相关的块；集合不存在或为空时返回空切片与 nil
-func (e *Engine) Retrieve(ctx context.Context, req RetrieveRequest) ([]Chunk, error) {
-	return e.retrieve(orBackground(ctx), req)
+// Retrieve 在指定集合中检索最相关的块；集合不存在或为空时返回空切片与 nil
+func (e *Engine) Retrieve(ctx context.Context, collection string, req RetrieveRequest) ([]Chunk, error) {
+	name, err := normalizeCollection(collection)
+	if err != nil {
+		return nil, err
+	}
+	return e.retrieve(orBackground(ctx), name, req)
 }
 
 // retrieve 执行检索
-func (e *Engine) retrieve(ctx context.Context, req RetrieveRequest) ([]Chunk, error) {
+func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRequest) ([]Chunk, error) {
 	query := strings.TrimSpace(req.Query)
 	if query == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
@@ -37,13 +41,13 @@ func (e *Engine) retrieve(ctx context.Context, req RetrieveRequest) ([]Chunk, er
 	if err != nil {
 		return nil, err
 	}
-	hits, err := e.store.Search(ctx, e.collection, vectordb.SearchQuery{
+	hits, err := e.store.Search(ctx, collection, vectordb.SearchQuery{
 		Vector: toFloat32(vectors[0]),
 		TopK:   req.TopK,
 		Filter: req.Filter,
 	})
 	if err != nil {
-		// 知识库尚未建立等同于空检索
+		// 集合尚未建立等同于空检索
 		if errors.Is(err, vectordb.ErrNotFound) {
 			return []Chunk{}, nil
 		}

@@ -24,11 +24,10 @@ const (
 // collectionNameRe 集合名规则与 vectordb 保持一致
 var collectionNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,254}$`)
 
-// Config 创建 Engine 的构造配置；只保留依赖与集合身份，运行期参数由请求传入
+// Config 创建 Engine 的构造配置；只保留依赖，集合与运行期参数由调用传入
 type Config struct {
-	Embedder   embedding.Client // Embedder 向量化客户端；必填
-	Store      vectordb.Store   // Store 向量库；必填，Dimension 必须与向量化输出一致
-	Collection string           // Collection 是 Engine 绑定的集合名；必填；须符合 vectordb 命名
+	Embedder embedding.Client // Embedder 向量化客户端；必填
+	Store    vectordb.Store   // Store 向量库；必填，各集合 Dimension 必须与向量化输出一致
 }
 
 // SplitConfig 内置切块策略配置
@@ -44,13 +43,10 @@ func (c Config) validate() error {
 	if c.Embedder == nil || c.Store == nil {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	if _, err := normalizeCollection(c.Collection); err != nil {
-		return err
-	}
 	return nil
 }
 
-// normalizeCollection 修剪并校验集合名；空串非法
+// normalizeCollection 修剪并校验集合名；空串或非法命名返回 ErrInvalidArgument
 func normalizeCollection(name string) (string, error) {
 	n := strings.TrimSpace(name)
 	if n == "" || !collectionNameRe.MatchString(n) {
