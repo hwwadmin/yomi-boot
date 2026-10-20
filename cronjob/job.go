@@ -22,7 +22,8 @@ type Handler func(ctx context.Context) error
 
 // Job 业务定时任务定义
 type Job struct {
-	// Name 集群内唯一，用作锁 Key 后缀；建议带服务前缀。同一进程内重复启动同名 Job 会输出 Warn
+	// Name 集群内唯一，用作锁 Key 后缀；建议带服务前缀。
+	// 同一进程内重复启动同名 Job 返回 ErrDuplicateJobName，不启动第二个调度器。
 	Name string
 
 	// Spec 是 6 段 cron（秒 分 时 日 月 周）；也支持 @daily 等描述符与 TZ=/CRON_TZ= 时区前缀

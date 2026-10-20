@@ -5,15 +5,20 @@
 //
 // # 基本用法
 //
-//	done := cronjob.Start(runCtx, cronjob.Job{
+//	done, err := cronjob.Start(runCtx, cronjob.Job{
 //	    Name: "order-service:settle.daily",
 //	    Spec: "0 0 2 * * *", // 秒 分 时 日 月 周
 //	}, settleDaily, distLockFactory)
+//	if err != nil {
+//	    // 参数非法或同名 Job 已在本进程运行
+//	}
 //	// 停止：cancel(runCtx)；等待调度与在途 Handler 结束：<-done
 //
 // # 语义
 //
 //   - Spec 为 6 段（含秒）；默认时区 time.Local，可在 Spec 前加 TZ=/CRON_TZ= 指定
+//   - 同一进程内重复启动同名 Job 返回 ErrDuplicateJobName 并拒绝启动（MustStart 直接 panic）；
+//     须等前一个 done 关闭后再重启。跨进程同名由执行锁互斥
 //   - 每次触发 TryLock(cronjob:lock:{Name})；未抢到则跳过（每个进程内每分钟最多一次 Warn，其余 Debug）
 //   - MaxRunDuration 为单次 Handler 最长执行时间；0 表示不限制，始终以 Job 配置为准（覆盖工厂默认值），到期 cancel Handler ctx 并停止续锁
 //   - 至少一次：崩溃、锁过期或故障恢复后可能重跑，Handler 必须幂等

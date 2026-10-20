@@ -61,13 +61,16 @@ func TestJob_validate(t *testing.T) {
 	}
 }
 
-// TestStart_invalid 校验非法参数时 Start 返回已关闭的 done 且不启动调度
+// TestStart_invalid 校验非法参数时 Start 返回错误与已关闭的 done，且不启动调度
 func TestStart_invalid(t *testing.T) {
 	var runs atomic.Int32
-	done := Start(context.Background(), Job{}, func(context.Context) error {
+	done, err := Start(context.Background(), Job{}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, nil)
+	if err == nil {
+		t.Fatal("invalid start should return error")
+	}
 
 	select {
 	case <-done:
@@ -99,10 +102,13 @@ func TestStart_malformedTZSpecDoesNotPanic(t *testing.T) {
 	}
 
 	var runs atomic.Int32
-	done := Start(context.Background(), Job{Name: "test-tz", Spec: "TZ=Asia/Shanghai"}, func(context.Context) error {
+	done, err := Start(context.Background(), Job{Name: "test-tz", Spec: "TZ=Asia/Shanghai"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
+	if err == nil {
+		t.Fatal("malformed tz spec should return error")
+	}
 
 	select {
 	case <-done:
@@ -127,11 +133,13 @@ func TestStart_executesHandler(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	Start(ctx, Job{Name: "test-exec", Spec: "*/1 * * * * *"}, func(context.Context) error {
+	done, err := Start(ctx, Job{Name: "test-exec", Spec: "*/1 * * * * *"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
-
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 	deadline := time.After(3 * time.Second)
 	for runs.Load() == 0 {
 		select {
@@ -142,7 +150,11 @@ func TestStart_executesHandler(t *testing.T) {
 		}
 	}
 	cancel()
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("done did not close after cancel")
+	}
 }
 
 // TestStart_contextCancelStops 校验 cancel 后不再持续触发
@@ -157,10 +169,12 @@ func TestStart_contextCancelStops(t *testing.T) {
 	var runs atomic.Int32
 	ctx, cancel := context.WithCancel(context.Background())
 
-	Start(ctx, Job{Name: "test-cancel", Spec: "*/1 * * * * *"}, func(context.Context) error {
+	if _, err := Start(ctx, Job{Name: "test-cancel", Spec: "*/1 * * * * *"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
-	}, factory)
+	}, factory); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
 	deadline := time.After(3 * time.Second)
 	for runs.Load() == 0 {
@@ -191,9 +205,12 @@ func TestStart_doneClosesAfterCancel(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := Start(ctx, Job{Name: "test-start-done", Spec: "*/1 * * * * *"}, func(context.Context) error {
+	done, err := Start(ctx, Job{Name: "test-start-done", Spec: "*/1 * * * * *"}, func(context.Context) error {
 		return nil
 	}, factory)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 	cancel()
 
 	select {
@@ -201,6 +218,83 @@ func TestStart_doneClosesAfterCancel(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("done channel did not close after cancel")
 	}
+}
+
+// TestStart_duplicateNameRejected 校验同一进程内同名 Job 拒绝启动，释放后可重新启动
+func TestStart_duplicateNameRejected(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	job := Job{Name: "test-duplicate", Spec: "0 0 2 * * *"}
+	h := func(context.Context) error { return nil }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done, err := Start(ctx, job, h, factory)
+	if err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+
+	dupDone, err := Start(ctx, job, h, factory)
+	if !errors.Is(err, ErrDuplicateJobName) {
+		t.Fatalf("duplicate Start err = %v, want ErrDuplicateJobName", err)
+	}
+	select {
+	case <-dupDone:
+	default:
+		t.Fatal("duplicate Start should return closed done")
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("done did not close after cancel")
+	}
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	done2, err := Start(ctx2, job, h, factory)
+	if err != nil {
+		t.Fatalf("restart after release: %v", err)
+	}
+	cancel2()
+	select {
+	case <-done2:
+	case <-time.After(2 * time.Second):
+		t.Fatal("done2 did not close after cancel")
+	}
+}
+
+// TestMustStart_duplicateNamePanics 校验 MustStart 对同名 Job panic
+func TestMustStart_duplicateNamePanics(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	job := Job{Name: "test-must-duplicate", Spec: "0 0 2 * * *"}
+	h := func(context.Context) error { return nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	done, err := Start(ctx, job, h, factory)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("MustStart should panic on duplicate name")
+		}
+	}()
+	MustStart(ctx, job, h, factory)
 }
 
 // TestFire_skipWhenLockHeld 校验锁被占用时跳过 Handler
@@ -365,19 +459,18 @@ func TestExecLockKey(t *testing.T) {
 	}
 }
 
-// TestJobNameRegistry 校验同名 Job 引用计数与释放
+// TestJobNameRegistry 校验同名 Job 拒绝注册与释放后可重新注册
 func TestJobNameRegistry(t *testing.T) {
 	name := "test-registry"
-	if n := acquireJobName(name); n != 1 {
-		t.Fatalf("first acquire = %d, want 1", n)
+	if err := acquireJobName(name); err != nil {
+		t.Fatalf("first acquire: %v", err)
 	}
-	if n := acquireJobName(name); n != 2 {
-		t.Fatalf("second acquire = %d, want 2", n)
+	if err := acquireJobName(name); !errors.Is(err, ErrDuplicateJobName) {
+		t.Fatalf("second acquire = %v, want ErrDuplicateJobName", err)
 	}
 	releaseJobName(name)
-	releaseJobName(name)
-	if n := acquireJobName(name); n != 1 {
-		t.Fatalf("acquire after release = %d, want 1", n)
+	if err := acquireJobName(name); err != nil {
+		t.Fatalf("acquire after release: %v", err)
 	}
 	releaseJobName(name)
 }
@@ -385,7 +478,9 @@ func TestJobNameRegistry(t *testing.T) {
 // TestSkipWarnThrottle 校验抢锁失败 Warn 的节流
 func TestSkipWarnThrottle(t *testing.T) {
 	name := "test-skip-warn"
-	acquireJobName(name)
+	if err := acquireJobName(name); err != nil {
+		t.Fatalf("acquireJobName: %v", err)
+	}
 	defer releaseJobName(name)
 
 	if !shouldWarnSkip(name) {

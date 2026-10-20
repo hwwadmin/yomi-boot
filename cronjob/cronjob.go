@@ -25,43 +25,52 @@ const (
 	skipWarnInterval   = time.Minute      // 抢锁失败 Warn 的最小间隔
 )
 
-// jobNameState 记录进程内同名 Job 的活跃数量与跳过告警时间
+// jobNameState 记录进程内同名 Job 的跳过告警时间
 type jobNameState struct {
-	active       int       // active 是活跃调度器数量
 	lastSkipWarn time.Time // lastSkipWarn 是最近一次跳过 Warn 的时间
 }
 
-// jobNames 是进程内 Job 名状态表，用于同名提示与跳过告警节流
+// jobNames 是进程内活跃 Job 名状态表，用于同名拒绝与跳过告警节流
 var (
 	jobNamesMu sync.Mutex
 	jobNames   = make(map[string]*jobNameState)
 )
 
 // Start 校验后在后台按 Spec 触发；ctx 取消时停止调度并退出。
-// 非法参数或 Spec 无法解析时打 Error 日志并返回已关闭的 done。
+// 非法参数、Spec 无法解析或同一进程内已存在同名 Job 时返回错误，
+// 此时不启动调度，返回的 done 已关闭。
 // 返回的 done 在调度停止且所有在途 Handler 结束后关闭。
-func Start(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) <-chan struct{} {
+func Start(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) (<-chan struct{}, error) {
 	if err := job.validate(h, factory); err != nil {
 		logger.ErrorWithoutCtx("cronjob.start.invalid", "name", job.Name, "spec", job.Spec, "error", err)
-		return closedDone()
+		return closedDone(), err
 	}
-	return startScheduler(ctx, job, h, factory)
+	done, err := startScheduler(ctx, job, h, factory)
+	if err != nil {
+		logger.ErrorWithoutCtx("cronjob.start.duplicate_name", "name", job.Name, "error", err)
+	}
+	return done, err
 }
 
-// MustStart 与 Start 相同，但启动参数非法时 panic；供启动装配阶段 Fail Fast 使用
+// MustStart 与 Start 相同，但启动参数非法或同名 Job 已存在时 panic；供启动装配阶段 Fail Fast 使用
 func MustStart(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) <-chan struct{} {
 	if err := job.validate(h, factory); err != nil {
 		logger.ErrorWithoutCtx("cronjob.must_start.invalid", "name", job.Name, "spec", job.Spec, "error", err)
 		panic(errors.Wrap(err, "cronjob 启动参数非法"))
 	}
-	return startScheduler(ctx, job, h, factory)
+	done, err := startScheduler(ctx, job, h, factory)
+	if err != nil {
+		logger.ErrorWithoutCtx("cronjob.must_start.duplicate_name", "name", job.Name, "error", err)
+		panic(err)
+	}
+	return done
 }
 
-// startScheduler 在后台启动调度，返回调度与在途 Handler 全部结束的信号
-func startScheduler(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) <-chan struct{} {
+// startScheduler 注册 Job 名后在后台启动调度；同名 Job 已运行时返回 ErrDuplicateJobName
+func startScheduler(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) (<-chan struct{}, error) {
 	ctx = appctx.OrBackground(ctx)
-	if n := acquireJobName(job.Name); n > 1 {
-		logger.Warn(ctx, "cronjob.start.duplicate_name", "name", job.Name, "active", n)
+	if err := acquireJobName(job.Name); err != nil {
+		return closedDone(), err
 	}
 	done := make(chan struct{})
 	go func() {
@@ -69,7 +78,7 @@ func startScheduler(ctx context.Context, job Job, h Handler, factory distlock.Di
 		defer releaseJobName(job.Name)
 		runScheduler(ctx, job, h, factory)
 	}()
-	return done
+	return done, nil
 }
 
 // closedDone 返回已关闭的调度结束信号
@@ -177,31 +186,22 @@ func execLockKey(name string) string {
 	return execLockKeyPrefix + name
 }
 
-// acquireJobName 记录进程内活跃 Job 名并返回同名数量
-func acquireJobName(name string) int {
+// acquireJobName 注册进程内活跃 Job 名；同名已存在时返回 ErrDuplicateJobName
+func acquireJobName(name string) error {
 	jobNamesMu.Lock()
 	defer jobNamesMu.Unlock()
-	st := jobNames[name]
-	if st == nil {
-		st = &jobNameState{}
-		jobNames[name] = st
+	if _, exists := jobNames[name]; exists {
+		return errors.Wrap(ErrDuplicateJobName, "name=%s", name)
 	}
-	st.active++
-	return st.active
+	jobNames[name] = &jobNameState{}
+	return nil
 }
 
-// releaseJobName 释放进程内活跃 Job 名引用
+// releaseJobName 释放进程内活跃 Job 名
 func releaseJobName(name string) {
 	jobNamesMu.Lock()
 	defer jobNamesMu.Unlock()
-	st := jobNames[name]
-	if st == nil {
-		return
-	}
-	st.active--
-	if st.active <= 0 {
-		delete(jobNames, name)
-	}
+	delete(jobNames, name)
 }
 
 // shouldWarnSkip 判断抢锁失败是否输出 Warn；同一 Job 至少间隔 skipWarnInterval。
