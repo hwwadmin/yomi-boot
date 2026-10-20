@@ -17,11 +17,12 @@ import (
 
 // stubPump 测试用流读取器，可预置增量、错误与阻塞
 type stubPump struct {
-	mu     sync.Mutex    // mu 保护增量队列
-	chunks []*ChatChunk  // chunks 是待返回的增量队列
-	err    error         // err 是队列耗尽后的错误，空则结束
-	block  chan struct{} // block 非空时读取先等待关闭
-	closed atomic.Bool   // closed 记录是否已关闭
+	mu       sync.Mutex    // mu 保护增量队列
+	chunks   []*ChatChunk  // chunks 是待返回的增量队列
+	err      error         // err 是队列耗尽后的错误，空则结束
+	block    chan struct{} // block 非空时读取先等待关闭
+	closed   atomic.Bool   // closed 记录是否已关闭
+	closeErr error         // closeErr 是 close 返回的错误
 }
 
 // next 弹出下一增量；可先阻塞；队列空时返回预置错误或结束
@@ -52,7 +53,20 @@ func (p *stubPump) close() error {
 			close(p.block)
 		}
 	}
-	return nil
+	return p.closeErr
+}
+
+// TestStreamCloseReturnsPumpError 验证 Close 透传底层关闭错误
+func TestStreamCloseReturnsPumpError(t *testing.T) {
+	t.Parallel()
+	want := errors.New("close boom")
+	s := newChatStream(context.Background(), nil, &stubPump{closeErr: want})
+	if err := s.Close(); !errors.Is(err, want) {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := s.Close(); !errors.Is(err, want) {
+		t.Fatalf("repeat Close: %v", err)
+	}
 }
 
 // TestStreamConcurrentRecvDoesNotClose 验证并发 Recv 返回非法参数且不关流

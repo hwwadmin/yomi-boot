@@ -254,6 +254,64 @@ func (s *milvusStore) Get(ctx context.Context, collection string, ids []string) 
 	return resultSetToRecords(&rs)
 }
 
+// ListIDs 按元数据等值 AND 列出主键
+func (s *milvusStore) ListIDs(ctx context.Context, collection string, filter map[string]string) ([]string, error) {
+	ctx, cancel, err := s.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	n, err := normalizeCollectionName(collection)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateFilter(filter, true); err != nil {
+		return nil, err
+	}
+	has, err := s.has(ctx, n)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, errors.Sentinel(ErrNotFound)
+	}
+	if err := s.ensureReady(ctx, n); err != nil {
+		return nil, err
+	}
+	expr, err := metadataFilterExpr(filter)
+	if err != nil {
+		return nil, err
+	}
+	iter, err := retryOnRateLimitVal(ctx, func() (milvusclient.QueryIterator, error) {
+		return s.cli.QueryIterator(ctx, milvusclient.NewQueryIteratorOption(n).
+			WithOutputFields(fieldID).
+			WithFilter(expr).
+			WithBatchSize(1000).
+			WithConsistencyLevel(entity.ClStrong))
+	})
+	if err != nil {
+		return nil, mapMilvusErr(err)
+	}
+	ids := make([]string, 0)
+	for {
+		rs, err := retryOnRateLimitVal(ctx, func() (milvusclient.ResultSet, error) {
+			return iter.Next(ctx)
+		})
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, mapMilvusErr(err)
+		}
+		batch, err := idsFromResultSet(&rs)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, batch...)
+	}
+	return ids, nil
+}
+
 // Delete 按 ID 删除
 func (s *milvusStore) Delete(ctx context.Context, collection string, ids []string) error {
 	ctx, cancel, err := s.begin(ctx)

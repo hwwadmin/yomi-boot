@@ -28,6 +28,11 @@
 // 以请求级 context.WithTimeout 控制整段墙钟。New 之后再改该 Client 视为未定义行为。
 // 高强度调用建议自定义 Transport，提高 MaxIdleConnsPerHost 等连接池参数。本包不做限流。
 //
+// # 答案契约
+//
+// 请求中的每个问题都必须在响应 answers 中出现，且答案 type 必须与问题 type 一致；
+// 缺失答案或类型不符返回 ErrBadResponse。响应体读取上限 8MB。
+//
 // # 错误
 //
 // 包内哨兵：ErrInvalidArgument / ErrUnauthorized / ErrRateLimited / ErrBadResponse。

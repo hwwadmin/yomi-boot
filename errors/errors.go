@@ -6,6 +6,7 @@ package errors
 import (
 	stderrors "errors"
 	"fmt"
+	"strings"
 
 	pkgerrors "github.com/pkg/errors"
 )
@@ -63,10 +64,21 @@ func Join(errs ...error) error {
 	return stderrors.Join(errs...)
 }
 
-// Stack 返回错误链；New / Newf / Wrap / Sentinel 创建的节点含 file:line（用于日志）
+// Stack 返回错误链；New / Newf / Wrap / Sentinel 创建的节点含 file:line（用于日志）。
+// Join 产生的多错误会逐个展开，避免 joinError 的 %+v 只输出消息、丢失各节点的调用栈。
 func Stack(err error) string {
 	if err == nil {
 		return ""
+	}
+	if multi, ok := err.(interface{ Unwrap() []error }); ok {
+		parts := multi.Unwrap()
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if s := Stack(part); s != "" {
+				out = append(out, s)
+			}
+		}
+		return strings.Join(out, "\n")
 	}
 	return fmt.Sprintf("%+v", err)
 }

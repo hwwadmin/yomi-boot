@@ -31,7 +31,7 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 	if req.TopK <= 0 || req.TopK > maxTopK {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	if math.IsNaN(float64(req.MinScore)) {
+	if math.IsNaN(float64(req.MinScore)) || math.IsInf(float64(req.MinScore), 0) {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 	if err := validateFilter(req.Filter); err != nil {

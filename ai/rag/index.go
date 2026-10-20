@@ -23,7 +23,7 @@ const idBatchSize = 500
 
 // Index 切分、向量化并写入指定集合；集合不存在时自动创建
 //
-// 同一 ID 重复写入会覆盖并清理多余旧块。
+// 同一 ID 重复写入会覆盖同序号块，并清理本次新块集合之外的旧块。
 func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error) {
 	ctx = orBackground(ctx)
 	name, err := normalizeCollection(collection)
@@ -57,14 +57,6 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 		prepared = append(prepared, preparedDocument{doc: doc, chunks: chunks})
 		texts = append(texts, chunks...)
 	}
-	if err := e.ensureCollection(ctx, name); err != nil {
-		return nil, err
-	}
-	// 写入前读取旧块数，写入后据此清理尾部旧块
-	oldCounts, err := e.oldChunkCounts(ctx, name, docs)
-	if err != nil {
-		return nil, err
-	}
 	vectors, tokens, err := e.embed(ctx, texts)
 	if err != nil {
 		return nil, err
@@ -76,16 +68,25 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 			records = append(records, vectordb.Record{
 				ID:       chunkID(p.doc.ID, i),
 				Vector:   toFloat32(vectors[offset+i]),
-				Metadata: chunkMetadata(p.doc, i, len(p.chunks), content),
+				Metadata: chunkMetadata(p.doc, i, content),
 			})
 		}
 		offset += len(p.chunks)
 	}
+	// 写入阶段按文档加锁；条带锁只保证进程内，跨实例需调用方串行
+	unlock := e.lockDocuments(name, prepared)
+	defer unlock()
+	if err := e.ensureCollection(ctx, name); err != nil {
+		return nil, err
+	}
+	// 先写新块：Upsert 失败时旧块保持完整，不会出现“旧块已删、新块没写进去”
 	if err := e.store.Upsert(ctx, name, records); err != nil {
 		return nil, err
 	}
+	// 写入成功后列出该文档现有块，删除不在本次新块集合中的旧块；
+	// 删除失败或进程崩溃时旧块仍在，下次 Index 会重新枚举并清理，可自愈
 	for _, p := range prepared {
-		if err := e.deleteStaleChunks(ctx, name, p.doc.ID, oldCounts[p.doc.ID], len(p.chunks)); err != nil {
+		if err := e.deleteStaleChunks(ctx, name, p.doc.ID, len(p.chunks)); err != nil {
 			return nil, err
 		}
 	}
@@ -111,71 +112,42 @@ func (e *Engine) DeleteDocument(ctx context.Context, collection, docID string) e
 }
 
 // chunkMetadata 合并文档元数据与保留键
-func chunkMetadata(doc Document, index, count int, content string) map[string]string {
-	md := make(map[string]string, len(doc.Metadata)+5)
+func chunkMetadata(doc Document, index int, content string) map[string]string {
+	md := make(map[string]string, len(doc.Metadata)+4)
 	for k, v := range doc.Metadata {
 		md[k] = v
 	}
 	md[MetadataKeyDocumentID] = doc.ID
 	md[MetadataKeyChunkIndex] = strconv.Itoa(index)
-	md[MetadataKeyChunkCount] = strconv.Itoa(count)
 	md[MetadataKeySource] = doc.Source
 	md[MetadataKeyContent] = content
 	return md
 }
 
-// oldChunkCounts 读取指定集合中各文档第 0 块的块数；集合不存在时返回空表
-func (e *Engine) oldChunkCounts(ctx context.Context, collection string, docs []Document) (map[string]int, error) {
-	ids := make([]string, len(docs))
-	for i := range docs {
-		ids[i] = chunkID(docs[i].ID, 0)
+// deleteStaleChunks 删除指定集合中不属于本次新块集合的旧块
+func (e *Engine) deleteStaleChunks(ctx context.Context, collection, docID string, newCount int) error {
+	keep := make(map[string]struct{}, newCount)
+	for i := 0; i < newCount; i++ {
+		keep[chunkID(docID, i)] = struct{}{}
 	}
-	out := make(map[string]int, len(ids))
-	for start := 0; start < len(ids); start += idBatchSize {
+	ids, err := e.store.ListIDs(ctx, collection, map[string]string{MetadataKeyDocumentID: docID})
+	if err != nil {
+		// 写入已成功，集合此时不应消失；列出失败必须上报，不能把失败当成功
+		return err
+	}
+	stale := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := keep[id]; ok {
+			continue
+		}
+		stale = append(stale, id)
+	}
+	for start := 0; start < len(stale); start += idBatchSize {
 		end := start + idBatchSize
-		if end > len(ids) {
-			end = len(ids)
+		if end > len(stale) {
+			end = len(stale)
 		}
-		records, err := e.store.Get(ctx, collection, ids[start:end])
-		if err != nil {
-			if errors.Is(err, vectordb.ErrNotFound) {
-				return map[string]int{}, nil
-			}
-			return nil, err
-		}
-		for i := range records {
-			docID := strings.TrimSpace(records[i].Metadata[MetadataKeyDocumentID])
-			if docID == "" {
-				continue
-			}
-			count, err := strconv.Atoi(records[i].Metadata[MetadataKeyChunkCount])
-			if err != nil || count <= 0 {
-				continue
-			}
-			if count > maxChunksPerDoc {
-				count = maxChunksPerDoc
-			}
-			out[docID] = count
-		}
-	}
-	return out, nil
-}
-
-// deleteStaleChunks 删除指定集合中序号超出新块数的旧块
-func (e *Engine) deleteStaleChunks(ctx context.Context, collection, docID string, oldCount, newCount int) error {
-	if oldCount <= newCount || oldCount > maxChunksPerDoc {
-		return nil
-	}
-	ids := make([]string, 0, oldCount-newCount)
-	for i := newCount; i < oldCount; i++ {
-		ids = append(ids, chunkID(docID, i))
-	}
-	for start := 0; start < len(ids); start += idBatchSize {
-		end := start + idBatchSize
-		if end > len(ids) {
-			end = len(ids)
-		}
-		if err := e.store.Delete(ctx, collection, ids[start:end]); err != nil {
+		if err := e.store.Delete(ctx, collection, stale[start:end]); err != nil {
 			return err
 		}
 	}

@@ -9,8 +9,6 @@ const (
 	MetadataKeyDocumentID = "rag_doc_id"
 	// MetadataKeyChunkIndex 块在文档内的序号，从 0 开始
 	MetadataKeyChunkIndex = "rag_chunk_index"
-	// MetadataKeyChunkCount 文档切分后的总块数
-	MetadataKeyChunkCount = "rag_chunk_count"
 	// MetadataKeySource 文档来源
 	MetadataKeySource = "rag_source"
 	// MetadataKeyContent 块文本

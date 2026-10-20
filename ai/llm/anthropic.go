@@ -109,6 +109,12 @@ func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewPara
 	if err := validateChatRequest(req); err != nil {
 		return anthropic.MessageNewParams{}, err
 	}
+	// Anthropic 拒绝空 text block；非 system 消息内容必须非空白
+	for _, m := range req.Messages {
+		if m.Role != RoleSystem && strings.TrimSpace(m.Content) == "" {
+			return anthropic.MessageNewParams{}, errors.Sentinel(ErrInvalidArgument)
+		}
+	}
 	// 抽掉系统提示后的轮次必须由用户开头且严格交替
 	if err := validateAnthropicTurns(req.Messages); err != nil {
 		return anthropic.MessageNewParams{}, err
@@ -217,11 +223,12 @@ func (c *anthropicClient) mapErr(err error) error {
 
 // anthropicPump 适配 Anthropic 服务端推送流
 type anthropicPump struct {
-	stream *ssestream.Stream[anthropic.MessageStreamEventUnion] // stream 是官方流读取器
-	mapErr func(error) error                                    // mapErr 将官方错误映射为本包哨兵
-	once   sync.Once                                            // once 保证 close 只执行一次
-	id     string                                               // id 来自 message_start
-	model  string                                               // model 来自 message_start
+	stream    *ssestream.Stream[anthropic.MessageStreamEventUnion] // stream 是官方流读取器
+	mapErr    func(error) error                                    // mapErr 将官方错误映射为本包哨兵
+	closeOnce sync.Once                                            // closeOnce 保证 close 只执行一次
+	closeErr  error                                                // closeErr 记录首次关闭结果
+	id        string                                               // id 来自 message_start
+	model     string                                               // model 来自 message_start
 }
 
 // next 读取文本增量；先记下会话标识与模型名再透出增量
@@ -254,11 +261,10 @@ func (p *anthropicPump) next() (*ChatChunk, error) {
 	return nil, io.EOF
 }
 
-// close 关闭底层流；幂等，重复调用返回首次结果
+// close 关闭底层流；幂等，重复调用返回首次关闭结果
 func (p *anthropicPump) close() error {
-	var err error
-	p.once.Do(func() {
-		err = p.stream.Close()
+	p.closeOnce.Do(func() {
+		p.closeErr = p.stream.Close()
 	})
-	return err
+	return p.closeErr
 }

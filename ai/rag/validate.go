@@ -87,7 +87,7 @@ func validateFilter(filter map[string]string) error {
 // isReservedMetadataKey 判断是否为本包保留的元数据键
 func isReservedMetadataKey(key string) bool {
 	switch key {
-	case MetadataKeyDocumentID, MetadataKeyChunkIndex, MetadataKeyChunkCount, MetadataKeySource, MetadataKeyContent:
+	case MetadataKeyDocumentID, MetadataKeyChunkIndex, MetadataKeySource, MetadataKeyContent:
 		return true
 	default:
 		return false

@@ -5,7 +5,9 @@ package rag
 
 import (
 	"context"
+	"sort"
 	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"gitee.com/hq_project/yomi-boot/ai/embedding"
@@ -16,12 +18,16 @@ import (
 // embedBatchSize 是单次向量化的文本条数上限
 const embedBatchSize = 64
 
+// indexLockStripes 是 Index 写入阶段的锁条数；同一文档命中同一条带
+const indexLockStripes = 64
+
 // Engine 检索增强引擎；同一实例可并发服务多个集合；构造后不可变，请勿复制值
 type Engine struct {
 	embedder        embedding.Client
 	store           vectordb.Store
 	defaultSplitter Splitter
 	dimension       atomic.Int64
+	indexLocks      [indexLockStripes]sync.Mutex
 }
 
 // EnsureCollection 确保集合存在；已存在时返回 nil
@@ -85,7 +91,7 @@ func (e *Engine) embed(ctx context.Context, texts []string) ([][]float64, int, e
 			return nil, 0, err
 		}
 		if resp == nil || len(resp.Vectors) != end-start {
-			return nil, 0, errors.New("ai/rag 向量化返回条数与输入不一致")
+			return nil, 0, errors.Wrap(ErrBadResponse, "ai/rag 向量化返回条数与输入不一致")
 		}
 		for i := range resp.Vectors {
 			if err := e.checkDimension(len(resp.Vectors[i])); err != nil {
@@ -128,4 +134,46 @@ func toFloat32(vec []float64) []float32 {
 		out[i] = float32(v)
 	}
 	return out
+}
+
+// lockDocuments 按文档获取写入锁；条带按序加锁避免死锁，返回释放函数
+func (e *Engine) lockDocuments(collection string, docs []preparedDocument) func() {
+	stripes := make([]int, 0, len(docs))
+	seen := make(map[int]struct{}, len(docs))
+	for _, doc := range docs {
+		stripe := int(indexLockHash(collection, doc.doc.ID) % indexLockStripes)
+		if _, ok := seen[stripe]; ok {
+			continue
+		}
+		seen[stripe] = struct{}{}
+		stripes = append(stripes, stripe)
+	}
+	sort.Ints(stripes)
+	for _, stripe := range stripes {
+		e.indexLocks[stripe].Lock()
+	}
+	return func() {
+		for i := len(stripes) - 1; i >= 0; i-- {
+			e.indexLocks[stripes[i]].Unlock()
+		}
+	}
+}
+
+// indexLockHash 计算集合与文档 ID 的 FNV-1a 哈希
+func indexLockHash(collection, docID string) uint32 {
+	const (
+		offset32 = 2166136261
+		prime32  = 16777619
+	)
+	h := uint32(offset32)
+	for i := 0; i < len(collection); i++ {
+		h ^= uint32(collection[i])
+		h *= prime32
+	}
+	h *= prime32
+	for i := 0; i < len(docID); i++ {
+		h ^= uint32(docID[i])
+		h *= prime32
+	}
+	return h
 }

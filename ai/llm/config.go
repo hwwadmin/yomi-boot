@@ -5,6 +5,7 @@ package llm
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,6 +31,18 @@ const (
 	defaultMaxTokens = 4096
 )
 
+// MaxTokensField 控制 OpenAI 协议最大令牌字段的落点
+type MaxTokensField string
+
+const (
+	// MaxTokensFieldAuto 按模型名自动选择；默认
+	MaxTokensFieldAuto MaxTokensField = ""
+	// MaxTokensFieldLegacy 仅写 max_tokens，兼容旧模型与兼容网关
+	MaxTokensFieldLegacy MaxTokensField = "max_tokens"
+	// MaxTokensFieldCompletion 仅写 max_completion_tokens，适配 reasoning / GPT-5 系列
+	MaxTokensFieldCompletion MaxTokensField = "max_completion_tokens"
+)
+
 // Config 创建 Client 的构造配置；本包不读 YAML
 type Config struct {
 	Protocol         Protocol          // Protocol 是协议标识，仅 openai / anthropic
@@ -38,6 +51,7 @@ type Config struct {
 	Model            string            // Model 是本实例锁定的模型名；构造期 trim 后不得为空
 	Temperature      *float64          // Temperature 是默认采样温度；空则 1.0；0 为合法值
 	MaxTokens        *int              // MaxTokens 是默认最大输出令牌；空则 4096；若设置必须 >0
+	MaxTokensField   MaxTokensField    // MaxTokensField 是 OpenAI 协议最大令牌字段；空则按模型名自动选择
 	Timeout          time.Duration     // Timeout 是整段墙钟超时；0 表示 60s；小于 0 非法
 	HTTPClient       *http.Client      // HTTPClient 可选，仅传输层/代理；New 之后再改视为未定义行为
 	AnthropicVersion string            // AnthropicVersion 仅 anthropic；空则 2023-06-01
@@ -72,9 +86,15 @@ func (c Config) validate() error {
 	default:
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	// 地址、密钥与模型名修剪后不得为空
-	if strings.TrimSpace(c.APIURL) == "" {
+	// 最大令牌字段只能是自动或两个白名单值
+	switch c.MaxTokensField {
+	case MaxTokensFieldAuto, MaxTokensFieldLegacy, MaxTokensFieldCompletion:
+	default:
 		return errors.Sentinel(ErrInvalidArgument)
+	}
+	// 地址必须是 http/https 绝对地址；密钥与模型名修剪后不得为空
+	if err := validateAPIURL(c.APIURL); err != nil {
+		return err
 	}
 	if strings.TrimSpace(c.APIKey) == "" {
 		return errors.Sentinel(ErrInvalidArgument)
@@ -90,13 +110,57 @@ func (c Config) validate() error {
 	if c.Timeout < 0 {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
+	seenHeaders := make(map[string]struct{}, len(c.ExtraHeaders))
 	for k := range c.ExtraHeaders {
-		// 与鉴权或版本头冲突的键拒绝构造
-		if isReservedHeader(k) {
+		key := strings.TrimSpace(k)
+		// 空键、与鉴权或版本头冲突、修剪后重名的键拒绝构造
+		if key == "" || isReservedHeader(key) {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
+		if _, ok := seenHeaders[key]; ok {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
+		seenHeaders[key] = struct{}{}
 	}
 	return nil
+}
+
+// validateAPIURL 校验地址为 http/https 绝对地址
+func validateAPIURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return nil
+}
+
+// resolvedMaxTokensField 返回实际落点；自动模式按模型名判断 reasoning 系列
+func (c Config) resolvedMaxTokensField() MaxTokensField {
+	if c.MaxTokensField != MaxTokensFieldAuto {
+		return c.MaxTokensField
+	}
+	if isReasoningModel(c.Model) {
+		return MaxTokensFieldCompletion
+	}
+	return MaxTokensFieldLegacy
+}
+
+// isReasoningModel 判断模型是否属于只接受 max_completion_tokens 的系列
+func isReasoningModel(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	// 兼容 provider/model 形式，只看最后一段
+	if i := strings.LastIndexByte(m, '/'); i >= 0 {
+		m = m[i+1:]
+	}
+	for _, prefix := range []string{"o1", "o3", "o4", "gpt-5"} {
+		if strings.HasPrefix(m, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // isReservedHeader 判断扩展头是否与鉴权或版本头冲突（大小写不敏感）
@@ -116,7 +180,7 @@ func copyExtraHeaders(src map[string]string) map[string]string {
 	}
 	dst := make(map[string]string, len(src))
 	for k, v := range src {
-		dst[k] = v
+		dst[strings.TrimSpace(k)] = v
 	}
 	return dst
 }

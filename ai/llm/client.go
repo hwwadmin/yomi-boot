@@ -48,10 +48,10 @@ type Stream interface {
 	Close() error
 }
 
-// Message 单条对话消息；Content 允许空串
+// Message 单条对话消息；Content 在 OpenAI 协议下允许空串，Anthropic 协议下非 system 消息必须非空白
 type Message struct {
 	Role    Role   // Role 仅 system / user / assistant
-	Content string // Content 允许空串
+	Content string // Content 见类型注释；Anthropic 非 system 消息不得为空白
 }
 
 // ChatRequest 同步与流式共用入参；模型由 Config.Model 锁定

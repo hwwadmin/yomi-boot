@@ -114,12 +114,12 @@ func (s *chatStream) Close() error {
 	s.stateMu.Lock()
 	s.closedByCaller = true
 	s.stateMu.Unlock()
-	_ = s.pump.close()
+	err := s.pump.close()
 	// 取消超时上下文，打断进行中的读取
 	if s.cancel != nil {
 		s.cancel()
 	}
-	return nil
+	return err
 }
 
 // markTerminated 标记流已结束并释放超时定时器，后续 Recv 一律 EOF

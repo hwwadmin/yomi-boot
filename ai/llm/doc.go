@@ -14,7 +14,9 @@
 //
 // 模型由 Config.Model 锁定；换模型请另 New 一个实例。请求侧不再选型。
 // Temperature / MaxTokens：Config 空则缺省 1.0 / 4096；请求指针非空则覆盖。
-// OpenAI 协议会同时写入 max_tokens 与 max_completion_tokens，兼顾兼容网关与 reasoning 模型。
+// OpenAI 协议只写 max_tokens 或 max_completion_tokens 之一（两者互斥，同时发送会被官方拒绝）；
+// Config.MaxTokensField 为空时按模型名自动选择：o1/o3/o4/gpt-5 系列用 max_completion_tokens，
+// 其余用 max_tokens。兼容网关的别名模型可通过 MaxTokensField 显式指定。
 //
 //	resp, err := cli.Chat(ctx, llm.ChatRequest{
 //	    Messages: []llm.Message{{Role: llm.RoleUser, Content: "hello"}},
@@ -55,6 +57,7 @@
 //
 // 抽掉 system 后：messages 至少 1 条、第一条必须是 user、user/assistant 严格交替，否则
 // ErrInvalidArgument。全部 system 文本按出现顺序换行拼入 SDK system 字段。
+// 该协议要求非 system 消息的 Content 非空白（上游拒绝空 text block）。
 // 交错写在对话中间的 system 抽到顶部后，与 OpenAI「插在对话中间的 system」不完全等价；
 // 换协议只保证仍调用 Chat/ChatStream，不保证任意 Messages 两协议都能发出。
 //

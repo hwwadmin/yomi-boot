@@ -651,6 +651,174 @@ func TestIndexCustomSplitterInvalid(t *testing.T) {
 	}
 }
 
+// flakyStore 在指定次数内让 Upsert 或 Delete 失败，用于模拟写入/清理的瞬时故障
+type flakyStore struct {
+	vectordb.Store
+	upsertFailures int
+	deleteFailures int
+}
+
+// Upsert 按剩余失败次数返回错误，其余透传
+func (s *flakyStore) Upsert(ctx context.Context, collection string, records []vectordb.Record) error {
+	if s.upsertFailures > 0 {
+		s.upsertFailures--
+		return errors.New("simulated upsert failure")
+	}
+	return s.Store.Upsert(ctx, collection, records)
+}
+
+// Delete 按剩余失败次数返回错误，其余透传
+func (s *flakyStore) Delete(ctx context.Context, collection string, ids []string) error {
+	if s.deleteFailures > 0 {
+		s.deleteFailures--
+		return errors.New("simulated delete failure")
+	}
+	return s.Store.Delete(ctx, collection, ids)
+}
+
+// TestIndexUpsertFailureKeepsOldVersionIntact 验证写入失败时不删除旧块
+func TestIndexUpsertFailureKeepsOldVersionIntact(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t, testDimension)
+	flaky := &flakyStore{Store: store}
+	e, err := New(Config{Embedder: &fakeEmbedder{dim: testDimension}, Store: flaky})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	large := &stubSplitter{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
+	if _, err := e.Index(ctx, testCollection, IndexRequest{
+		Documents: []Document{{ID: "doc", Content: "large"}},
+		Splitter:  large,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	small := &stubSplitter{chunks: []string{"b0"}}
+	flaky.upsertFailures = 1
+	if _, err := e.Index(ctx, testCollection, IndexRequest{
+		Documents: []Document{{ID: "doc", Content: "small"}},
+		Splitter:  small,
+	}); err == nil {
+		t.Fatal("期望写入失败")
+	}
+	// 写入失败发生在清理之前，旧版本必须保持完整
+	got, err := store.Get(ctx, testCollection, []string{chunkID("doc", 0), chunkID("doc", 5)})
+	if err != nil || len(got) != 2 ||
+		got[0].Metadata[MetadataKeyContent] != "a0" || got[1].Metadata[MetadataKeyContent] != "a5" {
+		t.Fatalf("旧版本应保持完整: %+v err=%v", got, err)
+	}
+	// 重试后只保留新版本
+	if _, err := e.Index(ctx, testCollection, IndexRequest{
+		Documents: []Document{{ID: "doc", Content: "small"}},
+		Splitter:  small,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "q", TopK: 20})
+	if err != nil || len(chunks) != 1 || chunks[0].Content != "b0" {
+		t.Fatalf("重试后应只剩新版本: %+v err=%v", chunks, err)
+	}
+}
+
+// TestIndexDeleteFailureSelfHeals 验证清理失败后旧块残留，重试会重新枚举并清理
+func TestIndexDeleteFailureSelfHeals(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t, testDimension)
+	flaky := &flakyStore{Store: store}
+	e, err := New(Config{Embedder: &fakeEmbedder{dim: testDimension}, Store: flaky})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	large := &stubSplitter{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
+	if _, err := e.Index(ctx, testCollection, IndexRequest{
+		Documents: []Document{{ID: "doc", Content: "large"}},
+		Splitter:  large,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	small := &stubSplitter{chunks: []string{"b0"}}
+	flaky.deleteFailures = 1
+	if _, err := e.Index(ctx, testCollection, IndexRequest{
+		Documents: []Document{{ID: "doc", Content: "small"}},
+		Splitter:  small,
+	}); err == nil {
+		t.Fatal("期望旧块清理失败")
+	}
+	// 写入已成功：第 0 块是新版本，旧块 1..5 仍残留
+	got, err := store.Get(ctx, testCollection, []string{chunkID("doc", 0), chunkID("doc", 5)})
+	if err != nil || len(got) != 2 ||
+		got[0].Metadata[MetadataKeyContent] != "b0" || got[1].Metadata[MetadataKeyContent] != "a5" {
+		t.Fatalf("写入后应保留新块与旧尾块: %+v err=%v", got, err)
+	}
+	// 重试会重新枚举该文档的块并清理旧尾块
+	if _, err := e.Index(ctx, testCollection, IndexRequest{
+		Documents: []Document{{ID: "doc", Content: "small"}},
+		Splitter:  small,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "q", TopK: 20})
+	if err != nil || len(chunks) != 1 || chunks[0].Content != "b0" {
+		t.Fatalf("重试后应只剩新版本: %+v err=%v", chunks, err)
+	}
+}
+
+// TestConcurrentSameDocumentIndexKeepsConsistentChunks 验证并发写入同一文档后块集一致
+func TestConcurrentSameDocumentIndexKeepsConsistentChunks(t *testing.T) {
+	t.Parallel()
+	e, _, store := newTestEngine(t)
+	ctx := context.Background()
+	large := []string{"a0", "a1", "a2", "a3", "a4", "a5"}
+	small := []string{"b0"}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = e.Index(ctx, testCollection, IndexRequest{
+				Documents: []Document{{ID: "doc", Content: "large"}},
+				Splitter:  &stubSplitter{chunks: large},
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = e.Index(ctx, testCollection, IndexRequest{
+				Documents: []Document{{ID: "doc", Content: "small"}},
+				Splitter:  &stubSplitter{chunks: small},
+			})
+		}()
+	}
+	wg.Wait()
+	ids := make([]string, 6)
+	for i := range ids {
+		ids[i] = chunkID("doc", i)
+	}
+	got, err := store.Get(ctx, testCollection, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 并发写入后只能留下某一套完整版本，不能出现新旧块混合
+	byID := make(map[string]string, len(got))
+	for _, rec := range got {
+		byID[rec.ID] = rec.Metadata[MetadataKeyContent]
+	}
+	switch len(got) {
+	case 1:
+		if byID[chunkID("doc", 0)] != "b0" {
+			t.Fatalf("小版本不完整: %+v", got)
+		}
+	case 6:
+		for i, want := range large {
+			if byID[chunkID("doc", i)] != want {
+				t.Fatalf("大版本不完整: %+v", got)
+			}
+		}
+	default:
+		t.Fatalf("并发写入后块集不完整: %d 块", len(got))
+	}
+}
+
 // TestEngineConcurrentRetrieve 覆盖并发检索
 func TestEngineConcurrentRetrieve(t *testing.T) {
 	t.Parallel()

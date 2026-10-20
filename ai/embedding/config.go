@@ -5,6 +5,7 @@ package embedding
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -53,9 +54,9 @@ func (c Config) validate() error {
 	default:
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	// 地址与模型名修剪后不得为空；密钥允许为空
-	if strings.TrimSpace(c.APIURL) == "" {
-		return errors.Sentinel(ErrInvalidArgument)
+	// 地址必须是 http/https 绝对地址；模型名修剪后不得为空；密钥允许为空
+	if err := validateAPIURL(c.APIURL); err != nil {
+		return err
 	}
 	if strings.TrimSpace(c.Model) == "" {
 		return errors.Sentinel(ErrInvalidArgument)
@@ -68,19 +69,37 @@ func (c Config) validate() error {
 	if c.Timeout < 0 {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
+	seenHeaders := make(map[string]struct{}, len(c.ExtraHeaders))
 	for k := range c.ExtraHeaders {
-		// 与鉴权或版本头冲突的键拒绝构造
-		if isReservedHeader(k) {
+		key := strings.TrimSpace(k)
+		// 空键、与鉴权头冲突、修剪后重名的键拒绝构造
+		if key == "" || isReservedHeader(key) {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
+		if _, ok := seenHeaders[key]; ok {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
+		seenHeaders[key] = struct{}{}
 	}
 	return nil
 }
 
-// isReservedHeader 判断扩展头是否与鉴权或版本头冲突（大小写不敏感）
+// validateAPIURL 校验地址为 http/https 绝对地址
+func validateAPIURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return nil
+}
+
+// isReservedHeader 判断扩展头是否与鉴权头冲突（大小写不敏感）
 func isReservedHeader(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "authorization", "x-api-key", "anthropic-version":
+	case "authorization", "x-api-key":
 		return true
 	default:
 		return false
@@ -94,7 +113,7 @@ func copyExtraHeaders(src map[string]string) map[string]string {
 	}
 	dst := make(map[string]string, len(src))
 	for k, v := range src {
-		dst[k] = v
+		dst[strings.TrimSpace(k)] = v
 	}
 	return dst
 }

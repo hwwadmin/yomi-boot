@@ -229,6 +229,39 @@ func (s *memoryStore) Get(ctx context.Context, collection string, ids []string) 
 	return out, nil
 }
 
+// ListIDs 按元数据等值 AND 列出主键；返回结果按 ID 升序
+func (s *memoryStore) ListIDs(ctx context.Context, collection string, filter map[string]string) ([]string, error) {
+	_, cancel, err := s.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	n, err := normalizeCollectionName(collection)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateFilter(filter, true); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return nil, errors.Sentinel(ErrClosed)
+	}
+	coll, ok := s.colls[n]
+	if !ok {
+		return nil, errors.Sentinel(ErrNotFound)
+	}
+	ids := make([]string, 0, len(coll))
+	for id, row := range coll {
+		if matchFilter(row.metadata, filter) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
 // Delete 按 ID 删除
 func (s *memoryStore) Delete(ctx context.Context, collection string, ids []string) error {
 	_, cancel, err := s.begin(ctx)

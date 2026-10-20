@@ -4,6 +4,7 @@
 package jev
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -38,11 +39,11 @@ type DecideRequest struct {
 	Questions map[string]Question // Questions 至少 1 项；key 为调用方 id
 }
 
-// Question 单条类型化问题；noul 不需 Criteria
+// Question 单条类型化问题；noul 不得携带 Criteria
 type Question struct {
 	Type         QuestionType    // Type 为 noul / choice / score
 	Instructions string          // Instructions 不得为空
-	Criteria     json.RawMessage // Criteria choice 为对象、score 为数组；noul 省略
+	Criteria     json.RawMessage // Criteria choice 为对象、score 为数组；noul 不得携带
 }
 
 // DecideResponse 决策完整结果
@@ -61,7 +62,7 @@ type TokenUsage struct {
 
 // Answer 单题类型化答案；未出现的字段为 nil
 type Answer struct {
-	Type          string          // Type 与问题类型一致
+	Type          QuestionType    // Type 与问题类型一致；解析时校验
 	Noul          *float64        // Noul 为「是」的概率
 	Choice        *string         // Choice 为选中选项 key
 	Score         *float64        // Score 为量表得分
@@ -70,12 +71,10 @@ type Answer struct {
 	Probabilities json.RawMessage // Probabilities 为对象或数组，依题型而定
 }
 
-// validateDecideRequest 校验 state 与 questions；非法返回 ErrInvalidArgument
+// validateDecideRequest 校验 state、questions 与 criteria；非法返回 ErrInvalidArgument
 func validateDecideRequest(req DecideRequest) error {
-	if len(req.State) == 0 {
-		return errors.Sentinel(ErrInvalidArgument)
-	}
-	if !json.Valid(req.State) {
+	state := bytes.TrimSpace(req.State)
+	if len(state) == 0 || !json.Valid(state) || bytes.Equal(state, []byte("null")) {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	if len(req.Questions) == 0 {
@@ -92,6 +91,23 @@ func validateDecideRequest(req DecideRequest) error {
 		}
 		if strings.TrimSpace(q.Instructions) == "" {
 			return errors.Sentinel(ErrInvalidArgument)
+		}
+		criteria := bytes.TrimSpace(q.Criteria)
+		// noul 不得携带 Criteria；choice/score 可选，携带时必须是约定形状
+		if q.Type == QuestionNoul {
+			if len(criteria) > 0 {
+				return errors.Sentinel(ErrInvalidArgument)
+			}
+		} else if len(criteria) > 0 {
+			if !json.Valid(criteria) {
+				return errors.Sentinel(ErrInvalidArgument)
+			}
+			if q.Type == QuestionChoice && criteria[0] != '{' {
+				return errors.Sentinel(ErrInvalidArgument)
+			}
+			if q.Type == QuestionScore && criteria[0] != '[' {
+				return errors.Sentinel(ErrInvalidArgument)
+			}
 		}
 	}
 	return nil

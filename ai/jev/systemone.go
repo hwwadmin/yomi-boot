@@ -15,22 +15,25 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// systemoneClient System One 协议的 Client 实现
-type systemoneClient struct {
+// maxResponseBytes 是单次响应体读取上限
+const maxResponseBytes = 8 << 20
+
+// systemOneClient System One 协议的 Client 实现
+type systemOneClient struct {
 	cfg        Config
 	httpClient *http.Client
 	timeout    time.Duration
 }
 
-var _ Client = (*systemoneClient)(nil)
+var _ Client = (*systemOneClient)(nil)
 
 // newSystemOneClient 构造 System One 协议客户端
-func newSystemOneClient(cfg Config) (*systemoneClient, error) {
+func newSystemOneClient(cfg Config) (*systemOneClient, error) {
 	hc := cfg.HTTPClient
 	if hc == nil {
 		hc = &http.Client{Timeout: 0}
 	}
-	return &systemoneClient{
+	return &systemOneClient{
 		cfg:        cfg,
 		httpClient: hc,
 		timeout:    timeoutOrDefault(cfg.Timeout),
@@ -38,7 +41,7 @@ func newSystemOneClient(cfg Config) (*systemoneClient, error) {
 }
 
 // Decide 发起同步决策请求
-func (c *systemoneClient) Decide(ctx context.Context, req DecideRequest) (*DecideResponse, error) {
+func (c *systemOneClient) Decide(ctx context.Context, req DecideRequest) (*DecideResponse, error) {
 	if err := validateDecideRequest(req); err != nil {
 		return nil, err
 	}
@@ -64,25 +67,28 @@ func (c *systemoneClient) Decide(ctx context.Context, req DecideRequest) (*Decid
 		return nil, mapHTTPDoErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, mapStatusError(0, err)
+	}
+	if len(raw) > maxResponseBytes {
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/jev: 响应体超过 8MB"))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, mapStatusError(resp.StatusCode, errors.New(strings.TrimSpace(string(raw))))
 	}
-	return parseSystemOneResponse(raw)
+	return parseSystemOneResponse(raw, req.Questions)
 }
 
 // buildWireRequest 映射为上游 JSON 请求体
-func (c *systemoneClient) buildWireRequest(req DecideRequest) systemoneDecideRequest {
-	wire := systemoneDecideRequest{
+func (c *systemOneClient) buildWireRequest(req DecideRequest) systemOneDecideRequest {
+	wire := systemOneDecideRequest{
 		Model:     c.cfg.Model,
 		State:     req.State,
-		Questions: make(map[string]systemoneQuestion, len(req.Questions)),
+		Questions: make(map[string]systemOneQuestion, len(req.Questions)),
 	}
 	for id, q := range req.Questions {
-		wq := systemoneQuestion{
+		wq := systemOneQuestion{
 			Type:         string(q.Type),
 			Instructions: q.Instructions,
 		}
@@ -94,30 +100,30 @@ func (c *systemoneClient) buildWireRequest(req DecideRequest) systemoneDecideReq
 	return wire
 }
 
-type systemoneDecideRequest struct {
+type systemOneDecideRequest struct {
 	Model     string                       `json:"model"`
 	State     json.RawMessage              `json:"state"`
-	Questions map[string]systemoneQuestion `json:"questions"`
+	Questions map[string]systemOneQuestion `json:"questions"`
 }
 
-type systemoneQuestion struct {
+type systemOneQuestion struct {
 	Type         string          `json:"type"`
 	Instructions string          `json:"instructions"`
 	Criteria     json.RawMessage `json:"criteria,omitempty"`
 }
 
-type systemoneDecideResponse struct {
+type systemOneDecideResponse struct {
 	Model   string                     `json:"model"`
 	Answers map[string]json.RawMessage `json:"answers"`
-	Usage   *systemoneUsage            `json:"usage"`
+	Usage   *systemOneUsage            `json:"usage"`
 }
 
-type systemoneUsage struct {
+type systemOneUsage struct {
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
 }
 
-type systemoneAnswer struct {
+type systemOneAnswer struct {
 	Type          string          `json:"type"`
 	Noul          *float64        `json:"noul"`
 	Choice        *string         `json:"choice"`
@@ -127,28 +133,52 @@ type systemoneAnswer struct {
 	Probabilities json.RawMessage `json:"probabilities"`
 }
 
-// parseSystemOneResponse 解析成功响应；结构非法返回 ErrBadResponse
-func parseSystemOneResponse(raw []byte) (*DecideResponse, error) {
-	var wire systemoneDecideResponse
+// parseSystemOneResponse 解析成功响应；缺失答案、类型不符或结构非法返回 ErrBadResponse
+func parseSystemOneResponse(raw []byte, questions map[string]Question) (*DecideResponse, error) {
+	var wire systemOneDecideResponse
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return nil, wrapSentinel(ErrBadResponse, err)
 	}
 	if len(wire.Answers) == 0 {
 		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/jev: 空 answers"))
 	}
+	// 请求中的每个问题都必须有答案；缺答时不能让调用方拿到零值 Answer
+	for id := range questions {
+		if _, ok := wire.Answers[id]; !ok {
+			return nil, wrapSentinel(ErrBadResponse, errors.Newf("ai/jev: 缺少问题 %q 的答案", id))
+		}
+	}
 	out := &DecideResponse{
 		Model:   wire.Model,
-		Answers: make(map[string]Answer, len(wire.Answers)),
+		Answers: make(map[string]Answer, len(questions)),
 	}
 	for id, rawAns := range wire.Answers {
-		var a systemoneAnswer
+		q, ok := questions[id]
+		// 未请求的答案不进入结果，避免调用方收到意外 key
+		if !ok {
+			continue
+		}
+		var a systemOneAnswer
 		if err := json.Unmarshal(rawAns, &a); err != nil {
 			return nil, wrapSentinel(ErrBadResponse, err)
 		}
 		if strings.TrimSpace(a.Type) == "" {
 			return nil, wrapSentinel(ErrBadResponse, errors.New("ai/jev: 答案缺少 type"))
 		}
-		out.Answers[id] = Answer(a)
+		answerType := QuestionType(a.Type)
+		// 答案类型必须与请求的问题类型一致
+		if answerType != q.Type {
+			return nil, wrapSentinel(ErrBadResponse, errors.Newf("ai/jev: 问题 %q 的答案类型 %q 与请求类型 %q 不一致", id, a.Type, q.Type))
+		}
+		out.Answers[id] = Answer{
+			Type:          answerType,
+			Noul:          a.Noul,
+			Choice:        a.Choice,
+			Score:         a.Score,
+			Confidence:    a.Confidence,
+			Legend:        a.Legend,
+			Probabilities: a.Probabilities,
+		}
 	}
 	if wire.Usage != nil && (wire.Usage.InputTokens > 0 || wire.Usage.OutputTokens > 0) {
 		out.Usage = &TokenUsage{

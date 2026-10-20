@@ -100,3 +100,19 @@ func TestSentinelNil(t *testing.T) {
 		t.Fatal("expected nil from Sentinel(nil)")
 	}
 }
+
+// TestStackExpandsJoinedErrors 验证 Join 后的每个子错误都保留调用栈
+func TestStackExpandsJoinedErrors(t *testing.T) {
+	sentinel := NewNoStack("AI_TEST_BAD_RESPONSE")
+	err := Join(Sentinel(sentinel), Wrap(New("upstream boom"), "ai/test"))
+	stack := Stack(err)
+	if !strings.Contains(stack, "errors_test.go") {
+		t.Fatalf("expected joined stack to contain errors_test.go, got: %s", stack)
+	}
+	if !strings.Contains(stack, "AI_TEST_BAD_RESPONSE") || !strings.Contains(stack, "upstream boom") {
+		t.Fatalf("expected both joined messages, got: %s", stack)
+	}
+	if !Is(err, sentinel) {
+		t.Fatal("expected joined error to match sentinel via Is")
+	}
+}

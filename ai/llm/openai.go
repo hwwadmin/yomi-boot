@@ -135,9 +135,12 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 	}
 	if maxTok := resolveMaxTokens(req.MaxTokens, c.cfg.MaxTokens); maxTok != nil {
 		n := int64(*maxTok)
-		// 同时写入新旧字段：兼容网关用 max_tokens，reasoning 模型用 max_completion_tokens
-		params.MaxTokens = openai.Int(n)
-		params.MaxCompletionTokens = openai.Int(n)
+		// 两个字段互斥：官方 OpenAI/Azure 同时收到会 400，按模型族或显式配置择一
+		if c.cfg.resolvedMaxTokensField() == MaxTokensFieldCompletion {
+			params.MaxCompletionTokens = openai.Int(n)
+		} else {
+			params.MaxTokens = openai.Int(n)
+		}
 	}
 	return params, nil
 }
@@ -160,9 +163,10 @@ func mapOpenAIError(err error) error {
 
 // openaiPump 适配 OpenAI 服务端推送流
 type openaiPump struct {
-	stream *ssestream.Stream[openai.ChatCompletionChunk] // stream 是官方流读取器
-	mapErr func(error) error                             // mapErr 将官方错误映射为本包哨兵
-	once   sync.Once                                     // once 保证 close 只执行一次
+	stream    *ssestream.Stream[openai.ChatCompletionChunk] // stream 是官方流读取器
+	mapErr    func(error) error                             // mapErr 将官方错误映射为本包哨兵
+	closeOnce sync.Once                                     // closeOnce 保证 close 只执行一次
+	closeErr  error                                         // closeErr 记录首次关闭结果
 }
 
 // next 读取下一增量；跳过空文本控制帧；流结束返回 io.EOF
@@ -174,9 +178,6 @@ func (p *openaiPump) next() (*ChatChunk, error) {
 			delta = cur.Choices[0].Delta.Content
 		}
 		// 跳过无文本增量的控制帧
-		if delta == "" && cur.ID == "" {
-			continue
-		}
 		if delta == "" {
 			continue
 		}
@@ -192,11 +193,10 @@ func (p *openaiPump) next() (*ChatChunk, error) {
 	return nil, io.EOF
 }
 
-// close 关闭底层流；幂等，重复调用返回首次结果
+// close 关闭底层流；幂等，重复调用返回首次关闭结果
 func (p *openaiPump) close() error {
-	var err error
-	p.once.Do(func() {
-		err = p.stream.Close()
+	p.closeOnce.Do(func() {
+		p.closeErr = p.stream.Close()
 	})
-	return err
+	return p.closeErr
 }

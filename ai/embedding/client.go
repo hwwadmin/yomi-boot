@@ -21,7 +21,7 @@ type Client interface {
 
 // Request 向量化入参；模型由 Config.Model 锁定
 type Request struct {
-	Inputs     []string // Inputs 至少 1 条；trim 后不得为空串
+	Inputs     []string // Inputs 至少 1 条；trim 后不得为空串；单次建议不超过 2048 条（OpenAI 上限）
 	Dimensions *int     // Dimensions 可选；空则回退配置；若设置必须 >0
 }
 

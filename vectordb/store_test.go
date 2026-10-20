@@ -294,6 +294,20 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 		}
 	})
 
+	t.Run("list ids by filter", func(t *testing.T) {
+		ids, err := store.ListIDs(ctx, name, map[string]string{"doc_id": "d2"})
+		if err != nil || len(ids) != 1 || ids[0] != "b" {
+			t.Fatalf("list ids: %+v err=%v", ids, err)
+		}
+		ids, err = store.ListIDs(ctx, name, map[string]string{"doc_id": "nope"})
+		if err != nil || len(ids) != 0 {
+			t.Fatalf("list ids miss: %+v err=%v", ids, err)
+		}
+		if _, err := store.ListIDs(ctx, name, nil); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("list ids empty filter: %v", err)
+		}
+	})
+
 	t.Run("get after delete", func(t *testing.T) {
 		if err := store.Delete(ctx, name, []string{"b"}); err != nil {
 			t.Fatal(err)
@@ -343,6 +357,10 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 		_, err = store.Get(ctx, name, []string{"z"})
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("get dropped: %v", err)
+		}
+		_, err = store.ListIDs(ctx, name, map[string]string{"k": "v"})
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("list ids dropped: %v", err)
 		}
 	})
 

@@ -50,9 +50,11 @@
 // # 写入
 //
 //   - 块主键为 "文档ID#序号"；内容与切分信息写入保留元数据键，文档自定义元数据原样合并
-//   - 同一文档重复 Index 会覆盖同序号块，并删除序号超出新块数的旧块；失败时可能留下部分新块，重试即可
-//   - 旧块清理依据块上的 rag_chunk_count，仅对由本库写入的块生效
-//   - 同一文档的 Index 需调用方串行；不同文档、不同集合可并发
+//   - 同一文档重复 Index 会覆盖同序号块，并在写入成功后删除该文档中不属于本次新块集合的旧块
+//   - 旧块清理依据保留键 rag_doc_id 列出该文档现有块，不依赖块数元数据
+//   - 同一文档的写入阶段由库内条带锁串行；条带锁仅保证进程内，跨实例需调用方用分布式锁或串行投递
+//   - Upsert 失败时旧块保持不变；清理失败或进程崩溃时旧块仍在，重试会重新枚举并清理，可自愈
+//   - 不同文档、不同集合可并发；条带碰撞会短暂串行
 //   - 保留元数据键见 MetadataKeyDocumentID 等常量，Document.Metadata 不得使用
 //
 // # 检索与删除
@@ -63,7 +65,7 @@
 //
 // # 错误
 //
-// 包内哨兵：ErrInvalidArgument / ErrDimensionMismatch。
+// 包内哨兵：ErrInvalidArgument / ErrDimensionMismatch / ErrBadResponse。
 // embedding / vectordb 的错误原样透传，可用 errors.Is 判断其哨兵。
 //
 // Engine 构造后不可变，可并发调用；请勿复制 Engine 值。

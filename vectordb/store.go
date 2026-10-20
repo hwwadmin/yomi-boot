@@ -20,6 +20,8 @@ type Store interface {
 	Upsert(ctx context.Context, collection string, records []Record) error
 	// Get 按 ID 取回；只返回命中；空 ids 非法；集合不存在返回 ErrNotFound
 	Get(ctx context.Context, collection string, ids []string) ([]Record, error)
+	// ListIDs 按元数据等值 AND 列出主键；filter 至少 1 个键；集合不存在返回 ErrNotFound；无命中返回空切片
+	ListIDs(ctx context.Context, collection string, filter map[string]string) ([]string, error)
 	// Delete 按 ID 删除；缺失 ID 幂等成功；空 ids 非法；集合不存在返回 ErrNotFound
 	Delete(ctx context.Context, collection string, ids []string) error
 	// DeleteByFilter 按元数据等值 AND 删除；filter 至少 1 个键；集合不存在返回 ErrNotFound

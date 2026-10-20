@@ -34,9 +34,13 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 		{"empty protocol", func(c *Config) { c.Protocol = "" }},
 		{"unknown protocol", func(c *Config) { c.Protocol = Protocol("openai") }},
 		{"empty url", func(c *Config) { c.APIURL = "  " }},
+		{"bad url", func(c *Config) { c.APIURL = "not-a-url" }},
+		{"bad scheme", func(c *Config) { c.APIURL = "ftp://example.com" }},
 		{"empty model", func(c *Config) { c.Model = "\t" }},
 		{"negative timeout", func(c *Config) { c.Timeout = -time.Second }},
 		{"reserved header", func(c *Config) { c.ExtraHeaders = map[string]string{"Authorization": "x"} }},
+		{"blank header key", func(c *Config) { c.ExtraHeaders = map[string]string{" ": "x"} }},
+		{"duplicate trimmed key", func(c *Config) { c.ExtraHeaders = map[string]string{"X-A": "1", " X-A ": "2"} }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,7 +63,7 @@ func TestNewCopiesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	impl, ok := cli.(*systemoneClient)
+	impl, ok := cli.(*systemOneClient)
 	if !ok {
 		t.Fatalf("type=%T", cli)
 	}
@@ -82,7 +86,7 @@ func TestNewAllowsEmptyAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	impl, ok := cli.(*systemoneClient)
+	impl, ok := cli.(*systemOneClient)
 	if !ok {
 		t.Fatalf("type=%T", cli)
 	}
@@ -106,15 +110,66 @@ func TestValidateDecideRequest(t *testing.T) {
 	cases := []DecideRequest{
 		{State: nil, Questions: valid.Questions},
 		{State: json.RawMessage("not-json"), Questions: valid.Questions},
+		{State: json.RawMessage("null"), Questions: valid.Questions},
 		{State: valid.State, Questions: nil},
 		{State: valid.State, Questions: map[string]Question{"": {Type: QuestionNoul, Instructions: "x"}}},
 		{State: valid.State, Questions: map[string]Question{"q": {Type: QuestionType("bad"), Instructions: "x"}}},
 		{State: valid.State, Questions: map[string]Question{"q": {Type: QuestionNoul, Instructions: "  "}}},
+		{State: valid.State, Questions: map[string]Question{"q": {Type: QuestionNoul, Instructions: "x", Criteria: json.RawMessage(`{"a":1}`)}}},
+		{State: valid.State, Questions: map[string]Question{"q": {Type: QuestionChoice, Instructions: "x", Criteria: json.RawMessage("not-json")}}},
+		{State: valid.State, Questions: map[string]Question{"q": {Type: QuestionChoice, Instructions: "x", Criteria: json.RawMessage(`["a"]`)}}},
+		{State: valid.State, Questions: map[string]Question{"q": {Type: QuestionScore, Instructions: "x", Criteria: json.RawMessage(`{"a":1}`)}}},
 	}
 	for i, req := range cases {
 		if err := validateDecideRequest(req); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("case %d: err=%v", i, err)
 		}
+	}
+	validCriteria := DecideRequest{
+		State: valid.State,
+		Questions: map[string]Question{
+			"choice": {Type: QuestionChoice, Instructions: "x", Criteria: json.RawMessage(`{"a":"b"}`)},
+			"score":  {Type: QuestionScore, Instructions: "x", Criteria: json.RawMessage(`["a","b"]`)},
+		},
+	}
+	if err := validateDecideRequest(validCriteria); err != nil {
+		t.Fatalf("valid criteria: %v", err)
+	}
+}
+
+// TestDecideRejectsMissingOrMismatchedAnswers 验证缺答与答案类型不符返回 ErrBadResponse
+func TestDecideRejectsMissingOrMismatchedAnswers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		answers map[string]any
+	}{
+		{"missing", map[string]any{}},
+		{"type mismatch", map[string]any{"is_urgent": map[string]any{"type": "choice", "choice": "a"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"model":   "jev-mock",
+					"answers": tc.answers,
+				})
+			}))
+			defer srv.Close()
+			cli, err := New(Config{Protocol: ProtocolSystemOne, APIURL: srv.URL, Model: "jev-mock"})
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			_, err = cli.Decide(context.Background(), DecideRequest{
+				State: StateString("test"),
+				Questions: map[string]Question{
+					"is_urgent": {Type: QuestionNoul, Instructions: "urgent?"},
+				},
+			})
+			if !errors.Is(err, ErrBadResponse) {
+				t.Fatalf("err=%v", err)
+			}
+		})
 	}
 }
 
@@ -137,7 +192,7 @@ func TestDecideMock(t *testing.T) {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		var body systemoneDecideRequest
+		var body systemOneDecideRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
