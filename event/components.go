@@ -41,12 +41,13 @@ type Components struct {
 	NormalReceiver *NormalReceiver
 	cfg            cfg.Runtime
 
-	outboxRepo     *repo.OutboxRepo
-	dlqHandler     *outbox.DlqHandler
-	processor      *outbox.Processor
-	kafkaPublisher yomikafka.PublisherService
-	txExecutor     db.TxExecutor
-	lockFactory    distlock.DistLockFactory
+	outboxRepo      *repo.OutboxRepo
+	dlqHandler      *outbox.DlqHandler
+	inboxDlqHandler *InboxDlqHandler
+	processor       *outbox.Processor
+	kafkaPublisher  yomikafka.PublisherService
+	txExecutor      db.TxExecutor
+	lockFactory     distlock.DistLockFactory
 
 	cancel  context.CancelFunc
 	started bool
@@ -95,7 +96,11 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 			return nil, errors.New("event: 分布式锁工厂未初始化")
 		}
 		inboxRepo := repo.NewInboxRepo(deps.DB)
-		c.Receiver = NewReceiver(inboxRepo, deps.TxExecutor, deps.DistLockFactory, runtime, deps.IDGenerator)
+		inboxDlqRepo := repo.NewInboxDlqRepo(deps.DB)
+		c.Receiver = NewReceiver(
+			inboxRepo, inboxDlqRepo, deps.TxExecutor, deps.DistLockFactory, runtime, deps.IDGenerator,
+		)
+		c.inboxDlqHandler = NewInboxDlqHandler(runtime, inboxDlqRepo, inboxRepo, deps.KafkaPublisher)
 		c.NormalReceiver = NewNormalReceiver()
 	}
 
@@ -125,15 +130,10 @@ func NewAndStart(deps Deps, eventCfg Config) (c *Components, err error) {
 	return c, nil
 }
 
-// Start 启动发件箱后台任务（抓取、发送、超时回收、DLQ）；仅发布侧启用时生效。
+// Start 启动事件后台任务（发件箱抓取/发送/超时回收/DLQ，收件箱死信重投）。
 // 任一后台任务启动失败时取消已启动任务并返回错误。
 func (c *Components) Start(parentCtx context.Context) error {
 	if c.started {
-		return nil
-	}
-	if !c.cfg.PublisherEnabled {
-		logger.InfoWithoutCtx("[消息队列事件]发布侧未启用，跳过发件箱后台任务")
-		c.started = true
 		return nil
 	}
 	if c.lockFactory == nil {
@@ -146,36 +146,55 @@ func (c *Components) Start(parentCtx context.Context) error {
 	runCtx, cancel := context.WithCancel(parentCtx)
 	c.cancel = cancel
 
-	if c.processor == nil {
-		processor, err := outbox.NewProcessor(
-			c.cfg, c.outboxRepo, c.dlqHandler, c.kafkaPublisher, c.txExecutor, runCtx,
-		)
-		if err != nil {
+	if c.cfg.PublisherEnabled {
+		if c.processor == nil {
+			processor, err := outbox.NewProcessor(
+				c.cfg, c.outboxRepo, c.dlqHandler, c.kafkaPublisher, c.txExecutor, runCtx,
+			)
+			if err != nil {
+				cancel()
+				return err
+			}
+			c.processor = processor
+		}
+
+		fetcher := outbox.NewFetcher(c.cfg, c.outboxRepo, c.processor)
+		if err := fetcher.Start(runCtx, c.lockFactory); err != nil {
 			cancel()
 			return err
 		}
-		c.processor = processor
+
+		fetchTimeout := outbox.NewFetchTimeout(c.cfg, c.outboxRepo)
+		if err := fetchTimeout.Start(runCtx, c.lockFactory); err != nil {
+			cancel()
+			return err
+		}
+
+		if err := c.dlqHandler.Start(runCtx, c.lockFactory); err != nil {
+			cancel()
+			return err
+		}
+	} else {
+		logger.InfoWithoutCtx("[消息队列事件]发布侧未启用，跳过发件箱后台任务")
 	}
 
-	fetcher := outbox.NewFetcher(c.cfg, c.outboxRepo, c.processor)
-	if err := fetcher.Start(runCtx, c.lockFactory); err != nil {
-		cancel()
-		return err
-	}
-
-	fetchTimeout := outbox.NewFetchTimeout(c.cfg, c.outboxRepo)
-	if err := fetchTimeout.Start(runCtx, c.lockFactory); err != nil {
-		cancel()
-		return err
-	}
-
-	if err := c.dlqHandler.Start(runCtx, c.lockFactory); err != nil {
-		cancel()
-		return err
+	if c.cfg.ConsumerEnabled {
+		if c.inboxDlqHandler == nil {
+			cancel()
+			return errors.New("event: 收件箱死信处理器未初始化")
+		}
+		if err := c.inboxDlqHandler.Start(runCtx, c.lockFactory); err != nil {
+			cancel()
+			return err
+		}
 	}
 
 	c.started = true
-	logger.InfoWithoutCtx("[消息队列事件]发件箱后台任务已启动", "serviceName", c.cfg.ServiceName)
+	logger.InfoWithoutCtx("[消息队列事件]后台任务已启动",
+		"serviceName", c.cfg.ServiceName,
+		"publisherEnabled", c.cfg.PublisherEnabled,
+		"consumerEnabled", c.cfg.ConsumerEnabled,
+	)
 	return nil
 }
 
@@ -187,7 +206,7 @@ func (c *Components) ResetDlqRetryCountInTimeRange(ctx context.Context, from, to
 	return c.dlqHandler.ResetRetryCountInTimeRange(ctx, from, to)
 }
 
-// Close 停止发件箱后台任务并释放资源
+// Close 停止事件后台任务并释放资源
 func (c *Components) Close() error {
 	if c.cancel != nil {
 		c.cancel()

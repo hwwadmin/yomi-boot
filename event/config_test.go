@@ -1,6 +1,23 @@
 package event
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+// TestConfigConsumerDefaults 校验消费重试与收件箱死信重投的默认值
+func TestConfigConsumerDefaults(t *testing.T) {
+	config := Config{}
+	if got := config.ConsumerMaxRetryOrDefault(); got != 20 {
+		t.Fatalf("consumer_max_retry 默认值期望 20，实际 %d", got)
+	}
+	if got := config.InboxDlqFrequencyOrDefault(); got != 30*time.Second {
+		t.Fatalf("inbox_dlq_frequency_ms 默认值期望 30s，实际 %s", got)
+	}
+	if got := config.InboxDlqSizeOrDefault(); got != 100 {
+		t.Fatalf("inbox_dlq_size 默认值期望 100，实际 %d", got)
+	}
+}
 
 // TestConfigValidateFrequencyMinimum 校验抓取与死信轮询频率不得低于 roundrobin 的最小间隔
 func TestConfigValidateFrequencyMinimum(t *testing.T) {
