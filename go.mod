@@ -40,6 +40,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
 	github.com/yuin/gopher-lua v1.1.1
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sync v0.23.0
@@ -201,7 +202,6 @@ require (
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
-	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.5 // indirect

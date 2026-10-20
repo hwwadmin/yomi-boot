@@ -193,7 +193,7 @@ services/{domain}/
 | `bc/hmac` | HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证 |
 | `bc/aes` | AES-GCM（推荐）/ CBC；ECB 不推荐 |
 | `bc/sm4` | SM4-GCM（推荐）/ CBC；ECB 不推荐（国密） |
-| `bc/rsa` | RSA PEM、OAEP 加解密、PSS/PKCS1v15 签名 |
+| `bc/rsa` | RSA PEM（PKCS#1/PKCS#8、证书链、带密码私钥）、OAEP 加解密、PSS/PKCS1v15 签名 |
 | `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
 | `kafka` | 生产者 `PublisherService`、消费者 `ConsumerService`、`kafkatest` 测试封装 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
