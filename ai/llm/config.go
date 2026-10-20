@@ -1,7 +1,7 @@
-// Package aiclient 构造配置与协议常量。
+// Package llm 构造配置与协议常量。
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"net/http"
@@ -30,7 +30,7 @@ const (
 	defaultMaxTokens = 4096
 )
 
-// Config 创建 AIClient 的构造配置；本包不读 YAML
+// Config 创建 Client 的构造配置；本包不读 YAML
 type Config struct {
 	Protocol         Protocol          // Protocol 是协议标识，仅 openai / anthropic
 	APIURL           string            // APIURL 原样注入官方客户端 BaseURL，本包不拼接路径

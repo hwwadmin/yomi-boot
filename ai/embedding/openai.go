@@ -1,10 +1,11 @@
-// Package aiclient OpenAI Embeddings 适配（包私有）。
+// Package embedding OpenAI Embeddings 适配（包私有）。
 //
 // @author zwei
-package aiclient
+package embedding
 
 import (
 	"context"
+	stderrors "errors"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -13,19 +14,19 @@ import (
 	"github.com/openai/openai-go/v3/option"
 )
 
-// openaiEmbeddingClient OpenAI 协议的 EmbeddingClient 实现
-type openaiEmbeddingClient struct {
-	sdk     openai.Client   // sdk 是官方客户端，选项不可变，可并发调用
-	cfg     EmbeddingConfig // cfg 是构造期拷贝后的配置
-	timeout time.Duration   // timeout 是整段墙钟超时（0 已回退为 60s）
+// openaiClient OpenAI 协议的 Client 实现
+type openaiClient struct {
+	sdk     openai.Client // sdk 是官方客户端，选项不可变，可并发调用
+	cfg     Config        // cfg 是构造期拷贝后的配置
+	timeout time.Duration // timeout 是整段墙钟超时（0 已回退为 60s）
 }
 
-var _ EmbeddingClient = (*openaiEmbeddingClient)(nil)
+var _ Client = (*openaiClient)(nil)
 
-// newOpenAIEmbeddingClient 构造 OpenAI 协议向量化客户端
+// newOpenAIClient 构造 OpenAI 协议向量化客户端
 //
 // 官方客户端仅持有不可变选项，每次请求独立执行，同一实例可并发 Embed。
-func newOpenAIEmbeddingClient(cfg EmbeddingConfig) (*openaiEmbeddingClient, error) {
+func newOpenAIClient(cfg Config) (*openaiClient, error) {
 	// 地址原样注入；关闭官方默认重试
 	opts := []option.RequestOption{
 		option.WithBaseURL(cfg.APIURL),
@@ -40,7 +41,7 @@ func newOpenAIEmbeddingClient(cfg EmbeddingConfig) (*openaiEmbeddingClient, erro
 	for k, v := range cfg.ExtraHeaders {
 		opts = append(opts, option.WithHeader(k, v))
 	}
-	return &openaiEmbeddingClient{
+	return &openaiClient{
 		sdk:     openai.NewClient(opts...),
 		cfg:     cfg,
 		timeout: timeoutOrDefault(cfg.Timeout),
@@ -48,7 +49,7 @@ func newOpenAIEmbeddingClient(cfg EmbeddingConfig) (*openaiEmbeddingClient, erro
 }
 
 // Embed 发起同步向量化；空结果或下标不齐返回 ErrBadResponse
-func (c *openaiEmbeddingClient) Embed(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error) {
+func (c *openaiClient) Embed(ctx context.Context, req Request) (*Response, error) {
 	params, err := c.buildParams(req)
 	if err != nil {
 		return nil, err
@@ -58,16 +59,16 @@ func (c *openaiEmbeddingClient) Embed(ctx context.Context, req EmbeddingRequest)
 	defer cancel()
 	resp, err := c.sdk.Embeddings.New(ctx, params)
 	if err != nil {
-		return nil, mapOpenAIErr(err)
+		return nil, mapOpenAIError(err)
 	}
 	if resp == nil {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 空 embedding 响应"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: 空响应"))
 	}
 	vectors, err := collectEmbeddingVectors(len(req.Inputs), resp.Data)
 	if err != nil {
 		return nil, err
 	}
-	return &EmbeddingResponse{
+	return &Response{
 		Model:   resp.Model,
 		Vectors: vectors,
 		Usage:   embeddingUsage(resp.Usage.PromptTokens, resp.Usage.TotalTokens),
@@ -75,8 +76,8 @@ func (c *openaiEmbeddingClient) Embed(ctx context.Context, req EmbeddingRequest)
 }
 
 // buildParams 将门面请求映射为官方客户端参数；入参非法返回 ErrInvalidArgument
-func (c *openaiEmbeddingClient) buildParams(req EmbeddingRequest) (openai.EmbeddingNewParams, error) {
-	if err := validateEmbeddingRequest(req); err != nil {
+func (c *openaiClient) buildParams(req Request) (openai.EmbeddingNewParams, error) {
+	if err := validateRequest(req); err != nil {
 		return openai.EmbeddingNewParams{}, err
 	}
 	params := openai.EmbeddingNewParams{
@@ -91,24 +92,40 @@ func (c *openaiEmbeddingClient) buildParams(req EmbeddingRequest) (openai.Embedd
 	return params, nil
 }
 
+// mapOpenAIError 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
+func mapOpenAIError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// 取消或超时保持标准库错误，便于按错误链判断
+	if stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded) {
+		return wrapCtxErr(err)
+	}
+	var apiErr *openai.Error
+	if stderrors.As(err, &apiErr) {
+		return mapStatusError(apiErr.StatusCode, err)
+	}
+	return mapStatusError(0, err)
+}
+
 // collectEmbeddingVectors 按上游 index 填回与输入等长的向量列表
 func collectEmbeddingVectors(n int, data []openai.Embedding) ([][]float64, error) {
 	if n <= 0 || len(data) == 0 {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 空 embeddings"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: 空 embeddings"))
 	}
 	out := make([][]float64, n)
 	filled := make([]bool, n)
 	for _, item := range data {
 		i := int(item.Index)
 		if i < 0 || i >= n || filled[i] || len(item.Embedding) == 0 {
-			return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: embeddings 下标或向量异常"))
+			return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: embeddings 下标或向量异常"))
 		}
 		out[i] = item.Embedding
 		filled[i] = true
 	}
 	for _, ok := range filled {
 		if !ok {
-			return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: embeddings 条数不齐"))
+			return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: embeddings 条数不齐"))
 		}
 	}
 	return out, nil

@@ -1,7 +1,7 @@
-// Package aiclient System One 兼容 Jev HTTP 适配（包私有）。
+// Package jev System One 兼容 HTTP 适配（包私有）。
 //
 // @author zwei
-package aiclient
+package jev
 
 import (
 	"bytes"
@@ -15,22 +15,22 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// systemoneJevClient System One 协议的 JevClient 实现
-type systemoneJevClient struct {
-	cfg        JevConfig
+// systemoneClient System One 协议的 Client 实现
+type systemoneClient struct {
+	cfg        Config
 	httpClient *http.Client
 	timeout    time.Duration
 }
 
-var _ JevClient = (*systemoneJevClient)(nil)
+var _ Client = (*systemoneClient)(nil)
 
-// newSystemOneJevClient 构造 System One 协议客户端
-func newSystemOneJevClient(cfg JevConfig) (*systemoneJevClient, error) {
+// newSystemOneClient 构造 System One 协议客户端
+func newSystemOneClient(cfg Config) (*systemoneClient, error) {
 	hc := cfg.HTTPClient
 	if hc == nil {
 		hc = &http.Client{Timeout: 0}
 	}
-	return &systemoneJevClient{
+	return &systemoneClient{
 		cfg:        cfg,
 		httpClient: hc,
 		timeout:    timeoutOrDefault(cfg.Timeout),
@@ -38,8 +38,8 @@ func newSystemOneJevClient(cfg JevConfig) (*systemoneJevClient, error) {
 }
 
 // Decide 发起同步决策请求
-func (c *systemoneJevClient) Decide(ctx context.Context, req JevDecideRequest) (*JevDecideResponse, error) {
-	if err := validateJevDecideRequest(req); err != nil {
+func (c *systemoneClient) Decide(ctx context.Context, req DecideRequest) (*DecideResponse, error) {
+	if err := validateDecideRequest(req); err != nil {
 		return nil, err
 	}
 	body, err := json.Marshal(c.buildWireRequest(req))
@@ -75,7 +75,7 @@ func (c *systemoneJevClient) Decide(ctx context.Context, req JevDecideRequest) (
 }
 
 // buildWireRequest 映射为上游 JSON 请求体
-func (c *systemoneJevClient) buildWireRequest(req JevDecideRequest) systemoneDecideRequest {
+func (c *systemoneClient) buildWireRequest(req DecideRequest) systemoneDecideRequest {
 	wire := systemoneDecideRequest{
 		Model:     c.cfg.Model,
 		State:     req.State,
@@ -128,17 +128,17 @@ type systemoneAnswer struct {
 }
 
 // parseSystemOneResponse 解析成功响应；结构非法返回 ErrBadResponse
-func parseSystemOneResponse(raw []byte) (*JevDecideResponse, error) {
+func parseSystemOneResponse(raw []byte) (*DecideResponse, error) {
 	var wire systemoneDecideResponse
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return nil, wrapSentinel(ErrBadResponse, err)
 	}
 	if len(wire.Answers) == 0 {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 空 answers"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/jev: 空 answers"))
 	}
-	out := &JevDecideResponse{
+	out := &DecideResponse{
 		Model:   wire.Model,
-		Answers: make(map[string]JevAnswer, len(wire.Answers)),
+		Answers: make(map[string]Answer, len(wire.Answers)),
 	}
 	for id, rawAns := range wire.Answers {
 		var a systemoneAnswer
@@ -146,17 +146,9 @@ func parseSystemOneResponse(raw []byte) (*JevDecideResponse, error) {
 			return nil, wrapSentinel(ErrBadResponse, err)
 		}
 		if strings.TrimSpace(a.Type) == "" {
-			return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 答案缺少 type"))
+			return nil, wrapSentinel(ErrBadResponse, errors.New("ai/jev: 答案缺少 type"))
 		}
-		out.Answers[id] = JevAnswer{
-			Type:          a.Type,
-			Noul:          a.Noul,
-			Choice:        a.Choice,
-			Score:         a.Score,
-			Confidence:    a.Confidence,
-			Legend:        a.Legend,
-			Probabilities: a.Probabilities,
-		}
+		out.Answers[id] = Answer(a)
 	}
 	if wire.Usage != nil && (wire.Usage.InputTokens > 0 || wire.Usage.OutputTokens > 0) {
 		out.Usage = &TokenUsage{

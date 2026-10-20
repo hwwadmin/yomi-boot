@@ -1,7 +1,7 @@
-// Package aiclient OpenAI Chat Completions 适配（包私有）。
+// Package llm OpenAI Chat Completions 适配（包私有）。
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"context"
@@ -18,14 +18,14 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 )
 
-// openaiClient OpenAI 协议的 AIClient 实现
+// openaiClient OpenAI 协议的 Client 实现
 type openaiClient struct {
 	sdk     openai.Client // sdk 是官方客户端，选项不可变，可并发调用
 	cfg     Config        // cfg 是构造期拷贝后的配置
 	timeout time.Duration // timeout 是整段墙钟超时（0 已回退为 60s）
 }
 
-var _ AIClient = (*openaiClient)(nil)
+var _ Client = (*openaiClient)(nil)
 
 // newOpenAIClient 构造 OpenAI 协议客户端
 //
@@ -62,11 +62,11 @@ func (c *openaiClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse
 	defer cancel()
 	resp, err := c.sdk.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, mapOpenAIErr(err)
+		return nil, mapOpenAIError(err)
 	}
 	// 空选项列表视为协议异常
 	if resp == nil || len(resp.Choices) == 0 {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 空 choices"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/llm: 空 choices"))
 	}
 	text := resp.Choices[0].Message.Content
 	out := &ChatResponse{
@@ -86,13 +86,13 @@ func (c *openaiClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse
 	}
 	// 无助手文本视为协议异常
 	if text == "" {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 无 assistant 文本"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/llm: 无 assistant 文本"))
 	}
 	return out, nil
 }
 
 // ChatStream 开启流式对话；建连失败时关闭底层流并返回错误，不返回半开流
-func (c *openaiClient) ChatStream(ctx context.Context, req ChatRequest) (ChatStream, error) {
+func (c *openaiClient) ChatStream(ctx context.Context, req ChatRequest) (Stream, error) {
 	params, err := c.buildParams(req)
 	if err != nil {
 		return nil, err
@@ -104,9 +104,9 @@ func (c *openaiClient) ChatStream(ctx context.Context, req ChatRequest) (ChatStr
 	if err := stream.Err(); err != nil {
 		cancel()
 		_ = stream.Close()
-		return nil, mapOpenAIErr(err)
+		return nil, mapOpenAIError(err)
 	}
-	return newChatStream(ctx, cancel, &openaiPump{stream: stream, mapErr: mapOpenAIErr}), nil
+	return newChatStream(ctx, cancel, &openaiPump{stream: stream, mapErr: mapOpenAIError}), nil
 }
 
 // buildParams 将门面请求映射为官方客户端参数；入参非法返回 ErrInvalidArgument
@@ -142,8 +142,8 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 	return params, nil
 }
 
-// mapOpenAIErr 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
-func mapOpenAIErr(err error) error {
+// mapOpenAIError 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误
+func mapOpenAIError(err error) error {
 	if err == nil {
 		return nil
 	}

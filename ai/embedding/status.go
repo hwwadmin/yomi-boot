@@ -1,12 +1,11 @@
-// Package aiclient HTTP 状态到本包哨兵的最低映射。
+// Package embedding HTTP 状态到本包哨兵的最低映射。
 //
 // @author zwei
-package aiclient
+package embedding
 
 import (
 	"context"
 	stderrors "errors"
-	"io"
 	"net/http"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -17,7 +16,7 @@ func wrapSentinel(sentinel, cause error) error {
 	if cause == nil {
 		return errors.Sentinel(sentinel)
 	}
-	return errors.Join(errors.Sentinel(sentinel), errors.Wrap(cause, "aiclient"))
+	return errors.Join(errors.Sentinel(sentinel), errors.Wrap(cause, "ai/embedding"))
 }
 
 // mapStatusError 按能取出的 HTTP 状态码映射哨兵并保留原因
@@ -41,7 +40,7 @@ func mapStatusError(status int, cause error) error {
 			return wrapSentinel(ErrRateLimited, cause)
 		}
 	}
-	// 其它 HTTP 状态、无状态码读失败（含 SSE error）均为协议异常
+	// 其它 HTTP 状态、无状态码读失败均为协议异常
 	return wrapSentinel(ErrBadResponse, cause)
 }
 
@@ -57,10 +56,5 @@ func wrapCtxErr(err error) error {
 	if stderrors.Unwrap(err) != nil {
 		return err
 	}
-	return errors.Wrap(err, "aiclient: 请求已取消或超时")
-}
-
-// terminateEOF 返回未包装的 io.EOF
-func terminateEOF() error {
-	return io.EOF
+	return errors.Wrap(err, "ai/embedding: 请求已取消或超时")
 }

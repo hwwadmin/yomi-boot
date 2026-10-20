@@ -1,7 +1,7 @@
-// Package aiclient NewEmbedding 按协议分发实现。
+// Package llm New 按协议分发实现。
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"strings"
@@ -9,8 +9,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// NewEmbedding 校验配置并按协议构造 EmbeddingClient；失败不发起网络
-func NewEmbedding(cfg EmbeddingConfig) (EmbeddingClient, error) {
+// New 校验配置并按协议构造 Client；失败不发起网络
+func New(cfg Config) (Client, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -19,11 +19,16 @@ func NewEmbedding(cfg EmbeddingConfig) (EmbeddingClient, error) {
 	copied.APIURL = strings.TrimSpace(cfg.APIURL)
 	copied.APIKey = strings.TrimSpace(cfg.APIKey)
 	copied.Model = strings.TrimSpace(cfg.Model)
-	copied.Dimensions = cloneInt(cfg.Dimensions)
+	copied.Temperature = cloneFloat64(cfg.Temperature)
+	copied.MaxTokens = cloneInt(cfg.MaxTokens)
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
+	// 温度为 nil 时填 1.0，最大令牌为 nil 时填 4096
+	applyGenerationDefaults(&copied)
 	switch copied.Protocol {
-	case EmbeddingProtocolOpenAI:
-		return newOpenAIEmbeddingClient(copied)
+	case ProtocolOpenAI:
+		return newOpenAIClient(copied)
+	case ProtocolAnthropic:
+		return newAnthropicClient(copied)
 	default:
 		// validate 已覆盖，此处为防御
 		return nil, errors.Sentinel(ErrInvalidArgument)

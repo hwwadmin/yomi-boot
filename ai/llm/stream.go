@@ -1,7 +1,7 @@
-// Package aiclient 流式读取与关闭的生命周期。
+// Package llm 流式读取与关闭的生命周期。
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"context"
@@ -20,7 +20,7 @@ type chunkPump interface {
 	close() error
 }
 
-// chatStream 实现 ChatStream
+// chatStream 实现 Stream
 type chatStream struct {
 	ctx            context.Context    // ctx 是带墙钟超时的请求上下文
 	cancel         context.CancelFunc // cancel 释放 WithTimeout 定时器；可空
@@ -32,7 +32,7 @@ type chatStream struct {
 	gotText        bool               // gotText 表示已产出过非空增量
 }
 
-var _ ChatStream = (*chatStream)(nil)
+var _ Stream = (*chatStream)(nil)
 
 // newChatStream 包装协议流；cancel 用于释放超时定时器，可为 nil
 func newChatStream(ctx context.Context, cancel context.CancelFunc, pump chunkPump) *chatStream {
@@ -91,7 +91,7 @@ func (s *chatStream) Recv() (*ChatChunk, error) {
 		}
 		if stderrors.Is(err, io.EOF) {
 			if !gotText {
-				return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 流结束且无 assistant 文本"))
+				return nil, wrapSentinel(ErrBadResponse, errors.New("ai/llm: 流结束且无 assistant 文本"))
 			}
 			return nil, terminateEOF()
 		}

@@ -1,7 +1,7 @@
-// Package aiclient Anthropic Messages 适配（包私有）。
+// Package llm Anthropic Messages 适配（包私有）。
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"context"
@@ -18,14 +18,14 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 )
 
-// anthropicClient Anthropic 协议的 AIClient 实现
+// anthropicClient Anthropic 协议的 Client 实现
 type anthropicClient struct {
 	sdk     anthropic.Client // sdk 是官方客户端，选项不可变，可并发调用
 	cfg     Config           // cfg 是构造期拷贝后的配置
 	timeout time.Duration    // timeout 是整段墙钟超时（0 已回退为 60s）
 }
 
-var _ AIClient = (*anthropicClient)(nil)
+var _ Client = (*anthropicClient)(nil)
 
 // newAnthropicClient 构造 Anthropic 协议客户端
 //
@@ -67,7 +67,7 @@ func (c *anthropicClient) Chat(ctx context.Context, req ChatRequest) (*ChatRespo
 	}
 	// 空响应视为协议异常
 	if resp == nil {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 空响应"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/llm: 空响应"))
 	}
 	text := collectAnthropicText(resp.Content)
 	out := &ChatResponse{
@@ -81,13 +81,13 @@ func (c *anthropicClient) Chat(ctx context.Context, req ChatRequest) (*ChatRespo
 	}
 	// 无助手文本视为协议异常
 	if text == "" {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("aiclient: 无 assistant 文本"))
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/llm: 无 assistant 文本"))
 	}
 	return out, nil
 }
 
 // ChatStream 开启流式对话；建连失败时关闭底层流并返回错误，不返回半开流
-func (c *anthropicClient) ChatStream(ctx context.Context, req ChatRequest) (ChatStream, error) {
+func (c *anthropicClient) ChatStream(ctx context.Context, req ChatRequest) (Stream, error) {
 	params, err := c.buildParams(req)
 	if err != nil {
 		return nil, err
@@ -138,6 +138,41 @@ func (c *anthropicClient) buildParams(req ChatRequest) (anthropic.MessageNewPara
 		params.MaxTokens = int64(*maxTok)
 	}
 	return params, nil
+}
+
+// validateAnthropicTurns 校验抽掉系统提示后的轮次：非空、用户开头、用户与助手严格交替
+func validateAnthropicTurns(messages []Message) error {
+	var turns []Role
+	for _, m := range messages {
+		if m.Role == RoleSystem {
+			continue
+		}
+		turns = append(turns, m.Role)
+	}
+	// 仅系统提示或非用户开头不得发往供应商
+	if len(turns) == 0 || turns[0] != RoleUser {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	for i := 1; i < len(turns); i++ {
+		if turns[i] == turns[i-1] {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
+		if turns[i] != RoleUser && turns[i] != RoleAssistant {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
+	}
+	return nil
+}
+
+// joinSystemPrompts 按出现顺序换行拼接全部系统提示；无系统提示时返回空串
+func joinSystemPrompts(messages []Message) string {
+	var parts []string
+	for _, m := range messages {
+		if m.Role == RoleSystem {
+			parts = append(parts, m.Content)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 // collectAnthropicText 拼接文本类型内容块；无文本块时返回空串

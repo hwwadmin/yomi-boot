@@ -1,11 +1,10 @@
-// Package aiclient 定义统一对话门面与请求响应结构。
+// Package llm 定义统一对话门面与请求响应结构。
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"context"
-	"strings"
 
 	"gitee.com/hq_project/yomi-boot/errors"
 )
@@ -22,8 +21,8 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
-// AIClient 协议无关的同步/流式 Chat 门面；同一实例可并发调用
-type AIClient interface {
+// Client 协议无关的同步/流式 Chat 门面；同一实例可并发调用
+type Client interface {
 	// Chat 发起同步对话
 	//
 	// 入参 Messages 至少 1 条；模型由构造配置锁定，本请求不再选型。
@@ -34,11 +33,11 @@ type AIClient interface {
 	//
 	// 建连失败（含超时/取消）在返回前失败，不返回半开流。
 	// Temperature / MaxTokens 回退规则与 Chat 相同。
-	ChatStream(ctx context.Context, req ChatRequest) (ChatStream, error)
+	ChatStream(ctx context.Context, req ChatRequest) (Stream, error)
 }
 
-// ChatStream 流式增量读取器；Recv 须串行；Close 可与 Recv 并发且幂等
-type ChatStream interface {
+// Stream 流式增量读取器；Recv 须串行；Close 可与 Recv 并发且幂等
+type Stream interface {
 	// Recv 读取下一增量
 	//
 	// 正常结束、已 Close、已返回过非「并发 Recv」错误之后再 Recv：未包装 io.EOF。
@@ -119,39 +118,4 @@ func resolveMaxTokens(req, def *int) *int {
 		return req
 	}
 	return def
-}
-
-// validateAnthropicTurns 校验抽掉系统提示后的轮次：非空、用户开头、用户与助手严格交替
-func validateAnthropicTurns(messages []Message) error {
-	var turns []Role
-	for _, m := range messages {
-		if m.Role == RoleSystem {
-			continue
-		}
-		turns = append(turns, m.Role)
-	}
-	// 仅系统提示或非用户开头不得发往供应商
-	if len(turns) == 0 || turns[0] != RoleUser {
-		return errors.Sentinel(ErrInvalidArgument)
-	}
-	for i := 1; i < len(turns); i++ {
-		if turns[i] == turns[i-1] {
-			return errors.Sentinel(ErrInvalidArgument)
-		}
-		if turns[i] != RoleUser && turns[i] != RoleAssistant {
-			return errors.Sentinel(ErrInvalidArgument)
-		}
-	}
-	return nil
-}
-
-// joinSystemPrompts 按出现顺序换行拼接全部系统提示；无系统提示时返回空串
-func joinSystemPrompts(messages []Message) string {
-	var parts []string
-	for _, m := range messages {
-		if m.Role == RoleSystem {
-			parts = append(parts, m.Content)
-		}
-	}
-	return strings.Join(parts, "\n")
 }

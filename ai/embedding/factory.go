@@ -1,7 +1,7 @@
-// Package aiclient NewJev 按协议分发实现。
+// Package embedding New 按协议分发实现。
 //
 // @author zwei
-package aiclient
+package embedding
 
 import (
 	"strings"
@@ -9,20 +9,23 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// NewJev 校验配置并按协议构造 JevClient；失败不发起网络
-func NewJev(cfg JevConfig) (JevClient, error) {
+// New 校验配置并按协议构造 Client；失败不发起网络
+func New(cfg Config) (Client, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+	// 拷贝配置，避免调用方事后修改扩展头或可选指针影响已构造客户端
 	copied := cfg
 	copied.APIURL = strings.TrimSpace(cfg.APIURL)
 	copied.APIKey = strings.TrimSpace(cfg.APIKey)
 	copied.Model = strings.TrimSpace(cfg.Model)
+	copied.Dimensions = cloneInt(cfg.Dimensions)
 	copied.ExtraHeaders = copyExtraHeaders(cfg.ExtraHeaders)
 	switch copied.Protocol {
-	case JevProtocolSystemOne:
-		return newSystemOneJevClient(copied)
+	case ProtocolOpenAI:
+		return newOpenAIClient(copied)
 	default:
+		// validate 已覆盖，此处为防御
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 }

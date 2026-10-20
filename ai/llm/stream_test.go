@@ -1,7 +1,7 @@
-// Package aiclient 流式 Recv/Close 生命周期单测
+// Package llm 流式 Recv/Close 生命周期单测
 //
 // @author zwei
-package aiclient
+package llm
 
 import (
 	"context"
@@ -153,7 +153,7 @@ func TestWrapCtxErrIdempotent(t *testing.T) {
 	if !errors.Is(twice, context.DeadlineExceeded) {
 		t.Fatalf("lost DeadlineExceeded: %v", twice)
 	}
-	if strings.Count(twice.Error(), "aiclient: 请求已取消或超时") != 1 {
+	if strings.Count(twice.Error(), "ai/llm: 请求已取消或超时") != 1 {
 		t.Fatalf("wrapped more than once: %q", twice.Error())
 	}
 }

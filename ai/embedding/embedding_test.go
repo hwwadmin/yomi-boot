@@ -1,7 +1,7 @@
-// Package aiclient 向量化构造与入参校验单测
+// Package embedding 向量化构造与入参校验单测
 //
 // @author zwei
-package aiclient
+package embedding
 
 import (
 	"testing"
@@ -12,36 +12,36 @@ import (
 	openai "github.com/openai/openai-go/v3"
 )
 
-// validEmbeddingCfg 返回可通过构造校验的占位配置；不发起网络
-func validEmbeddingCfg() EmbeddingConfig {
-	return EmbeddingConfig{
-		Protocol: EmbeddingProtocolOpenAI,
+// validCfg 返回可通过构造校验的占位配置；不发起网络
+func validCfg() Config {
+	return Config{
+		Protocol: ProtocolOpenAI,
 		APIURL:   "https://api.openai.com/v1",
 		APIKey:   "sk-test",
 		Model:    "text-embedding-3-small",
 	}
 }
 
-// TestNewEmbeddingRejectsInvalidConfig 验证非法协议、空字段、非正维度与负超时被拒绝
-func TestNewEmbeddingRejectsInvalidConfig(t *testing.T) {
+// TestNewRejectsInvalidConfig 验证非法协议、空字段、非正维度与负超时被拒绝
+func TestNewRejectsInvalidConfig(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
-		mut  func(*EmbeddingConfig)
+		mut  func(*Config)
 	}{
-		{"empty protocol", func(c *EmbeddingConfig) { c.Protocol = "" }},
-		{"unknown protocol", func(c *EmbeddingConfig) { c.Protocol = EmbeddingProtocol("anthropic") }},
-		{"empty url", func(c *EmbeddingConfig) { c.APIURL = "  " }},
-		{"empty model", func(c *EmbeddingConfig) { c.Model = "\t" }},
-		{"non-positive dimensions", func(c *EmbeddingConfig) { z := 0; c.Dimensions = &z }},
-		{"negative timeout", func(c *EmbeddingConfig) { c.Timeout = -time.Second }},
-		{"reserved header", func(c *EmbeddingConfig) { c.ExtraHeaders = map[string]string{"Authorization": "x"} }},
+		{"empty protocol", func(c *Config) { c.Protocol = "" }},
+		{"unknown protocol", func(c *Config) { c.Protocol = Protocol("anthropic") }},
+		{"empty url", func(c *Config) { c.APIURL = "  " }},
+		{"empty model", func(c *Config) { c.Model = "\t" }},
+		{"non-positive dimensions", func(c *Config) { z := 0; c.Dimensions = &z }},
+		{"negative timeout", func(c *Config) { c.Timeout = -time.Second }},
+		{"reserved header", func(c *Config) { c.ExtraHeaders = map[string]string{"Authorization": "x"} }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := validEmbeddingCfg()
+			cfg := validCfg()
 			tc.mut(&cfg)
-			_, err := NewEmbedding(cfg)
+			_, err := New(cfg)
 			if !errors.Is(err, ErrInvalidArgument) {
 				t.Fatalf("err=%v", err)
 			}
@@ -49,18 +49,18 @@ func TestNewEmbeddingRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
-// TestNewEmbeddingCopiesConfig 验证构造后修改原配置不影响已拷贝字段
-func TestNewEmbeddingCopiesConfig(t *testing.T) {
+// TestNewCopiesConfig 验证构造后修改原配置不影响已拷贝字段
+func TestNewCopiesConfig(t *testing.T) {
 	t.Parallel()
 	dim := 8
-	cfg := validEmbeddingCfg()
+	cfg := validCfg()
 	cfg.Dimensions = &dim
 	cfg.ExtraHeaders = map[string]string{"X-Gateway": "a"}
-	cli, err := NewEmbedding(cfg)
+	cli, err := New(cfg)
 	if err != nil {
-		t.Fatalf("NewEmbedding: %v", err)
+		t.Fatalf("New: %v", err)
 	}
-	impl, ok := cli.(*openaiEmbeddingClient)
+	impl, ok := cli.(*openaiClient)
 	if !ok {
 		t.Fatalf("type=%T", cli)
 	}
@@ -78,16 +78,16 @@ func TestNewEmbeddingCopiesConfig(t *testing.T) {
 	}
 }
 
-// TestNewEmbeddingAllowsEmptyAPIKey 验证密钥为空或仅空白时仍可构造
-func TestNewEmbeddingAllowsEmptyAPIKey(t *testing.T) {
+// TestNewAllowsEmptyAPIKey 验证密钥为空或仅空白时仍可构造
+func TestNewAllowsEmptyAPIKey(t *testing.T) {
 	t.Parallel()
-	cfg := validEmbeddingCfg()
+	cfg := validCfg()
 	cfg.APIKey = "  "
-	cli, err := NewEmbedding(cfg)
+	cli, err := New(cfg)
 	if err != nil {
-		t.Fatalf("NewEmbedding: %v", err)
+		t.Fatalf("New: %v", err)
 	}
-	impl, ok := cli.(*openaiEmbeddingClient)
+	impl, ok := cli.(*openaiClient)
 	if !ok {
 		t.Fatalf("type=%T", cli)
 	}
@@ -96,21 +96,21 @@ func TestNewEmbeddingAllowsEmptyAPIKey(t *testing.T) {
 	}
 }
 
-// TestValidateEmbeddingRequest 验证空列表、trim 后空串与非正维度
-func TestValidateEmbeddingRequest(t *testing.T) {
+// TestValidateRequest 验证空列表、trim 后空串与非正维度
+func TestValidateRequest(t *testing.T) {
 	t.Parallel()
 	zero := 0
-	cases := []EmbeddingRequest{
+	cases := []Request{
 		{},
 		{Inputs: []string{"ok", "  "}},
 		{Inputs: []string{"ok"}, Dimensions: &zero},
 	}
 	for i, req := range cases {
-		if err := validateEmbeddingRequest(req); !errors.Is(err, ErrInvalidArgument) {
+		if err := validateRequest(req); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("case %d err=%v", i, err)
 		}
 	}
-	if err := validateEmbeddingRequest(EmbeddingRequest{Inputs: []string{" a "}}); err != nil {
+	if err := validateRequest(Request{Inputs: []string{" a "}}); err != nil {
 		t.Fatalf("valid: %v", err)
 	}
 }
@@ -161,29 +161,29 @@ func TestEmbeddingUsage(t *testing.T) {
 		t.Fatal("zero should be nil")
 	}
 	u := embeddingUsage(3, 3)
-	if u == nil || u.PromptTokens != 3 || u.TotalTokens != 3 || u.CompletionTokens != 0 {
+	if u == nil || u.PromptTokens != 3 || u.TotalTokens != 3 {
 		t.Fatalf("usage=%+v", u)
 	}
 }
 
-// TestMustNewEmbeddingPanics 验证非法配置 Fail Fast
-func TestMustNewEmbeddingPanics(t *testing.T) {
+// TestMustNewPanics 验证非法配置 Fail Fast
+func TestMustNewPanics(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic")
 		}
 	}()
-	MustNewEmbedding(EmbeddingConfig{})
+	MustNew(Config{})
 }
 
-// TestEmbedLocalValidate 验证构造成功后空输入仍走本包校验
-func TestEmbedLocalValidate(t *testing.T) {
+// TestEmbedRejectsEmptyInputs 验证构造成功后空输入仍走本包校验
+func TestEmbedRejectsEmptyInputs(t *testing.T) {
 	t.Parallel()
-	cli, err := NewEmbedding(validEmbeddingCfg())
+	cli, err := New(validCfg())
 	if err != nil {
-		t.Fatalf("NewEmbedding: %v", err)
+		t.Fatalf("New: %v", err)
 	}
-	_, err = cli.Embed(t.Context(), EmbeddingRequest{})
+	_, err = cli.Embed(t.Context(), Request{})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("err=%v", err)
 	}
