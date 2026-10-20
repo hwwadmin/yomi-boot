@@ -1,7 +1,7 @@
-// Package filestorage 提供对象存储启动配置（YAML mapstructure）
+// Package oss 提供对象存储启动配置（YAML mapstructure）
 //
 // @author zwei
-package filestorage
+package oss
 
 import (
 	"strings"
@@ -13,7 +13,7 @@ import (
 
 const (
 	// SectionKey YAML 根 key
-	SectionKey = "filestorage"
+	SectionKey = "oss"
 
 	bootProviderMinIO  = "minio"
 	bootProviderS3     = "s3"
@@ -69,7 +69,7 @@ func (c BootConfig) Validate() error {
 		return nil
 	}
 	if c.MaxPresignExpirySeconds < 0 {
-		return errors.New("filestorage.max_presign_expiry_seconds 不能小于 0")
+		return errors.New("oss.max_presign_expiry_seconds 不能小于 0")
 	}
 	provider := strings.ToLower(strings.TrimSpace(c.Provider))
 	switch provider {
@@ -80,22 +80,22 @@ func (c BootConfig) Validate() error {
 	case bootProviderAliOSS:
 		return c.AliOSS.validate()
 	case "":
-		return errors.New("filestorage.provider 不能为空")
+		return errors.New("oss.provider 不能为空")
 	default:
-		return errors.Newf("filestorage.provider 不支持: %s", c.Provider)
+		return errors.Newf("oss.provider 不支持: %s", c.Provider)
 	}
 }
 
 // validate 校验 MinIO 访问配置
 func (c BootMinIOConfig) validate() error {
 	if strings.TrimSpace(c.Endpoint) == "" {
-		return errors.New("filestorage.minio.endpoint 不能为空")
+		return errors.New("oss.minio.endpoint 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("filestorage.minio.access_key_id 不能为空")
+		return errors.New("oss.minio.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("filestorage.minio.secret_access_key 不能为空")
+		return errors.New("oss.minio.secret_access_key 不能为空")
 	}
 	return nil
 }
@@ -103,13 +103,13 @@ func (c BootMinIOConfig) validate() error {
 // validate 校验 S3 访问配置
 func (c BootS3Config) validate() error {
 	if strings.TrimSpace(c.Region) == "" {
-		return errors.New("filestorage.s3.region 不能为空")
+		return errors.New("oss.s3.region 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("filestorage.s3.access_key_id 不能为空")
+		return errors.New("oss.s3.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("filestorage.s3.secret_access_key 不能为空")
+		return errors.New("oss.s3.secret_access_key 不能为空")
 	}
 	return nil
 }
@@ -117,18 +117,18 @@ func (c BootS3Config) validate() error {
 // validate 校验 AliOSS 访问配置
 func (c BootAliOSSConfig) validate() error {
 	if strings.TrimSpace(c.Region) == "" {
-		return errors.New("filestorage.alioss.region 不能为空")
+		return errors.New("oss.alioss.region 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("filestorage.alioss.access_key_id 不能为空")
+		return errors.New("oss.alioss.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("filestorage.alioss.secret_access_key 不能为空")
+		return errors.New("oss.alioss.secret_access_key 不能为空")
 	}
 	return nil
 }
 
-// ConfigSection 返回 filestorage 配置段
+// ConfigSection 返回 oss 配置段
 func ConfigSection() config.Section {
 	return config.NewSection(SectionKey, &BootConfig{}, func(c *BootConfig, _ *config.Document) error {
 		return c.Validate()

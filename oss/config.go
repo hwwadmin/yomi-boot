@@ -1,7 +1,7 @@
-// Package filestorage 构造配置（与 mapstructure YAML 配置分离）。
+// Package oss 构造配置（与 mapstructure YAML 配置分离）。
 //
 // @author zwei
-package filestorage
+package oss
 
 import (
 	"strings"
@@ -24,7 +24,7 @@ const (
 	defaultMaxPresignExpiry = 7 * 24 * time.Hour
 )
 
-// Config 创建 FileStorage 的构造配置
+// Config 创建 Storage 的构造配置
 type Config struct {
 	Provider         Provider      // Provider 是存储实现标识
 	PublicBaseURL    string        // PublicBaseURL 是固定访问 URL 的全局基址（多桶共用）；ObjectURL 依赖此项
@@ -79,20 +79,20 @@ func (c Config) validate() error {
 	case ProviderAliOSS:
 		return c.AliOSS.validate()
 	default:
-		return errors.Newf("filestorage: 不支持的 provider: %s", c.Provider)
+		return errors.Newf("oss: 不支持的 provider: %s", c.Provider)
 	}
 }
 
 // validate 校验 MinIO 配置必填字段（Endpoint / AccessKeyID / SecretAccessKey）
 func (c MinIOConfig) validate() error {
 	if strings.TrimSpace(c.Endpoint) == "" {
-		return errors.New("filestorage: minio.endpoint 不能为空")
+		return errors.New("oss: minio.endpoint 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("filestorage: minio.access_key_id 不能为空")
+		return errors.New("oss: minio.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("filestorage: minio.secret_access_key 不能为空")
+		return errors.New("oss: minio.secret_access_key 不能为空")
 	}
 	return nil
 }
@@ -100,13 +100,13 @@ func (c MinIOConfig) validate() error {
 // validate 校验 S3 配置必填字段（Region / AccessKeyID / SecretAccessKey）
 func (c S3Config) validate() error {
 	if strings.TrimSpace(c.Region) == "" {
-		return errors.New("filestorage: s3.region 不能为空")
+		return errors.New("oss: s3.region 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("filestorage: s3.access_key_id 不能为空")
+		return errors.New("oss: s3.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("filestorage: s3.secret_access_key 不能为空")
+		return errors.New("oss: s3.secret_access_key 不能为空")
 	}
 	return nil
 }
@@ -114,13 +114,13 @@ func (c S3Config) validate() error {
 // validate 校验 AliOSS 配置必填字段（Region / AccessKeyID / SecretAccessKey）
 func (c AliOSSConfig) validate() error {
 	if strings.TrimSpace(c.Region) == "" {
-		return errors.New("filestorage: alioss.region 不能为空")
+		return errors.New("oss: alioss.region 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("filestorage: alioss.access_key_id 不能为空")
+		return errors.New("oss: alioss.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("filestorage: alioss.secret_access_key 不能为空")
+		return errors.New("oss: alioss.secret_access_key 不能为空")
 	}
 	return nil
 }

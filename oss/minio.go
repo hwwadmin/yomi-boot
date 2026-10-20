@@ -1,7 +1,7 @@
-// Package filestorage 基于 minio-go 的 FileStorage 实现。
+// Package oss 基于 minio-go 的 Storage 实现。
 //
 // @author zwei
-package filestorage
+package oss
 
 import (
 	"context"
@@ -17,11 +17,11 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-var _ FileStorage = (*minioStorage)(nil)
+var _ Storage = (*minioStorage)(nil)
 
 const minioDefaultRegion = "us-east-1"
 
-// minioStorage 是基于 MinIO 的 FileStorage 实现
+// minioStorage 是基于 MinIO 的 Storage 实现
 type minioStorage struct {
 	client           *minio.Client
 	publicBaseURL    string
@@ -29,7 +29,7 @@ type minioStorage struct {
 }
 
 // newMinIOStorage 根据配置创建 MinIO 存储实现
-func newMinIOStorage(cfg Config) (FileStorage, error) {
+func newMinIOStorage(cfg Config) (Storage, error) {
 	endpoint := strings.TrimSpace(cfg.MinIO.Endpoint)
 	region := strings.TrimSpace(cfg.MinIO.Region)
 	if region == "" {
@@ -42,7 +42,7 @@ func newMinIOStorage(cfg Config) (FileStorage, error) {
 		Region: region,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "filestorage: 创建 MinIO 客户端失败")
+		return nil, errors.Wrap(err, "oss: 创建 MinIO 客户端失败")
 	}
 
 	return &minioStorage{
@@ -60,7 +60,7 @@ func (s *minioStorage) PutObject(ctx context.Context, bucket, key string, body i
 		return "", err
 	}
 	if body == nil {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: body 不能为 nil")
 	}
 
 	putOpts := applyPutOptions(opts)
@@ -71,7 +71,7 @@ func (s *minioStorage) PutObject(ctx context.Context, bucket, key string, body i
 
 	_, err = s.client.PutObject(ctx, bucket, key, body, size, objectOpts)
 	if err != nil {
-		return "", errors.Wrap(err, "filestorage: MinIO 上传对象失败")
+		return "", errors.Wrap(err, "oss: MinIO 上传对象失败")
 	}
 	return JoinURI(bucket, key)
 }
@@ -86,13 +86,13 @@ func (s *minioStorage) GetObject(ctx context.Context, uri string) (io.ReadCloser
 
 	obj, err := s.client.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, nil, minioMapError(err, "filestorage: MinIO 下载对象失败")
+		return nil, nil, minioMapError(err, "oss: MinIO 下载对象失败")
 	}
 
 	info, err := obj.Stat()
 	if err != nil {
 		_ = obj.Close()
-		return nil, nil, minioMapError(err, "filestorage: MinIO 下载对象失败")
+		return nil, nil, minioMapError(err, "oss: MinIO 下载对象失败")
 	}
 
 	return obj, &ObjectMeta{
@@ -116,7 +116,7 @@ func (s *minioStorage) DeleteObject(ctx context.Context, uri string) error {
 		if minioIsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "filestorage: MinIO 删除对象失败")
+		return errors.Wrap(err, "oss: MinIO 删除对象失败")
 	}
 	return nil
 }
@@ -131,7 +131,7 @@ func (s *minioStorage) StatObject(ctx context.Context, uri string) (*ObjectMeta,
 
 	info, err := s.client.StatObject(ctx, bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, minioMapError(err, "filestorage: MinIO 查询对象失败")
+		return nil, minioMapError(err, "oss: MinIO 查询对象失败")
 	}
 
 	return &ObjectMeta{
@@ -167,15 +167,15 @@ func (s *minioStorage) PresignGet(ctx context.Context, uri string, expiry time.D
 		return "", err
 	}
 	if expiry <= 0 {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 必须大于 0")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: expiry 必须大于 0")
 	}
 	if expiry > s.maxPresignExpiry {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 超过允许上限")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: expiry 超过允许上限")
 	}
 
 	u, err := s.client.PresignedGetObject(ctx, bucket, key, expiry, nil)
 	if err != nil {
-		return "", errors.Wrap(err, "filestorage: MinIO 生成预签名 URL 失败")
+		return "", errors.Wrap(err, "oss: MinIO 生成预签名 URL 失败")
 	}
 	return u.String(), nil
 }

@@ -1,11 +1,11 @@
-// Package filestorage 提供统一的文件/对象存储服务，支持 MinIO、AWS S3 与阿里云 OSS。
+// Package oss 提供统一的文件/对象存储服务，支持 MinIO、AWS S3 与阿里云 OSS。
 //
 // # 基本用法
 //
-//	store, err := filestorage.New(filestorage.Config{
-//	    Provider:      filestorage.ProviderMinIO,
+//	store, err := oss.New(oss.Config{
+//	    Provider:      oss.ProviderMinIO,
 //	    PublicBaseURL: "https://cdn.example.com",
-//	    MinIO: filestorage.MinIOConfig{
+//	    MinIO: oss.MinIOConfig{
 //	        Endpoint:        "127.0.0.1:9000",
 //	        AccessKeyID:     "...",
 //	        SecretAccessKey: "...",
@@ -15,7 +15,7 @@
 //	    return err
 //	}
 //
-//	uri, err := store.PutObject(ctx, "avatars", "u/1.png", reader, size, filestorage.WithContentType("image/png"))
+//	uri, err := store.PutObject(ctx, "avatars", "u/1.png", reader, size, oss.WithContentType("image/png"))
 //	// 入库 uri，例如 "avatars/u/1.png"；不要存完整 HTTP URL
 //	url, err := store.ObjectURL(uri)                                 // 固定访问 URL
 //	url, err = store.PresignGet(ctx, uri, 15*time.Minute)            // 临时预签名 URL
@@ -41,4 +41,4 @@
 // URI 解析与固定 URL 拼装（uri.go）为包级公共能力，与具体 SDK 无关。
 //
 // @author zwei
-package filestorage
+package oss

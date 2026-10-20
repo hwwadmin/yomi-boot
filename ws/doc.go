@@ -29,7 +29,7 @@
 // # 其它
 //
 // 小文件可走 WS（受 WriteMaxPayloadSize 限制，默认 256KiB，上限 8MiB）；
-// 大文件走 filestorage，WS 只做信令。ConnID 仅服务端生成。
+// 大文件走 oss，WS 只做信令。ConnID 仅服务端生成。
 // 心跳 / 寿命 / MaxConnections / Origin：nil 与显式 0 语义见各 Config 字段注释。
 // Client：单连接；Connect 会先关旧再拨；Close 为实例释放点。
 // 无 yml、无默认插件；勿直接依赖 github.com/coder/websocket。

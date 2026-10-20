@@ -11,11 +11,11 @@ import (
 	"gitee.com/hq_project/yomi-boot/db"
 	"gitee.com/hq_project/yomi-boot/dtm"
 	"gitee.com/hq_project/yomi-boot/event"
-	"gitee.com/hq_project/yomi-boot/filestorage"
 	"gitee.com/hq_project/yomi-boot/httprecord"
 	"gitee.com/hq_project/yomi-boot/idempotency"
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 	"gitee.com/hq_project/yomi-boot/logger"
+	"gitee.com/hq_project/yomi-boot/oss"
 	bootpprof "gitee.com/hq_project/yomi-boot/pprof"
 	"gitee.com/hq_project/yomi-boot/ratelimit"
 	"gitee.com/hq_project/yomi-boot/redis"
@@ -45,7 +45,7 @@ func DefaultConfigRegistry() *config.Registry {
 			snowflake.ConfigSection(),
 			idempotency.ConfigSection(),
 			ratelimit.ConfigSection(),
-			filestorage.ConfigSection(),
+			oss.ConfigSection(),
 			bootpprof.ConfigSection(),
 		)
 }

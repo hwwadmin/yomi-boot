@@ -1,7 +1,7 @@
-// Package filestorage 基于 aws-sdk-go-v2 的 FileStorage 实现。
+// Package oss 基于 aws-sdk-go-v2 的 Storage 实现。
 //
 // @author zwei
-package filestorage
+package oss
 
 import (
 	"context"
@@ -20,9 +20,9 @@ import (
 	"github.com/aws/smithy-go"
 )
 
-var _ FileStorage = (*s3Storage)(nil)
+var _ Storage = (*s3Storage)(nil)
 
-// s3Storage 是基于 AWS S3 的 FileStorage 实现
+// s3Storage 是基于 AWS S3 的 Storage 实现
 type s3Storage struct {
 	client           *s3.Client
 	presigner        *s3.PresignClient
@@ -31,7 +31,7 @@ type s3Storage struct {
 }
 
 // newS3Storage 根据配置创建 AWS S3 存储实现
-func newS3Storage(cfg Config) (FileStorage, error) {
+func newS3Storage(cfg Config) (Storage, error) {
 	region := strings.TrimSpace(cfg.S3.Region)
 	endpoint := strings.TrimSpace(cfg.S3.Endpoint)
 
@@ -44,7 +44,7 @@ func newS3Storage(cfg Config) (FileStorage, error) {
 		)),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "filestorage: 加载 AWS 配置失败")
+		return nil, errors.Wrap(err, "oss: 加载 AWS 配置失败")
 	}
 
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
@@ -70,7 +70,7 @@ func (s *s3Storage) PutObject(ctx context.Context, bucket, key string, body io.R
 		return "", err
 	}
 	if body == nil {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: body 不能为 nil")
 	}
 
 	putOpts := applyPutOptions(opts)
@@ -88,7 +88,7 @@ func (s *s3Storage) PutObject(ctx context.Context, bucket, key string, body io.R
 
 	_, err = s.client.PutObject(ctx, input)
 	if err != nil {
-		return "", errors.Wrap(err, "filestorage: S3 上传对象失败")
+		return "", errors.Wrap(err, "oss: S3 上传对象失败")
 	}
 	return JoinURI(bucket, key)
 }
@@ -106,7 +106,7 @@ func (s *s3Storage) GetObject(ctx context.Context, uri string) (io.ReadCloser, *
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return nil, nil, s3MapError(err, "filestorage: S3 下载对象失败")
+		return nil, nil, s3MapError(err, "oss: S3 下载对象失败")
 	}
 
 	meta := &ObjectMeta{}
@@ -142,7 +142,7 @@ func (s *s3Storage) DeleteObject(ctx context.Context, uri string) error {
 		if s3IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "filestorage: S3 删除对象失败")
+		return errors.Wrap(err, "oss: S3 删除对象失败")
 	}
 	return nil
 }
@@ -160,7 +160,7 @@ func (s *s3Storage) StatObject(ctx context.Context, uri string) (*ObjectMeta, er
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return nil, s3MapError(err, "filestorage: S3 查询对象失败")
+		return nil, s3MapError(err, "oss: S3 查询对象失败")
 	}
 
 	meta := &ObjectMeta{}
@@ -204,10 +204,10 @@ func (s *s3Storage) PresignGet(ctx context.Context, uri string, expiry time.Dura
 		return "", err
 	}
 	if expiry <= 0 {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 必须大于 0")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: expiry 必须大于 0")
 	}
 	if expiry > s.maxPresignExpiry {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 超过允许上限")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: expiry 超过允许上限")
 	}
 
 	out, err := s.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
@@ -215,7 +215,7 @@ func (s *s3Storage) PresignGet(ctx context.Context, uri string, expiry time.Dura
 		Key:    aws.String(key),
 	}, s3.WithPresignExpires(expiry))
 	if err != nil {
-		return "", errors.Wrap(err, "filestorage: S3 生成预签名 URL 失败")
+		return "", errors.Wrap(err, "oss: S3 生成预签名 URL 失败")
 	}
 	return out.URL, nil
 }

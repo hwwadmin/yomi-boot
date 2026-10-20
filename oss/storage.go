@@ -1,7 +1,7 @@
-// Package filestorage FileStorage 接口与公共类型。
+// Package oss 提供 Storage 接口与公共类型。
 //
 // @author zwei
-package filestorage
+package oss
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-// FileStorage 统一文件/对象存储服务。
+// Storage 统一文件/对象存储服务。
 //
 // 对象定位统一使用逻辑 URI（格式 bucket/key，见 JoinURI / ParseURI）。
 // PutObject 仍接收 bucket 与 key，成功后返回可入库的 uri。
-type FileStorage interface {
+type Storage interface {
 	// PutObject 上传对象。body 由调用方关闭；size < 0 表示长度未知（实现按 SDK 能力处理）。
 	// 成功返回可入库的逻辑 URI（bucket/key），不是完整 HTTP URL。
 	PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64, opts ...PutOption) (uri string, err error)

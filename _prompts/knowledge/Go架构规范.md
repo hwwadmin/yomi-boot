@@ -195,7 +195,7 @@ services/{domain}/
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
 | `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |
 | `rpc` | HTTP RPC 读客户端（Consul 发现 + POST JSON）；轻量重试（退避）+ 按下游服务熔断；跨域写走 DTM，不在此叠加写重试 |
-| `ws` | 独立端口 WebSocket（coder/websocket）：Config 配 Processor/可选 Handler；默认 Handler 消费消息；ConnID 仅服务端；心跳/寿命/`MaxConnections`；可选 `MaxFramePayloadSize` 协议分片；无 yml/默认插件；小文件可走 WS，大文件走 `filestorage` |
+| `ws` | 独立端口 WebSocket（coder/websocket）：Config 配 Processor/可选 Handler；默认 Handler 消费消息；ConnID 仅服务端；心跳/寿命/`MaxConnections`；可选 `MaxFramePayloadSize` 协议分片；无 yml/默认插件；小文件可走 WS，大文件走 `oss` |
 | `distlock` | 基于 Redsync 的分布式锁、看门狗 |
 | `errors` | 系统级错误包装与 `BizError` 业务异常类型 |
 | `response` | `Encoder` 接口、显式 `MustRegister`；可提供预制实现供业务显式选用（预制 ≠ 强制契约） |
@@ -213,7 +213,7 @@ services/{domain}/
 | `testclient` | 集成测试 HTTP 客户端辅助 |
 | `aiclient` | 统一 LLM 门面：Chat（OpenAI / Anthropic）、Embedding（OpenAI Embeddings）、Jev 决策（System One）；`New`/`MustNew`、`NewEmbedding`/`MustNewEmbedding`、`NewJev`/`MustNewJev`；三套 Client 配置互不混用；一实例一模型；不进 bootstrap、不读 YAML、不做限流 |
 | `vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
-| `filestorage` | 统一对象存储抽象（MinIO / AWS S3 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
+| `oss` | 统一对象存储抽象（MinIO / AWS S3 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
 | `golua` | 按需 Lua 脚本引擎（gopher-lua，受信规则场景）：须显式 CacheBackend（memory/redis）；变更后 `Refresh*Force`；不进 bootstrap |
 
 **平台共享 DDL**（与封装同包维护，**无**独立 `gitee.com/hq_project/yomi-boot/sql/` 目录）：
@@ -492,10 +492,10 @@ kafka: ...
 | 定时任务 | `cronjob`（内部轮询用 `roundrobin`） |
 | 服务发现与读 RPC | `consul`、`rpc` |
 | 异步消息 | 按需选用 `kafka` 或 `redisstream`；可靠领域事件另看 `event` |
-| WebSocket 长连接 | `ws`（独立端口 Server/Client；ConnID 仅服务端）；小文件可走 WS，大文件走 `filestorage` |
+| WebSocket 长连接 | `ws`（独立端口 Server/Client；ConnID 仅服务端）；小文件可走 WS，大文件走 `oss` |
 | 鉴权令牌 | `token` |
 | 加解密 / 哈希 / 密码 | `bc/*` |
-| 对象存储 | `filestorage`（大文件上传/下载；勿用 `ws` 整包） |
+| 对象存储 | `oss`（大文件上传/下载；勿用 `ws` 整包） |
 | 调用大模型 Chat / 流式、文本向量化 Embedding、Jev 结构化决策 | `aiclient`（`New`/`MustNew`、`NewEmbedding`/`MustNewEmbedding`、`NewJev`/`MustNewJev`；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
 | 向量写入 / ANN 检索 / 动态索引 | `vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
 | 业务 Lua 脚本（受信规则） | `golua`（须显式 CacheBackend；变更后 `Refresh*Force`） |

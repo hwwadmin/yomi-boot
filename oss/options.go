@@ -1,7 +1,7 @@
-// Package filestorage PutObject 可选参数。
+// Package oss PutObject 可选参数。
 //
 // @author zwei
-package filestorage
+package oss
 
 // PutOptions 上传可选参数
 type PutOptions struct {

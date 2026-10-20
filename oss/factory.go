@@ -1,12 +1,12 @@
-// Package filestorage New 构造函数：按 provider 分发实现。
+// Package oss New 构造函数：按 provider 分发实现。
 //
 // @author zwei
-package filestorage
+package oss
 
 import "gitee.com/hq_project/yomi-boot/errors"
 
-// New 根据配置创建 FileStorage
-func New(cfg Config) (FileStorage, error) {
+// New 根据配置创建 Storage
+func New(cfg Config) (Storage, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}

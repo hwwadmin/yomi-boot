@@ -1,7 +1,7 @@
-// Package filestorage 基于 alibabacloud-oss-go-sdk-v2 的 FileStorage 实现。
+// Package oss 基于 alibabacloud-oss-go-sdk-v2 的 Storage 实现。
 //
 // @author zwei
-package filestorage
+package oss
 
 import (
 	"context"
@@ -13,25 +13,25 @@ import (
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/errors"
 
-	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
+	aliyunoss "github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
 )
 
-var _ FileStorage = (*aliOSSStorage)(nil)
+var _ Storage = (*aliOSSStorage)(nil)
 
-// aliOSSStorage 是基于阿里云 OSS 的 FileStorage 实现
+// aliOSSStorage 是基于阿里云 OSS 的 Storage 实现
 type aliOSSStorage struct {
-	client           *oss.Client
+	client           *aliyunoss.Client
 	publicBaseURL    string
 	maxPresignExpiry time.Duration
 }
 
 // newAliOSSStorage 根据配置创建阿里云 OSS 存储实现
-func newAliOSSStorage(cfg Config) (FileStorage, error) {
+func newAliOSSStorage(cfg Config) (Storage, error) {
 	region := strings.TrimSpace(cfg.AliOSS.Region)
 	endpoint := strings.TrimSpace(cfg.AliOSS.Endpoint)
 
-	ossCfg := oss.LoadDefaultConfig().
+	ossCfg := aliyunoss.LoadDefaultConfig().
 		WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			cfg.AliOSS.AccessKeyID,
 			cfg.AliOSS.SecretAccessKey,
@@ -45,7 +45,7 @@ func newAliOSSStorage(cfg Config) (FileStorage, error) {
 	}
 
 	return &aliOSSStorage{
-		client:           oss.NewClient(ossCfg),
+		client:           aliyunoss.NewClient(ossCfg),
 		publicBaseURL:    strings.TrimSpace(cfg.PublicBaseURL),
 		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
 	}, nil
@@ -59,25 +59,25 @@ func (s *aliOSSStorage) PutObject(ctx context.Context, bucket, key string, body 
 		return "", err
 	}
 	if body == nil {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: body 不能为 nil")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: body 不能为 nil")
 	}
 
 	putOpts := applyPutOptions(opts)
-	input := &oss.PutObjectRequest{
-		Bucket: oss.Ptr(bucket),
-		Key:    oss.Ptr(key),
+	input := &aliyunoss.PutObjectRequest{
+		Bucket: aliyunoss.Ptr(bucket),
+		Key:    aliyunoss.Ptr(key),
 		Body:   body,
 	}
 	if putOpts.ContentType != "" {
-		input.ContentType = oss.Ptr(putOpts.ContentType)
+		input.ContentType = aliyunoss.Ptr(putOpts.ContentType)
 	}
 	if size >= 0 {
-		input.ContentLength = oss.Ptr(size)
+		input.ContentLength = aliyunoss.Ptr(size)
 	}
 
 	_, err = s.client.PutObject(ctx, input)
 	if err != nil {
-		return "", errors.Wrap(err, "filestorage: AliOSS 上传对象失败")
+		return "", errors.Wrap(err, "oss: AliOSS 上传对象失败")
 	}
 	return JoinURI(bucket, key)
 }
@@ -90,12 +90,12 @@ func (s *aliOSSStorage) GetObject(ctx context.Context, uri string) (io.ReadClose
 		return nil, nil, err
 	}
 
-	out, err := s.client.GetObject(ctx, &oss.GetObjectRequest{
-		Bucket: oss.Ptr(bucket),
-		Key:    oss.Ptr(key),
+	out, err := s.client.GetObject(ctx, &aliyunoss.GetObjectRequest{
+		Bucket: aliyunoss.Ptr(bucket),
+		Key:    aliyunoss.Ptr(key),
 	})
 	if err != nil {
-		return nil, nil, aliOSSMapError(err, "filestorage: AliOSS 下载对象失败")
+		return nil, nil, aliOSSMapError(err, "oss: AliOSS 下载对象失败")
 	}
 
 	return out.Body, aliOSSObjectMeta(out.ContentType, out.ContentLength, out.ETag, out.LastModified), nil
@@ -109,15 +109,15 @@ func (s *aliOSSStorage) DeleteObject(ctx context.Context, uri string) error {
 		return err
 	}
 
-	_, err = s.client.DeleteObject(ctx, &oss.DeleteObjectRequest{
-		Bucket: oss.Ptr(bucket),
-		Key:    oss.Ptr(key),
+	_, err = s.client.DeleteObject(ctx, &aliyunoss.DeleteObjectRequest{
+		Bucket: aliyunoss.Ptr(bucket),
+		Key:    aliyunoss.Ptr(key),
 	})
 	if err != nil {
 		if aliOSSIsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "filestorage: AliOSS 删除对象失败")
+		return errors.Wrap(err, "oss: AliOSS 删除对象失败")
 	}
 	return nil
 }
@@ -130,12 +130,12 @@ func (s *aliOSSStorage) StatObject(ctx context.Context, uri string) (*ObjectMeta
 		return nil, err
 	}
 
-	out, err := s.client.HeadObject(ctx, &oss.HeadObjectRequest{
-		Bucket: oss.Ptr(bucket),
-		Key:    oss.Ptr(key),
+	out, err := s.client.HeadObject(ctx, &aliyunoss.HeadObjectRequest{
+		Bucket: aliyunoss.Ptr(bucket),
+		Key:    aliyunoss.Ptr(key),
 	})
 	if err != nil {
-		return nil, aliOSSMapError(err, "filestorage: AliOSS 查询对象失败")
+		return nil, aliOSSMapError(err, "oss: AliOSS 查询对象失败")
 	}
 
 	return aliOSSObjectMeta(out.ContentType, out.ContentLength, out.ETag, out.LastModified), nil
@@ -166,18 +166,18 @@ func (s *aliOSSStorage) PresignGet(ctx context.Context, uri string, expiry time.
 		return "", err
 	}
 	if expiry <= 0 {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 必须大于 0")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: expiry 必须大于 0")
 	}
 	if expiry > s.maxPresignExpiry {
-		return "", errors.Wrap(ErrInvalidArgument, "filestorage: expiry 超过允许上限")
+		return "", errors.Wrap(ErrInvalidArgument, "oss: expiry 超过允许上限")
 	}
 
-	out, err := s.client.Presign(ctx, &oss.GetObjectRequest{
-		Bucket: oss.Ptr(bucket),
-		Key:    oss.Ptr(key),
-	}, oss.PresignExpires(expiry))
+	out, err := s.client.Presign(ctx, &aliyunoss.GetObjectRequest{
+		Bucket: aliyunoss.Ptr(bucket),
+		Key:    aliyunoss.Ptr(key),
+	}, aliyunoss.PresignExpires(expiry))
 	if err != nil {
-		return "", errors.Wrap(err, "filestorage: AliOSS 生成预签名 URL 失败")
+		return "", errors.Wrap(err, "oss: AliOSS 生成预签名 URL 失败")
 	}
 	return out.URL, nil
 }
@@ -205,7 +205,7 @@ func aliOSSIsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	var se *oss.ServiceError
+	var se *aliyunoss.ServiceError
 	if errors.As(err, &se) {
 		if se.StatusCode == http.StatusNotFound {
 			return true
