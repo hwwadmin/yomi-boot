@@ -10,7 +10,8 @@
 //   - gitee.com/hq_project/yomi-boot/bc/hmac：HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证
 //   - gitee.com/hq_project/yomi-boot/bc/aes：AES-GCM（推荐）/ AES-CBC / AES-ECB（仅遗留，新业务禁止）
 //   - gitee.com/hq_project/yomi-boot/bc/sm4：SM4-GCM（推荐）/ SM4-CBC / SM4-ECB（仅遗留，国密）
-//   - gitee.com/hq_project/yomi-boot/bc/rsa：RSA PEM（含证书、带密码私钥）、OAEP 加解密、PSS/PKCS1v15 签名
+//   - gitee.com/hq_project/yomi-boot/bc/rsa：RSA PEM（含证书、带密码私钥）、OAEP 加解密、PSS 签名
+//   - gitee.com/hq_project/yomi-boot/bc/sha256withrsa：SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签
 //   - gitee.com/hq_project/yomi-boot/bc/sm2：SM2 PEM、加解密、签名验签（国密）
 //
 // 红线：

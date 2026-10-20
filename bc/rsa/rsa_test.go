@@ -7,7 +7,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// TestOAEPAndSign 验证 OAEP 加解密及 PSS/PKCS1v15 签名验签
+// TestOAEPAndSign 验证 OAEP 加解密及 PSS 签名验签
 func TestOAEPAndSign(t *testing.T) {
 	priv, err := GenerateKey(2048)
 	if err != nil {
@@ -35,14 +35,6 @@ func TestOAEPAndSign(t *testing.T) {
 	}
 	if err := VerifyPSS(pub, []byte("other"), sig); !errors.Is(err, ErrVerify) {
 		t.Fatalf("期望 ErrVerify，实际 %v", err)
-	}
-
-	sig2, err := SignPKCS1v15(priv, msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := VerifyPKCS1v15(pub, msg, sig2); err != nil {
-		t.Fatal(err)
 	}
 }
 
