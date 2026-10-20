@@ -499,7 +499,7 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 		{"empty query", RetrieveRequest{Query: "  ", TopK: 5}},
 		{"zero topk", RetrieveRequest{Query: "苹果"}},
 		{"negative topk", RetrieveRequest{Query: "苹果", TopK: -1}},
-		{"topk too large", RetrieveRequest{Query: "苹果", TopK: maxTopK + 1}},
+		{"topk too large", RetrieveRequest{Query: "苹果", TopK: vectordb.MaxTopK + 1}},
 		{"nan min score", RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.NaN())}},
 		{"empty filter key", RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{"": "x"}}},
 		{"bad filter key", RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{`a"b`: "x"}}},
@@ -526,6 +526,9 @@ func TestDimensionLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
+	if err := e.EnsureCollection(ctx, "rag_dim"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.Retrieve(ctx, "rag_dim", RetrieveRequest{Query: "苹果", TopK: 5}); err != nil {
 		t.Fatal(err)
 	}

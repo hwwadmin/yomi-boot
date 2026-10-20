@@ -28,7 +28,7 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 	if query == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	if req.TopK <= 0 || req.TopK > maxTopK {
+	if req.TopK <= 0 || req.TopK > vectordb.MaxTopK {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 	if math.IsNaN(float64(req.MinScore)) || math.IsInf(float64(req.MinScore), 0) {
@@ -36,6 +36,14 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 	}
 	if err := validateFilter(req.Filter); err != nil {
 		return nil, err
+	}
+	// 集合不存在时不消耗向量化调用，严格按契约返回空结果
+	has, err := e.store.HasCollection(ctx, collection)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return []Chunk{}, nil
 	}
 	vectors, _, err := e.embed(ctx, []string{query})
 	if err != nil {

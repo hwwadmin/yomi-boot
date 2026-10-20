@@ -39,10 +39,11 @@ const (
 	defaultIndexM           = 16
 	defaultIndexEFConstruct = 64
 	maxDimension            = 32768
-	maxTopK                 = 16384
-	maxIDLen                = 128
-	maxNameLen              = 255
-	upsertBatchSize         = 500
+	// MaxTopK 是单次检索允许的最大 TopK
+	MaxTopK         = 16384
+	maxIDLen        = 128
+	maxNameLen      = 255
+	upsertBatchSize = 500
 )
 
 // IndexType milvus 向量索引类型；空则 HNSW

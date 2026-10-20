@@ -43,7 +43,7 @@ type Record struct {
 // SearchQuery 向量检索入参
 type SearchQuery struct {
 	Vector []float32         // Vector 长度必须等于 Config.Dimension
-	TopK   int               // TopK 必须 > 0 且不超过 maxTopK
+	TopK   int               // TopK 必须 > 0 且不超过 MaxTopK
 	Filter map[string]string // Filter 可选；nil/空表示不过滤；全键等值 AND
 }
 

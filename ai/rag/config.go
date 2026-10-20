@@ -4,9 +4,6 @@
 package rag
 
 import (
-	"regexp"
-	"strings"
-
 	"gitee.com/hq_project/yomi-boot/ai/embedding"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/vectordb"
@@ -16,13 +13,9 @@ const (
 	defaultChunkSize    = 800
 	defaultChunkOverlap = 100
 	maxChunkSize        = 8192
-	maxTopK             = 16384
 	maxDocIDLen         = 120
 	maxChunksPerDoc     = 10000
 )
-
-// collectionNameRe 集合名规则与 vectordb 保持一致
-var collectionNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,254}$`)
 
 // Config 创建 Engine 的构造配置；只保留依赖，集合与运行期参数由调用传入
 type Config struct {
@@ -76,8 +69,8 @@ func (c Config) validate() error {
 
 // normalizeCollection 修剪并校验集合名；空串或非法命名返回 ErrInvalidArgument
 func normalizeCollection(name string) (string, error) {
-	n := strings.TrimSpace(name)
-	if n == "" || !collectionNameRe.MatchString(n) {
+	n, err := vectordb.NormalizeCollectionName(name)
+	if err != nil {
 		return "", errors.Sentinel(ErrInvalidArgument)
 	}
 	return n, nil

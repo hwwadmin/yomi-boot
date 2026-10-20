@@ -15,6 +15,11 @@ import (
 
 var collectionNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,254}$`)
 
+// NormalizeCollectionName 修剪并校验集合名，返回规范化名称
+func NormalizeCollectionName(name string) (string, error) {
+	return normalizeCollectionName(name)
+}
+
 // normalizeCollectionName 修剪并校验集合名
 func normalizeCollectionName(name string) (string, error) {
 	n := strings.TrimSpace(name)
@@ -84,7 +89,7 @@ func validateSearchQuery(q SearchQuery, dim int) error {
 	if len(q.Vector) != dim {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	if q.TopK <= 0 || q.TopK > maxTopK {
+	if q.TopK <= 0 || q.TopK > MaxTopK {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	return validateFilter(q.Filter, false)

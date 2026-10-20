@@ -50,7 +50,7 @@ type IndexResult struct {
 // RetrieveRequest 检索入参
 type RetrieveRequest struct {
 	Query    string            // Query 是检索问题；trim 后非空
-	TopK     int               // TopK 是返回条数；必须 >0 且不超过 16384
+	TopK     int               // TopK 是返回条数；必须 >0 且不超过 vectordb.MaxTopK
 	MinScore float32           // MinScore 是最低相似度；0 表示不设阈值；NaN 非法
 	Filter   map[string]string // Filter 可选；元数据等值 AND，可用保留键过滤
 }
