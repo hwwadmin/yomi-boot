@@ -27,30 +27,54 @@ const (
 	StrategyRecursive SplitStrategy = "recursive"
 	// StrategyFixed 按固定字符窗口切分，可能截断词语
 	StrategyFixed SplitStrategy = "fixed"
-	// StrategySentence 按段落与中英文句末切分后装箱
+	// StrategySentence 按段落与句末分隔符切分后装箱
 	StrategySentence SplitStrategy = "sentence"
 	// StrategyMarkdown 按 Markdown 标题分节，超长小节再递归切分
 	StrategyMarkdown SplitStrategy = "markdown"
 )
 
-// NewSplitter 校验切块配置并按策略构造 Splitter
+// NewSplitter 校验配置并按 Strategy 构造 Splitter；只有对应策略的子配置生效
 func NewSplitter(cfg SplitConfig) (Splitter, error) {
-	normalized, err := normalizeSplitConfig(cfg)
+	strategy, err := normalizeStrategy(cfg.Strategy)
 	if err != nil {
 		return nil, err
 	}
-	switch normalized.Strategy {
+	switch strategy {
 	case StrategyFixed:
-		return &fixedSplitter{chunkSize: normalized.ChunkSize, chunkOverlap: normalized.ChunkOverlap}, nil
+		fixed, err := normalizeFixedConfig(cfg.Fixed)
+		if err != nil {
+			return nil, err
+		}
+		return &fixedSplitter{chunkSize: fixed.ChunkSize, chunkOverlap: fixed.ChunkOverlap}, nil
 	case StrategySentence:
-		return &sentenceSplitter{chunkSize: normalized.ChunkSize, chunkOverlap: normalized.ChunkOverlap}, nil
+		sentence, err := normalizeSentenceConfig(cfg.Sentence)
+		if err != nil {
+			return nil, err
+		}
+		return &sentenceSplitter{
+			chunkSize:    sentence.ChunkSize,
+			chunkOverlap: sentence.ChunkOverlap,
+			separators:   sentence.Separators,
+		}, nil
 	case StrategyMarkdown:
-		return &markdownSplitter{chunkSize: normalized.ChunkSize, chunkOverlap: normalized.ChunkOverlap}, nil
+		markdown, err := normalizeMarkdownConfig(cfg.Markdown)
+		if err != nil {
+			return nil, err
+		}
+		return &markdownSplitter{
+			chunkSize:       markdown.ChunkSize,
+			chunkOverlap:    markdown.ChunkOverlap,
+			maxHeadingLevel: markdown.MaxHeadingLevel,
+		}, nil
 	default:
+		recursive, err := normalizeRecursiveConfig(cfg.Recursive)
+		if err != nil {
+			return nil, err
+		}
 		return &recursiveSplitter{
-			chunkSize:    normalized.ChunkSize,
-			chunkOverlap: normalized.ChunkOverlap,
-			separators:   normalized.Separators,
+			chunkSize:    recursive.ChunkSize,
+			chunkOverlap: recursive.ChunkOverlap,
+			separators:   recursive.Separators,
 		}, nil
 	}
 }
@@ -64,56 +88,106 @@ func SplitText(text string, cfg SplitConfig) ([]string, error) {
 	return splitter.Split(text)
 }
 
-// normalizeSplitConfig 填充缺省并校验切块配置
-func normalizeSplitConfig(cfg SplitConfig) (SplitConfig, error) {
-	out := cfg
-	if out.Strategy == "" {
-		out.Strategy = StrategyRecursive
+// normalizeStrategy 空策略回退 recursive，并校验白名单
+func normalizeStrategy(strategy SplitStrategy) (SplitStrategy, error) {
+	if strategy == "" {
+		return StrategyRecursive, nil
 	}
-	switch out.Strategy {
+	switch strategy {
 	case StrategyRecursive, StrategyFixed, StrategySentence, StrategyMarkdown:
+		return strategy, nil
 	default:
-		return SplitConfig{}, errors.Sentinel(ErrInvalidArgument)
+		return "", errors.Sentinel(ErrInvalidArgument)
 	}
-	if out.ChunkSize == 0 {
-		out.ChunkSize = defaultChunkSize
+}
+
+// normalizeChunkConfig 填充块长与重叠缺省，并校验范围
+func normalizeChunkConfig(chunkSize, chunkOverlap int) (int, int, error) {
+	if chunkSize == 0 {
+		chunkSize = defaultChunkSize
 	}
-	if out.ChunkSize < 0 || out.ChunkSize > maxChunkSize {
-		return SplitConfig{}, errors.Sentinel(ErrInvalidArgument)
+	if chunkSize < 0 || chunkSize > maxChunkSize {
+		return 0, 0, errors.Sentinel(ErrInvalidArgument)
 	}
-	if out.ChunkOverlap < 0 {
-		return SplitConfig{}, errors.Sentinel(ErrInvalidArgument)
+	if chunkOverlap < 0 {
+		return 0, 0, errors.Sentinel(ErrInvalidArgument)
 	}
-	if out.ChunkOverlap == 0 {
-		out.ChunkOverlap = defaultChunkOverlap
-		if auto := out.ChunkSize / 4; auto < out.ChunkOverlap {
-			out.ChunkOverlap = auto
+	if chunkOverlap == 0 {
+		chunkOverlap = defaultChunkOverlap
+		if auto := chunkSize / 4; auto < chunkOverlap {
+			chunkOverlap = auto
 		}
 	}
-	if out.ChunkOverlap >= out.ChunkSize {
-		return SplitConfig{}, errors.Sentinel(ErrInvalidArgument)
+	if chunkOverlap >= chunkSize {
+		return 0, 0, errors.Sentinel(ErrInvalidArgument)
 	}
-	// 自定义分隔符仅对 recursive 有意义，其他策略传入视为配置错误
-	if out.Strategy != StrategyRecursive {
-		if len(out.Separators) > 0 {
-			return SplitConfig{}, errors.Sentinel(ErrInvalidArgument)
-		}
-		out.Separators = nil
-		return out, nil
+	return chunkSize, chunkOverlap, nil
+}
+
+// normalizeSeparators 填充分隔符缺省并校验元素非空
+func normalizeSeparators(separators, defaults []string) ([]string, error) {
+	if len(separators) == 0 {
+		return append([]string(nil), defaults...), nil
 	}
-	if len(out.Separators) == 0 {
-		out.Separators = append([]string(nil), defaultSeparators...)
-		return out, nil
-	}
-	seps := make([]string, len(out.Separators))
-	for i, sep := range out.Separators {
+	out := make([]string, len(separators))
+	for i, sep := range separators {
 		if sep == "" {
-			return SplitConfig{}, errors.Sentinel(ErrInvalidArgument)
+			return nil, errors.Sentinel(ErrInvalidArgument)
 		}
-		seps[i] = sep
+		out[i] = sep
 	}
-	out.Separators = seps
 	return out, nil
+}
+
+// normalizeRecursiveConfig 填充并校验 recursive 配置
+func normalizeRecursiveConfig(cfg RecursiveConfig) (RecursiveConfig, error) {
+	size, overlap, err := normalizeChunkConfig(cfg.ChunkSize, cfg.ChunkOverlap)
+	if err != nil {
+		return RecursiveConfig{}, err
+	}
+	separators, err := normalizeSeparators(cfg.Separators, defaultSeparators)
+	if err != nil {
+		return RecursiveConfig{}, err
+	}
+	return RecursiveConfig{ChunkSize: size, ChunkOverlap: overlap, Separators: separators}, nil
+}
+
+// normalizeFixedConfig 填充并校验 fixed 配置
+func normalizeFixedConfig(cfg FixedConfig) (FixedConfig, error) {
+	size, overlap, err := normalizeChunkConfig(cfg.ChunkSize, cfg.ChunkOverlap)
+	if err != nil {
+		return FixedConfig{}, err
+	}
+	return FixedConfig{ChunkSize: size, ChunkOverlap: overlap}, nil
+}
+
+// normalizeSentenceConfig 填充并校验 sentence 配置
+func normalizeSentenceConfig(cfg SentenceConfig) (SentenceConfig, error) {
+	size, overlap, err := normalizeChunkConfig(cfg.ChunkSize, cfg.ChunkOverlap)
+	if err != nil {
+		return SentenceConfig{}, err
+	}
+	separators, err := normalizeSeparators(cfg.Separators, sentenceSeparators)
+	if err != nil {
+		return SentenceConfig{}, err
+	}
+	return SentenceConfig{ChunkSize: size, ChunkOverlap: overlap, Separators: separators}, nil
+}
+
+// normalizeMarkdownConfig 填充并校验 markdown 配置
+func normalizeMarkdownConfig(cfg MarkdownConfig) (MarkdownConfig, error) {
+	size, overlap, err := normalizeChunkConfig(cfg.ChunkSize, cfg.ChunkOverlap)
+	if err != nil {
+		return MarkdownConfig{}, err
+	}
+	level := cfg.MaxHeadingLevel
+	if level == 0 {
+		level = 6
+	}
+	if level < 1 || level > 6 {
+		return MarkdownConfig{}, errors.Sentinel(ErrInvalidArgument)
+	}
+	return MarkdownConfig{ChunkSize: size, ChunkOverlap: overlap, MaxHeadingLevel: level}, nil
 }
 
 // normalizeText 统一换行符并去掉首尾空白

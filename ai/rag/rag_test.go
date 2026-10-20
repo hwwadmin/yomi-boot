@@ -257,7 +257,9 @@ func TestRetrieveEmptyCollection(t *testing.T) {
 func TestIndexReplacesStaleChunks(t *testing.T) {
 	t.Parallel()
 	e, _, store := newTestEngine(t)
-	splitter, err := NewSplitter(SplitConfig{ChunkSize: 6, ChunkOverlap: 1})
+	splitter, err := NewSplitter(SplitConfig{
+		Recursive: RecursiveConfig{ChunkSize: 6, ChunkOverlap: 1},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

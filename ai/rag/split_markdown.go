@@ -12,8 +12,9 @@ import (
 
 // markdownSplitter 按 Markdown 标题分节，超长小节再递归切分
 type markdownSplitter struct {
-	chunkSize    int
-	chunkOverlap int
+	chunkSize       int
+	chunkOverlap    int
+	maxHeadingLevel int
 }
 
 var _ Splitter = (*markdownSplitter)(nil)
@@ -24,7 +25,7 @@ func (s *markdownSplitter) Split(text string) ([]string, error) {
 	if src == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	sections := splitMarkdownSections(src)
+	sections := splitMarkdownSections(src, s.maxHeadingLevel)
 	out := make([]string, 0, len(sections))
 	for _, section := range sections {
 		section = strings.TrimSpace(section)
@@ -42,7 +43,7 @@ func (s *markdownSplitter) Split(text string) ([]string, error) {
 }
 
 // splitMarkdownSections 按标题行分节；围栏代码块内的 # 不视为标题
-func splitMarkdownSections(text string) []string {
+func splitMarkdownSections(text string, maxHeadingLevel int) []string {
 	lines := strings.Split(text, "\n")
 	sections := make([]string, 0, 4)
 	current := make([]string, 0, len(lines))
@@ -59,7 +60,7 @@ func splitMarkdownSections(text string) []string {
 				fence = ""
 			}
 		}
-		if !inFence && !fenceLine && isMarkdownHeading(line) && len(current) > 0 {
+		if !inFence && !fenceLine && isMarkdownHeading(line, maxHeadingLevel) && len(current) > 0 {
 			sections = append(sections, strings.Join(current, "\n"))
 			current = current[:0]
 		}
@@ -86,8 +87,8 @@ func markdownFence(line string) (string, bool) {
 	return "", false
 }
 
-// isMarkdownHeading 判断是否为 1-6 级 Markdown 标题行
-func isMarkdownHeading(line string) bool {
+// isMarkdownHeading 判断是否为 1..maxHeadingLevel 级 Markdown 标题行
+func isMarkdownHeading(line string, maxHeadingLevel int) bool {
 	trimmed := strings.TrimLeft(line, " ")
 	if len(line)-len(trimmed) > 3 {
 		return false
@@ -96,7 +97,7 @@ func isMarkdownHeading(line string) bool {
 	for level < len(trimmed) && trimmed[level] == '#' {
 		level++
 	}
-	if level == 0 || level > 6 {
+	if level == 0 || level > maxHeadingLevel {
 		return false
 	}
 	if level == len(trimmed) {

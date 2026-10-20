@@ -26,41 +26,78 @@ func TestNewSplitterDefault(t *testing.T) {
 		t.Fatalf("默认切块参数 = %+v", recursive)
 	}
 	if len(recursive.separators) == 0 {
-		t.Fatal("默认可分隔符为空")
+		t.Fatal("默认分隔符为空")
 	}
 }
 
-// TestNewSplitterStrategies 覆盖各策略的构造类型
+// TestNewSplitterStrategies 覆盖各策略的独立配置与构造类型
 func TestNewSplitterStrategies(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		strategy SplitStrategy
-		check    func(t *testing.T, splitter Splitter)
+		name  string
+		cfg   SplitConfig
+		check func(t *testing.T, splitter Splitter)
 	}{
-		{StrategyRecursive, func(t *testing.T, splitter Splitter) {
-			if _, ok := splitter.(*recursiveSplitter); !ok {
-				t.Fatalf("recursive 类型错误: %T", splitter)
-			}
-		}},
-		{StrategyFixed, func(t *testing.T, splitter Splitter) {
-			if _, ok := splitter.(*fixedSplitter); !ok {
-				t.Fatalf("fixed 类型错误: %T", splitter)
-			}
-		}},
-		{StrategySentence, func(t *testing.T, splitter Splitter) {
-			if _, ok := splitter.(*sentenceSplitter); !ok {
-				t.Fatalf("sentence 类型错误: %T", splitter)
-			}
-		}},
-		{StrategyMarkdown, func(t *testing.T, splitter Splitter) {
-			if _, ok := splitter.(*markdownSplitter); !ok {
-				t.Fatalf("markdown 类型错误: %T", splitter)
-			}
-		}},
+		{
+			name: "recursive",
+			cfg: SplitConfig{
+				Strategy:  StrategyRecursive,
+				Recursive: RecursiveConfig{ChunkSize: 100, ChunkOverlap: 10},
+			},
+			check: func(t *testing.T, splitter Splitter) {
+				s, ok := splitter.(*recursiveSplitter)
+				if !ok || s.chunkSize != 100 || s.chunkOverlap != 10 || len(s.separators) == 0 {
+					t.Fatalf("recursive 配置: %T %+v", splitter, splitter)
+				}
+			},
+		},
+		{
+			name: "fixed",
+			cfg: SplitConfig{
+				Strategy: StrategyFixed,
+				Fixed:    FixedConfig{ChunkSize: 100, ChunkOverlap: 10},
+			},
+			check: func(t *testing.T, splitter Splitter) {
+				s, ok := splitter.(*fixedSplitter)
+				if !ok || s.chunkSize != 100 || s.chunkOverlap != 10 {
+					t.Fatalf("fixed 配置: %T %+v", splitter, splitter)
+				}
+			},
+		},
+		{
+			name: "sentence",
+			cfg: SplitConfig{
+				Strategy: StrategySentence,
+				Sentence: SentenceConfig{
+					ChunkSize:    100,
+					ChunkOverlap: 10,
+					Separators:   []string{"。"},
+				},
+			},
+			check: func(t *testing.T, splitter Splitter) {
+				s, ok := splitter.(*sentenceSplitter)
+				if !ok || s.chunkSize != 100 || len(s.separators) != 1 || s.separators[0] != "。" {
+					t.Fatalf("sentence 配置: %T %+v", splitter, splitter)
+				}
+			},
+		},
+		{
+			name: "markdown",
+			cfg: SplitConfig{
+				Strategy: StrategyMarkdown,
+				Markdown: MarkdownConfig{ChunkSize: 100, ChunkOverlap: 10, MaxHeadingLevel: 3},
+			},
+			check: func(t *testing.T, splitter Splitter) {
+				s, ok := splitter.(*markdownSplitter)
+				if !ok || s.chunkSize != 100 || s.maxHeadingLevel != 3 {
+					t.Fatalf("markdown 配置: %T %+v", splitter, splitter)
+				}
+			},
+		},
 	}
 	for _, tc := range cases {
-		t.Run(string(tc.strategy), func(t *testing.T) {
-			splitter, err := NewSplitter(SplitConfig{Strategy: tc.strategy})
+		t.Run(tc.name, func(t *testing.T) {
+			splitter, err := NewSplitter(tc.cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,7 +106,23 @@ func TestNewSplitterStrategies(t *testing.T) {
 	}
 }
 
-// TestNewSplitterInvalidConfig 覆盖策略与切块配置边界
+// TestNewSplitterIgnoresOtherStrategies 覆盖非当前策略的子配置被忽略
+func TestNewSplitterIgnoresOtherStrategies(t *testing.T) {
+	t.Parallel()
+	splitter, err := NewSplitter(SplitConfig{
+		Strategy:  StrategyFixed,
+		Recursive: RecursiveConfig{ChunkSize: -1},
+		Fixed:     FixedConfig{ChunkSize: 100},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := splitter.(*fixedSplitter); !ok {
+		t.Fatalf("策略 = %T，期望 fixedSplitter", splitter)
+	}
+}
+
+// TestNewSplitterInvalidConfig 覆盖策略专属配置校验
 func TestNewSplitterInvalidConfig(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -77,14 +130,45 @@ func TestNewSplitterInvalidConfig(t *testing.T) {
 		cfg  SplitConfig
 	}{
 		{"unknown strategy", SplitConfig{Strategy: "bogus"}},
-		{"negative chunk size", SplitConfig{ChunkSize: -1}},
-		{"chunk size too large", SplitConfig{ChunkSize: maxChunkSize + 1}},
-		{"negative overlap", SplitConfig{ChunkOverlap: -1}},
-		{"overlap equals size", SplitConfig{ChunkSize: 10, ChunkOverlap: 10}},
-		{"empty separator", SplitConfig{Separators: []string{""}}},
-		{"separators with fixed", SplitConfig{Strategy: StrategyFixed, Separators: []string{"。"}}},
-		{"separators with sentence", SplitConfig{Strategy: StrategySentence, Separators: []string{"。"}}},
-		{"separators with markdown", SplitConfig{Strategy: StrategyMarkdown, Separators: []string{"。"}}},
+		{"recursive negative size", SplitConfig{Recursive: RecursiveConfig{ChunkSize: -1}}},
+		{"recursive size too large", SplitConfig{
+			Recursive: RecursiveConfig{ChunkSize: maxChunkSize + 1},
+		}},
+		{"recursive negative overlap", SplitConfig{Recursive: RecursiveConfig{ChunkOverlap: -1}}},
+		{"recursive overlap equals size", SplitConfig{
+			Recursive: RecursiveConfig{ChunkSize: 10, ChunkOverlap: 10},
+		}},
+		{"recursive empty separator", SplitConfig{
+			Recursive: RecursiveConfig{Separators: []string{""}},
+		}},
+		{"fixed negative size", SplitConfig{
+			Strategy: StrategyFixed,
+			Fixed:    FixedConfig{ChunkSize: -1},
+		}},
+		{"fixed overlap equals size", SplitConfig{
+			Strategy: StrategyFixed,
+			Fixed:    FixedConfig{ChunkSize: 10, ChunkOverlap: 10},
+		}},
+		{"sentence negative overlap", SplitConfig{
+			Strategy: StrategySentence,
+			Sentence: SentenceConfig{ChunkOverlap: -1},
+		}},
+		{"sentence empty separator", SplitConfig{
+			Strategy: StrategySentence,
+			Sentence: SentenceConfig{Separators: []string{""}},
+		}},
+		{"markdown negative size", SplitConfig{
+			Strategy: StrategyMarkdown,
+			Markdown: MarkdownConfig{ChunkSize: -1},
+		}},
+		{"markdown level too high", SplitConfig{
+			Strategy: StrategyMarkdown,
+			Markdown: MarkdownConfig{MaxHeadingLevel: 7},
+		}},
+		{"markdown negative level", SplitConfig{
+			Strategy: StrategyMarkdown,
+			Markdown: MarkdownConfig{MaxHeadingLevel: -1},
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,7 +198,10 @@ func TestSplitTextDefaults(t *testing.T) {
 func TestSplitTextRecursiveChineseSentence(t *testing.T) {
 	t.Parallel()
 	text := strings.Repeat("这是一个用于测试的句子。", 40)
-	cfg := SplitConfig{Strategy: StrategyRecursive, ChunkSize: 50, ChunkOverlap: 10}
+	cfg := SplitConfig{
+		Strategy:  StrategyRecursive,
+		Recursive: RecursiveConfig{ChunkSize: 50, ChunkOverlap: 10},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +213,7 @@ func TestSplitTextRecursiveChineseSentence(t *testing.T) {
 		if chunk == "" {
 			t.Fatalf("第 %d 块为空", i)
 		}
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Recursive.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
 		}
 		if !strings.HasSuffix(chunk, "。") {
@@ -134,7 +221,7 @@ func TestSplitTextRecursiveChineseSentence(t *testing.T) {
 		}
 	}
 	prev := []rune(chunks[0])
-	tail := string(prev[len(prev)-cfg.ChunkOverlap:])
+	tail := string(prev[len(prev)-cfg.Recursive.ChunkOverlap:])
 	if !strings.HasPrefix(chunks[1], tail) {
 		t.Fatalf("缺少重叠: tail=%q next=%q", tail, chunks[1])
 	}
@@ -144,7 +231,10 @@ func TestSplitTextRecursiveChineseSentence(t *testing.T) {
 func TestSplitTextRecursiveHardSplit(t *testing.T) {
 	t.Parallel()
 	text := strings.Repeat("a", 1000)
-	cfg := SplitConfig{Strategy: StrategyRecursive, ChunkSize: 100, ChunkOverlap: 20}
+	cfg := SplitConfig{
+		Strategy:  StrategyRecursive,
+		Recursive: RecursiveConfig{ChunkSize: 100, ChunkOverlap: 20},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -153,12 +243,12 @@ func TestSplitTextRecursiveHardSplit(t *testing.T) {
 		t.Fatalf("块数 = %d，期望 13", len(chunks))
 	}
 	for i, chunk := range chunks {
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Recursive.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
 		}
 	}
 	prev := []rune(chunks[0])
-	tail := string(prev[len(prev)-cfg.ChunkOverlap:])
+	tail := string(prev[len(prev)-cfg.Recursive.ChunkOverlap:])
 	if !strings.HasPrefix(chunks[1], tail) {
 		t.Fatalf("硬切缺少重叠: tail=%q next=%q", tail, chunks[1])
 	}
@@ -169,13 +259,16 @@ func TestSplitTextRecursiveParagraph(t *testing.T) {
 	t.Parallel()
 	paras := []string{"第一段内容。", "第二段内容。", "第三段内容。"}
 	text := strings.Join(paras, "\n\n")
-	cfg := SplitConfig{Strategy: StrategyRecursive, ChunkSize: 12, ChunkOverlap: 2}
+	cfg := SplitConfig{
+		Strategy:  StrategyRecursive,
+		Recursive: RecursiveConfig{ChunkSize: 12, ChunkOverlap: 2},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, chunk := range chunks {
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Recursive.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限: %q", i, n, chunk)
 		}
 	}
@@ -191,7 +284,10 @@ func TestSplitTextRecursiveParagraph(t *testing.T) {
 func TestSplitTextRecursiveLongWords(t *testing.T) {
 	t.Parallel()
 	text := strings.Repeat("word ", 1000)
-	cfg := SplitConfig{Strategy: StrategyRecursive, ChunkSize: 100, ChunkOverlap: 20}
+	cfg := SplitConfig{
+		Strategy:  StrategyRecursive,
+		Recursive: RecursiveConfig{ChunkSize: 100, ChunkOverlap: 20},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -200,19 +296,21 @@ func TestSplitTextRecursiveLongWords(t *testing.T) {
 		t.Fatalf("块数过少: %d", len(chunks))
 	}
 	for i, chunk := range chunks {
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Recursive.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
 		}
 	}
 }
 
-// TestSplitTextRecursiveCustomSeparator 覆盖自定义分隔符
+// TestSplitTextRecursiveCustomSeparator 覆盖 recursive 自定义分隔符
 func TestSplitTextRecursiveCustomSeparator(t *testing.T) {
 	t.Parallel()
 	chunks, err := SplitText("apple|banana|cherry", SplitConfig{
-		Strategy:   StrategyRecursive,
-		ChunkSize:  8,
-		Separators: []string{"|"},
+		Strategy: StrategyRecursive,
+		Recursive: RecursiveConfig{
+			ChunkSize:  8,
+			Separators: []string{"|"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +332,10 @@ func TestSplitTextRecursiveCustomSeparator(t *testing.T) {
 func TestSplitTextFixed(t *testing.T) {
 	t.Parallel()
 	text := strings.Repeat("a", 1000)
-	cfg := SplitConfig{Strategy: StrategyFixed, ChunkSize: 100, ChunkOverlap: 20}
+	cfg := SplitConfig{
+		Strategy: StrategyFixed,
+		Fixed:    FixedConfig{ChunkSize: 100, ChunkOverlap: 20},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -243,12 +344,12 @@ func TestSplitTextFixed(t *testing.T) {
 		t.Fatalf("块数 = %d，期望 13", len(chunks))
 	}
 	for i, chunk := range chunks {
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Fixed.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
 		}
 	}
 	prev := []rune(chunks[0])
-	tail := string(prev[len(prev)-cfg.ChunkOverlap:])
+	tail := string(prev[len(prev)-cfg.Fixed.ChunkOverlap:])
 	if !strings.HasPrefix(chunks[1], tail) {
 		t.Fatalf("固定窗口缺少重叠: tail=%q next=%q", tail, chunks[1])
 	}
@@ -258,7 +359,10 @@ func TestSplitTextFixed(t *testing.T) {
 func TestSplitTextSentence(t *testing.T) {
 	t.Parallel()
 	text := strings.Repeat("这是一个句子。", 40)
-	cfg := SplitConfig{Strategy: StrategySentence, ChunkSize: 50, ChunkOverlap: 10}
+	cfg := SplitConfig{
+		Strategy: StrategySentence,
+		Sentence: SentenceConfig{ChunkSize: 50, ChunkOverlap: 10},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +371,7 @@ func TestSplitTextSentence(t *testing.T) {
 		t.Fatalf("块数过少: %d", len(chunks))
 	}
 	for i, chunk := range chunks {
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Sentence.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
 		}
 		if !strings.HasSuffix(chunk, "。") {
@@ -276,15 +380,41 @@ func TestSplitTextSentence(t *testing.T) {
 	}
 }
 
+// TestSplitTextSentenceCustomSeparator 覆盖 sentence 自定义句末分隔符
+func TestSplitTextSentenceCustomSeparator(t *testing.T) {
+	t.Parallel()
+	chunks, err := SplitText("apple|banana|cherry", SplitConfig{
+		Strategy: StrategySentence,
+		Sentence: SentenceConfig{
+			ChunkSize:  8,
+			Separators: []string{"|"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("块数 = %d，期望 3: %q", len(chunks), chunks)
+	}
+	for i, want := range []string{"apple", "banana", "cherry"} {
+		if !strings.Contains(chunks[i], want) {
+			t.Fatalf("第 %d 块 = %q，期望包含 %q", i, chunks[i], want)
+		}
+		if n := utf8.RuneCountInString(chunks[i]); n > 8 {
+			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
+		}
+	}
+}
+
 // TestSplitTextMarkdownSections 覆盖标题分节与代码块内 # 的识别
 func TestSplitTextMarkdownSections(t *testing.T) {
 	t.Parallel()
 	text := "# 标题一\n内容一\n\n## 标题二\n内容二\n\n```go\n# 不是标题\n```"
-	chunks, err := SplitText(text, SplitConfig{
-		Strategy:     StrategyMarkdown,
-		ChunkSize:    100,
-		ChunkOverlap: 10,
-	})
+	cfg := SplitConfig{
+		Strategy: StrategyMarkdown,
+		Markdown: MarkdownConfig{ChunkSize: 100, ChunkOverlap: 10},
+	}
+	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,11 +429,42 @@ func TestSplitTextMarkdownSections(t *testing.T) {
 	}
 }
 
+// TestSplitTextMarkdownMaxHeadingLevel 覆盖 markdown 最大标题层级
+func TestSplitTextMarkdownMaxHeadingLevel(t *testing.T) {
+	t.Parallel()
+	text := "# A\na\n## B\nb\n### C\nc"
+	cfg := SplitConfig{
+		Strategy: StrategyMarkdown,
+		Markdown: MarkdownConfig{ChunkSize: 100, MaxHeadingLevel: 2},
+	}
+	chunks, err := SplitText(text, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 2 {
+		t.Fatalf("块数 = %d，期望 2: %q", len(chunks), chunks)
+	}
+	if !strings.Contains(chunks[1], "### C") {
+		t.Fatalf("三级标题应留在上一节: %q", chunks[1])
+	}
+	cfg.Markdown.MaxHeadingLevel = 6
+	chunks, err = SplitText(text, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("全层级块数 = %d，期望 3: %q", len(chunks), chunks)
+	}
+}
+
 // TestSplitTextMarkdownLongSection 覆盖超长小节递归切分
 func TestSplitTextMarkdownLongSection(t *testing.T) {
 	t.Parallel()
 	text := "# 标题\n" + strings.Repeat("这是一个句子。", 30)
-	cfg := SplitConfig{Strategy: StrategyMarkdown, ChunkSize: 50, ChunkOverlap: 10}
+	cfg := SplitConfig{
+		Strategy: StrategyMarkdown,
+		Markdown: MarkdownConfig{ChunkSize: 50, ChunkOverlap: 10},
+	}
 	chunks, err := SplitText(text, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -315,7 +476,7 @@ func TestSplitTextMarkdownLongSection(t *testing.T) {
 		t.Fatalf("首块未保留标题: %q", chunks[0])
 	}
 	for i, chunk := range chunks {
-		if n := utf8.RuneCountInString(chunk); n > cfg.ChunkSize {
+		if n := utf8.RuneCountInString(chunk); n > cfg.Markdown.ChunkSize {
 			t.Fatalf("第 %d 块长度 %d 超过上限", i, n)
 		}
 	}
@@ -325,17 +486,49 @@ func TestSplitTextMarkdownLongSection(t *testing.T) {
 func TestSplitterKeepsText(t *testing.T) {
 	t.Parallel()
 	text := "第一段。\n\n第二段，包含更多内容。\n\n第三段。"
-	strategies := []SplitStrategy{StrategyRecursive, StrategyFixed, StrategySentence, StrategyMarkdown}
-	for _, strategy := range strategies {
-		t.Run(string(strategy), func(t *testing.T) {
-			chunks, err := SplitText(text, SplitConfig{Strategy: strategy, ChunkSize: 8, ChunkOverlap: 2})
+	cases := []struct {
+		name string
+		cfg  SplitConfig
+	}{
+		{
+			name: "recursive",
+			cfg: SplitConfig{
+				Strategy:  StrategyRecursive,
+				Recursive: RecursiveConfig{ChunkSize: 8, ChunkOverlap: 2},
+			},
+		},
+		{
+			name: "fixed",
+			cfg: SplitConfig{
+				Strategy: StrategyFixed,
+				Fixed:    FixedConfig{ChunkSize: 8, ChunkOverlap: 2},
+			},
+		},
+		{
+			name: "sentence",
+			cfg: SplitConfig{
+				Strategy: StrategySentence,
+				Sentence: SentenceConfig{ChunkSize: 8, ChunkOverlap: 2},
+			},
+		},
+		{
+			name: "markdown",
+			cfg: SplitConfig{
+				Strategy: StrategyMarkdown,
+				Markdown: MarkdownConfig{ChunkSize: 8, ChunkOverlap: 2},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chunks, err := SplitText(text, tc.cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
 			joined := strings.Join(chunks, "")
 			for _, part := range []string{"第一段", "第二段", "第三段"} {
 				if !strings.Contains(joined, part) {
-					t.Fatalf("策略 %s 丢失内容 %q: %q", strategy, part, chunks)
+					t.Fatalf("策略 %s 丢失内容 %q: %q", tc.name, part, chunks)
 				}
 			}
 		})

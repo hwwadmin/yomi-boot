@@ -9,7 +9,10 @@
 // # 基本用法
 //
 //	engine, err := rag.New(rag.Config{Embedder: emb, Store: store})
-//	splitter, err := rag.NewSplitter(rag.SplitConfig{Strategy: rag.StrategyMarkdown})
+//	splitter, err := rag.NewSplitter(rag.SplitConfig{
+//	    Strategy: rag.StrategyMarkdown,
+//	    Markdown: rag.MarkdownConfig{ChunkSize: 800, MaxHeadingLevel: 3},
+//	})
 //	_, err = engine.Index(ctx, "kb_sales", rag.IndexRequest{
 //	    Documents: []rag.Document{{ID: "doc-1", Content: text, Source: "manual.md"}},
 //	    Splitter:  splitter,
@@ -25,13 +28,14 @@
 //
 // # 切块策略
 //
-// Splitter 是切块策略门面，内置四种策略：
+// Splitter 是切块策略门面，内置四种策略，各自使用独立的配置类型：
 //
-//   - recursive（默认）：按段落、行、中英文句末、分句与空格逐级回退
-//   - fixed：按固定字符窗口切分，可能截断词语
-//   - sentence：按段落与中英文句末切分后装箱
-//   - markdown：按 Markdown 标题分节，超长小节再递归切分
+//   - recursive（默认）：RecursiveConfig，块长、重叠与分隔符优先级
+//   - fixed：FixedConfig，块长与重叠
+//   - sentence：SentenceConfig，块长、重叠与句末分隔符
+//   - markdown：MarkdownConfig，块长、重叠与最大标题层级
 //
+// SplitConfig 只有 Strategy 对应的子配置生效，其余子配置忽略。
 // 通过 IndexRequest.Splitter 按需指定；为空则使用内置默认 recursive（800 字 / 100 重叠）。
 // 可用 NewSplitter / SplitText 直接构造使用。块长按 rune 计，单块不得超过 8192 字。
 //

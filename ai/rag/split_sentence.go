@@ -5,7 +5,7 @@ package rag
 
 import "gitee.com/hq_project/yomi-boot/errors"
 
-// sentenceSeparators 句子策略的分隔符；只认段落、行与句末标点
+// sentenceSeparators 句子策略的默认分隔符；只认段落、行与句末标点
 var sentenceSeparators = []string{
 	"\n\n", "\n",
 	"。", "！", "？", "；", "：", "……",
@@ -16,6 +16,7 @@ var sentenceSeparators = []string{
 type sentenceSplitter struct {
 	chunkSize    int
 	chunkOverlap int
+	separators   []string
 }
 
 var _ Splitter = (*sentenceSplitter)(nil)
@@ -26,6 +27,6 @@ func (s *sentenceSplitter) Split(text string) ([]string, error) {
 	if src == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	segments := splitSegments(src, sentenceSeparators, s.chunkSize, s.chunkOverlap)
+	segments := splitSegments(src, s.separators, s.chunkSize, s.chunkOverlap)
 	return normalizeChunks(packSegments(segments, s.chunkSize, s.chunkOverlap))
 }
