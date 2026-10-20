@@ -1,3 +1,8 @@
+// Package rsa 提供 RSA PEM 解析（含证书、带密码私钥）与 OAEP 加解密
+//
+// 签名请使用 bc/sha256withrsa（PKCS#1 v1.5）或 bc/rsapss（PSS）。
+//
+// @author zwei
 package rsa
 
 import (

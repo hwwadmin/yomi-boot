@@ -3,12 +3,10 @@ package rsa
 import (
 	"bytes"
 	"testing"
-
-	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// TestOAEPAndSign 验证 OAEP 加解密及 PSS 签名验签
-func TestOAEPAndSign(t *testing.T) {
+// TestOAEP 验证 OAEP 加解密
+func TestOAEP(t *testing.T) {
 	priv, err := GenerateKey(2048)
 	if err != nil {
 		t.Fatal(err)
@@ -23,18 +21,6 @@ func TestOAEPAndSign(t *testing.T) {
 	got, err := DecryptOAEP(priv, ct)
 	if err != nil || !bytes.Equal(got, plain) {
 		t.Fatalf("oaep got %q err=%v", got, err)
-	}
-
-	msg := []byte("sign-me")
-	sig, err := SignPSS(priv, msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := VerifyPSS(pub, msg, sig); err != nil {
-		t.Fatal(err)
-	}
-	if err := VerifyPSS(pub, []byte("other"), sig); !errors.Is(err, ErrVerify) {
-		t.Fatalf("期望 ErrVerify，实际 %v", err)
 	}
 }
 
