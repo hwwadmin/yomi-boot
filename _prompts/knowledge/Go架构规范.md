@@ -189,7 +189,7 @@ services/{domain}/
 | `bc/hash` | MD5 / SHA-1（遗留兼容）/ SHA-256 / SHA-512 摘要（禁止用于密码） |
 | `bc/sm3` | SM3 摘要（国密；禁止用于密码） |
 | `bc/hmacsha` | HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证 |
-| `bc/aes` | AES-GCM（推荐）/ CBC；ECB 不推荐 |
+| `bc/aes` | AES-GCM（推荐，支持 AAD）/ CBC；ECB 不推荐 |
 | `bc/sm4` | SM4-GCM（推荐）/ CBC；ECB 不推荐（国密） |
 | `bc/rsa` | RSA PEM（PKCS#1/PKCS#8、证书链、带密码私钥）、OAEP 加解密 |
 | `bc/sha256withrsa` | SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签；对应 Java、支付宝 RSA2、微信支付 v3 |

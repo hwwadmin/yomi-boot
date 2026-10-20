@@ -10,7 +10,7 @@ import (
 
 const gcmNonceSize = 12
 
-// GCM AES-GCM 加解密器（推荐用于新业务）
+// GCM AES-GCM 加解密器（推荐用于新业务；支持 AAD 附加认证数据）
 type GCM struct {
 	aead cipher.AEAD
 }
@@ -33,6 +33,13 @@ func NewGCM(key []byte) (*GCM, error) {
 
 // Seal 加密：返回 nonce || ciphertext||tag
 func (g *GCM) Seal(plain []byte) ([]byte, error) {
+	return g.SealWithAAD(plain, nil)
+}
+
+// SealWithAAD 加密并绑定附加认证数据：返回 nonce || ciphertext||tag
+//
+// aad 不随密文存储，OpenWithAAD 必须提供相同内容才能解密。
+func (g *GCM) SealWithAAD(plain, aad []byte) ([]byte, error) {
 	if g == nil || g.aead == nil {
 		return nil, errors.New("aes: GCM 未初始化")
 	}
@@ -40,7 +47,7 @@ func (g *GCM) Seal(plain []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	sealed := g.aead.Seal(nil, nonce, plain, nil)
+	sealed := g.aead.Seal(nil, nonce, plain, aad)
 	out := make([]byte, 0, len(nonce)+len(sealed))
 	out = append(out, nonce...)
 	out = append(out, sealed...)
@@ -49,6 +56,11 @@ func (g *GCM) Seal(plain []byte) ([]byte, error) {
 
 // Open 解密 Seal 产出的密文
 func (g *GCM) Open(sealed []byte) ([]byte, error) {
+	return g.OpenWithAAD(sealed, nil)
+}
+
+// OpenWithAAD 解密 SealWithAAD 产出的密文并校验附加认证数据
+func (g *GCM) OpenWithAAD(sealed, aad []byte) ([]byte, error) {
 	if g == nil || g.aead == nil {
 		return nil, errors.New("aes: GCM 未初始化")
 	}
@@ -57,7 +69,7 @@ func (g *GCM) Open(sealed []byte) ([]byte, error) {
 	}
 	nonce := sealed[:gcmNonceSize]
 	ciphertext := sealed[gcmNonceSize:]
-	plain, err := g.aead.Open(nil, nonce, ciphertext, nil)
+	plain, err := g.aead.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return nil, errors.Sentinel(ErrOpen)
 	}
