@@ -1,9 +1,9 @@
-// Package hmac 提供 HMAC-SHA1 / HMAC-SHA256 / HMAC-SHA512 消息认证
+// Package hmacsha 提供 HMAC-SHA1 / HMAC-SHA256 / HMAC-SHA512 消息认证
 //
 // HMAC-SHA1 仅用于遗留协议兼容；新业务优先 HMAC-SHA256。
 //
 // @author zwei
-package hmac
+package hmacsha
 
 import (
 	stdhmac "crypto/hmac"
@@ -55,7 +55,7 @@ func Equal(mac1, mac2 []byte) bool {
 // sum 使用指定哈希构造器计算 HMAC
 func sum(newHash func() hash.Hash, key, data []byte) ([]byte, error) {
 	if len(key) == 0 {
-		return nil, errors.New("hmac: key 不能为空")
+		return nil, errors.New("hmacsha: key 不能为空")
 	}
 	mac := stdhmac.New(newHash, key)
 	_, _ = mac.Write(data)

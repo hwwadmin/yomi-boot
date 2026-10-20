@@ -1,4 +1,4 @@
-package hmac
+package hmacsha
 
 import (
 	"bytes"

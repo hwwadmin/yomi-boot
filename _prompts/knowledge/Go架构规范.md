@@ -190,7 +190,7 @@ services/{domain}/
 | `bc/sha1` | SHA-1 摘要（遗留兼容；禁止用于密码与新签名） |
 | `bc/hash` | SHA-256 / SHA-512 摘要（禁止用于密码） |
 | `bc/sm3` | SM3 摘要（国密；禁止用于密码） |
-| `bc/hmac` | HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证 |
+| `bc/hmacsha` | HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证 |
 | `bc/aes` | AES-GCM（推荐）/ CBC；ECB 不推荐 |
 | `bc/sm4` | SM4-GCM（推荐）/ CBC；ECB 不推荐（国密） |
 | `bc/rsa` | RSA PEM（PKCS#1/PKCS#8、证书链、带密码私钥）、OAEP 加解密 |

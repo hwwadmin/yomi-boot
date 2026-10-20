@@ -7,7 +7,7 @@
 //   - gitee.com/hq_project/yomi-boot/bc/sha1：SHA-1 摘要（遗留兼容；禁止用于密码与新签名）
 //   - gitee.com/hq_project/yomi-boot/bc/hash：SHA-256 / SHA-512 摘要（禁止用于密码）
 //   - gitee.com/hq_project/yomi-boot/bc/sm3：SM3 摘要（国密；禁止用于密码）
-//   - gitee.com/hq_project/yomi-boot/bc/hmac：HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证
+//   - gitee.com/hq_project/yomi-boot/bc/hmacsha：HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证
 //   - gitee.com/hq_project/yomi-boot/bc/aes：AES-GCM（推荐）/ AES-CBC / AES-ECB（仅遗留，新业务禁止）
 //   - gitee.com/hq_project/yomi-boot/bc/sm4：SM4-GCM（推荐）/ SM4-CBC / SM4-ECB（仅遗留，国密）
 //   - gitee.com/hq_project/yomi-boot/bc/rsa：RSA PEM（含证书、带密码私钥）、OAEP 加解密
