@@ -5,13 +5,12 @@ package token
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/bc/hash"
 	"gitee.com/hq_project/yomi-boot/errors"
 
 	yomiredis "gitee.com/hq_project/yomi-boot/redis"
@@ -294,7 +293,5 @@ func (s *RedisStore) storePrefixValue(storePrefix string) (string, error) {
 // hashToken 将原始令牌哈希为 Redis 存储键后缀，避免明文落库
 func (s *RedisStore) hashToken(token string) string {
 	token = strings.TrimSpace(token)
-	sum := sha256.Sum256([]byte(token))
-
-	return hex.EncodeToString(sum[:])
+	return hash.SHA256Hex([]byte(token))
 }

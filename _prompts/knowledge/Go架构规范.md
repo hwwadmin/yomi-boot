@@ -186,11 +186,15 @@ services/{domain}/
 | `bc` | 密码学基础设施能力簇（Bootstrap Crypto）；无状态按需 import，不挂 Infra |
 | `bc/passwd` | 密码单向哈希/校验（bcrypt） |
 | `bc/random` | 密码学安全随机（Bytes/Hex/URLSafe） |
-| `bc/md5` | MD5 摘要（禁止用于密码） |
+| `bc/md5` | MD5 摘要（遗留兼容；禁止用于密码） |
+| `bc/sha1` | SHA-1 摘要（遗留兼容；禁止用于密码与新签名） |
 | `bc/hash` | SHA-256 / SHA-512 摘要（禁止用于密码） |
-| `bc/hmac` | HMAC-SHA256 消息认证 |
+| `bc/sm3` | SM3 摘要（国密；禁止用于密码） |
+| `bc/hmac` | HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证 |
 | `bc/aes` | AES-GCM（推荐）/ CBC；ECB 不推荐 |
+| `bc/sm4` | SM4-GCM（推荐）/ CBC；ECB 不推荐（国密） |
 | `bc/rsa` | RSA PEM、OAEP 加解密、PSS/PKCS1v15 签名 |
+| `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
 | `kafka` | 生产者 `PublisherService`、消费者 `ConsumerService`、`kafkatest` 测试封装 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
 | `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |

@@ -4,10 +4,9 @@
 package golua
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/bc/hash"
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
@@ -23,8 +22,7 @@ func (s *Script) ContentHash() string {
 	if s == nil {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(s.Source))
-	return hex.EncodeToString(sum[:])
+	return hash.SHA256Hex([]byte(s.Source))
 }
 
 // EffectiveVersion 返回业务版本；为空时使用源码 hash
