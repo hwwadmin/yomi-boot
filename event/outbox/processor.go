@@ -33,6 +33,7 @@ type Processor struct {
 	kafkaPublisher yomikafka.PublisherService
 	txExecutor     db.TxExecutor
 	worker         worker.WorkerService
+	queueSize      int        // queueSize 是发送队列的实际容量
 	closeMu        sync.Mutex // closeMu 保护 closed 并发调用
 	closed         bool       // closed 标记是否已关闭
 }
@@ -83,24 +84,77 @@ func NewProcessor(
 		kafkaPublisher: kafkaPublisher,
 		txExecutor:     txExecutor,
 		worker:         w,
+		queueSize:      workCfg.Size,
 	}, nil
+}
+
+// Capacity 返回发送队列的总容量
+func (p *Processor) Capacity() int {
+	if p == nil {
+		return 0
+	}
+	return p.queueSize
+}
+
+// Pending 返回发送队列中待处理事件数
+func (p *Processor) Pending() int {
+	if p == nil || p.worker == nil {
+		return 0
+	}
+	return p.worker.Pending()
+}
+
+// AvailableCapacity 返回发送队列当前可用容量
+func (p *Processor) AvailableCapacity() int {
+	if p == nil || p.worker == nil || p.queueSize <= 0 {
+		return 0
+	}
+	return max(0, p.queueSize-p.worker.Pending())
 }
 
 // Offer 提交发件箱事件到发送线程池
 func (p *Processor) Offer(ctx context.Context, row model.SysEventOutbox) {
+	if err := p.tryOffer(row); err != nil {
+		if shouldRestorePending(err) {
+			p.restoreFetchedEvent(ctx, row, err)
+			return
+		}
+		logger.Error(ctx, "消息队列事件提交发送线程池失败",
+			"eventId", row.EventID, "topic", row.Topic, "error", err)
+	}
+}
+
+// OfferBatch 批量提交发件箱事件；被线程池拒绝的事件统一批量恢复为 PENDING
+func (p *Processor) OfferBatch(ctx context.Context, rows []model.SysEventOutbox) {
+	if len(rows) == 0 {
+		return
+	}
+	rejected := make([]model.SysEventOutbox, 0, len(rows))
+	var cause error
+	for i := range rows {
+		if err := p.tryOffer(rows[i]); err != nil {
+			if shouldRestorePending(err) {
+				rejected = append(rejected, rows[i])
+				if cause == nil {
+					cause = err
+				}
+				continue
+			}
+			logger.Error(ctx, "消息队列事件提交发送线程池失败",
+				"eventId", rows[i].EventID, "topic", rows[i].Topic, "error", err)
+		}
+	}
+	if len(rejected) > 0 {
+		p.restoreFetchedEvents(ctx, rejected, cause)
+	}
+}
+
+// tryOffer 尝试将单个发件箱事件提交到发送线程池
+func (p *Processor) tryOffer(row model.SysEventOutbox) error {
 	cloned := row
-	err := p.worker.TrySubmit(func(taskCtx context.Context) error {
+	return p.worker.TrySubmit(func(taskCtx context.Context) error {
 		return p.push(taskCtx, cloned)
 	})
-	if err == nil {
-		return
-	}
-	if shouldRestorePending(err) {
-		p.restoreFetchedEvent(ctx, cloned, err)
-		return
-	}
-	logger.Error(ctx, "消息队列事件提交发送线程池失败",
-		"eventId", row.EventID, "topic", row.Topic, "error", err)
 }
 
 // Close 关闭发送线程池，幂等安全
@@ -155,18 +209,26 @@ func (p *Processor) push(ctx context.Context, row model.SysEventOutbox) error {
 	return nil
 }
 
-// restoreFetchedEvent 将提交线程池失败的事件恢复为 PENDING 状态
+// restoreFetchedEvent 将单个提交线程池失败的事件恢复为 PENDING 状态
 func (p *Processor) restoreFetchedEvent(ctx context.Context, row model.SysEventOutbox, cause error) {
-	logger.Error(ctx, "消息队列事件提交发送线程池失败，准备恢复为 PENDING",
-		"eventId", row.EventID, "topic", row.Topic, "error", cause)
+	p.restoreFetchedEvents(ctx, []model.SysEventOutbox{row}, cause)
+}
+
+// restoreFetchedEvents 将批量提交线程池失败的事件恢复为 PENDING 状态
+func (p *Processor) restoreFetchedEvents(ctx context.Context, rows []model.SysEventOutbox, cause error) {
+	if len(rows) == 0 {
+		return
+	}
+	ids := make([]int64, 0, len(rows))
+	for i := range rows {
+		ids = append(ids, rows[i].ID)
+	}
+	logger.Error(ctx, "消息队列事件提交发送线程池失败，准备批量恢复为 PENDING",
+		"count", len(ids), "error", cause, "sample", buildOutboxSample(rows))
 	restoreCtx := context.WithoutCancel(ctx)
-	if err := p.txExecutor.Execute(restoreCtx, func(txCtx context.Context) error {
-		row.Status = model.OutboxStatusPending
-		row.FetchTime = nil
-		return p.outboxRepo.Update(txCtx, &row)
-	}); err != nil {
-		logger.Error(ctx, "消息队列事件恢复 PENDING 失败，将依赖 FETCHED 超时回收",
-			"eventId", row.EventID, "topic", row.Topic, "error", err)
+	if err := p.outboxRepo.RestorePendingBatch(restoreCtx, ids); err != nil {
+		logger.Error(ctx, "消息队列事件批量恢复 PENDING 失败，将依赖 FETCHED 超时回收",
+			"count", len(ids), "error", err)
 	}
 }
 

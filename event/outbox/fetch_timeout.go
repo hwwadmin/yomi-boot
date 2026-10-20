@@ -56,7 +56,7 @@ func (f *FetchTimeout) doTask(ctx context.Context) error {
 		"count", len(rows),
 		"serviceName", f.cfg.ServiceName,
 		"fetchTimeout", f.cfg.FetchTimeout.String(),
-		"sample", buildTimeoutSample(rows),
+		"sample", buildOutboxSample(rows),
 	)
 
 	for i := range rows {
@@ -72,8 +72,8 @@ func (f *FetchTimeout) doTask(ctx context.Context) error {
 	return nil
 }
 
-// buildTimeoutSample 构造超时事件的日志采样字符串
-func buildTimeoutSample(rows []model.SysEventOutbox) string {
+// buildOutboxSample 构造发件箱事件的日志采样字符串
+func buildOutboxSample(rows []model.SysEventOutbox) string {
 	limit := fetchTimeoutLogSampleSize
 	if len(rows) < limit {
 		limit = len(rows)

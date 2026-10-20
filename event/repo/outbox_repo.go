@@ -14,6 +14,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// outboxUpdateBatchSize 是批量全量更新的单批行数，避免单条 SQL 超过 max_allowed_packet
+const outboxUpdateBatchSize = 200
+
 // OutboxRepo 发件箱仓储
 type OutboxRepo struct {
 	db.BaseRepository
@@ -69,13 +72,34 @@ func (r *OutboxRepo) Update(ctx context.Context, row *model.SysEventOutbox) erro
 	return nil
 }
 
-// UpdateBatch 批量全量更新发件箱记录
+// UpdateBatch 批量全量更新发件箱记录（按固定分片提交，避免单条 SQL 过大）
 func (r *OutboxRepo) UpdateBatch(ctx context.Context, rows []model.SysEventOutbox) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	if err := r.UpdateAllBatch(ctx, rows); err != nil {
-		return errors.Wrap(err, "批量更新发件箱记录失败")
+	for start := 0; start < len(rows); start += outboxUpdateBatchSize {
+		end := min(start+outboxUpdateBatchSize, len(rows))
+		if err := r.UpdateAllBatch(ctx, rows[start:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RestorePendingBatch 将指定发件箱记录批量恢复为待处理状态（仅处理 FETCHED 记录）
+func (r *OutboxRepo) RestorePendingBatch(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	result := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id IN ? AND status = ?", ids, model.OutboxStatusFetched).
+		Updates(map[string]any{
+			"status":     model.OutboxStatusPending,
+			"fetch_time": nil,
+		})
+	if result.Error != nil {
+		return errors.Wrap(result.Error, "批量恢复发件箱事件为待处理失败")
 	}
 	return nil
 }

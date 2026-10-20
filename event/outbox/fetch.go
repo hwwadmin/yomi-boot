@@ -42,9 +42,21 @@ func (f *Fetcher) Start(ctx context.Context, factory distlock.DistLockFactory) e
 	return nil
 }
 
+// fetchSize 返回本轮实际抓取数量：取配置值与发送队列可用容量的较小者
+func (f *Fetcher) fetchSize() int {
+	if f.processor == nil || f.cfg.FetchSize <= 0 {
+		return 0
+	}
+	return min(f.cfg.FetchSize, f.processor.AvailableCapacity())
+}
+
 // doTask 抓取待处理事件，标记为已抓取并提交到发送处理器
 func (f *Fetcher) doTask(ctx context.Context) error {
-	rows, err := f.outboxRepo.FetchPending(ctx, f.cfg.ServiceName, f.cfg.FetchSize)
+	size := f.fetchSize()
+	if size <= 0 {
+		return nil
+	}
+	rows, err := f.outboxRepo.FetchPending(ctx, f.cfg.ServiceName, size)
 	if err != nil {
 		return err
 	}
@@ -61,8 +73,6 @@ func (f *Fetcher) doTask(ctx context.Context) error {
 		return err
 	}
 
-	for i := range rows {
-		f.processor.Offer(ctx, rows[i])
-	}
+	f.processor.OfferBatch(ctx, rows)
 	return nil
 }
