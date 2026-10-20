@@ -1,6 +1,7 @@
-// Package jev 按填写的实网配置调用门面
+// 按填写的实网配置调用门面
 //
 // @author zwei
+
 package jev
 
 import (

@@ -1,6 +1,7 @@
-// Package embedding Fail Fast 构造。
+// Fail Fast 构造。
 //
 // @author zwei
+
 package embedding
 
 import "gitee.com/hq_project/yomi-boot/logger"

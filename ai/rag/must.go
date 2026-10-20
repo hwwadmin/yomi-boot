@@ -1,6 +1,7 @@
-// Package rag Fail Fast 构造。
+// Fail Fast 构造。
 //
 // @author zwei
+
 package rag
 
 import "gitee.com/hq_project/yomi-boot/logger"

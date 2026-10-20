@@ -1,6 +1,7 @@
-// Package rag 公共入参校验与规范化。
+// 公共入参校验与规范化。
 //
 // @author zwei
+
 package rag
 
 import (

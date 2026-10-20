@@ -1,6 +1,7 @@
-// Package rag Markdown 标题切块策略。
+// Markdown 标题切块策略。
 //
 // @author zwei
+
 package rag
 
 import (

@@ -1,6 +1,7 @@
-// Package embedding OpenAI Embeddings 适配（包私有）。
+// OpenAI Embeddings 适配（包私有）。
 //
 // @author zwei
+
 package embedding
 
 import (

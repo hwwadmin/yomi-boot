@@ -1,6 +1,7 @@
-// Package rag 检索。
+// 检索。
 //
 // @author zwei
+
 package rag
 
 import (

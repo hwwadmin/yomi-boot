@@ -1,6 +1,7 @@
-// Package rag 构造配置与切块默认值；本包不读 YAML。
+// 构造配置与切块默认值；本包不读 YAML。
 //
 // @author zwei
+
 package rag
 
 import (

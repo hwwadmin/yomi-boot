@@ -1,6 +1,7 @@
-// Package jev Jev 构造与入参校验单测
+// Jev 构造与入参校验单测
 //
 // @author zwei
+
 package jev
 
 import (

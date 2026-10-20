@@ -1,6 +1,7 @@
-// Package llm 流式读取与关闭的生命周期。
+// 流式读取与关闭的生命周期。
 //
 // @author zwei
+
 package llm
 
 import (

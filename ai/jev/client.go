@@ -1,6 +1,7 @@
-// Package jev 定义 Jev 决策门面与请求响应结构。
+// 定义 Jev 决策门面与请求响应结构。
 //
 // @author zwei
+
 package jev
 
 import (

@@ -1,6 +1,7 @@
-// Package rag Engine 定义与集合生命周期。
+// Engine 定义与集合生命周期。
 //
 // @author zwei
+
 package rag
 
 import (

@@ -1,6 +1,7 @@
-// Package llm 配置与 max token 字段单测
+// 配置与 max token 字段单测
 //
 // @author zwei
+
 package llm
 
 import (

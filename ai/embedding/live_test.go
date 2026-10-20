@@ -1,6 +1,7 @@
-// Package embedding 按填写的实网配置调用门面
+// 按填写的实网配置调用门面
 //
 // @author zwei
+
 package embedding
 
 import (

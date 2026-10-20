@@ -1,6 +1,7 @@
-// Package jev 构造配置与协议常量。
+// 构造配置与协议常量。
 //
 // @author zwei
+
 package jev
 
 import (

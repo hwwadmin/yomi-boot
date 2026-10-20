@@ -1,6 +1,7 @@
-// Package rag 固定窗口切块策略。
+// 固定窗口切块策略。
 //
 // @author zwei
+
 package rag
 
 import "gitee.com/hq_project/yomi-boot/errors"

@@ -1,6 +1,7 @@
-// Package rag New 校验配置并装配 Engine。
+// New 校验配置并装配 Engine。
 //
 // @author zwei
+
 package rag
 
 // New 校验配置并构造 Engine；不访问网络、不创建集合

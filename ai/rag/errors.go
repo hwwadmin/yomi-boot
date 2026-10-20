@@ -1,6 +1,7 @@
-// Package rag 定义检索增强数据能力哨兵错误。
+// 定义检索增强数据能力哨兵错误。
 //
 // @author zwei
+
 package rag
 
 import "gitee.com/hq_project/yomi-boot/errors"

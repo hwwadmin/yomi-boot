@@ -1,6 +1,7 @@
-// Package jev 定义 Jev 决策客户端哨兵错误。
+// 定义 Jev 决策客户端哨兵错误。
 //
 // @author zwei
+
 package jev
 
 import "gitee.com/hq_project/yomi-boot/errors"

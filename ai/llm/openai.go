@@ -1,6 +1,7 @@
-// Package llm OpenAI Chat Completions 适配（包私有）。
+// OpenAI Chat Completions 适配（包私有）。
 //
 // @author zwei
+
 package llm
 
 import (

@@ -1,6 +1,7 @@
-// Package jev System One 兼容 HTTP 适配（包私有）。
+// System One 兼容 HTTP 适配（包私有）。
 //
 // @author zwei
+
 package jev
 
 import (

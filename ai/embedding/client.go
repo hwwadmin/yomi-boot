@@ -1,6 +1,7 @@
-// Package embedding 定义向量化门面与请求响应结构。
+// 定义向量化门面与请求响应结构。
 //
 // @author zwei
+
 package embedding
 
 import (

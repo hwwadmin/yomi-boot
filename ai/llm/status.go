@@ -1,6 +1,7 @@
-// Package llm HTTP 状态到本包哨兵的最低映射。
+// HTTP 状态到本包哨兵的最低映射。
 //
 // @author zwei
+
 package llm
 
 import (

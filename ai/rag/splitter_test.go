@@ -1,6 +1,7 @@
-// Package rag 切块策略测试。
+// 切块策略测试。
 //
 // @author zwei
+
 package rag
 
 import (

@@ -1,6 +1,7 @@
-// Package jev Fail Fast 构造。
+// Fail Fast 构造。
 //
 // @author zwei
+
 package jev
 
 import "gitee.com/hq_project/yomi-boot/logger"

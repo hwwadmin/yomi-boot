@@ -1,6 +1,7 @@
-// Package llm Fail Fast 构造。
+// Fail Fast 构造。
 //
 // @author zwei
+
 package llm
 
 import "gitee.com/hq_project/yomi-boot/logger"

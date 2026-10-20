@@ -1,6 +1,7 @@
-// Package llm Anthropic Messages 适配（包私有）。
+// Anthropic Messages 适配（包私有）。
 //
 // @author zwei
+
 package llm
 
 import (

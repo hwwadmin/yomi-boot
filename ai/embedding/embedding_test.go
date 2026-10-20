@@ -1,6 +1,7 @@
-// Package embedding 向量化构造与入参校验单测
+// 向量化构造与入参校验单测
 //
 // @author zwei
+
 package embedding
 
 import (

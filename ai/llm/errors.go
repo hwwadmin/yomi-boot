@@ -1,6 +1,7 @@
-// Package llm 定义对话客户端哨兵错误。
+// 定义对话客户端哨兵错误。
 //
 // @author zwei
+
 package llm
 
 import "gitee.com/hq_project/yomi-boot/errors"

@@ -1,6 +1,7 @@
-// Package rag 定义文档、块与请求响应类型。
+// 定义文档、块与请求响应类型。
 //
 // @author zwei
+
 package rag
 
 // 保留元数据键；由本包写入，Document.Metadata 不得使用

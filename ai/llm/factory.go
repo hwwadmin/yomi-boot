@@ -1,6 +1,7 @@
-// Package llm New 按协议分发实现。
+// New 按协议分发实现。
 //
 // @author zwei
+
 package llm
 
 import (

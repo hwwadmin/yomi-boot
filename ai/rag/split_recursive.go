@@ -1,6 +1,7 @@
-// Package rag 递归切块策略。
+// 递归切块策略。
 //
 // @author zwei
+
 package rag
 
 import (

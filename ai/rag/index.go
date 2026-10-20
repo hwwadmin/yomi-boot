@@ -1,6 +1,7 @@
-// Package rag 文档入库与删除。
+// 文档入库与删除。
 //
 // @author zwei
+
 package rag
 
 import (

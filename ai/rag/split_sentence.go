@@ -1,6 +1,7 @@
-// Package rag 句子切块策略。
+// 句子切块策略。
 //
 // @author zwei
+
 package rag
 
 import "gitee.com/hq_project/yomi-boot/errors"

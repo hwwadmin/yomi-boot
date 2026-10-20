@@ -1,6 +1,7 @@
-// Package rag 切块策略门面与构造。
+// 切块策略门面与构造。
 //
 // @author zwei
+
 package rag
 
 import (

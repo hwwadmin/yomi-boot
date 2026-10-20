@@ -1,6 +1,7 @@
-// Package embedding 定义向量化客户端哨兵错误。
+// 定义向量化客户端哨兵错误。
 //
 // @author zwei
+
 package embedding
 
 import "gitee.com/hq_project/yomi-boot/errors"
