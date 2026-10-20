@@ -1,0 +1,124 @@
+// Package rag Engine 定义与集合生命周期。
+//
+// @author zwei
+package rag
+
+import (
+	"context"
+	"strconv"
+	"sync/atomic"
+
+	"gitee.com/hq_project/yomi-boot/ai/embedding"
+	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/vectordb"
+)
+
+// embedBatchSize 是单次向量化的文本条数上限
+const embedBatchSize = 64
+
+// Engine 检索增强引擎；构造后不可变，可并发调用；请勿复制值
+type Engine struct {
+	embedder        embedding.Client
+	store           vectordb.Store
+	collection      string
+	defaultSplitter Splitter
+	dimension       atomic.Int64
+}
+
+// EnsureCollection 确保集合存在；已存在时返回 nil
+func (e *Engine) EnsureCollection(ctx context.Context) error {
+	return e.ensureCollection(orBackground(ctx))
+}
+
+// DropCollection 删除集合；不存在时返回 nil
+func (e *Engine) DropCollection(ctx context.Context) error {
+	return e.store.DropCollection(orBackground(ctx), e.collection)
+}
+
+// ensureCollection 查询并按需创建集合；并发创建撞车时视为成功
+func (e *Engine) ensureCollection(ctx context.Context) error {
+	has, err := e.store.HasCollection(ctx, e.collection)
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if err := e.store.CreateCollection(ctx, e.collection); err != nil {
+		if errors.Is(err, vectordb.ErrAlreadyExists) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// orBackground 返回可用的 ctx；nil 回退 Background
+func orBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+// embed 分批向量化并校验维度与返回条数；返回向量与用量合计
+func (e *Engine) embed(ctx context.Context, texts []string) ([][]float64, int, error) {
+	if len(texts) == 0 {
+		return nil, 0, nil
+	}
+	out := make([][]float64, 0, len(texts))
+	tokens := 0
+	for start := 0; start < len(texts); start += embedBatchSize {
+		end := start + embedBatchSize
+		if end > len(texts) {
+			end = len(texts)
+		}
+		resp, err := e.embedder.Embed(ctx, embedding.Request{Inputs: texts[start:end]})
+		if err != nil {
+			return nil, 0, err
+		}
+		if resp == nil || len(resp.Vectors) != end-start {
+			return nil, 0, errors.New("ai/rag 向量化返回条数与输入不一致")
+		}
+		for i := range resp.Vectors {
+			if err := e.checkDimension(len(resp.Vectors[i])); err != nil {
+				return nil, 0, err
+			}
+		}
+		if resp.Usage != nil {
+			tokens += resp.Usage.TotalTokens
+		}
+		out = append(out, resp.Vectors...)
+	}
+	return out, tokens, nil
+}
+
+// checkDimension 校验向量维度；未锁定则用本次结果锁定
+func (e *Engine) checkDimension(n int) error {
+	if n <= 0 {
+		return errors.Sentinel(ErrDimensionMismatch)
+	}
+	locked := e.dimension.Load()
+	if locked == 0 {
+		e.dimension.CompareAndSwap(0, int64(n))
+		locked = e.dimension.Load()
+	}
+	if int64(n) != locked {
+		return errors.Sentinel(ErrDimensionMismatch)
+	}
+	return nil
+}
+
+// chunkID 拼接块主键；文档 ID 最长 120，块序号最大 4 位，总长不超过 128
+func chunkID(docID string, index int) string {
+	return docID + "#" + strconv.Itoa(index)
+}
+
+// toFloat32 将向量化输出转为向量库所需的 float32
+func toFloat32(vec []float64) []float32 {
+	out := make([]float32, len(vec))
+	for i, v := range vec {
+		out[i] = float32(v)
+	}
+	return out
+}

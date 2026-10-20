@@ -153,6 +153,7 @@
   - `gitee.com/hq_project/yomi-boot/event/`：Outbox/Inbox 可靠领域事件（当前传输侧接 Kafka）。
 - **WebSocket**（可选）：`gitee.com/hq_project/yomi-boot/ws/`（底层 `github.com/coder/websocket`）；独立端口 Server / Client，构造期 Config 多实例装配，无 yml 段与默认插件；单条消息大小由 `WriteMaxPayloadSize` / `ReadMaxPayloadSize` 约束；可选 `MaxFramePayloadSize` 做出站协议分片（0=关闭；超限自动 continuation；可与压缩同开，压缩时帧长尽力而为）。小文件可直接走 WS（体量对齐 `WriteMaxPayloadSize`，默认 256KiB）；大文件经 `oss`（MinIO / S3 / OSS）上传或预签名直传，WS 只推 uri / 进度 / 完成失败等控制报文，勿靠调高读写上限整包传输。
 - **向量库**（可选）：`gitee.com/hq_project/yomi-boot/vectordb/`（底层 `github.com/milvus-io/milvus/client/v2` + 进程内 memory）；构造期 `New`/`MustNew` 传入 Config，无 yml 段与默认插件。一实例锁定 Dimension 与 Metric（`COSINE` 默认，可配 `L2` / `IP`）。业务禁止直引 Milvus SDK。
+- **RAG 检索增强数据层**（可选）：`gitee.com/hq_project/yomi-boot/ai/rag/` 组合 `ai/embedding` + `vectordb`，提供多种切块策略（recursive / fixed / sentence / markdown，可自定义 `Splitter`）、入库、检索与删除，不含大模型问答；一个 Engine 绑定一个集合，构造期 `New`/`MustNew` 传入 Config，无 yml 段与默认插件。业务需要问答时，可在业务侧用 `ai/llm` 组合检索结果自行实现。
 - 服务间默认同步通信仍是 HTTP；异步是否启用、选用哪种消息能力由业务场景决定。
 - 不作为默认：`resty`（HTTP Client）；`jsoniter`/`sonic`（JSON）；gRPC 服务间调用；用 Outbox/Inbox 替代 DTM Saga 作为跨域写默认方案；在 boot 已提供能力之外再引入 RabbitMQ/NATS/Pulsar 等客户端而不经评审；业务直依赖 `github.com/coder/websocket`（应经 `ws` 包）；业务直依赖 `github.com/milvus-io/milvus/client/v2`（应经 `vectordb` 包）。
 
