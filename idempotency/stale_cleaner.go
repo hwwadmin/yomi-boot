@@ -58,7 +58,7 @@ func StaleCleanerConfigFrom(cfg Config, appName string) StaleCleanerConfig {
 	}
 }
 
-// StartStaleCleanerFromConfig 从应用配置创建并启动 Processing 超时清理；未启用或依赖缺失时返回 nil
+// StartStaleCleanerFromConfig 从应用配置创建并启动 Processing 超时清理；未启用、依赖缺失或启动失败时返回 nil
 func StartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleanerDeps) *StaleCleaner {
 	if deps.Repo == nil {
 		return nil
@@ -73,7 +73,9 @@ func StartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleanerDep
 		return nil
 	}
 	cleaner := NewStaleCleaner(deps.Repo, runtimeCfg)
-	cleaner.Start(parentCtx, deps.DistLockFactory)
+	if err := cleaner.Start(parentCtx, deps.DistLockFactory); err != nil {
+		return nil
+	}
 	return cleaner
 }
 
@@ -97,13 +99,13 @@ func SetupStaleCleanerOnBundle(bundle *runner.ServerBundle, parentCtx context.Co
 	AttachStaleCleanerCleanup(bundle, cleaner)
 }
 
-// Start 启动 Processing 超时清理轮询
-func (c *StaleCleaner) Start(parentCtx context.Context, factory distlock.DistLockFactory) {
+// Start 启动 Processing 超时清理轮询；启动失败时返回错误
+func (c *StaleCleaner) Start(parentCtx context.Context, factory distlock.DistLockFactory) error {
 	if c == nil || c.repo == nil || !c.cfg.Enabled {
-		return
+		return nil
 	}
 	if c.started {
-		return
+		return nil
 	}
 	if parentCtx == nil {
 		parentCtx = context.Background()
@@ -112,7 +114,12 @@ func (c *StaleCleaner) Start(parentCtx context.Context, factory distlock.DistLoc
 	c.cancel = cancel
 
 	name := staleCleanerRoundRobinName(c.cfg.ServiceName)
-	roundrobin.Start(runCtx, roundrobin.Simple(name, c.cfg.ScanInterval), c.doTask, factory)
+	if err := roundrobin.Start(runCtx, roundrobin.Simple(name, c.cfg.ScanInterval), c.doTask, factory); err != nil {
+		cancel()
+		c.cancel = nil
+		logger.ErrorWithoutCtx("[幂等]Processing 超时清理启动失败", "name", name, "error", err)
+		return err
+	}
 	c.started = true
 	logger.InfoWithoutCtx("[幂等]Processing 超时清理已启动",
 		"name", name,
@@ -120,6 +127,7 @@ func (c *StaleCleaner) Start(parentCtx context.Context, factory distlock.DistLoc
 		"staleTimeout", c.cfg.StaleTimeout.String(),
 		"batchSize", c.cfg.BatchSize,
 	)
+	return nil
 }
 
 // Close 停止 Processing 超时清理

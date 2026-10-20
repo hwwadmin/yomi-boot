@@ -11,7 +11,7 @@ import (
 )
 
 // MustStartStaleCleanerFromConfig 从应用配置创建并启动 Processing 超时清理
-// 未启用时返回 nil；已启用但依赖缺失或配置无效时 log + panic
+// 未启用时返回 nil；已启用但依赖缺失、配置无效或启动失败时 log + panic
 func MustStartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleanerDeps) *StaleCleaner {
 	runtimeCfg := StaleCleanerConfigFrom(deps.Config, deps.AppName)
 	if !runtimeCfg.Enabled {
@@ -31,6 +31,8 @@ func MustStartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleane
 		panic(err)
 	}
 	cleaner := NewStaleCleaner(deps.Repo, runtimeCfg)
-	cleaner.Start(parentCtx, deps.DistLockFactory)
+	if err := cleaner.Start(parentCtx, deps.DistLockFactory); err != nil {
+		panic(err)
+	}
 	return cleaner
 }

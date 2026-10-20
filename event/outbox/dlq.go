@@ -10,6 +10,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/db"
 	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/event/cfg"
 	"gitee.com/hq_project/yomi-boot/event/model"
 	"gitee.com/hq_project/yomi-boot/event/repo"
@@ -82,11 +83,14 @@ func (d *DlqHandler) ResetRetryCountInTimeRange(ctx context.Context, from, to ti
 	return affected, nil
 }
 
-// Start 启动 DLQ 重试轮询
-func (d *DlqHandler) Start(ctx context.Context, factory distlock.DistLockFactory) {
+// Start 启动 DLQ 重试轮询；启动失败时返回错误
+func (d *DlqHandler) Start(ctx context.Context, factory distlock.DistLockFactory) error {
 	name := d.cfg.RoundRobinName("MqEventPublisherDlq")
-	roundrobin.Start(ctx, roundrobin.Simple(name, d.cfg.DlqFrequency), d.processDlq, factory)
+	if err := roundrobin.Start(ctx, roundrobin.Simple(name, d.cfg.DlqFrequency), d.processDlq, factory); err != nil {
+		return errors.Wrap(err, "event: 启动发件箱死信队列处理器失败(%s)", name)
+	}
 	logger.InfoWithoutCtx("[消息队列事件]死信队列服务名", "name", name)
+	return nil
 }
 
 // processDlq 从 DLQ 拉取待重试记录并逐一处理

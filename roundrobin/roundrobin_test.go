@@ -46,6 +46,10 @@ func TestConfig_validate(t *testing.T) {
 			name: "wake up too small",
 			cfg:  Config{Name: "x", Frequency: time.Second, RandomDelayMin: 100 * time.Millisecond, RandomDelayMax: 200 * time.Millisecond, WakeUpInterval: 10 * time.Millisecond},
 		},
+		{
+			name: "negative max run duration",
+			cfg:  Config{Name: "x", Frequency: time.Second, RandomDelayMin: 100 * time.Millisecond, RandomDelayMax: 200 * time.Millisecond, WakeUpInterval: 100 * time.Millisecond, MaxRunDuration: -time.Second},
+		},
 	}
 
 	for _, tc := range cases {
@@ -146,10 +150,12 @@ func TestStart_invalidConfig(t *testing.T) {
 	}
 
 	var runs atomic.Int32
-	Start(context.Background(), Config{}, func(context.Context) error {
+	if err := Start(context.Background(), Config{}, func(context.Context) error {
 		runs.Add(1)
 		return nil
-	}, factory)
+	}, factory); err == nil {
+		t.Fatal("expected validation error")
+	}
 
 	time.Sleep(100 * time.Millisecond)
 	if runs.Load() != 0 {
@@ -265,6 +271,82 @@ func TestTick_cancelsTaskOnLockLost(t *testing.T) {
 	case <-canceled:
 	default:
 		t.Fatal("MaxHoldDuration 到期后 Task 未感知锁丢失")
+	}
+}
+
+// TestTick_maxRunDurationCancelsTask 校验 MaxRunDuration 到期后 Task 的 ctx 被 cancel
+func TestTick_maxRunDurationCancelsTask(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	cfg := Simple("test-max-run-duration", 50*time.Millisecond)
+	cfg.MaxRunDuration = 150 * time.Millisecond
+	canceled := make(chan struct{})
+	executed, err := tick(context.Background(), cfg, func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			close(canceled)
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+			t.Error("task ctx 未在 MaxRunDuration 到期后 cancel")
+			return nil
+		}
+	}, factory)
+	if err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+	if !executed {
+		t.Fatal("expected tick to execute task")
+	}
+
+	select {
+	case <-canceled:
+	default:
+		t.Fatal("MaxRunDuration 到期后 Task 未感知取消")
+	}
+}
+
+// TestTick_zeroMaxRunDurationOverridesFactoryDefault 校验 MaxRunDuration=0 显式覆盖工厂级 MaxHoldDuration
+func TestTick_zeroMaxRunDurationOverridesFactoryDefault(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	factory, err := distlock.NewFactory(client,
+		distlock.WithDefaultLockOptions(
+			distlock.WithWatchdogInterval(30*time.Millisecond),
+			distlock.WithMaxHoldDuration(100*time.Millisecond),
+		),
+	)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	cfg := Simple("test-zero-max-run-duration", 50*time.Millisecond)
+	canceled := make(chan struct{})
+	executed, err := tick(context.Background(), cfg, func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			close(canceled)
+			return ctx.Err()
+		case <-time.After(300 * time.Millisecond):
+			return nil
+		}
+	}, factory)
+	if err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+	if !executed {
+		t.Fatal("expected tick to execute task")
+	}
+	select {
+	case <-canceled:
+		t.Fatal("MaxRunDuration=0 不应受工厂级 MaxHoldDuration 影响")
+	default:
 	}
 }
 

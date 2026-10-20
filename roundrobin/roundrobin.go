@@ -27,16 +27,18 @@ const (
 // testExecLockOpts 非空时覆盖 tick 的执行锁选项，仅供测试注入短 TTL / MaxHoldDuration
 var testExecLockOpts []distlock.LockOption
 
-// Start 校验参数后在后台 goroutine 按轮询策略执行任务；ctx 取消时退出
-func Start(ctx context.Context, cfg Config, task Task, factory distlock.DistLockFactory) {
+// Start 校验参数后在后台 goroutine 按轮询策略执行任务；ctx 取消时退出。
+// 参数非法时返回错误且不启动调度。
+func Start(ctx context.Context, cfg Config, task Task, factory distlock.DistLockFactory) error {
 	if err := validateStartArgs(cfg, task, factory); err != nil {
-		logger.ErrorWithoutCtx("roundrobin.start.invalid", "error", err)
-		return
+		logger.ErrorWithoutCtx("roundrobin.start.invalid", "name", cfg.Name, "error", err)
+		return err
 	}
 	ctx = appctx.OrBackground(ctx)
 	go func() {
 		_ = runLoop(ctx, cfg, task, factory)
 	}()
+	return nil
 }
 
 // Run 在当前 goroutine 按轮询策略执行任务，直至 ctx 取消
@@ -143,6 +145,8 @@ func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockF
 	execOpts := []distlock.LockOption{
 		distlock.WithTTL(defaultExecLockTTL),
 		distlock.WithWatchdog(true),
+		// MaxRunDuration 只跟随 Config，显式覆盖工厂级 MaxHoldDuration 默认值；0 表示不限制
+		distlock.WithMaxHoldDuration(cfg.MaxRunDuration),
 	}
 	if testExecLockOpts != nil {
 		execOpts = testExecLockOpts
@@ -174,7 +178,15 @@ func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockF
 	// 锁丢失时 cancel runCtx，让 Task 可感知并尽快退出，避免多实例并发跑同一任务
 	runCtx, stop := distlock.BindHeldContext(ctx, execLock)
 	defer stop()
+	if cfg.MaxRunDuration > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(runCtx, cfg.MaxRunDuration)
+		defer cancel()
+	}
 	runTaskSafely(runCtx, cfg.Name, task)
+	if cfg.MaxRunDuration > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		logger.Warn(ctx, "roundrobin.task.timeout", "name", cfg.Name, "max_run_duration", cfg.MaxRunDuration.String())
+	}
 	return true, nil
 }
 

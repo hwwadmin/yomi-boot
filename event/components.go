@@ -125,7 +125,8 @@ func NewAndStart(deps Deps, eventCfg Config) (c *Components, err error) {
 	return c, nil
 }
 
-// Start 启动发件箱后台任务（抓取、发送、超时回收、DLQ）；仅发布侧启用时生效
+// Start 启动发件箱后台任务（抓取、发送、超时回收、DLQ）；仅发布侧启用时生效。
+// 任一后台任务启动失败时取消已启动任务并返回错误。
 func (c *Components) Start(parentCtx context.Context) error {
 	if c.started {
 		return nil
@@ -157,12 +158,21 @@ func (c *Components) Start(parentCtx context.Context) error {
 	}
 
 	fetcher := outbox.NewFetcher(c.cfg, c.outboxRepo, c.processor)
-	fetcher.Start(runCtx, c.lockFactory)
+	if err := fetcher.Start(runCtx, c.lockFactory); err != nil {
+		cancel()
+		return err
+	}
 
 	fetchTimeout := outbox.NewFetchTimeout(c.cfg, c.outboxRepo)
-	fetchTimeout.Start(runCtx, c.lockFactory)
+	if err := fetchTimeout.Start(runCtx, c.lockFactory); err != nil {
+		cancel()
+		return err
+	}
 
-	c.dlqHandler.Start(runCtx, c.lockFactory)
+	if err := c.dlqHandler.Start(runCtx, c.lockFactory); err != nil {
+		cancel()
+		return err
+	}
 
 	c.started = true
 	logger.InfoWithoutCtx("[消息队列事件]发件箱后台任务已启动", "serviceName", c.cfg.ServiceName)

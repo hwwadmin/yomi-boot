@@ -10,6 +10,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/config"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/event/cfg"
+	"gitee.com/hq_project/yomi-boot/roundrobin"
 )
 
 const (
@@ -127,8 +128,12 @@ func (c Config) Validate() error {
 	if !c.AnyEnabledOrDefault() {
 		return nil
 	}
+	minFrequencyMS := int(roundrobin.MinInterval / time.Millisecond)
 	if c.FetchFrequencyMS < 0 {
 		return errors.New("event.fetch_frequency_ms 不能小于 0")
+	}
+	if c.FetchFrequencyMS > 0 && c.FetchFrequencyMS < minFrequencyMS {
+		return errors.Newf("event.fetch_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
 	}
 	if c.FetchSize < 0 {
 		return errors.New("event.fetch_size 不能小于 0")
@@ -138,6 +143,9 @@ func (c Config) Validate() error {
 	}
 	if c.DlqFrequencyMS < 0 {
 		return errors.New("event.dlq_frequency_ms 不能小于 0")
+	}
+	if c.DlqFrequencyMS > 0 && c.DlqFrequencyMS < minFrequencyMS {
+		return errors.Newf("event.dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
 	}
 	if c.DlqSize < 0 {
 		return errors.New("event.dlq_size 不能小于 0")

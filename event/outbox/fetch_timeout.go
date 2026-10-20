@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/event/cfg"
 	"gitee.com/hq_project/yomi-boot/event/model"
 	"gitee.com/hq_project/yomi-boot/event/repo"
@@ -30,11 +31,14 @@ func NewFetchTimeout(runtime cfg.Runtime, outboxRepo *repo.OutboxRepo) *FetchTim
 	return &FetchTimeout{cfg: runtime, outboxRepo: outboxRepo}
 }
 
-// Start 启动超时回收轮询
-func (f *FetchTimeout) Start(ctx context.Context, factory distlock.DistLockFactory) {
+// Start 启动超时回收轮询；启动失败时返回错误
+func (f *FetchTimeout) Start(ctx context.Context, factory distlock.DistLockFactory) error {
 	name := f.cfg.RoundRobinName("MqEventPublisherFetchTimeout")
-	roundrobin.Start(ctx, roundrobin.Simple(name, f.cfg.FetchFrequency), f.doTask, factory)
+	if err := roundrobin.Start(ctx, roundrobin.Simple(name, f.cfg.FetchFrequency), f.doTask, factory); err != nil {
+		return errors.Wrap(err, "event: 启动发件箱超时回收器失败(%s)", name)
+	}
 	logger.InfoWithoutCtx("[消息队列事件]超时抓取器服务名", "name", name)
+	return nil
 }
 
 // doTask 检测并重置抓取超时的事件为待处理状态

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/distlock"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/event/cfg"
 	"gitee.com/hq_project/yomi-boot/event/model"
 	"gitee.com/hq_project/yomi-boot/event/repo"
@@ -31,11 +32,14 @@ func NewFetcher(runtime cfg.Runtime, outboxRepo *repo.OutboxRepo, processor *Pro
 	}
 }
 
-// Start 启动抓取轮询
-func (f *Fetcher) Start(ctx context.Context, factory distlock.DistLockFactory) {
+// Start 启动抓取轮询；启动失败时返回错误
+func (f *Fetcher) Start(ctx context.Context, factory distlock.DistLockFactory) error {
 	name := f.cfg.RoundRobinName("MqEventPublisherFetch")
-	roundrobin.Start(ctx, roundrobin.Simple(name, f.cfg.FetchFrequency), f.doTask, factory)
+	if err := roundrobin.Start(ctx, roundrobin.Simple(name, f.cfg.FetchFrequency), f.doTask, factory); err != nil {
+		return errors.Wrap(err, "event: 启动发件箱抓取器失败(%s)", name)
+	}
 	logger.InfoWithoutCtx("[消息队列事件]抓取器服务名", "name", name)
+	return nil
 }
 
 // doTask 抓取待处理事件，标记为已抓取并提交到发送处理器
