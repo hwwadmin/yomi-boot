@@ -326,6 +326,38 @@ func TestFire_cancelsHandlerOnMaxRunDuration(t *testing.T) {
 	}
 }
 
+// TestFire_zeroMaxRunDurationIgnoresFactoryDefault 校验 MaxRunDuration=0 不受工厂级 MaxHoldDuration 影响
+func TestFire_zeroMaxRunDurationIgnoresFactoryDefault(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(client,
+		distlock.WithDefaultLockOptions(
+			distlock.WithMaxHoldDuration(150*time.Millisecond),
+			distlock.WithWatchdogInterval(50*time.Millisecond),
+		),
+	)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	canceled := make(chan struct{})
+	fire(context.Background(), Job{Name: "test-fire-zero-max"}, func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			close(canceled)
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+			return nil
+		}
+	}, factory)
+
+	select {
+	case <-canceled:
+		t.Fatal("MaxRunDuration=0 不应受工厂级 MaxHoldDuration 影响")
+	default:
+	}
+}
+
 // TestExecLockKey 校验锁 Key 前缀
 func TestExecLockKey(t *testing.T) {
 	if got := execLockKey("svc:job"); got != "cronjob:lock:svc:job" {
@@ -348,4 +380,18 @@ func TestJobNameRegistry(t *testing.T) {
 		t.Fatalf("acquire after release = %d, want 1", n)
 	}
 	releaseJobName(name)
+}
+
+// TestSkipWarnThrottle 校验抢锁失败 Warn 的节流
+func TestSkipWarnThrottle(t *testing.T) {
+	name := "test-skip-warn"
+	acquireJobName(name)
+	defer releaseJobName(name)
+
+	if !shouldWarnSkip(name) {
+		t.Fatal("first skip should warn")
+	}
+	if shouldWarnSkip(name) {
+		t.Fatal("second skip within interval should not warn")
+	}
 }

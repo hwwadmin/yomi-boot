@@ -14,8 +14,8 @@
 // # 语义
 //
 //   - Spec 为 6 段（含秒）；默认时区 time.Local，可在 Spec 前加 TZ=/CRON_TZ= 指定
-//   - 每次触发 TryLock(cronjob:lock:{Name})；未抢到则跳过
-//   - MaxRunDuration 为单次 Handler 最长执行时间；0 表示不限制，到期 cancel Handler ctx 并停止续锁
+//   - 每次触发 TryLock(cronjob:lock:{Name})；未抢到则跳过（每个进程内每分钟最多一次 Warn，其余 Debug）
+//   - MaxRunDuration 为单次 Handler 最长执行时间；0 表示不限制，始终以 Job 配置为准（覆盖工厂默认值），到期 cancel Handler ctx 并停止续锁
 //   - 至少一次：崩溃、锁过期或故障恢复后可能重跑，Handler 必须幂等
 //   - 锁丢失且 Handler 不响应 ctx 时可能出现短暂重叠执行
 //   - Handler error / panic 仅记日志，不拖死进程

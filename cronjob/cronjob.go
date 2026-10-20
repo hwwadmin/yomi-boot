@@ -22,12 +22,19 @@ import (
 const (
 	defaultExecLockTTL = 30 * time.Second // 执行锁默认过期时间（与 roundrobin 执行锁一致）
 	execLockKeyPrefix  = "cronjob:lock:"  // 执行锁 Key 前缀
+	skipWarnInterval   = time.Minute      // 抢锁失败 Warn 的最小间隔
 )
 
-// activeJobNames 进程内活跃 Job 名引用计数，用于提示重复 Name
+// jobNameState 记录进程内同名 Job 的活跃数量与跳过告警时间
+type jobNameState struct {
+	active       int       // active 是活跃调度器数量
+	lastSkipWarn time.Time // lastSkipWarn 是最近一次跳过 Warn 的时间
+}
+
+// jobNames 是进程内 Job 名状态表，用于同名提示与跳过告警节流
 var (
-	activeJobNamesMu sync.Mutex
-	activeJobNames   = make(map[string]int)
+	jobNamesMu sync.Mutex
+	jobNames   = make(map[string]*jobNameState)
 )
 
 // Start 校验后在后台按 Spec 触发；ctx 取消时停止调度并退出。
@@ -93,11 +100,12 @@ func runScheduler(ctx context.Context, job Job, h Handler, factory distlock.Dist
 	logger.Info(ctx, fmt.Sprintf("CronJob[%s] stopped.", job.Name))
 }
 
-// fire 单次触发：TryLock 互斥后执行 Handler
+// fire 单次触发：TryLock 互斥后按 MaxRunDuration 执行 Handler
 func fire(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) {
 	opts := []distlock.LockOption{
 		distlock.WithTTL(defaultExecLockTTL),
 		distlock.WithWatchdog(true),
+		// MaxRunDuration 只跟随 Job 配置，显式覆盖工厂级 MaxHoldDuration 默认值
 		distlock.WithMaxHoldDuration(job.MaxRunDuration),
 	}
 	lock := factory.GetLock(execLockKey(job.Name), opts...)
@@ -107,7 +115,11 @@ func fire(ctx context.Context, job Job, h Handler, factory distlock.DistLockFact
 		return
 	}
 	if !held {
-		logger.Debug(ctx, "cronjob.skip.lock_not_held", "name", job.Name)
+		if shouldWarnSkip(job.Name) {
+			logger.Warn(ctx, "cronjob.skip.lock_not_held", "name", job.Name)
+		} else {
+			logger.Debug(ctx, "cronjob.skip.lock_not_held", "name", job.Name)
+		}
 		return
 	}
 
@@ -167,19 +179,44 @@ func execLockKey(name string) string {
 
 // acquireJobName 记录进程内活跃 Job 名并返回同名数量
 func acquireJobName(name string) int {
-	activeJobNamesMu.Lock()
-	defer activeJobNamesMu.Unlock()
-	activeJobNames[name]++
-	return activeJobNames[name]
+	jobNamesMu.Lock()
+	defer jobNamesMu.Unlock()
+	st := jobNames[name]
+	if st == nil {
+		st = &jobNameState{}
+		jobNames[name] = st
+	}
+	st.active++
+	return st.active
 }
 
 // releaseJobName 释放进程内活跃 Job 名引用
 func releaseJobName(name string) {
-	activeJobNamesMu.Lock()
-	defer activeJobNamesMu.Unlock()
-	if activeJobNames[name] <= 1 {
-		delete(activeJobNames, name)
+	jobNamesMu.Lock()
+	defer jobNamesMu.Unlock()
+	st := jobNames[name]
+	if st == nil {
 		return
 	}
-	activeJobNames[name]--
+	st.active--
+	if st.active <= 0 {
+		delete(jobNames, name)
+	}
+}
+
+// shouldWarnSkip 判断抢锁失败是否输出 Warn；同一 Job 至少间隔 skipWarnInterval。
+// 未注册的 Job（直接调用 fire 的测试场景）不节流。
+func shouldWarnSkip(name string) bool {
+	jobNamesMu.Lock()
+	defer jobNamesMu.Unlock()
+	st := jobNames[name]
+	if st == nil {
+		return true
+	}
+	now := time.Now()
+	if !st.lastSkipWarn.IsZero() && now.Sub(st.lastSkipWarn) < skipWarnInterval {
+		return false
+	}
+	st.lastSkipWarn = now
+	return true
 }

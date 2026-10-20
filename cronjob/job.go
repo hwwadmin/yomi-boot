@@ -29,6 +29,7 @@ type Job struct {
 	Spec string
 
 	// MaxRunDuration 单次 Handler 最长执行时间；0 表示不限制。
+	// 本字段始终覆盖工厂级 MaxHoldDuration 默认值。
 	// 到期后 cancel Handler ctx 并停止续锁，Handler 须尊重 ctx 才能及时退出。
 	MaxRunDuration time.Duration
 }
