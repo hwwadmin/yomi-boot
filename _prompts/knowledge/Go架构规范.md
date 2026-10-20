@@ -194,6 +194,9 @@ services/{domain}/
 | `bc/rsa` | RSA PEM（PKCS#1/PKCS#8、证书链、带密码私钥）、OAEP 加解密 |
 | `bc/sha256withrsa` | SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签；对应 Java、支付宝 RSA2、微信支付 v3 |
 | `bc/rsapss` | RSASSA-PSS + SHA-256 签名验签（SaltLength=HashLen） |
+| `bc/ecdsap256` | ECDSA P-256 + SHA-256 签名验签与 PEM；ASN.1 DER（JWT ES256） |
+| `bc/ecdsap384` | ECDSA P-384 + SHA-384 签名验签与 PEM；ASN.1 DER（JWT ES384） |
+| `bc/ed25519` | Ed25519 签名验签与 PEM；64 字节原始签名（JWT EdDSA） |
 | `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
 | `kafka` | 生产者 `PublisherService`、消费者 `ConsumerService`、`kafkatest` 测试封装 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |

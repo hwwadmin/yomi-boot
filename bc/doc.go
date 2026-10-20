@@ -11,6 +11,9 @@
 //   - gitee.com/hq_project/yomi-boot/bc/rsa：RSA PEM（含证书、带密码私钥）、OAEP 加解密
 //   - gitee.com/hq_project/yomi-boot/bc/sha256withrsa：SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签
 //   - gitee.com/hq_project/yomi-boot/bc/rsapss：RSASSA-PSS + SHA-256 签名验签
+//   - gitee.com/hq_project/yomi-boot/bc/ecdsap256：ECDSA P-256 + SHA-256 签名验签与 PEM（JWT ES256）
+//   - gitee.com/hq_project/yomi-boot/bc/ecdsap384：ECDSA P-384 + SHA-384 签名验签与 PEM（JWT ES384）
+//   - gitee.com/hq_project/yomi-boot/bc/ed25519：Ed25519 签名验签与 PEM（JWT EdDSA）
 //   - gitee.com/hq_project/yomi-boot/bc/sm2：SM2 PEM、加解密、签名验签（国密）
 //
 // 红线：
