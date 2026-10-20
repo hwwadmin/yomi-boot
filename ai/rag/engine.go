@@ -92,7 +92,7 @@ func (e *Engine) embed(ctx context.Context, texts []string) ([][]float64, int, e
 			return nil, 0, err
 		}
 		if resp == nil || len(resp.Vectors) != end-start {
-			return nil, 0, errors.Wrap(ErrBadResponse, "ai/rag 向量化返回条数与输入不一致")
+			return nil, 0, wrapSentinel(ErrBadResponse, errors.New("ai/rag 向量化返回条数与输入不一致"))
 		}
 		for i := range resp.Vectors {
 			if err := e.checkDimension(len(resp.Vectors[i])); err != nil {

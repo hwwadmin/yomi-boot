@@ -1,6 +1,7 @@
-// Package vectordb 错误链辅助。
+// 错误链辅助。
 //
 // @author zwei
+
 package vectordb
 
 import (

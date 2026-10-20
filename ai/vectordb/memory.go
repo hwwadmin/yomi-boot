@@ -1,6 +1,7 @@
-// Package vectordb 进程内内存实现。
+// 进程内内存实现。
 //
 // @author zwei
+
 package vectordb
 
 import (

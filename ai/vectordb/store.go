@@ -1,6 +1,7 @@
-// Package vectordb 定义向量库门面与公共类型。
+// 定义向量库门面与公共类型。
 //
 // @author zwei
+
 package vectordb
 
 import "context"

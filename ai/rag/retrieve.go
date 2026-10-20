@@ -62,10 +62,24 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 		}
 		return nil, err
 	}
+	// 读取命中文档当前块总数，过滤索引更新窗口内尚未删除的旧块
+	counts, err := e.currentChunkCounts(ctx, collection, hits)
+	if err != nil {
+		if errors.Is(err, vectordb.ErrNotFound) {
+			return []Chunk{}, nil
+		}
+		return nil, err
+	}
 	out := make([]Chunk, 0, len(hits))
 	for _, hit := range hits {
 		if req.MinScore != 0 && hit.Score < req.MinScore {
 			continue
+		}
+		if count, ok := counts[strings.TrimSpace(hit.Metadata[MetadataKeyDocumentID])]; ok {
+			index, err := strconv.Atoi(strings.TrimSpace(hit.Metadata[MetadataKeyChunkIndex]))
+			if err == nil && index >= count {
+				continue
+			}
 		}
 		content := strings.TrimSpace(hit.Metadata[MetadataKeyContent])
 		if content == "" {
@@ -74,6 +88,44 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 		out = append(out, hitToChunk(hit, content))
 	}
 	return out, nil
+}
+
+// currentChunkCounts 读取命中文档当前版本的块总数；用于过滤更新窗口内的旧块
+func (e *Engine) currentChunkCounts(ctx context.Context, collection string, hits []vectordb.Hit) (map[string]int, error) {
+	ids := make([]string, 0, len(hits))
+	seen := make(map[string]struct{}, len(hits))
+	for _, hit := range hits {
+		docID := strings.TrimSpace(hit.Metadata[MetadataKeyDocumentID])
+		// 非本包写入的超长文档 ID 不参与块数查询，避免 Get 因主键超长整体失败
+		if docID == "" || len(docID) > maxDocIDLen {
+			continue
+		}
+		if _, ok := seen[docID]; ok {
+			continue
+		}
+		seen[docID] = struct{}{}
+		ids = append(ids, chunkID(docID, 0))
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	records, err := e.store.Get(ctx, collection, ids)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(records))
+	for _, record := range records {
+		docID := strings.TrimSpace(record.Metadata[MetadataKeyDocumentID])
+		if docID == "" {
+			continue
+		}
+		total, err := strconv.Atoi(strings.TrimSpace(record.Metadata[MetadataKeyChunkCount]))
+		if err != nil || total <= 0 {
+			continue
+		}
+		counts[docID] = total
+	}
+	return counts, nil
 }
 
 // hitToChunk 将向量库命中转为块，并剥离保留元数据键

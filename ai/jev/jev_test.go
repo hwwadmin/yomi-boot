@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +170,48 @@ func TestDecideRejectsMissingOrMismatchedAnswers(t *testing.T) {
 			})
 			if !errors.Is(err, ErrBadResponse) {
 				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+}
+
+// TestDecideErrorBodyTruncated 验证非 2xx 正文截断与空正文回退状态码
+func TestDecideErrorBodyTruncated(t *testing.T) {
+	t.Parallel()
+	longBody := strings.Repeat("错", maxErrorBodyRunes+32)
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"truncated", longBody, "已截断"},
+		{"empty", "", "HTTP 502"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			cli, err := New(Config{Protocol: ProtocolSystemOne, APIURL: srv.URL, Model: "jev-mock"})
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			_, err = cli.Decide(context.Background(), DecideRequest{
+				State: StateString("test"),
+				Questions: map[string]Question{
+					"q": {Type: QuestionNoul, Instructions: "?"},
+				},
+			})
+			if !errors.Is(err, ErrBadResponse) {
+				t.Fatalf("err=%v", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("msg=%q", err.Error())
+			}
+			if tc.body != "" && strings.Contains(err.Error(), strings.Repeat("错", maxErrorBodyRunes+1)) {
+				t.Fatalf("正文未截断: %d", len([]rune(err.Error())))
 			}
 		})
 	}

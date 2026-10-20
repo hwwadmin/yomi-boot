@@ -1,6 +1,7 @@
-// Package vectordb Store 契约测试。
+// Store 契约测试。
 //
 // @author zwei
+
 package vectordb
 
 import (

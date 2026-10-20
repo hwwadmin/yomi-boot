@@ -1,6 +1,7 @@
-// Package vectordb 构造配置；本包不读 YAML。
+// 构造配置；本包不读 YAML。
 //
 // @author zwei
+
 package vectordb
 
 import (

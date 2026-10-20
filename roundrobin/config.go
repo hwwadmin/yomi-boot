@@ -26,10 +26,7 @@ type Task func(ctx context.Context) error
 
 // Simple 创建带默认延迟与唤醒间隔的轮询配置
 func Simple(name string, frequency time.Duration) Config {
-	wakeUp := frequency / 2
-	if wakeUp <= 100*time.Millisecond {
-		wakeUp = 100 * time.Millisecond
-	}
+	wakeUp := max(frequency/2, 100*time.Millisecond)
 	return Config{
 		Name:           name,
 		Frequency:      frequency,

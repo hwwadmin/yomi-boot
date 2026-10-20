@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -16,8 +17,12 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// maxResponseBytes 是单次响应体读取上限
-const maxResponseBytes = 8 << 20
+const (
+	// maxResponseBytes 是单次响应体读取上限
+	maxResponseBytes = 8 << 20
+	// maxErrorBodyRunes 是非 2xx 错误正文进入错误链的最大字符数
+	maxErrorBodyRunes = 512
+)
 
 // systemOneClient System One 协议的 Client 实现
 type systemOneClient struct {
@@ -76,7 +81,7 @@ func (c *systemOneClient) Decide(ctx context.Context, req DecideRequest) (*Decid
 		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/jev: 响应体超过 8MB"))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, mapStatusError(resp.StatusCode, errors.New(strings.TrimSpace(string(raw))))
+		return nil, mapStatusError(resp.StatusCode, errors.New(formatHTTPErrorBody(resp.StatusCode, raw)))
 	}
 	return parseSystemOneResponse(raw, req.Questions)
 }
@@ -189,6 +194,19 @@ func parseSystemOneResponse(raw []byte, questions map[string]Question) (*DecideR
 		}
 	}
 	return out, nil
+}
+
+// formatHTTPErrorBody 生成非 2xx 错误正文；空正文回退状态码，超长按 rune 截断
+func formatHTTPErrorBody(status int, raw []byte) string {
+	body := strings.TrimSpace(string(raw))
+	if body == "" {
+		return fmt.Sprintf("HTTP %d", status)
+	}
+	runes := []rune(body)
+	if len(runes) > maxErrorBodyRunes {
+		return string(runes[:maxErrorBodyRunes]) + fmt.Sprintf("（已截断，原文 %d 字节）", len(raw))
+	}
+	return body
 }
 
 // mapHTTPDoErr 映射传输层错误；取消/超时保持上下文错误

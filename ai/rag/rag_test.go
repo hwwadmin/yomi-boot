@@ -306,6 +306,52 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	}
 }
 
+// TestRetrieveFiltersStaleChunks 验证索引收缩窗口内不会返回当前块总数之外的旧块
+func TestRetrieveFiltersStaleChunks(t *testing.T) {
+	t.Parallel()
+	e, _, store := newTestEngine(t)
+	ctx := context.Background()
+	doc := Document{ID: "doc", Content: "苹果"}
+	old := make([]vectordb.Record, 8)
+	for i := range old {
+		old[i] = vectordb.Record{
+			ID:       chunkID("doc", i),
+			Vector:   []float32{1, 0, 0},
+			Metadata: chunkMetadata(doc, i, len(old), "旧内容"),
+		}
+	}
+	if err := store.CreateCollection(ctx, testCollection); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Upsert(ctx, testCollection, old); err != nil {
+		t.Fatal(err)
+	}
+	// 模拟 Upsert 已完成、旧块尚未删除的窗口：0..2 是新块，3..7 仍是旧块
+	fresh := make([]vectordb.Record, 3)
+	for i := range fresh {
+		fresh[i] = vectordb.Record{
+			ID:       chunkID("doc", i),
+			Vector:   []float32{1, 0, 0},
+			Metadata: chunkMetadata(doc, i, len(fresh), "新内容"),
+		}
+	}
+	if err := store.Upsert(ctx, testCollection, fresh); err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != len(fresh) {
+		t.Fatalf("chunks=%d %+v", len(chunks), chunks)
+	}
+	for _, chunk := range chunks {
+		if chunk.Index >= len(fresh) || chunk.Content != "新内容" {
+			t.Fatalf("命中旧块: %+v", chunk)
+		}
+	}
+}
+
 // TestDeleteDocument 覆盖按文档删除与幂等语义
 func TestDeleteDocument(t *testing.T) {
 	t.Parallel()
@@ -464,6 +510,9 @@ func TestIndexInvalidRequests(t *testing.T) {
 		}}}},
 		{"reserved metadata", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{MetadataKeyContent: "x"},
+		}}}},
+		{"reserved chunk count", IndexRequest{Documents: []Document{{
+			ID: "doc", Content: "x", Metadata: map[string]string{MetadataKeyChunkCount: "1"},
 		}}}},
 		{"empty metadata key", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{" ": "x"},

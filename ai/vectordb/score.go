@@ -1,6 +1,7 @@
-// Package vectordb 相似度计算与门面 Score 映射。
+// 相似度计算与门面 Score 映射。
 //
 // @author zwei
+
 package vectordb
 
 import "math"

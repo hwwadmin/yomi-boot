@@ -1,6 +1,7 @@
-// Package vectordb Fail Fast 构造。
+// Fail Fast 构造。
 //
 // @author zwei
+
 package vectordb
 
 import "gitee.com/hq_project/yomi-boot/logger"

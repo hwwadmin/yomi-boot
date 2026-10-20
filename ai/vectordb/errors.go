@@ -1,6 +1,7 @@
-// Package vectordb 定义向量库哨兵错误。
+// 定义向量库哨兵错误。
 //
 // @author zwei
+
 package vectordb
 
 import "gitee.com/hq_project/yomi-boot/errors"

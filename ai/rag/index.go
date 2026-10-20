@@ -110,7 +110,7 @@ func (e *Engine) indexGroup(ctx context.Context, collection string, group docGro
 			records = append(records, vectordb.Record{
 				ID:       chunkID(p.doc.ID, i),
 				Vector:   toFloat32(vectors[offset+i]),
-				Metadata: chunkMetadata(p.doc, i, content),
+				Metadata: chunkMetadata(p.doc, i, len(p.chunks), content),
 			})
 		}
 		offset += len(p.chunks)
@@ -121,7 +121,7 @@ func (e *Engine) indexGroup(ctx context.Context, collection string, group docGro
 	if err := e.ensureCollection(ctx, collection); err != nil {
 		return 0, err
 	}
-	// 先写新块：Upsert 失败时旧块保持完整，不会出现“旧块已删、新块没写进去”
+	// 先写新块：Upsert 失败时不会删除旧块，可能出现新旧块并存，重试可自愈
 	if err := e.store.Upsert(ctx, collection, records); err != nil {
 		return 0, err
 	}
@@ -153,14 +153,15 @@ func (e *Engine) DeleteDocument(ctx context.Context, collection, docID string) e
 	return err
 }
 
-// chunkMetadata 合并文档元数据与保留键
-func chunkMetadata(doc Document, index int, content string) map[string]string {
-	md := make(map[string]string, len(doc.Metadata)+4)
+// chunkMetadata 合并文档元数据与保留键；total 是文档当前版本的块总数
+func chunkMetadata(doc Document, index, total int, content string) map[string]string {
+	md := make(map[string]string, len(doc.Metadata)+5)
 	for k, v := range doc.Metadata {
 		md[k] = v
 	}
 	md[MetadataKeyDocumentID] = doc.ID
 	md[MetadataKeyChunkIndex] = strconv.Itoa(index)
+	md[MetadataKeyChunkCount] = strconv.Itoa(total)
 	md[MetadataKeySource] = doc.Source
 	md[MetadataKeyContent] = content
 	return md

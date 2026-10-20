@@ -14,6 +14,8 @@ const (
 	MetadataKeySource = "rag_source"
 	// MetadataKeyContent 块文本
 	MetadataKeyContent = "rag_content"
+	// MetadataKeyChunkCount 文档当前版本的块总数；用于检索侧过滤更新窗口内的旧块
+	MetadataKeyChunkCount = "rag_chunk_count"
 )
 
 // Document 待入库的原始文档

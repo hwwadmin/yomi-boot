@@ -1,6 +1,7 @@
-// Package vectordb 对 Milvus 服务端 gRPC 限流做退避重试。
+// 对 Milvus 服务端 gRPC 限流做退避重试。
 //
 // @author zwei
+
 package vectordb
 
 import (

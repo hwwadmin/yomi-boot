@@ -1,6 +1,7 @@
-// Package vectordb New 按 Provider 分发实现。
+// New 按 Provider 分发实现。
 //
 // @author zwei
+
 package vectordb
 
 import (
@@ -19,6 +20,8 @@ func New(cfg Config) (Store, error) {
 	copied.Milvus.Address = strings.TrimSpace(cfg.Milvus.Address)
 	copied.Milvus.DBName = strings.TrimSpace(cfg.Milvus.DBName)
 	copied.Milvus.Username = strings.TrimSpace(cfg.Milvus.Username)
+	// APIKey 是令牌，修剪首尾空白；Password 有意不修剪，口令可合法包含首尾空格
+	copied.Milvus.APIKey = strings.TrimSpace(cfg.Milvus.APIKey)
 	copied.Milvus.IndexType = indexTypeOrDefault(cfg.Milvus.IndexType)
 	copied.Milvus.IndexNlist = indexNlistOrDefault(cfg.Milvus.IndexNlist)
 	copied.Milvus.IndexM = indexMOrDefault(cfg.Milvus.IndexM)

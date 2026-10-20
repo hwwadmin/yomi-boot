@@ -1,6 +1,7 @@
-// Package vectordb Milvus 实现。
+// Milvus 实现。
 //
 // @author zwei
+
 package vectordb
 
 import (
@@ -17,6 +18,7 @@ import (
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 
 	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/logger"
 )
 
 const (
@@ -552,11 +554,19 @@ func (s *milvusStore) newVectorIndex() index.Index {
 	}
 }
 
-// dropQuiet 补偿删除；忽略错误以免掩盖主因
+// dropQuiet 补偿删除；使用独立超时避免父上下文过期导致补偿失效，失败仅告警
 func (s *milvusStore) dropQuiet(ctx context.Context, name string) {
-	_ = retryOnRateLimit(ctx, func() error {
-		return s.cli.DropCollection(ctx, milvusclient.NewDropCollectionOption(name))
-	})
+	base := ctx
+	if base == nil {
+		base = context.Background()
+	}
+	dropCtx, cancel := context.WithTimeout(context.WithoutCancel(base), timeoutOrDefault(s.timeout))
+	defer cancel()
+	if err := retryOnRateLimit(dropCtx, func() error {
+		return s.cli.DropCollection(dropCtx, milvusclient.NewDropCollectionOption(name))
+	}); err != nil {
+		logger.Warn(base, "vectordb 补偿删除集合失败", "collection", name, "error", err)
+	}
 }
 
 // load 加载集合并等待完成

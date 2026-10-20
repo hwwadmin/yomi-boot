@@ -1,6 +1,7 @@
-// Package vectordb 公共入参校验。
+// 公共入参校验。
 //
 // @author zwei
+
 package vectordb
 
 import (
