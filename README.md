@@ -17,7 +17,7 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | `redis/`、`distlock/`、`ratelimit/`、`roundrobin/`、`cronjob/`、`worker/`、`snowflake/` | 缓存、锁、限流与调度 |
 | `consul/`、`rpc/`、`kafka/` | 服务发现、RPC 与消息 |
 | `token/`、`bc/` | 安全、令牌与密码学 |
-| `oss/`、`ai/`、`vectordb/`、`pprof/` | 对象存储、AI 组件（llm / embedding / jev / rag）、向量库与可观测 |
+| `oss/`、`ai/`、`pprof/` | 对象存储、AI 组件（llm / embedding / jev / rag / vectordb）与可观测 |
 | `errors/`、`shared/`、`utils/`、`testclient/` | 错误、共享模型与工具 |
 | `_prompts/` | 指令（commands） / Skill / 知识库与规范文档 |
 | `LICENSE` | Apache License 2.0 全文 |
@@ -37,7 +37,7 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | DTM | **≥ 1.18**（与 `dtm-labs/client` 配套） | 可选；Saga 分布式事务 |
 | PostgreSQL | **16.x** | 可选；非默认库，已支持驱动 |
 | MinIO | **当前稳定版**（RELEASE 系列） | 可选；对象存储（亦可对接 AWS S3） |
-| Milvus | **2.6.x**（与 `milvus/client/v2` v2.6.5 配套） | 可选；向量库（经 `vectordb`，亦可 memory） |
+| Milvus | **2.6.x**（与 `milvus/client/v2` v2.6.5 配套） | 可选；向量库（经 `ai/vectordb`，亦可 memory） |
 
 ## 许可证
 

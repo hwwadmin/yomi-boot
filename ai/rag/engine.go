@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 
 	"gitee.com/hq_project/yomi-boot/ai/embedding"
+	"gitee.com/hq_project/yomi-boot/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/vectordb"
 )
 
 // embedBatchSize 是单次向量化的文本条数上限

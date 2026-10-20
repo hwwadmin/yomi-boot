@@ -1,4 +1,4 @@
-// Package rag 提供基于 ai/embedding 与 vectordb 的检索增强数据能力。
+// Package rag 提供基于 ai/embedding 与 ai/vectordb 的检索增强数据能力。
 //
 // 覆盖切块、向量化、写入、检索与删除，不包含大模型问答。
 // Config 只保留 Embedder 与 Store；集合名与其余运行期参数都按调用传入，

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/vectordb"
 )
 
 // Retrieve 在指定集合中检索最相关的块；集合不存在或为空时返回空切片与 nil

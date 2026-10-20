@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/vectordb"
 )
 
 // preparedDocument 切分后的文档

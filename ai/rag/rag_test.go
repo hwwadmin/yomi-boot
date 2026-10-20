@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"gitee.com/hq_project/yomi-boot/ai/embedding"
+	"gitee.com/hq_project/yomi-boot/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/errors"
-	"gitee.com/hq_project/yomi-boot/vectordb"
 )
 
 const (
