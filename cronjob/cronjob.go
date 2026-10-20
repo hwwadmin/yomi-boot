@@ -21,9 +21,6 @@ const (
 	execLockKeyPrefix  = "cronjob:lock:"  // 执行锁 Key 前缀
 )
 
-// testExecLockOpts 非空时覆盖 fire 的执行锁选项，仅供测试注入短 TTL / MaxHoldDuration
-var testExecLockOpts []distlock.LockOption
-
 // Start 校验后在后台按 Spec 触发；ctx 取消时停止调度并退出。
 // 非法参数或 Spec 无法解析时打 Error 日志并直接返回。
 func Start(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) {
@@ -39,7 +36,7 @@ func Start(ctx context.Context, job Job, h Handler, factory distlock.DistLockFac
 func runScheduler(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) {
 	c := cron.New(cron.WithSeconds(), cron.WithLocation(time.Local))
 	_, err := c.AddFunc(job.Spec, func() {
-		fire(ctx, job.Name, h, factory)
+		fire(ctx, job, h, factory)
 	})
 	if err != nil {
 		// validate 已解析 Spec；此处失败属防御性日志
@@ -57,22 +54,20 @@ func runScheduler(ctx context.Context, job Job, h Handler, factory distlock.Dist
 }
 
 // fire 单次触发：TryLock 互斥后执行 Handler
-func fire(ctx context.Context, name string, h Handler, factory distlock.DistLockFactory) {
+func fire(ctx context.Context, job Job, h Handler, factory distlock.DistLockFactory) {
 	opts := []distlock.LockOption{
 		distlock.WithTTL(defaultExecLockTTL),
 		distlock.WithWatchdog(true),
+		distlock.WithMaxHoldDuration(job.MaxRunDuration),
 	}
-	if testExecLockOpts != nil {
-		opts = testExecLockOpts
-	}
-	lock := factory.GetLock(execLockKey(name), opts...)
+	lock := factory.GetLock(execLockKey(job.Name), opts...)
 	held, err := lock.TryLock(ctx)
 	if err != nil {
-		logger.Error(ctx, "cronjob.trylock.failed", "name", name, "error", err)
+		logger.Error(ctx, "cronjob.trylock.failed", "name", job.Name, "error", err)
 		return
 	}
 	if !held {
-		logger.Debug(ctx, "cronjob.skip.lock_not_held", "name", name)
+		logger.Debug(ctx, "cronjob.skip.lock_not_held", "name", job.Name)
 		return
 	}
 
@@ -81,14 +76,22 @@ func fire(ctx context.Context, name string, h Handler, factory distlock.DistLock
 		defer cancel()
 		unlockErr := lock.Unlock(unlockCtx)
 		if unlockErr != nil && !errors.Is(unlockErr, distlock.ErrLockNotHeld) {
-			logger.Error(ctx, "cronjob.unlock.failed", "name", name, "error", unlockErr)
+			logger.Error(ctx, "cronjob.unlock.failed", "name", job.Name, "error", unlockErr)
 		}
 	}()
 
-	// 锁丢失时 cancel runCtx，让 Handler 可感知并尽快退出，避免多实例并发跑同一 Job
+	// 锁丢失或达到 MaxRunDuration 时 cancel runCtx，让 Handler 感知并尽快退出
 	runCtx, stop := distlock.BindHeldContext(ctx, lock)
 	defer stop()
-	runHandlerSafely(runCtx, name, h)
+	if job.MaxRunDuration > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(runCtx, job.MaxRunDuration)
+		defer cancel()
+	}
+	runHandlerSafely(runCtx, job.Name, h)
+	if job.MaxRunDuration > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		logger.Warn(ctx, "cronjob.handler.timeout", "name", job.Name, "max_run_duration", job.MaxRunDuration.String())
+	}
 }
 
 // runHandlerSafely 执行 Handler 并 recover panic，避免未捕获 panic 导致进程退出

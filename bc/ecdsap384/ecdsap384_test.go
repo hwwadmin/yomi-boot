@@ -52,11 +52,32 @@ func TestSignVerify(t *testing.T) {
 	}
 }
 
-// TestInvalidKey 验证零值私钥返回错误而非 panic
+// TestInvalidKey 验证零值、缺公钥坐标的密钥返回错误而非 panic
 func TestInvalidKey(t *testing.T) {
 	zero := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: elliptic.P384()}}
 	if _, err := Sign(zero, []byte("m")); err == nil {
 		t.Fatal("零值私钥应失败")
+	}
+
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	noPub := *priv
+	noPub.X = nil
+	noPub.Y = nil
+	if _, err := Sign(&noPub, []byte("m")); err == nil {
+		t.Fatal("缺公钥坐标私钥签名应失败")
+	}
+	if _, err := MarshalPrivateKeyPEM(&noPub); err == nil {
+		t.Fatal("缺公钥坐标私钥导出应失败")
+	}
+	badPub := &ecdsa.PublicKey{Curve: priv.Curve}
+	if _, err := MarshalPublicKeyPEM(badPub); err == nil {
+		t.Fatal("缺坐标公钥导出应失败")
+	}
+	if err := Verify(badPub, []byte("m"), []byte("sig")); err == nil {
+		t.Fatal("缺坐标公钥验签应失败")
 	}
 }
 

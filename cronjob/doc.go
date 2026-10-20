@@ -15,6 +15,7 @@
 //
 //   - Spec 为 6 段（含秒），时区 time.Local
 //   - 每次触发 TryLock(cronjob:lock:{Name})；未抢到则跳过
+//   - MaxRunDuration 为单次 Handler 最长执行时间；0 表示不限制，到期 cancel Handler ctx 并停止续锁
 //   - Handler error / panic 仅记日志，不拖死进程
 //   - 生命周期仅认 ctx；挂 plugin / Cleanup 由调用方拼装
 //

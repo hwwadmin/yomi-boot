@@ -29,6 +29,11 @@ func TestJob_validate(t *testing.T) {
 		t.Fatalf("valid job: %v", err)
 	}
 
+	validTZ := Job{Name: "svc:job", Spec: "CRON_TZ=UTC 0 0 2 * * *"}
+	if err := validTZ.validate(h, factory); err != nil {
+		t.Fatalf("valid tz job: %v", err)
+	}
+
 	cases := []struct {
 		name    string
 		job     Job
@@ -40,6 +45,11 @@ func TestJob_validate(t *testing.T) {
 		{name: "nil handler", job: Job{Name: "x", Spec: "0 0 2 * * *"}, h: nil, factory: factory},
 		{name: "nil factory", job: Job{Name: "x", Spec: "0 0 2 * * *"}, h: h, factory: nil},
 		{name: "bad spec", job: Job{Name: "x", Spec: "not-a-cron"}, h: h, factory: factory},
+		// robfig 解析器对 TZ 前缀畸形输入会 panic，validate 必须转为 error
+		{name: "tz prefix without expression", job: Job{Name: "x", Spec: "TZ=Asia/Shanghai"}, h: h, factory: factory},
+		{name: "cron tz prefix without expression", job: Job{Name: "x", Spec: "CRON_TZ=UTC"}, h: h, factory: factory},
+		{name: "empty tz prefix", job: Job{Name: "x", Spec: "TZ="}, h: h, factory: factory},
+		{name: "negative max run duration", job: Job{Name: "x", Spec: "0 0 2 * * *", MaxRunDuration: -time.Second}, h: h, factory: factory},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,6 +71,27 @@ func TestStart_invalid(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if runs.Load() != 0 {
 		t.Fatal("invalid start should not run handler")
+	}
+}
+
+// TestStart_malformedTZSpecDoesNotPanic 校验畸形 TZ 前缀 Spec 不会让 Start panic
+func TestStart_malformedTZSpecDoesNotPanic(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	var runs atomic.Int32
+	Start(context.Background(), Job{Name: "test-tz", Spec: "TZ=Asia/Shanghai"}, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	}, factory)
+
+	time.Sleep(100 * time.Millisecond)
+	if runs.Load() != 0 {
+		t.Fatal("malformed tz spec should not run handler")
 	}
 }
 
@@ -149,7 +180,7 @@ func TestFire_skipWhenLockHeld(t *testing.T) {
 	defer func() { _ = blocker.Unlock(context.Background()) }()
 
 	var runs atomic.Int32
-	fire(context.Background(), name, func(context.Context) error {
+	fire(context.Background(), Job{Name: name}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
@@ -168,7 +199,7 @@ func TestFire_runsWhenLockFree(t *testing.T) {
 	}
 
 	var runs atomic.Int32
-	fire(context.Background(), "test-fire-ok", func(context.Context) error {
+	fire(context.Background(), Job{Name: "test-fire-ok"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
@@ -186,12 +217,12 @@ func TestFire_handlerErrorDoesNotPanic(t *testing.T) {
 		t.Fatalf("NewFactory: %v", err)
 	}
 
-	fire(context.Background(), "test-fire-err", func(context.Context) error {
+	fire(context.Background(), Job{Name: "test-fire-err"}, func(context.Context) error {
 		return errors.New("biz fail")
 	}, factory)
 
 	var runs atomic.Int32
-	fire(context.Background(), "test-fire-err", func(context.Context) error {
+	fire(context.Background(), Job{Name: "test-fire-err"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
@@ -209,12 +240,12 @@ func TestFire_handlerPanicDoesNotCrash(t *testing.T) {
 		t.Fatalf("NewFactory: %v", err)
 	}
 
-	fire(context.Background(), "test-fire-panic", func(context.Context) error {
+	fire(context.Background(), Job{Name: "test-fire-panic"}, func(context.Context) error {
 		panic("boom")
 	}, factory)
 
 	var runs atomic.Int32
-	fire(context.Background(), "test-fire-panic", func(context.Context) error {
+	fire(context.Background(), Job{Name: "test-fire-panic"}, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	}, factory)
@@ -223,8 +254,8 @@ func TestFire_handlerPanicDoesNotCrash(t *testing.T) {
 	}
 }
 
-// TestFire_cancelsHandlerOnLockLost 校验 MaxHoldDuration 到期后 Handler 的 ctx 被 cancel
-func TestFire_cancelsHandlerOnLockLost(t *testing.T) {
+// TestFire_cancelsHandlerOnMaxRunDuration 校验 MaxRunDuration 到期后 Handler 的 ctx 被 cancel
+func TestFire_cancelsHandlerOnMaxRunDuration(t *testing.T) {
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
 	factory, err := distlock.NewFactory(client)
@@ -232,22 +263,17 @@ func TestFire_cancelsHandlerOnLockLost(t *testing.T) {
 		t.Fatalf("NewFactory: %v", err)
 	}
 
-	testExecLockOpts = []distlock.LockOption{
-		distlock.WithTTL(time.Second),
-		distlock.WithWatchdog(true),
-		distlock.WithWatchdogInterval(50 * time.Millisecond),
-		distlock.WithMaxHoldDuration(150 * time.Millisecond),
-	}
-	defer func() { testExecLockOpts = nil }()
-
 	canceled := make(chan struct{})
-	fire(context.Background(), "test-fire-lock-lost", func(ctx context.Context) error {
+	fire(context.Background(), Job{
+		Name:           "test-fire-max-run",
+		MaxRunDuration: 150 * time.Millisecond,
+	}, func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			close(canceled)
 			return ctx.Err()
 		case <-time.After(3 * time.Second):
-			t.Error("handler ctx 未在锁丢失后 cancel")
+			t.Error("handler ctx 未在 MaxRunDuration 到期后 cancel")
 			return nil
 		}
 	}, factory)
@@ -255,7 +281,7 @@ func TestFire_cancelsHandlerOnLockLost(t *testing.T) {
 	select {
 	case <-canceled:
 	case <-time.After(2 * time.Second):
-		t.Fatal("MaxHoldDuration 到期后 Handler 未感知锁丢失")
+		t.Fatal("MaxRunDuration 到期后 Handler 未感知取消")
 	}
 }
 

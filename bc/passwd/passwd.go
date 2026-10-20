@@ -1,6 +1,7 @@
 // Package passwd 提供密码单向哈希与校验能力（bcrypt）
 //
 // bcrypt 只使用明文的前 72 字节；Hash 与 Verify 对超长密码统一返回 ErrPasswordTooLong。
+// 成本必须位于 bcrypt.MinCost..bcrypt.MaxCost，否则返回 error。
 // 属于 boot/bc 密码学基础设施的一种能力；不输出业务 BizCode，强度规则由领域层自行校验。
 //
 // @author zwei
@@ -29,10 +30,13 @@ func Hash(plain string) (string, error) {
 	return HashWithCost(plain, DefaultCost)
 }
 
-// HashWithCost 使用指定成本对明文密码加盐哈希
+// HashWithCost 使用指定成本对明文密码加盐哈希；cost 须在 bcrypt.MinCost..bcrypt.MaxCost
 func HashWithCost(plain string, cost int) (string, error) {
 	if len(plain) > MaxPasswordBytes {
 		return "", errors.Sentinel(ErrPasswordTooLong)
+	}
+	if err := validCost(cost); err != nil {
+		return "", err
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(plain), cost)
 	if err != nil {
@@ -70,12 +74,20 @@ func Cost(hash string) (int, error) {
 
 // NeedsRehash 判断哈希成本是否低于目标成本；哈希非法或目标成本越界时返回 error
 func NeedsRehash(hash string, cost int) (bool, error) {
-	if cost < bcrypt.MinCost || cost > bcrypt.MaxCost {
-		return false, errors.Newf("passwd: cost 必须在 %d..%d", bcrypt.MinCost, bcrypt.MaxCost)
+	if err := validCost(cost); err != nil {
+		return false, err
 	}
 	current, err := Cost(hash)
 	if err != nil {
 		return false, err
 	}
 	return current < cost, nil
+}
+
+// validCost 校验 bcrypt 成本范围
+func validCost(cost int) error {
+	if cost < bcrypt.MinCost || cost > bcrypt.MaxCost {
+		return errors.Newf("passwd: cost 必须在 %d..%d", bcrypt.MinCost, bcrypt.MaxCost)
+	}
+	return nil
 }

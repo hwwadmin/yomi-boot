@@ -21,7 +21,7 @@ func TestHashAndVerify(t *testing.T) {
 	}
 }
 
-// TestHashWithCost 验证指定 cost 的密码哈希与校验
+// TestHashWithCost 验证指定 cost 的密码哈希与校验及越界成本拒绝
 func TestHashWithCost(t *testing.T) {
 	hash, err := HashWithCost("abc", 4) // MinCost 便于单测加速
 	if err != nil {
@@ -29,6 +29,12 @@ func TestHashWithCost(t *testing.T) {
 	}
 	if err := Verify(hash, "abc"); err != nil {
 		t.Fatalf("Verify: %v", err)
+	}
+	if _, err := HashWithCost("abc", 3); err == nil {
+		t.Fatal("cost 低于 MinCost 应失败")
+	}
+	if _, err := HashWithCost("abc", 32); err == nil {
+		t.Fatal("cost 高于 MaxCost 应失败")
 	}
 }
 

@@ -25,6 +25,37 @@ func GenerateKey() (*ecdsa.PrivateKey, error) {
 	return key, nil
 }
 
+// validPrivateKey 校验 P-384 私钥的曲线、标量与公钥坐标
+func validPrivateKey(key *ecdsa.PrivateKey) error {
+	if key == nil {
+		return errors.New("ecdsap384: private key 为 nil")
+	}
+	if !isP384(key.Curve) {
+		return errors.New("ecdsap384: private key 不是 P-384 曲线")
+	}
+	if key.D == nil || key.D.Sign() <= 0 || key.D.Cmp(key.Curve.Params().N) >= 0 {
+		return errors.New("ecdsap384: private key 无效")
+	}
+	if key.X == nil || key.Y == nil || !key.IsOnCurve(key.X, key.Y) {
+		return errors.New("ecdsap384: private key 公钥坐标无效")
+	}
+	return nil
+}
+
+// validPublicKey 校验 P-384 公钥的曲线与坐标
+func validPublicKey(key *ecdsa.PublicKey) error {
+	if key == nil {
+		return errors.New("ecdsap384: public key 为 nil")
+	}
+	if !isP384(key.Curve) {
+		return errors.New("ecdsap384: public key 不是 P-384 曲线")
+	}
+	if key.X == nil || key.Y == nil || !key.IsOnCurve(key.X, key.Y) {
+		return errors.New("ecdsap384: public key 无效")
+	}
+	return nil
+}
+
 // ParsePrivateKeyPEM 解析 PKCS#8 或 SEC1 私钥 PEM
 func ParsePrivateKeyPEM(pemBytes []byte) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(pemBytes)
@@ -67,8 +98,8 @@ func ParsePublicKeyPEM(pemBytes []byte) (*ecdsa.PublicKey, error) {
 
 // MarshalPrivateKeyPEM 将私钥编码为 PKCS#8 PEM
 func MarshalPrivateKeyPEM(key *ecdsa.PrivateKey) ([]byte, error) {
-	if key == nil || !isP384(key.Curve) {
-		return nil, errors.New("ecdsap384: private key 不是 P-384 曲线")
+	if err := validPrivateKey(key); err != nil {
+		return nil, err
 	}
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
@@ -79,8 +110,8 @@ func MarshalPrivateKeyPEM(key *ecdsa.PrivateKey) ([]byte, error) {
 
 // MarshalPublicKeyPEM 将公钥编码为 PKIX PEM
 func MarshalPublicKeyPEM(pub *ecdsa.PublicKey) ([]byte, error) {
-	if pub == nil || !isP384(pub.Curve) {
-		return nil, errors.New("ecdsap384: public key 不是 P-384 曲线")
+	if err := validPublicKey(pub); err != nil {
+		return nil, err
 	}
 	der, err := x509.MarshalPKIXPublicKey(pub)
 	if err != nil {
