@@ -11,8 +11,8 @@ func New(cfg Config) (Storage, error) {
 		return nil, err
 	}
 	switch cfg.Provider {
-	case ProviderMinIO:
-		return newMinIOStorage(cfg)
+	case ProviderRustFS:
+		return newRustFSStorage(cfg)
 	case ProviderS3:
 		return newS3Storage(cfg)
 	case ProviderAliOSS:

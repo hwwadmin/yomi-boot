@@ -14,8 +14,8 @@ import (
 type Provider string
 
 const (
-	// ProviderMinIO 使用 MinIO
-	ProviderMinIO Provider = "minio"
+	// ProviderRustFS 使用 RustFS
+	ProviderRustFS Provider = "rustfs"
 	// ProviderS3 使用 AWS S3
 	ProviderS3 Provider = "s3"
 	// ProviderAliOSS 使用阿里云 OSS
@@ -29,17 +29,17 @@ type Config struct {
 	Provider         Provider      // Provider 是存储实现标识
 	PublicBaseURL    string        // PublicBaseURL 是固定访问 URL 的全局基址（多桶共用）；ObjectURL 依赖此项
 	MaxPresignExpiry time.Duration // MaxPresignExpiry 是预签名有效期上限；0 表示使用默认 7 天
-	MinIO            MinIOConfig   // MinIO 是 MinIO 访问配置（Provider=minio 时必填）
+	RustFS           RustFSConfig  // RustFS 是 RustFS 访问配置（Provider=rustfs 时必填）
 	S3               S3Config      // S3 是 AWS S3 访问配置（Provider=s3 时必填）
 	AliOSS           AliOSSConfig  // AliOSS 是阿里云 OSS 访问配置（Provider=alioss 时必填）
 }
 
-// MinIOConfig MinIO 访问配置
-type MinIOConfig struct {
-	Endpoint        string // Endpoint 是 MinIO 地址，如 127.0.0.1:9000（不含 scheme）
+// RustFSConfig RustFS 访问配置
+type RustFSConfig struct {
+	Endpoint        string // Endpoint 是 RustFS 地址，如 127.0.0.1:9000；可含 scheme
 	AccessKeyID     string // AccessKeyID 是访问密钥 ID
 	SecretAccessKey string // SecretAccessKey 是访问密钥
-	UseSSL          bool   // UseSSL 是否使用 HTTPS
+	UseSSL          bool   // UseSSL 是否使用 HTTPS；Endpoint 含 scheme 时忽略
 	Region          string // Region 是区域；空时使用 us-east-1
 }
 
@@ -72,8 +72,8 @@ func (c Config) maxPresignExpiryOrDefault() time.Duration {
 // validate 校验配置有效性，按 Provider 分发到对应子配置的校验逻辑
 func (c Config) validate() error {
 	switch c.Provider {
-	case ProviderMinIO:
-		return c.MinIO.validate()
+	case ProviderRustFS:
+		return c.RustFS.validate()
 	case ProviderS3:
 		return c.S3.validate()
 	case ProviderAliOSS:
@@ -83,16 +83,16 @@ func (c Config) validate() error {
 	}
 }
 
-// validate 校验 MinIO 配置必填字段（Endpoint / AccessKeyID / SecretAccessKey）
-func (c MinIOConfig) validate() error {
+// validate 校验 RustFS 配置必填字段（Endpoint / AccessKeyID / SecretAccessKey）
+func (c RustFSConfig) validate() error {
 	if strings.TrimSpace(c.Endpoint) == "" {
-		return errors.New("oss: minio.endpoint 不能为空")
+		return errors.New("oss: rustfs.endpoint 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("oss: minio.access_key_id 不能为空")
+		return errors.New("oss: rustfs.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("oss: minio.secret_access_key 不能为空")
+		return errors.New("oss: rustfs.secret_access_key 不能为空")
 	}
 	return nil
 }

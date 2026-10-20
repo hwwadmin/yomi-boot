@@ -223,7 +223,7 @@ services/{domain}/
 | `ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进 bootstrap、不读 YAML、不做限流 |
 | `ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `ai/embedding` + `ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进 bootstrap、不读 YAML、不做限流 |
 | `ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
-| `oss` | 统一对象存储抽象（MinIO / AWS S3 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
+| `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
 | `golua` | 按需 Lua 脚本引擎（gopher-lua，受信规则场景）：须显式 CacheBackend（memory/redis）；变更后 `Refresh*Force`；不进 bootstrap |
 
 **平台共享 DDL**（与封装同包维护，**无**独立 `gitee.com/hq_project/yomi-boot/sql/` 目录）：

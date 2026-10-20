@@ -1,11 +1,11 @@
-// Package oss 提供统一的文件/对象存储服务，支持 MinIO、AWS S3 与阿里云 OSS。
+// Package oss 提供统一的文件/对象存储服务，支持 RustFS、AWS S3 与阿里云 OSS。
 //
 // # 基本用法
 //
 //	store, err := oss.New(oss.Config{
-//	    Provider:      oss.ProviderMinIO,
+//	    Provider:      oss.ProviderRustFS,
 //	    PublicBaseURL: "https://cdn.example.com",
-//	    MinIO: oss.MinIOConfig{
+//	    RustFS: oss.RustFSConfig{
 //	        Endpoint:        "127.0.0.1:9000",
 //	        AccessKeyID:     "...",
 //	        SecretAccessKey: "...",
@@ -33,11 +33,12 @@
 //   - ObjectURL：固定 URL = PublicBaseURL + "/" + uri；未配置 PublicBaseURL 时报错；不校验对象是否存在
 //   - PresignGet：仅支持只读预签名；不校验对象是否存在；expiry 必须 > 0 且不超过 MaxPresignExpiry（默认 7 天）
 //   - endpoint：SDK 通信地址（可内网）；PublicBaseURL：对外固定访问基址（全局一份，多桶共用）
+//   - RustFS：固定 path-style 寻址；endpoint 可含 scheme，未含时按 use_ssl 补 http/https；region 为空使用 us-east-1
 //   - key / uri 前导 "/" 会被去掉
 //
 // # 实现隔离
 //
-// MinIO（minio.go）、AWS S3（s3.go）与阿里云 OSS（alioss.go）完全独立实现，禁止共享业务逻辑。
+// RustFS（rustfs.go）、AWS S3（s3.go）与阿里云 OSS（alioss.go）完全独立实现，禁止共享业务逻辑。
 // URI 解析与固定 URL 拼装（uri.go）为包级公共能力，与具体 SDK 无关。
 //
 // @author zwei

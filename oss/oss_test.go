@@ -19,11 +19,11 @@ func TestConfigValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("minio requires endpoint", func(t *testing.T) {
+	t.Run("rustfs requires endpoint", func(t *testing.T) {
 		t.Parallel()
 		_, err := New(Config{
-			Provider: ProviderMinIO,
-			MinIO: MinIOConfig{
+			Provider: ProviderRustFS,
+			RustFS: RustFSConfig{
 				AccessKeyID:     "ak",
 				SecretAccessKey: "sk",
 			},
@@ -111,7 +111,7 @@ func TestJoinAndParseURI(t *testing.T) {
 func TestObjectURL(t *testing.T) {
 	t.Parallel()
 
-	store := &minioStorage{publicBaseURL: "https://cdn.example.com/"}
+	store := &rustfsStorage{publicBaseURL: "https://cdn.example.com/"}
 	got, err := store.ObjectURL("avatars/u/1.png")
 	if err != nil || got != "https://cdn.example.com/avatars/u/1.png" {
 		t.Fatalf("ObjectURL: got=%q err=%v", got, err)
@@ -122,7 +122,7 @@ func TestObjectURL(t *testing.T) {
 		t.Fatalf("invalid uri: got %v", err)
 	}
 
-	store = &minioStorage{publicBaseURL: ""}
+	store = &rustfsStorage{publicBaseURL: ""}
 	_, err = store.ObjectURL("avatars/u/1.png")
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("missing base: got %v", err)
@@ -133,7 +133,7 @@ func TestObjectURL(t *testing.T) {
 func TestPresignArgs(t *testing.T) {
 	t.Parallel()
 
-	store := &minioStorage{maxPresignExpiry: time.Hour}
+	store := &rustfsStorage{maxPresignExpiry: time.Hour}
 	_, err := store.PresignGet(t.Context(), "b/k", 0)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expiry<=0: got %v", err)
@@ -148,14 +148,39 @@ func TestPresignArgs(t *testing.T) {
 	}
 }
 
+// TestRustFSEndpoint 验证 RustFS 端点 scheme 归一化
+func TestRustFSEndpoint(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		endpoint string
+		useSSL   bool
+		want     string
+	}{
+		{"plain without ssl", "127.0.0.1:9000", false, "http://127.0.0.1:9000"},
+		{"plain with ssl", "127.0.0.1:9000", true, "https://127.0.0.1:9000"},
+		{"scheme preserved", "http://rustfs:9000", true, "http://rustfs:9000"},
+		{"trim spaces", " https://rustfs.example.com ", false, "https://rustfs.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := rustFSEndpoint(tc.endpoint, tc.useSSL); got != tc.want {
+				t.Fatalf("rustFSEndpoint(%q, %v) = %q, want %q", tc.endpoint, tc.useSSL, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestConfigFromPublicBaseURL 验证 BootConfig 映射 PublicBaseURL
 func TestConfigFromPublicBaseURL(t *testing.T) {
 	t.Parallel()
 
 	cfg := ConfigFrom(BootConfig{
-		Provider:      "minio",
+		Provider:      "rustfs",
 		PublicBaseURL: " https://cdn.example.com/ ",
-		MinIO: BootMinIOConfig{
+		RustFS: BootRustFSConfig{
 			Endpoint:        "127.0.0.1:9000",
 			AccessKeyID:     "ak",
 			SecretAccessKey: "sk",

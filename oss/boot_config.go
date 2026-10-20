@@ -15,7 +15,7 @@ const (
 	// SectionKey YAML 根 key
 	SectionKey = "oss"
 
-	bootProviderMinIO  = "minio"
+	bootProviderRustFS = "rustfs"
 	bootProviderS3     = "s3"
 	bootProviderAliOSS = "alioss"
 )
@@ -23,20 +23,20 @@ const (
 // BootConfig 表示对象存储访问配置（启动期 YAML 绑定）
 type BootConfig struct {
 	Enabled                 *bool            `mapstructure:"enabled"`                    // Enabled 是否启用；未配置默认 false
-	Provider                string           `mapstructure:"provider"`                   // Provider 是 minio、s3 或 alioss
+	Provider                string           `mapstructure:"provider"`                   // Provider 是 rustfs、s3 或 alioss
 	PublicBaseURL           string           `mapstructure:"public_base_url"`            // PublicBaseURL 是固定访问 URL 的全局基址（多桶共用）
 	MaxPresignExpirySeconds int              `mapstructure:"max_presign_expiry_seconds"` // MaxPresignExpirySeconds 预签名有效期上限（秒）；0 表示由实现默认
-	MinIO                   BootMinIOConfig  `mapstructure:"minio"`                      // MinIO 是 MinIO 访问配置
+	RustFS                  BootRustFSConfig `mapstructure:"rustfs"`                     // RustFS 是 RustFS 访问配置
 	S3                      BootS3Config     `mapstructure:"s3"`                         // S3 是 AWS S3 访问配置
 	AliOSS                  BootAliOSSConfig `mapstructure:"alioss"`                     // AliOSS 是阿里云 OSS 访问配置
 }
 
-// BootMinIOConfig MinIO 访问配置
-type BootMinIOConfig struct {
-	Endpoint        string `mapstructure:"endpoint"`          // Endpoint 是 MinIO 地址（不含 scheme）
+// BootRustFSConfig RustFS 访问配置
+type BootRustFSConfig struct {
+	Endpoint        string `mapstructure:"endpoint"`          // Endpoint 是 RustFS 地址；可含 scheme
 	AccessKeyID     string `mapstructure:"access_key_id"`     // AccessKeyID 是访问密钥 ID
 	SecretAccessKey string `mapstructure:"secret_access_key"` // SecretAccessKey 是访问密钥
-	UseSSL          bool   `mapstructure:"use_ssl"`           // UseSSL 是否使用 HTTPS
+	UseSSL          bool   `mapstructure:"use_ssl"`           // UseSSL 是否使用 HTTPS；Endpoint 含 scheme 时忽略
 	Region          string `mapstructure:"region"`            // Region 是区域
 }
 
@@ -73,8 +73,8 @@ func (c BootConfig) Validate() error {
 	}
 	provider := strings.ToLower(strings.TrimSpace(c.Provider))
 	switch provider {
-	case bootProviderMinIO:
-		return c.MinIO.validate()
+	case bootProviderRustFS:
+		return c.RustFS.validate()
 	case bootProviderS3:
 		return c.S3.validate()
 	case bootProviderAliOSS:
@@ -86,16 +86,16 @@ func (c BootConfig) Validate() error {
 	}
 }
 
-// validate 校验 MinIO 访问配置
-func (c BootMinIOConfig) validate() error {
+// validate 校验 RustFS 访问配置
+func (c BootRustFSConfig) validate() error {
 	if strings.TrimSpace(c.Endpoint) == "" {
-		return errors.New("oss.minio.endpoint 不能为空")
+		return errors.New("oss.rustfs.endpoint 不能为空")
 	}
 	if strings.TrimSpace(c.AccessKeyID) == "" {
-		return errors.New("oss.minio.access_key_id 不能为空")
+		return errors.New("oss.rustfs.access_key_id 不能为空")
 	}
 	if strings.TrimSpace(c.SecretAccessKey) == "" {
-		return errors.New("oss.minio.secret_access_key 不能为空")
+		return errors.New("oss.rustfs.secret_access_key 不能为空")
 	}
 	return nil
 }
@@ -141,12 +141,12 @@ func ConfigFrom(cfg BootConfig) Config {
 	out := Config{
 		Provider:      provider,
 		PublicBaseURL: strings.TrimSpace(cfg.PublicBaseURL),
-		MinIO: MinIOConfig{
-			Endpoint:        cfg.MinIO.Endpoint,
-			AccessKeyID:     cfg.MinIO.AccessKeyID,
-			SecretAccessKey: cfg.MinIO.SecretAccessKey,
-			UseSSL:          cfg.MinIO.UseSSL,
-			Region:          cfg.MinIO.Region,
+		RustFS: RustFSConfig{
+			Endpoint:        cfg.RustFS.Endpoint,
+			AccessKeyID:     cfg.RustFS.AccessKeyID,
+			SecretAccessKey: cfg.RustFS.SecretAccessKey,
+			UseSSL:          cfg.RustFS.UseSSL,
+			Region:          cfg.RustFS.Region,
 		},
 		S3: S3Config{
 			Region:          cfg.S3.Region,
