@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// CleanupRuntime 是单张表的过期数据清理运行时配置
+type CleanupRuntime struct {
+	Enabled    bool          // Enabled 是否启用该表清理
+	Retention  time.Duration // Retention 是数据保留时长
+	Frequency  time.Duration // Frequency 是清理任务轮询频率
+	BatchSize  int           // BatchSize 是单批清理数量
+	MaxBatches int           // MaxBatches 是单轮最大清理批数
+}
+
 // Runtime 消息队列事件运行时配置
 type Runtime struct {
 	ServiceName       string
@@ -21,8 +30,10 @@ type Runtime struct {
 	ConsumerMaxRetry  int           // ConsumerMaxRetry 是消费失败最大重试次数（不含首次处理），0 不重试，负数无限
 	InboxDlqFrequency time.Duration // InboxDlqFrequency 是收件箱死信后台重投频率
 	InboxDlqSize      int           // InboxDlqSize 是收件箱死信单次重投数量
-	PublisherEnabled  bool          // 发布侧（写 Outbox + 发件箱后台投递）
-	ConsumerEnabled   bool          // 消费侧（Receiver/Inbox）
+	OutboxCleanup     CleanupRuntime
+	InboxCleanup      CleanupRuntime
+	PublisherEnabled  bool // 发布侧（写 Outbox + 发件箱后台投递）
+	ConsumerEnabled   bool // 消费侧（Receiver/Inbox）
 }
 
 // LockKey 返回消息队列事件消费侧分布式锁 Redis Key

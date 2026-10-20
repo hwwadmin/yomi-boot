@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_inbox`
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_service_event_id` (`service_name`, `event_id`),
     KEY `idx_service_name` (`service_name`),
+    KEY `idx_service_create_time` (`service_name`, `create_time`),
     KEY `idx_create_time` (`create_time`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_outbox`
     UNIQUE KEY `uk_service_event_id` (`service_name`, `event_id`),
     KEY `idx_service_status_create_time` (`service_name`, `status`, `create_time`),
     KEY `idx_service_status_fetch_time` (`service_name`, `status`, `fetch_time`),
+    KEY `idx_service_status_sent_time` (`service_name`, `status`, `sent_time`),
     KEY `idx_event_id` (`event_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4

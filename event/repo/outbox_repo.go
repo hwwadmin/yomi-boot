@@ -17,6 +17,24 @@ import (
 // outboxUpdateBatchSize 是批量全量更新的单批行数，避免单条 SQL 超过 max_allowed_packet
 const outboxUpdateBatchSize = 200
 
+// listSentSuccessBeforeSQL 查询已过保留期、且没有被死信引用的发送成功记录
+const listSentSuccessBeforeSQL = `
+SELECT o.id
+FROM sys_event_outbox o
+WHERE o.service_name = ?
+  AND o.status = ?
+  AND o.sent_time IS NOT NULL
+  AND o.sent_time <= ?
+  AND o.delete_time IS NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM sys_event_outbox_dlq d
+      WHERE d.event_outbox_id = o.id
+        AND d.delete_time IS NULL
+  )
+ORDER BY o.sent_time ASC
+LIMIT ?`
+
 // OutboxRepo 发件箱仓储
 type OutboxRepo struct {
 	db.BaseRepository
@@ -198,6 +216,32 @@ func (r *OutboxRepo) RestorePendingBatch(ctx context.Context, ids []int64) error
 		return errors.Wrap(result.Error, "批量恢复发件箱事件为待处理失败")
 	}
 	return nil
+}
+
+// ListSentSuccessBefore 查询指定服务下发送成功且已过保留期的发件箱记录 ID
+func (r *OutboxRepo) ListSentSuccessBefore(
+	ctx context.Context,
+	serviceName string,
+	sentBefore time.Time,
+	limit int,
+) ([]int64, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var rows []struct {
+		ID int64
+	}
+	err := db.Exec(ctx, r.DB).
+		Raw(listSentSuccessBeforeSQL, serviceName, model.OutboxStatusSentSuccess, sentBefore, limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, errors.Wrap(err, "查询可清理发件箱记录失败")
+	}
+	ids := make([]int64, 0, len(rows))
+	for i := range rows {
+		ids = append(ids, rows[i].ID)
+	}
+	return ids, nil
 }
 
 // FindByIDs 按主键批量查询

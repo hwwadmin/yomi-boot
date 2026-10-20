@@ -111,6 +111,47 @@ func TestOutboxRepoUpdateBatchShardsStatements(t *testing.T) {
 	}
 }
 
+// TestOutboxRepoListSentSuccessBefore 验证只返回已过保留期且无死信引用的发送成功记录
+func TestOutboxRepoListSentSuccessBefore(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t,
+		dbtest.WithTables(model.SysEventOutbox{}, model.SysEventOutboxDlq{}),
+	)
+	defer cleanup()
+
+	oldSent := time.Now().Add(-40 * 24 * time.Hour)
+	recentSent := time.Now().Add(-24 * time.Hour)
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusSentSuccess, SentTime: &oldSent},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusSentSuccess, SentTime: &recentSent},
+		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusSentFail, SentTime: &oldSent},
+		{ServiceName: "svc", EventID: "event-4", Topic: "topic", Status: model.OutboxStatusSentSuccess, SentTime: &oldSent},
+		{ServiceName: "svc", EventID: "event-5", Topic: "topic", Status: model.OutboxStatusPending},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+	dlq := &model.SysEventOutboxDlq{ServiceName: "svc", EventOutboxID: 4, ErrorMsg: "failed"}
+	dlq.ID = 100
+	if err := gormDB.Create(dlq).Error; err != nil {
+		t.Fatalf("初始化死信数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	ids, err := r.ListSentSuccessBefore(context.Background(), "svc", time.Now().Add(-30*24*time.Hour), 100)
+	if err != nil {
+		t.Fatalf("查询可清理发件箱记录失败: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != 1 {
+		t.Fatalf("期望只返回 event-1，实际 %v", ids)
+	}
+	if got, err := r.ListSentSuccessBefore(context.Background(), "svc", time.Now(), 0); err != nil || got != nil {
+		t.Fatalf("limit<=0 应返回空，实际 ids=%v err=%v", got, err)
+	}
+}
+
 // TestOutboxRepoMarkFetchedBatchOnlyPending 验证只有 PENDING 记录会被标记为 FETCHED
 func TestOutboxRepoMarkFetchedBatchOnlyPending(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))

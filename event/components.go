@@ -41,13 +41,14 @@ type Components struct {
 	NormalReceiver *NormalReceiver
 	cfg            cfg.Runtime
 
-	outboxRepo      *repo.OutboxRepo
-	dlqHandler      *outbox.DlqHandler
-	inboxDlqHandler *InboxDlqHandler
-	processor       *outbox.Processor
-	kafkaPublisher  yomikafka.PublisherService
-	txExecutor      db.TxExecutor
-	lockFactory     distlock.DistLockFactory
+	outboxRepo       *repo.OutboxRepo
+	dlqHandler       *outbox.DlqHandler
+	inboxDlqHandler  *InboxDlqHandler
+	retentionCleaner *RetentionCleaner
+	processor        *outbox.Processor
+	kafkaPublisher   yomikafka.PublisherService
+	txExecutor       db.TxExecutor
+	lockFactory      distlock.DistLockFactory
 
 	cancel  context.CancelFunc
 	started bool
@@ -76,12 +77,13 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 		txExecutor:  deps.TxExecutor,
 		lockFactory: deps.DistLockFactory,
 	}
+	outboxRepo := repo.NewOutboxRepo(deps.DB)
+	inboxRepo := repo.NewInboxRepo(deps.DB)
 
 	if runtime.PublisherEnabled {
 		if deps.KafkaPublisher == nil {
 			return nil, errors.New("event: Kafka 发布者未初始化")
 		}
-		outboxRepo := repo.NewOutboxRepo(deps.DB)
 		dlqRepo := repo.NewOutboxDlqRepo(deps.DB)
 		c.Publisher = NewPublisher(outboxRepo, runtime, deps.IDGenerator, deps.DbType)
 		c.outboxRepo = outboxRepo
@@ -95,13 +97,16 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 		if deps.DistLockFactory == nil {
 			return nil, errors.New("event: 分布式锁工厂未初始化")
 		}
-		inboxRepo := repo.NewInboxRepo(deps.DB)
 		inboxDlqRepo := repo.NewInboxDlqRepo(deps.DB)
 		c.Receiver = NewReceiver(
 			inboxRepo, inboxDlqRepo, deps.TxExecutor, deps.DistLockFactory, runtime, deps.IDGenerator,
 		)
 		c.inboxDlqHandler = NewInboxDlqHandler(runtime, inboxDlqRepo, inboxRepo, deps.KafkaPublisher)
 		c.NormalReceiver = NewNormalReceiver()
+	}
+
+	if runtime.OutboxCleanup.Enabled || runtime.InboxCleanup.Enabled {
+		c.retentionCleaner = NewRetentionCleaner(runtime, outboxRepo, inboxRepo)
 	}
 
 	logger.InfoWithoutCtx("[消息队列事件]主体服务名",
@@ -130,7 +135,7 @@ func NewAndStart(deps Deps, eventCfg Config) (c *Components, err error) {
 	return c, nil
 }
 
-// Start 启动事件后台任务（发件箱抓取/发送/超时回收/DLQ，收件箱死信重投）。
+// Start 启动事件后台任务（发件箱抓取/发送/超时回收/DLQ，收件箱死信重投，过期数据清理）。
 // 任一后台任务启动失败时取消已启动任务并返回错误。
 func (c *Components) Start(parentCtx context.Context) error {
 	if c.started {
@@ -189,11 +194,20 @@ func (c *Components) Start(parentCtx context.Context) error {
 		}
 	}
 
+	if c.retentionCleaner != nil {
+		if err := c.retentionCleaner.Start(runCtx, c.lockFactory); err != nil {
+			cancel()
+			return err
+		}
+	}
+
 	c.started = true
 	logger.InfoWithoutCtx("[消息队列事件]后台任务已启动",
 		"serviceName", c.cfg.ServiceName,
 		"publisherEnabled", c.cfg.PublisherEnabled,
 		"consumerEnabled", c.cfg.ConsumerEnabled,
+		"outboxCleanupEnabled", c.cfg.OutboxCleanup.Enabled,
+		"inboxCleanupEnabled", c.cfg.InboxCleanup.Enabled,
 	)
 	return nil
 }
