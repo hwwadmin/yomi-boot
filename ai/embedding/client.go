@@ -16,13 +16,14 @@ type Client interface {
 	// Embed 将文本转为向量
 	//
 	// 入参 Inputs 至少 1 条；任一条 trim 后空串非法。维度空则回退 Config.Dimensions。
-	// 一次调用整批成功或整包失败。超时或取消返回上下文错误（可包装）。
+	// 超过 2048 条时内部按 2048 分批，对外仍是一整批成功或整包失败。
+	// 超时或取消返回上下文错误（可包装）。
 	Embed(ctx context.Context, req Request) (*Response, error)
 }
 
 // Request 向量化入参；模型由 Config.Model 锁定
 type Request struct {
-	Inputs     []string // Inputs 至少 1 条；trim 后不得为空串；单次建议不超过 2048 条（OpenAI 上限）
+	Inputs     []string // Inputs 至少 1 条；trim 后不得为空串；超过 2048 条时内部自动分批
 	Dimensions *int     // Dimensions 可选；空则回退配置；若设置必须 >0
 }
 

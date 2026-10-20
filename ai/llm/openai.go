@@ -8,6 +8,8 @@ import (
 	"context"
 	stderrors "errors"
 	"io"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,7 +65,13 @@ func (c *openaiClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse
 	defer cancel()
 	resp, err := c.sdk.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, mapOpenAIError(err)
+		// 上游明确拒绝当前 max token 字段时，切换另一字段重试一次
+		if retryParams, ok := c.maxTokensRetryParams(req, err); ok {
+			resp, err = c.sdk.Chat.Completions.New(ctx, retryParams)
+		}
+		if err != nil {
+			return nil, mapOpenAIError(err)
+		}
 	}
 	// 空选项列表视为协议异常
 	if resp == nil || len(resp.Choices) == 0 {
@@ -103,15 +111,27 @@ func (c *openaiClient) ChatStream(ctx context.Context, req ChatRequest) (Stream,
 	stream := c.sdk.Chat.Completions.NewStreaming(ctx, params)
 	// 建连失败关闭底层流，不把半开流交给调用方
 	if err := stream.Err(); err != nil {
-		cancel()
-		_ = stream.Close()
-		return nil, mapOpenAIError(err)
+		// 上游明确拒绝当前 max token 字段时，切换另一字段重试一次
+		if retryParams, ok := c.maxTokensRetryParams(req, err); ok {
+			_ = stream.Close()
+			stream = c.sdk.Chat.Completions.NewStreaming(ctx, retryParams)
+		}
+		if err := stream.Err(); err != nil {
+			cancel()
+			_ = stream.Close()
+			return nil, mapOpenAIError(err)
+		}
 	}
 	return newChatStream(ctx, cancel, &openaiPump{stream: stream, mapErr: mapOpenAIError}), nil
 }
 
 // buildParams 将门面请求映射为官方客户端参数；入参非法返回 ErrInvalidArgument
 func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewParams, error) {
+	return c.buildParamsWithField(req, c.cfg.resolvedMaxTokensField())
+}
+
+// buildParamsWithField 按指定 max token 字段构造参数
+func (c *openaiClient) buildParamsWithField(req ChatRequest, field MaxTokensField) (openai.ChatCompletionNewParams, error) {
 	if err := validateChatRequest(req); err != nil {
 		return openai.ChatCompletionNewParams{}, err
 	}
@@ -137,13 +157,39 @@ func (c *openaiClient) buildParams(req ChatRequest) (openai.ChatCompletionNewPar
 	if maxTok := resolveMaxTokens(req.MaxTokens, c.cfg.MaxTokens); maxTok != nil {
 		n := int64(*maxTok)
 		// 两个字段互斥：官方 OpenAI/Azure 同时收到会 400，按模型族或显式配置择一
-		if c.cfg.resolvedMaxTokensField() == MaxTokensFieldCompletion {
+		if field == MaxTokensFieldCompletion {
 			params.MaxCompletionTokens = openai.Int(n)
 		} else {
 			params.MaxTokens = openai.Int(n)
 		}
 	}
 	return params, nil
+}
+
+// maxTokensRetryParams 在上游 400 明确拒绝当前 max token 字段时，返回改用另一字段的参数
+func (c *openaiClient) maxTokensRetryParams(req ChatRequest, err error) (openai.ChatCompletionNewParams, bool) {
+	if !isMaxTokensFieldRejected(err) {
+		return openai.ChatCompletionNewParams{}, false
+	}
+	field := MaxTokensFieldCompletion
+	if c.cfg.resolvedMaxTokensField() == MaxTokensFieldCompletion {
+		field = MaxTokensFieldLegacy
+	}
+	params, buildErr := c.buildParamsWithField(req, field)
+	if buildErr != nil {
+		return openai.ChatCompletionNewParams{}, false
+	}
+	return params, true
+}
+
+// isMaxTokensFieldRejected 判断 400 是否由当前 max token 字段不受支持导致
+func isMaxTokensFieldRejected(err error) bool {
+	var apiErr *openai.Error
+	if !stderrors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
+		return false
+	}
+	msg := strings.ToLower(apiErr.Error())
+	return strings.Contains(msg, "max_tokens") || strings.Contains(msg, "max_completion_tokens")
 }
 
 // mapOpenAIError 映射 OpenAI 官方客户端错误；能取出 HTTP 状态时走哨兵，取消或超时保持上下文错误

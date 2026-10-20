@@ -15,6 +15,9 @@ import (
 	"github.com/openai/openai-go/v3/option"
 )
 
+// maxEmbedBatch 是单次上游请求的输入条数上限（OpenAI Embeddings）
+const maxEmbedBatch = 2048
+
 // openaiClient OpenAI 协议的 Client 实现
 type openaiClient struct {
 	sdk     openai.Client // sdk 是官方客户端，选项不可变，可并发调用
@@ -49,30 +52,46 @@ func newOpenAIClient(cfg Config) (*openaiClient, error) {
 	}, nil
 }
 
-// Embed 发起同步向量化；空结果或下标不齐返回 ErrBadResponse
+// Embed 发起同步向量化；超过 2048 条时内部自动分批；空结果或下标不齐返回 ErrBadResponse
 func (c *openaiClient) Embed(ctx context.Context, req Request) (*Response, error) {
-	params, err := c.buildParams(req)
-	if err != nil {
+	if err := validateRequest(req); err != nil {
 		return nil, err
 	}
 	// 整段请求绑定墙钟超时
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	resp, err := c.sdk.Embeddings.New(ctx, params)
-	if err != nil {
-		return nil, mapOpenAIError(err)
-	}
-	if resp == nil {
-		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: 空响应"))
-	}
-	vectors, err := collectEmbeddingVectors(len(req.Inputs), resp.Data)
-	if err != nil {
-		return nil, err
+	vectors := make([][]float64, len(req.Inputs))
+	model := ""
+	var promptTokens, totalTokens int64
+	for start := 0; start < len(req.Inputs); start += maxEmbedBatch {
+		end := start + maxEmbedBatch
+		if end > len(req.Inputs) {
+			end = len(req.Inputs)
+		}
+		params, err := c.buildParams(Request{Inputs: req.Inputs[start:end], Dimensions: req.Dimensions})
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.sdk.Embeddings.New(ctx, params)
+		if err != nil {
+			return nil, mapOpenAIError(err)
+		}
+		if resp == nil {
+			return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: 空响应"))
+		}
+		batchVectors, err := collectEmbeddingVectors(end-start, resp.Data)
+		if err != nil {
+			return nil, err
+		}
+		copy(vectors[start:end], batchVectors)
+		model = resp.Model
+		promptTokens += resp.Usage.PromptTokens
+		totalTokens += resp.Usage.TotalTokens
 	}
 	return &Response{
-		Model:   resp.Model,
+		Model:   model,
 		Vectors: vectors,
-		Usage:   embeddingUsage(resp.Usage.PromptTokens, resp.Usage.TotalTokens),
+		Usage:   embeddingUsage(promptTokens, totalTokens),
 	}, nil
 }
 

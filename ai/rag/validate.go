@@ -6,7 +6,6 @@ package rag
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"gitee.com/hq_project/yomi-boot/errors"
 )
@@ -66,9 +65,9 @@ func normalizeDocument(doc Document) (Document, error) {
 	}, nil
 }
 
-// validateDocID 校验文档 ID；块主键总长受向量库 128 限制
+// validateDocID 校验文档 ID；块主键总长受向量库 128 字节限制
 func validateDocID(id string) error {
-	if id == "" || utf8.RuneCountInString(id) > maxDocIDLen {
+	if id == "" || len(id) > maxDocIDLen {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	return nil

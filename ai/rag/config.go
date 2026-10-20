@@ -14,7 +14,7 @@ const (
 	defaultChunkSize    = 800
 	defaultChunkOverlap = 100
 	maxChunkSize        = 8192
-	maxDocIDLen         = 120
+	maxDocIDLen         = 120 // 文档 ID 最大字节数，为 "文档ID#序号" 预留 8 字节
 	maxChunksPerDoc     = 10000
 )
 

@@ -1,5 +1,8 @@
 // 构造配置与协议常量。
 //
+// 本文件与 ai/llm/config.go、ai/jev/config.go 共享相同的校验/拷贝工具；
+// 三包保持零依赖是有意设计，修改时需同步三处。
+//
 // @author zwei
 
 package embedding

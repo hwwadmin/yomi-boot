@@ -459,6 +459,9 @@ func TestIndexInvalidRequests(t *testing.T) {
 		{"long id", IndexRequest{Documents: []Document{{
 			ID: strings.Repeat("a", maxDocIDLen+1), Content: "x",
 		}}}},
+		{"long multibyte id", IndexRequest{Documents: []Document{{
+			ID: strings.Repeat("中", maxDocIDLen), Content: "x",
+		}}}},
 		{"reserved metadata", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{MetadataKeyContent: "x"},
 		}}}},

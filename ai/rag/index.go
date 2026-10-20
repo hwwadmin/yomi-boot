@@ -49,7 +49,7 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 		if err != nil {
 			return nil, err
 		}
-		// 自定义策略的输出同样要走统一校验，避免空块或超长块写入向量库
+		// 内置策略已保证块非空且不超长；这里兜底自定义 Splitter，接口契约要求 Engine 返回 ErrInvalidArgument
 		chunks, err = normalizeChunks(chunks)
 		if err != nil {
 			return nil, err

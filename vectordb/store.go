@@ -35,7 +35,7 @@ type Store interface {
 
 // Record 一条待写入或按 ID 取回的向量记录
 type Record struct {
-	ID       string            // ID 是主键；trim 后非空，最长 maxIDLen
+	ID       string            // ID 是主键；trim 后非空，最长 maxIDLen 字节
 	Vector   []float32         // Vector 长度必须等于 Config.Dimension
 	Metadata map[string]string // Metadata 可选；键 trim 后不得为空
 }

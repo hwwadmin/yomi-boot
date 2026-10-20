@@ -1,5 +1,8 @@
 // HTTP 状态到本包哨兵的最低映射。
 //
+// 本文件与 ai/embedding/status.go、ai/jev/status.go 结构一致；
+// 三包保持零依赖是有意设计，修改映射规则时需同步三处。
+//
 // @author zwei
 
 package llm

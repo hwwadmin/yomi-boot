@@ -18,7 +18,7 @@ const (
 
 // Document 待入库的原始文档
 type Document struct {
-	ID       string            // ID 是文档唯一标识；trim 后非空，最长 120 个字符
+	ID       string            // ID 是文档唯一标识；trim 后非空，最长 120 字节（Milvus VARCHAR 按字节计）
 	Content  string            // Content 是原始文本；trim 后非空
 	Source   string            // Source 是来源（URL / 路径等），可选；写入 rag_source
 	Metadata map[string]string // Metadata 是自定义元数据；键 trim 后非空且不得使用保留键

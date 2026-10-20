@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"gitee.com/hq_project/yomi-boot/errors"
 )
@@ -37,7 +36,7 @@ func validateRecords(records []Record, dim int) error {
 	seen := make(map[string]struct{}, len(records))
 	for i := range records {
 		id := strings.TrimSpace(records[i].ID)
-		if id == "" || utf8.RuneCountInString(id) > maxIDLen {
+		if id == "" || len(id) > maxIDLen {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
 		if _, ok := seen[id]; ok {
@@ -63,7 +62,7 @@ func validateIDs(ids []string) error {
 	}
 	for _, id := range ids {
 		s := strings.TrimSpace(id)
-		if s == "" || utf8.RuneCountInString(s) > maxIDLen {
+		if s == "" || len(s) > maxIDLen {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
 	}

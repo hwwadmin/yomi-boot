@@ -40,7 +40,7 @@ func (s *markdownSplitter) Split(text string) ([]string, error) {
 		segments := splitSegments(section, defaultSeparators, s.chunkSize, s.chunkOverlap)
 		out = append(out, packSegments(segments, s.chunkSize, s.chunkOverlap)...)
 	}
-	return normalizeChunks(out)
+	return out, nil
 }
 
 // splitMarkdownSections 按标题行分节；围栏代码块内的 # 不视为标题

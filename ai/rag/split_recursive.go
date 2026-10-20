@@ -35,7 +35,7 @@ func (s *recursiveSplitter) Split(text string) ([]string, error) {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 	segments := splitSegments(src, s.separators, s.chunkSize, s.chunkOverlap)
-	return normalizeChunks(packSegments(segments, s.chunkSize, s.chunkOverlap))
+	return packSegments(segments, s.chunkSize, s.chunkOverlap), nil
 }
 
 // splitSegments 递归按分隔符切出不超过 max 的原子段

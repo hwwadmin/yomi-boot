@@ -41,7 +41,7 @@ const (
 	maxDimension            = 32768
 	// MaxTopK 是单次检索允许的最大 TopK
 	MaxTopK         = 16384
-	maxIDLen        = 128
+	maxIDLen        = 128 // 主键最大字节数（Milvus VARCHAR max_length 按字节计）
 	maxNameLen      = 255
 	upsertBatchSize = 500
 )
