@@ -55,7 +55,7 @@ type RotatorOptions struct {
 	MaxBackups    int
 	MaxTotalMB    int
 	Compress      bool
-	Timezone      string
+	Timezone      string // 为空时使用进程时区（由 app.timezone 在启动时锁定）
 }
 
 // NewFileRotator 创建并打开活跃日志文件
@@ -66,13 +66,13 @@ func NewFileRotator(opts RotatorOptions) (*FileRotator, error) {
 	if opts.MaxSizeMB <= 0 || opts.RetentionDays <= 0 || opts.MaxBackups <= 0 || opts.MaxTotalMB <= 0 {
 		return nil, errors.New("滚动参数必须 > 0")
 	}
-	tzName := strings.TrimSpace(opts.Timezone)
-	if tzName == "" {
-		tzName = "Asia/Singapore"
-	}
-	loc, err := time.LoadLocation(tzName)
-	if err != nil {
-		return nil, errors.Wrap(err, "加载日志时区失败")
+	loc := time.Local
+	if tzName := strings.TrimSpace(opts.Timezone); tzName != "" {
+		var err error
+		loc, err = time.LoadLocation(tzName)
+		if err != nil {
+			return nil, errors.Wrap(err, "加载日志时区失败")
+		}
 	}
 	root := filepath.Clean(opts.RootDir)
 	dir := filepath.Join(root, opts.LogType)

@@ -32,7 +32,7 @@ import (
 //
 // # 启动顺序（不可随意调整）
 //
-//  1. app         — 始终启动，写入 Host.AppCtx
+//  1. app         — 始终启动，写入 Host.AppCtx，并按 app.timezone 锁定进程时区
 //  2. logger      — 始终启动（依赖 AppCtx）
 //  3. pprof       — pprof.enabled=true 时启动（默认 false）
 //  4. db          — db.enabled=true 时启动（写入 Host.DbType）

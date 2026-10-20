@@ -6,6 +6,7 @@ package appctxplugin
 import (
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/config"
+	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
@@ -21,9 +22,12 @@ func NewAppCtx() plugin.Plugin {
 	return &appCtxPlugin{PluginState: plugin.NewPluginState(appCtxName)}
 }
 
-// Init 初始化 AppCtx 并挂到 Host
+// Init 初始化 AppCtx、锁定时区并挂到 Host
 func (p *appCtxPlugin) Init(host *plugin.Host) {
 	cfg := config.MustSection[appctx.Config](host.Doc, appctx.SectionKey)
+	if err := appctx.LockTimezone(cfg.Timezone); err != nil {
+		panic(errors.Wrap(err, "appctx: 锁定时区失败"))
+	}
 	host.AppCtx = appctx.NewAppCtx(cfg.Name, cfg.Env, cfg.Version)
 	p.SetStarted()
 }

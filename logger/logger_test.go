@@ -89,7 +89,6 @@ func TestFileSplit_ELKFieldsAndStaticFields(t *testing.T) {
 		Dir:          dir,
 		Level:        "info",
 		ConsoleLevel: "error",
-		Timezone:     "Asia/Singapore",
 		Rotation:     testRotation(),
 		Fields: map[string]string{
 			"country_code": "pk",
@@ -141,7 +140,6 @@ func TestAccessMiddleware_InboundOutboundPair(t *testing.T) {
 		Dir:           dir,
 		Level:         "info",
 		ConsoleLevel:  "error",
-		Timezone:      "Asia/Singapore",
 		Rotation:      testRotation(),
 		SensitiveKeys: []string{"authorization", "password"},
 		Access: AccessConfig{
@@ -234,7 +232,6 @@ func TestAccessMiddleware_ErrorAlwaysLogged(t *testing.T) {
 		Dir:          dir,
 		Level:        "info",
 		ConsoleLevel: "error",
-		Timezone:     "Asia/Singapore",
 		Rotation:     testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
@@ -284,7 +281,6 @@ func TestAccessMiddleware_SampleDropsOK(t *testing.T) {
 		Dir:          dir,
 		Level:        "info",
 		ConsoleLevel: "error",
-		Timezone:     "Asia/Singapore",
 		Rotation:     testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
@@ -327,7 +323,6 @@ func TestAccessMiddleware_BodyOmittedBinary(t *testing.T) {
 		Dir:          dir,
 		Level:        "info",
 		ConsoleLevel: "error",
-		Timezone:     "Asia/Singapore",
 		Rotation:     testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
@@ -417,6 +412,31 @@ func TestFileRotator_SizeRotate(t *testing.T) {
 	}
 	if !hasHistory {
 		t.Fatalf("expected history file, entries=%v", names(entries))
+	}
+}
+
+// TestFileRotator_DefaultUsesProcessTimezone 验证未指定时区时跟随进程时区
+func TestFileRotator_DefaultUsesProcessTimezone(t *testing.T) {
+	original := time.Local
+	t.Cleanup(func() { time.Local = original })
+	loc := time.FixedZone("test-zone", 5*3600)
+	time.Local = loc
+
+	rot, err := NewFileRotator(RotatorOptions{
+		RootDir:       t.TempDir(),
+		LogType:       "info",
+		MaxSizeMB:     1,
+		RetentionDays: 1,
+		MaxBackups:    1,
+		MaxTotalMB:    1,
+	})
+	if err != nil {
+		t.Fatalf("NewFileRotator: %v", err)
+	}
+	defer func() { _ = rot.Close() }()
+
+	if rot.location != loc {
+		t.Fatalf("location = %v, want process time.Local", rot.location)
 	}
 }
 

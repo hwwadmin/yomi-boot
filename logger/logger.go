@@ -114,7 +114,6 @@ func newLogHub(serviceName, env string, cfg Config) (*logHub, error) {
 			MaxBackups:    cfg.Rotation.MaxBackups,
 			MaxTotalMB:    cfg.Rotation.MaxTotalMB,
 			Compress:      cfg.Rotation.CompressOrDefault(),
-			Timezone:      cfg.Timezone,
 		})
 	}
 

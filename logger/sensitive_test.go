@@ -110,7 +110,6 @@ func TestInfo_SensitiveKeysFromConfig(t *testing.T) {
 		Dir:           dir,
 		Level:         "info",
 		ConsoleLevel:  "error",
-		Timezone:      "Asia/Singapore",
 		Rotation:      testRotation(),
 		SensitiveKeys: []string{"password", "token"},
 	}

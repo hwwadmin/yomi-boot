@@ -13,7 +13,29 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/distlock"
 	"gitee.com/hq_project/yomi-boot/redis/redistest"
+
+	"github.com/robfig/cron/v3"
 )
+
+// TestSpecParser_DefaultTimezoneFollowsProcessLocal 验证未指定 TZ 前缀时按进程时区解析
+func TestSpecParser_DefaultTimezoneFollowsProcessLocal(t *testing.T) {
+	original := time.Local
+	t.Cleanup(func() { time.Local = original })
+	loc := time.FixedZone("test-zone", 8*3600)
+	time.Local = loc
+
+	parsed, err := specParser.Parse("0 0 2 * * *")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	schedule, ok := parsed.(*cron.SpecSchedule)
+	if !ok {
+		t.Fatalf("want *cron.SpecSchedule, got %T", parsed)
+	}
+	if schedule.Location != loc {
+		t.Fatalf("location = %v, want process time.Local", schedule.Location)
+	}
+}
 
 // TestJob_validate 校验合法 Job 通过及各非法字段拒绝
 func TestJob_validate(t *testing.T) {

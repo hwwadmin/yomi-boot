@@ -74,11 +74,12 @@ func (c AccessConfig) SampleRateOrDefault() float64 {
 }
 
 // Config 表示日志输出配置
+//
+// 日志时间统一使用进程时区（启动时由 app.timezone 锁定，默认 UTC）；原 log.timezone 已移除。
 type Config struct {
 	Dir            string            `mapstructure:"dir"`             // 日志根目录（其下 access/info/error/debug）
 	Level          string            `mapstructure:"level"`           // 文件最低级别
 	ConsoleLevel   string            `mapstructure:"console_level"`   // 控制台最低级别
-	Timezone       string            `mapstructure:"timezone"`        // 日志时间时区
 	Fields         map[string]string `mapstructure:"fields"`          // 静态标签，自动注入每条日志
 	SensitiveMatch string            `mapstructure:"sensitive_match"` // contains（默认）或 exact
 	SensitiveKeys  []string          `mapstructure:"sensitive_keys"`  // 敏感字段名；空=不脱敏
@@ -99,9 +100,6 @@ func (c *Config) Normalize() error {
 	}
 	if strings.TrimSpace(c.ConsoleLevel) == "" {
 		c.ConsoleLevel = "debug"
-	}
-	if strings.TrimSpace(c.Timezone) == "" {
-		c.Timezone = "Asia/Singapore"
 	}
 
 	if c.Rotation.MaxSizeMB <= 0 || c.Rotation.RetentionDays <= 0 || c.Rotation.MaxBackups <= 0 {

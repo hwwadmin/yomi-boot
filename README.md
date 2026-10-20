@@ -17,11 +17,11 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | MySQL | **8.4 LTS**（`8.4.11`） | `mysql:8.4.11` |
 | Redis | **7.4**（`7.4.11`） | `redis:7.4.11` |
 | Kafka | **Apache Kafka 4.2.2** | `apache/kafka:4.2.2`（Confluent 版 `confluentinc/cp-kafka:8.2.4`） |
-| Consul | **1.20.x** | — |
+| Consul | **1.21.x**（`1.21.5`） | `hashicorp/consul:1.21.5` |
 | DTM | **≥ 1.18**（配套 `dtm-labs/client` v1.18.7） | — |
 | PostgreSQL | **16.15** | `postgres:16-alpine` |
 | RustFS | **1.0.1** | `rustfs/rustfs:1.0.1` |
-| Milvus | **2.6.x**（配套 `milvus/client/v2` v2.6.5） | — |
+| Milvus | **2.6.5**（配套 `milvus/client/v2` v2.6.5） | `milvusdb/milvus:v2.6.5` |
 
 
 ## 许可证
