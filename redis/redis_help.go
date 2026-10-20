@@ -9,11 +9,15 @@ import (
 	"strings"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/errors"
 
 	"github.com/google/uuid"
 	redisv9 "github.com/redis/go-redis/v9"
 )
+
+// defaultCommandTimeout 单条指令执行的最长等待时间默认值
+const defaultCommandTimeout = time.Duration(DefaultCommandTimeoutMs) * time.Millisecond
 
 // RedisService 表示 Redis 常用读写能力接口
 type RedisService interface {
@@ -55,21 +59,54 @@ type RedisService interface {
 
 // RedisHelper 封装 Redis 常用读写操作
 type RedisHelper struct {
-	client *redisv9.Client // client 是底层 Redis 客户端
+	client         *redisv9.Client // client 是底层 Redis 客户端
+	commandTimeout time.Duration   // commandTimeout 是单条指令执行的最长等待时间
 }
 
 var _ RedisService = (*RedisHelper)(nil)
 
-// NewRedisHelper 创建 Redis 常用操作助手
-func NewRedisHelper(client *redisv9.Client) *RedisHelper {
+// HelperOption 表示 RedisHelper 的可选构造参数
+type HelperOption func(*RedisHelper)
+
+// WithCommandTimeout 设置单条指令执行的最长等待时间；timeout<=0 时使用默认值
+func WithCommandTimeout(timeout time.Duration) HelperOption {
+	return func(h *RedisHelper) {
+		if timeout > 0 {
+			h.commandTimeout = timeout
+		}
+	}
+}
+
+// NewRedisHelper 创建 Redis 常用操作助手；未指定 WithCommandTimeout 时单条指令最长等待 3s
+func NewRedisHelper(client *redisv9.Client, opts ...HelperOption) *RedisHelper {
 	if client == nil {
 		panic("redis 客户端未初始化: client 为 nil")
 	}
-	return &RedisHelper{client: client}
+	helper := &RedisHelper{client: client, commandTimeout: defaultCommandTimeout}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(helper)
+		}
+	}
+
+	return helper
+}
+
+// commandContext 为单条指令派生带最长等待时间的 context；调用方更短的 deadline 优先
+func (h *RedisHelper) commandContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := h.commandTimeout
+	if timeout <= 0 {
+		timeout = defaultCommandTimeout
+	}
+
+	return appctx.WithTimeout(ctx, timeout)
 }
 
 // OpsStr4Set 写入 Redis String 值，并按需设置过期时间
 func (h *RedisHelper) OpsStr4Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	if err := h.client.Set(ctx, key, value, ttl).Err(); err != nil {
 		return errors.Wrap(err, "写入 Redis String 失败")
 	}
@@ -100,6 +137,9 @@ func (h *RedisHelper) OpsStr4SetJSONNoTTL(ctx context.Context, key string, value
 // OpsStr4Get 读取 Redis String 值
 // key 不存在时返回 exists=false 和 nil error
 func (h *RedisHelper) OpsStr4Get(ctx context.Context, key string) (value string, exists bool, err error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	value, err = h.client.Get(ctx, key).Result()
 	if errors.Is(err, redisv9.Nil) {
 		return "", false, nil
@@ -145,6 +185,9 @@ func (h *RedisHelper) OpsHash4Set(ctx context.Context, key string, fields map[st
 		args = append(args, field, value)
 	}
 
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	if _, err := h.client.Eval(ctx, luaHashSetWithExpire, []string{key}, args...).Result(); err != nil {
 		return errors.Wrap(err, "写入 Redis Hash 失败")
 	}
@@ -155,6 +198,9 @@ func (h *RedisHelper) OpsHash4Set(ctx context.Context, key string, fields map[st
 // OpsHash4Get 读取 Redis Hash 的单个字段值
 // 字段不存在时返回 exists=false 和 nil error
 func (h *RedisHelper) OpsHash4Get(ctx context.Context, key string, field string) (value string, exists bool, err error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	value, err = h.client.HGet(ctx, key, field).Result()
 	if errors.Is(err, redisv9.Nil) {
 		return "", false, nil
@@ -169,6 +215,9 @@ func (h *RedisHelper) OpsHash4Get(ctx context.Context, key string, field string)
 // OpsHash4GetAll 读取 Redis Hash 的全部字段
 // key 不存在时返回 exists=false 和 nil error
 func (h *RedisHelper) OpsHash4GetAll(ctx context.Context, key string) (values map[string]string, exists bool, err error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	values, err = h.client.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, false, errors.Wrap(err, "读取 Redis Hash 全字段失败")
@@ -186,6 +235,9 @@ func (h *RedisHelper) OpsKey4Delete(ctx context.Context, keys ...string) error {
 		return nil
 	}
 
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	if err := h.client.Del(ctx, keys...).Err(); err != nil {
 		return errors.Wrap(err, "删除 Redis Key 失败")
 	}
@@ -195,6 +247,9 @@ func (h *RedisHelper) OpsKey4Delete(ctx context.Context, keys ...string) error {
 
 // OpsKey4Exists 判断指定 Key 是否存在
 func (h *RedisHelper) OpsKey4Exists(ctx context.Context, key string) (bool, error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	count, err := h.client.Exists(ctx, key).Result()
 	if err != nil {
 		return false, errors.Wrap(err, "检查 Redis Key 是否存在失败")
@@ -206,6 +261,9 @@ func (h *RedisHelper) OpsKey4Exists(ctx context.Context, key string) (bool, erro
 // OpsKey4Expire 为指定 Key 设置新的过期时间
 // key 不存在时返回 applied=false
 func (h *RedisHelper) OpsKey4Expire(ctx context.Context, key string, ttl time.Duration) (applied bool, err error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	applied, err = h.client.Expire(ctx, key, ttl).Result()
 	if err != nil {
 		return false, errors.Wrap(err, "设置 Redis Key 过期时间失败")
@@ -220,6 +278,9 @@ func (h *RedisHelper) OpsSet4Add(ctx context.Context, key string, members ...str
 		return nil
 	}
 
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	if err := h.client.SAdd(ctx, key, toStringSlice(members)...).Err(); err != nil {
 		return errors.Wrap(err, "写入 Redis Set 失败")
 	}
@@ -233,6 +294,9 @@ func (h *RedisHelper) OpsSet4Remove(ctx context.Context, key string, members ...
 		return nil
 	}
 
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	if err := h.client.SRem(ctx, key, toStringSlice(members)...).Err(); err != nil {
 		return errors.Wrap(err, "移除 Redis Set 成员失败")
 	}
@@ -242,6 +306,9 @@ func (h *RedisHelper) OpsSet4Remove(ctx context.Context, key string, members ...
 
 // OpsScript4Eval 执行 Lua 脚本，keys 与 args 分别映射为 KEYS 与 ARGV
 func (h *RedisHelper) OpsScript4Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	result, err := h.client.Eval(ctx, script, keys, args...).Result()
 	if err != nil {
 		return nil, errors.Wrap(err, "执行 Redis Lua 脚本失败")
@@ -303,6 +370,9 @@ func (h *RedisHelper) OpsRateLimit4Allow(ctx context.Context, key string, limit,
 
 // OpsSet4Members 读取 Redis Set 中的全部成员
 func (h *RedisHelper) OpsSet4Members(ctx context.Context, key string) ([]string, error) {
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
 	members, err := h.client.SMembers(ctx, key).Result()
 	if err != nil {
 		return nil, errors.Wrap(err, "读取 Redis Set 成员失败")

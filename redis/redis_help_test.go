@@ -2,10 +2,13 @@ package redis
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/redis/redistest"
+
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
 // TestRedisHelper_OpsStr4SetAndGet 验证 String 写入与读取
@@ -88,4 +91,64 @@ func TestNewRedisHelper_NilClientPanics(t *testing.T) {
 		}
 	}()
 	NewRedisHelper(nil)
+}
+
+// TestRedisHelper_CommandTimeout 验证单条指令超过最长等待时间后返回错误
+func TestRedisHelper_CommandTimeout(t *testing.T) {
+	addr, stop := startHangingRedisServer(t)
+	defer stop()
+
+	client := redisv9.NewClient(&redisv9.Options{
+		Addr:                  addr,
+		ReadTimeout:           5 * time.Second,
+		WriteTimeout:          5 * time.Second,
+		ContextTimeoutEnabled: true,
+	})
+	defer func() {
+		_ = client.Close()
+	}()
+
+	helper := NewRedisHelper(client, WithCommandTimeout(100*time.Millisecond))
+
+	start := time.Now()
+	_, _, err := helper.OpsStr4Get(context.Background(), "yomi:test:timeout")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("期望指令超时返回错误")
+	}
+	if elapsed > time.Second {
+		t.Fatalf("指令超时未生效，耗时 %v", elapsed)
+	}
+}
+
+// startHangingRedisServer 启动只接受连接、不应答任何指令的 TCP 服务，用于验证指令超时
+func startHangingRedisServer(t *testing.T) (addr string, stop func()) {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("监听本地端口失败: %v", err)
+	}
+
+	release := make(chan struct{})
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				<-release
+			}()
+		}
+	}()
+
+	return listener.Addr().String(), func() {
+		close(release)
+		_ = listener.Close()
+	}
 }

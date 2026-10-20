@@ -30,7 +30,7 @@ func (p *redisPlugin) Init(host *plugin.Host) {
 	}
 	conn := yomiredis.MustNewClient(*cfg)
 	host.RedisClient = conn
-	host.RedisService = yomiredis.NewRedisHelper(conn)
+	host.RedisService = yomiredis.NewRedisHelper(conn, yomiredis.WithCommandTimeout(cfg.CommandTimeout()))
 	host.DistLockFactory = distlock.MustNewFactory(conn)
 	p.SetStarted()
 }

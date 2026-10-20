@@ -4,8 +4,6 @@
 package redis
 
 import (
-	"time"
-
 	"gitee.com/hq_project/yomi-boot/appctx"
 	"gitee.com/hq_project/yomi-boot/errors"
 	"gitee.com/hq_project/yomi-boot/logger"
@@ -20,13 +18,19 @@ func NewClient(cfg Config) (*redis.Client, error) {
 
 // newClient 假定 cfg 已通过语义校验，仅处理连接与 Ping 验证
 func newClient(cfg Config) (*redis.Client, error) {
+	timeout := cfg.CommandTimeout()
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
 		DB:       cfg.DB,
+		// 单条指令的最长等待时间同时约束 socket 读写；阻塞命令由 go-redis 按 Block 自行放宽
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
+		// go-redis 默认忽略 context deadline，开启后 RedisHelper 的指令超时与调用方 deadline 才生效
+		ContextTimeoutEnabled: true,
 	})
 
-	ctx, cancel := appctx.BackgroundWithTimeout(3 * time.Second)
+	ctx, cancel := appctx.BackgroundWithTimeout(timeout)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
