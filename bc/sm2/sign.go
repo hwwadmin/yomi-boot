@@ -15,8 +15,8 @@ func Sign(priv *PrivateKey, msg []byte) ([]byte, error) {
 
 // SignWithUID 使用指定 UID 对原始消息签名；uid 为空时使用默认 UID
 func SignWithUID(priv *PrivateKey, uid, msg []byte) ([]byte, error) {
-	if priv == nil {
-		return nil, errors.New("sm2: private key 为 nil")
+	if err := validPrivateKey(priv); err != nil {
+		return nil, err
 	}
 	sig, err := priv.Sign(rand.Reader, msg, gmsm.NewSM2SignerOption(true, uid))
 	if err != nil {
@@ -32,8 +32,8 @@ func Verify(pub *PublicKey, msg, sig []byte) error {
 
 // VerifyWithUID 使用指定 UID 校验原始消息的 ASN.1 签名；uid 为空时使用默认 UID
 func VerifyWithUID(pub *PublicKey, uid, msg, sig []byte) error {
-	if pub == nil {
-		return errors.New("sm2: public key 为 nil")
+	if err := validPublicKey(pub); err != nil {
+		return err
 	}
 	if !gmsm.VerifyASN1WithSM2(pub, uid, msg, sig) {
 		return errors.Sentinel(ErrVerify)

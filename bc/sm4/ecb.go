@@ -9,7 +9,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// ECB SM4-ECB + PKCS7（仅遗留对接；新业务禁止）
+// ECB SM4-ECB + PKCS7（仅遗留对接；新业务与网络场景禁止）
 type ECB struct {
 	block cipher.Block
 }

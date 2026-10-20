@@ -12,6 +12,23 @@ import (
 	"time"
 )
 
+// TestParsePKCS1PublicKeyPEM 验证 PKCS#1 RSA 公钥 PEM 解析
+func TestParsePKCS1PublicKeyPEM(t *testing.T) {
+	priv, err := GenerateKey(2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der := x509.MarshalPKCS1PublicKey(&priv.PublicKey)
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: der})
+	pub, err := ParsePublicKeyPEM(pemBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pub.N.Cmp(priv.N) != 0 || pub.E != priv.E {
+		t.Fatal("PKCS#1 公钥解析结果不匹配")
+	}
+}
+
 // TestParseCertificatePEM 验证单证书、证书链解析及公钥提取
 func TestParseCertificatePEM(t *testing.T) {
 	priv, err := GenerateKey(2048)

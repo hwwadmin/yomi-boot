@@ -1,6 +1,7 @@
 // Package rsapss 提供 RSASSA-PSS + SHA-256 签名与验签
 //
 // 签名盐长度固定为摘要长度（32 字节）；原始消息在包内先做 SHA-256 摘要。
+// 对接使用最大盐长度的 JCA/HSM 时需另行适配。
 //
 // @author zwei
 package rsapss

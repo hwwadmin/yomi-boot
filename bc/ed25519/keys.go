@@ -1,6 +1,7 @@
-// Package ed25519 提供 Ed25519（RFC 8032）签名验签与 PEM 密钥管理
+// Package ed25519 提供 Ed25519（RFC 8032）签名验签与密钥 PEM 管理
 //
 // 签名输出 64 字节原始签名，对应 JWT EdDSA。
+// 仅支持密钥 PEM（PKCS#8/PKIX），不含证书与加密私钥。
 //
 // @author zwei
 package ed25519

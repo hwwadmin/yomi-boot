@@ -19,6 +19,9 @@ func Sign(priv *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
 	if !isP256(priv.Curve) {
 		return nil, errors.New("ecdsap256: private key 不是 P-256 曲线")
 	}
+	if priv.D == nil || priv.D.Sign() <= 0 {
+		return nil, errors.New("ecdsap256: private key 无效")
+	}
 	sum := sha256.Sum256(msg)
 	sig, err := ecdsa.SignASN1(rand.Reader, priv, sum[:])
 	if err != nil {

@@ -2,6 +2,9 @@ package sm2
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"testing"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -73,6 +76,52 @@ func TestEncryptDecrypt(t *testing.T) {
 	}
 	if _, err := Decrypt(other, ct); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("期望 ErrDecrypt，实际 %v", err)
+	}
+}
+
+// TestInvalidKeys 验证零值、缺坐标与非 SM2 曲线密钥返回错误而非 panic
+func TestInvalidKeys(t *testing.T) {
+	if _, err := Sign(&PrivateKey{}, []byte("m")); err == nil {
+		t.Fatal("零值私钥签名应失败")
+	}
+	if err := Verify(&PublicKey{}, []byte("m"), []byte("sig")); err == nil {
+		t.Fatal("零值公钥验签应失败")
+	}
+	if _, err := Encrypt(&PublicKey{}, []byte("m")); err == nil {
+		t.Fatal("零值公钥加密应失败")
+	}
+	if _, err := Decrypt(&PrivateKey{}, make([]byte, 128)); err == nil {
+		t.Fatal("零值私钥解密应失败")
+	}
+	if _, err := MarshalPrivateKeyPEM(&PrivateKey{}); err == nil {
+		t.Fatal("零值私钥导出应失败")
+	}
+
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badPub := &PublicKey{Curve: priv.Curve}
+	if _, err := Encrypt(badPub, []byte("m")); err == nil {
+		t.Fatal("缺坐标公钥加密应失败")
+	}
+	if err := Verify(badPub, []byte("m"), []byte("sig")); err == nil {
+		t.Fatal("缺坐标公钥验签应失败")
+	}
+
+	p256, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := &PrivateKey{PrivateKey: *p256}
+	if _, err := Sign(wrong, []byte("m")); err == nil {
+		t.Fatal("非 SM2 私钥签名应失败")
+	}
+	if _, err := MarshalPrivateKeyPEM(wrong); err == nil {
+		t.Fatal("非 SM2 私钥导出应失败")
+	}
+	if _, err := Encrypt(&p256.PublicKey, []byte("m")); err == nil {
+		t.Fatal("非 SM2 公钥加密应失败")
 	}
 }
 

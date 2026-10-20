@@ -17,6 +17,34 @@ type PrivateKey = gmsm.PrivateKey
 // PublicKey 是 SM2 公钥类型别名（SM2 曲线上的 ECDSA 公钥）
 type PublicKey = ecdsa.PublicKey
 
+// validPrivateKey 校验 SM2 私钥的曲线、公钥坐标与标量
+func validPrivateKey(key *PrivateKey) error {
+	if key == nil {
+		return errors.New("sm2: private key 为 nil")
+	}
+	if !gmsm.IsSM2PublicKey(&key.PublicKey) {
+		return errors.New("sm2: private key 不是 SM2 曲线")
+	}
+	if key.X == nil || key.Y == nil || key.D == nil || key.D.Sign() <= 0 || key.D.Cmp(key.Curve.Params().N) >= 0 {
+		return errors.New("sm2: private key 无效")
+	}
+	return nil
+}
+
+// validPublicKey 校验 SM2 公钥的曲线与坐标
+func validPublicKey(key *PublicKey) error {
+	if key == nil {
+		return errors.New("sm2: public key 为 nil")
+	}
+	if !gmsm.IsSM2PublicKey(key) {
+		return errors.New("sm2: public key 不是 SM2 曲线")
+	}
+	if key.X == nil || key.Y == nil {
+		return errors.New("sm2: public key 无效")
+	}
+	return nil
+}
+
 // GenerateKey 生成新的 SM2 私钥
 func GenerateKey() (*PrivateKey, error) {
 	key, err := gmsm.GenerateKey(rand.Reader)
@@ -69,8 +97,8 @@ func ParsePublicKeyPEM(pemBytes []byte) (*PublicKey, error) {
 
 // MarshalPrivateKeyPEM 将私钥编码为 PKCS#8 PEM
 func MarshalPrivateKeyPEM(key *PrivateKey) ([]byte, error) {
-	if key == nil {
-		return nil, errors.New("sm2: private key 为 nil")
+	if err := validPrivateKey(key); err != nil {
+		return nil, err
 	}
 	der, err := smx509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
@@ -81,11 +109,8 @@ func MarshalPrivateKeyPEM(key *PrivateKey) ([]byte, error) {
 
 // MarshalPublicKeyPEM 将公钥编码为 PKIX PEM
 func MarshalPublicKeyPEM(pub *PublicKey) ([]byte, error) {
-	if pub == nil {
-		return nil, errors.New("sm2: public key 为 nil")
-	}
-	if !gmsm.IsSM2PublicKey(pub) {
-		return nil, errors.New("sm2: public key 不是 SM2 曲线")
+	if err := validPublicKey(pub); err != nil {
+		return nil, err
 	}
 	der, err := smx509.MarshalPKIXPublicKey(pub)
 	if err != nil {

@@ -52,6 +52,47 @@ func TestCBCRoundTrip(t *testing.T) {
 	}
 }
 
+// TestGCMWithAAD 验证 AAD 绑定、不匹配拒绝及与无 AAD 接口的等价性
+func TestGCMWithAAD(t *testing.T) {
+	g, err := NewGCM(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := []byte("sm4 gcm aad")
+	aad := []byte("tenant=42;key-version=1")
+
+	sealed, err := g.SealWithAAD(plain, aad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := g.OpenWithAAD(sealed, aad)
+	if err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("got %q err=%v", got, err)
+	}
+	if _, err := g.OpenWithAAD(sealed, []byte("tenant=43;key-version=1")); !errors.Is(err, ErrOpen) {
+		t.Fatalf("AAD 不匹配应失败: %v", err)
+	}
+	if _, err := g.Open(sealed); !errors.Is(err, ErrOpen) {
+		t.Fatalf("缺少 AAD 应失败: %v", err)
+	}
+
+	sealedNoAAD, err := g.SealWithAAD(plain, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := g.Open(sealedNoAAD); err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("nil AAD 应与 Open 等价: got %q err=%v", got, err)
+	}
+
+	sealedDefault, err := g.Seal(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := g.OpenWithAAD(sealedDefault, nil); err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("Seal 应与 nil AAD 等价: got %q err=%v", got, err)
+	}
+}
+
 // TestGCMRoundTrip 验证 GCM 加解密、篡改检测与密钥长度校验
 func TestGCMRoundTrip(t *testing.T) {
 	g, err := NewGCM(testKey)

@@ -8,7 +8,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// CBC AES-CBC + PKCS7（兼容对接；无完整性保证）
+// CBC AES-CBC + PKCS7（兼容对接；无完整性保证，禁止用于网络或攻击者可控密文）
 type CBC struct {
 	block cipher.Block
 }

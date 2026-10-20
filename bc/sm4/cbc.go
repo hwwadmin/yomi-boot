@@ -10,7 +10,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/errors"
 )
 
-// CBC SM4-CBC + PKCS7（兼容对接；无完整性保证）
+// CBC SM4-CBC + PKCS7（兼容对接；无完整性保证，禁止用于网络或攻击者可控密文）
 type CBC struct {
 	block cipher.Block
 }

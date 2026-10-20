@@ -184,19 +184,19 @@ services/{domain}/
 | `redis` | `RedisService` 接口与 `RedisHelper` 实现（含 `OpsRateLimit4Allow` 滑动窗口限流原语） |
 | `ratelimit` | 调用式限流门面 `LimitService`（`Allow`/`AllowN`）；依赖 `RedisService`，不进默认中间件链 |
 | `bc` | 密码学基础设施能力簇（Bootstrap Crypto）；无状态按需 import，不挂 Infra |
-| `bc/passwd` | 密码单向哈希/校验（bcrypt） |
+| `bc/passwd` | 密码单向哈希/校验（bcrypt，≤72 字节） |
 | `bc/random` | 密码学安全随机（Bytes/Hex/URLSafe） |
 | `bc/hash` | MD5 / SHA-1（遗留兼容）/ SHA-256 / SHA-512 摘要（禁止用于密码） |
 | `bc/sm3` | SM3 摘要（国密；禁止用于密码） |
 | `bc/hmacsha` | HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证 |
 | `bc/aes` | AES-GCM（推荐，支持 AAD）/ CBC；ECB 不推荐 |
-| `bc/sm4` | SM4-GCM（推荐）/ CBC；ECB 不推荐（国密） |
-| `bc/rsa` | RSA PEM（PKCS#1/PKCS#8、证书链、带密码私钥）、OAEP 加解密 |
+| `bc/sm4` | SM4-GCM（推荐，支持 AAD）/ CBC；ECB 不推荐（国密） |
+| `bc/rsa` | RSA PEM（PKCS#1/PKCS#8、PKIX/PKCS#1 公钥、证书链、带密码私钥）、OAEP 加解密 |
 | `bc/sha256withrsa` | SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签；对应 Java、支付宝 RSA2、微信支付 v3 |
 | `bc/rsapss` | RSASSA-PSS + SHA-256 签名验签（SaltLength=HashLen） |
-| `bc/ecdsap256` | ECDSA P-256 + SHA-256 签名验签与 PEM；ASN.1 DER（JWT ES256） |
-| `bc/ecdsap384` | ECDSA P-384 + SHA-384 签名验签与 PEM；ASN.1 DER（JWT ES384） |
-| `bc/ed25519` | Ed25519 签名验签与 PEM；64 字节原始签名（JWT EdDSA） |
+| `bc/ecdsap256` | ECDSA P-256 + SHA-256 签名验签与密钥 PEM；ASN.1 DER（JWT ES256） |
+| `bc/ecdsap384` | ECDSA P-384 + SHA-384 签名验签与密钥 PEM；ASN.1 DER（JWT ES384） |
+| `bc/ed25519` | Ed25519 签名验签与密钥 PEM；64 字节原始签名（JWT EdDSA） |
 | `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
 | `kafka` | 生产者 `PublisherService`、消费者 `ConsumerService`、`kafkatest` 测试封装 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |

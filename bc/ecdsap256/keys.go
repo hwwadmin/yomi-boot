@@ -1,6 +1,7 @@
-// Package ecdsap256 提供 ECDSA P-256 + SHA-256 签名验签与 PEM 密钥管理
+// Package ecdsap256 提供 ECDSA P-256 + SHA-256 签名验签与密钥 PEM 管理
 //
 // 签名输出 ASN.1 DER，对应 JCA SHA256withECDSA；JWT ES256 使用固定宽度 R||S，需另行转换。
+// 仅支持密钥 PEM（PKCS#8/SEC1/PKIX），不含证书与加密私钥。
 //
 // @author zwei
 package ecdsap256

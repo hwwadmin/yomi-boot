@@ -52,6 +52,14 @@ func TestSignVerify(t *testing.T) {
 	}
 }
 
+// TestInvalidKey 验证零值私钥返回错误而非 panic
+func TestInvalidKey(t *testing.T) {
+	zero := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: elliptic.P256()}}
+	if _, err := Sign(zero, []byte("m")); err == nil {
+		t.Fatal("零值私钥应失败")
+	}
+}
+
 // TestPEMRoundTrip 验证 PKCS#8 / SEC1 私钥与 PKIX 公钥 PEM 往返
 func TestPEMRoundTrip(t *testing.T) {
 	priv, err := GenerateKey()

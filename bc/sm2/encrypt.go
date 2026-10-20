@@ -20,8 +20,8 @@ func EncryptASN1(pub *PublicKey, plain []byte) ([]byte, error) {
 
 // Decrypt 解密 Encrypt 或 EncryptASN1 产出的密文（自动识别格式）
 func Decrypt(priv *PrivateKey, ciphertext []byte) ([]byte, error) {
-	if priv == nil {
-		return nil, errors.New("sm2: private key 为 nil")
+	if err := validPrivateKey(priv); err != nil {
+		return nil, err
 	}
 	if len(ciphertext) == 0 {
 		return nil, errors.Sentinel(ErrDecrypt)
@@ -35,11 +35,8 @@ func Decrypt(priv *PrivateKey, ciphertext []byte) ([]byte, error) {
 
 // encrypt 校验公钥后执行 SM2 加密
 func encrypt(pub *PublicKey, plain []byte, asn1 bool) ([]byte, error) {
-	if pub == nil {
-		return nil, errors.New("sm2: public key 为 nil")
-	}
-	if !gmsm.IsSM2PublicKey(pub) {
-		return nil, errors.New("sm2: public key 不是 SM2 曲线")
+	if err := validPublicKey(pub); err != nil {
+		return nil, err
 	}
 	if len(plain) == 0 {
 		return nil, errors.New("sm2: plain 不能为空")

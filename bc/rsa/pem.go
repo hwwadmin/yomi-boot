@@ -53,6 +53,7 @@ func ParsePrivateKeyPEM(pemBytes []byte) (*stdrsa.PrivateKey, error) {
 
 // ParseEncryptedPrivateKeyPEM 解析带密码的私钥 PEM：
 // PKCS#8 的 ENCRYPTED PRIVATE KEY（PBES2）或 OpenSSL 传统加密的 RSA PRIVATE KEY。
+// 传统 PEM 使用 MD5 KDF，仅用于存量兼容；新密钥优先 PKCS#8 PBES2。
 func ParseEncryptedPrivateKeyPEM(pemBytes, password []byte) (*stdrsa.PrivateKey, error) {
 	if len(password) == 0 {
 		return nil, errors.New("rsa: password 不能为空")
@@ -87,7 +88,7 @@ func ParseEncryptedPrivateKeyPEM(pemBytes, password []byte) (*stdrsa.PrivateKey,
 	}
 }
 
-// ParseCertificatePEM 解析 X.509 证书 PEM；含多张证书时取第一张
+// ParseCertificatePEM 解析 X.509 证书 PEM；含多张证书时取第一张，不校验证书链与有效期
 func ParseCertificatePEM(pemBytes []byte) (*x509.Certificate, error) {
 	certs, err := ParseCertificatesPEM(pemBytes)
 	if err != nil {
@@ -96,7 +97,7 @@ func ParseCertificatePEM(pemBytes []byte) (*x509.Certificate, error) {
 	return certs[0], nil
 }
 
-// ParseCertificatesPEM 解析 PEM 中的全部 X.509 证书
+// ParseCertificatesPEM 解析 PEM 中的全部 X.509 证书（仅解析，不校验证书链与有效期）
 func ParseCertificatesPEM(pemBytes []byte) ([]*x509.Certificate, error) {
 	var certs []*x509.Certificate
 	rest := pemBytes
@@ -121,7 +122,7 @@ func ParseCertificatesPEM(pemBytes []byte) ([]*x509.Certificate, error) {
 	return certs, nil
 }
 
-// ParsePublicKeyFromCertificatePEM 从 X.509 证书 PEM 提取 RSA 公钥
+// ParsePublicKeyFromCertificatePEM 从第一张 X.509 证书提取 RSA 公钥；多证书请先用 ParseCertificatesPEM 选择
 func ParsePublicKeyFromCertificatePEM(pemBytes []byte) (*stdrsa.PublicKey, error) {
 	cert, err := ParseCertificatePEM(pemBytes)
 	if err != nil {
@@ -139,11 +140,18 @@ func isEncryptedPEMBlock(block *pem.Block) bool {
 	return block.Type == "ENCRYPTED PRIVATE KEY" || block.Headers["DEK-Info"] != ""
 }
 
-// ParsePublicKeyPEM 解析 PKIX 公钥 PEM
+// ParsePublicKeyPEM 解析 PKIX 或 PKCS#1 公钥 PEM
 func ParsePublicKeyPEM(pemBytes []byte) (*stdrsa.PublicKey, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
 		return nil, errors.New("rsa: 无效的公钥 PEM")
+	}
+	if block.Type == "RSA PUBLIC KEY" {
+		pub, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "rsa: parse public key")
+		}
+		return pub, nil
 	}
 	parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
