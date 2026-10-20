@@ -11,14 +11,14 @@ import (
 
 // SysEventInboxDlq 映射 sys_event_inbox_dlq 收件箱死信表
 type SysEventInboxDlq struct {
-	ServiceName    string     `gorm:"column:service_name;size:100;not null;uniqueIndex:uk_service_event_id"`
-	EventID        string     `gorm:"column:event_id;size:100;not null;uniqueIndex:uk_service_event_id"`
-	Topic          string     `gorm:"column:topic;size:200;not null"`
-	Payload        string     `gorm:"column:payload;type:longtext"`
-	ErrorMsg       string     `gorm:"column:error_msg;type:text"`
-	RetryCount     int        `gorm:"column:retry_count;not null;default:0"`
-	RetryLastTime  *time.Time `gorm:"column:retry_last_time"`
-	RetryAfterTime *time.Time `gorm:"column:retry_after_time"`
+	ServiceName    string     `gorm:"column:service_name;size:100;not null;uniqueIndex:uk_service_event_id"` // ServiceName 是消费方服务名
+	EventID        string     `gorm:"column:event_id;size:100;not null;uniqueIndex:uk_service_event_id"`     // EventID 是全局唯一事件 ID
+	Topic          string     `gorm:"column:topic;size:200;not null"`                                        // Topic 是事件主题
+	Payload        string     `gorm:"column:payload;type:longtext"`                                          // Payload 是事件负载
+	ErrorMsg       string     `gorm:"column:error_msg;type:text"`                                            // ErrorMsg 是失败信息
+	RetryCount     int        `gorm:"column:retry_count;not null;default:0"`                                 // RetryCount 是已重试次数
+	RetryLastTime  *time.Time `gorm:"column:retry_last_time"`                                                // RetryLastTime 是最后重投时间
+	RetryAfterTime *time.Time `gorm:"column:retry_after_time"`                                               // RetryAfterTime 是最早可重投时间
 	db.BaseModel
 }
 

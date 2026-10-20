@@ -2,6 +2,7 @@
 -- 消息队列事件模块建表脚本
 -- 作者: zwei
 -- 说明:
+--   event_id 是全局唯一事件 ID（建议使用雪花 ID），所有 event 表统一遵守此约定；
 --   sys_event_outbox.status 对应 EventOutboxStatus: PENDING-待处理, FETCHED-已抓取, SENT_SUCCESS-发送成功, SENT_FAIL-发送失败
 -- ----------------------------
 
@@ -9,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_inbox`
 (
     `id`           bigint       NOT NULL COMMENT '主键ID',
     `service_name` varchar(100) NOT NULL COMMENT '归属业务系统名称',
-    `event_id`     varchar(100) NOT NULL COMMENT '事件ID（服务内唯一，用于幂等校验）',
+    `event_id`     varchar(100) NOT NULL COMMENT '事件ID（全局唯一，用于幂等校验）',
     `topic`        varchar(200) NOT NULL COMMENT '事件主题',
     `payload`      longtext              DEFAULT NULL COMMENT '事件内容负载',
     `create_time`  datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_outbox`
 (
     `id`           bigint       NOT NULL COMMENT '主键ID',
     `service_name` varchar(100) NOT NULL COMMENT '归属业务系统名称',
-    `event_id`     varchar(100) NOT NULL COMMENT '事件ID',
+    `event_id`     varchar(100) NOT NULL COMMENT '事件ID（全局唯一）',
     `topic`        varchar(200) NOT NULL COMMENT '事件主题',
     `payload`      longtext              DEFAULT NULL COMMENT '事件内容负载',
     `status`       varchar(20)  NOT NULL DEFAULT 'PENDING' COMMENT '事件状态: PENDING-待处理, FETCHED-已抓取, SENT_SUCCESS-发送成功, SENT_FAIL-发送失败',
@@ -82,7 +83,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_inbox_dlq`
 (
     `id`           bigint       NOT NULL COMMENT '主键ID',
     `service_name` varchar(100) NOT NULL COMMENT '归属业务系统名称',
-    `event_id`     varchar(100) NOT NULL COMMENT '事件ID',
+    `event_id`     varchar(100) NOT NULL COMMENT '事件ID（全局唯一）',
     `topic`        varchar(200) NOT NULL COMMENT '事件主题',
     `payload`      longtext              DEFAULT NULL COMMENT '事件内容负载',
     `error_msg`    text                  DEFAULT NULL COMMENT '失败信息',

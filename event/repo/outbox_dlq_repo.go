@@ -80,7 +80,7 @@ func (r *OutboxDlqRepo) DeleteWithOutboxSuccess(
 ) error {
 	outbox.Status = model.OutboxStatusSentSuccess
 	outbox.SentTime = &sentTime
-	if err := outboxRepo.Update(ctx, outbox); err != nil {
+	if _, err := outboxRepo.MarkSentSuccessFromDlq(ctx, outbox.ID, sentTime); err != nil {
 		return err
 	}
 	return r.Delete(ctx, dlq.ID)

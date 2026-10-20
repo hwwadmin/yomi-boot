@@ -39,7 +39,8 @@ func NewPublisher(
 	}
 }
 
-// Publish 将事件写入发件箱，应在业务事务内调用以保证与业务数据原子提交
+// Publish 将事件写入发件箱，应在业务事务内调用以保证与业务数据原子提交。
+// evt.EventID 必须全局唯一（建议使用雪花 ID）；同一 service 下重复发布会返回 ErrDuplicatePublish。
 func (p *Publisher) Publish(ctx context.Context, evt Event) error {
 	if evt.EventID == "" || evt.Topic == "" {
 		return errors.Sentinel(ErrEventInvalid)

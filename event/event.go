@@ -5,5 +5,5 @@ package event
 
 import "gitee.com/hq_project/yomi-boot/event/model"
 
-// Event 消息队列事件
+// Event 消息队列事件；EventID 必须全局唯一（建议使用雪花 ID）
 type Event = model.WireEvent

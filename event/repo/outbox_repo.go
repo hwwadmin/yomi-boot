@@ -65,6 +65,8 @@ func (r *OutboxRepo) FetchFetchedTimeout(ctx context.Context, serviceName string
 }
 
 // Update 全量更新发件箱记录
+//
+// 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/MarkPendingBatch/MarkSentSuccess/MarkSentFail。
 func (r *OutboxRepo) Update(ctx context.Context, row *model.SysEventOutbox) error {
 	if err := r.UpdateAll(ctx, row); err != nil {
 		return errors.Wrap(err, "更新发件箱记录失败")
@@ -73,6 +75,8 @@ func (r *OutboxRepo) Update(ctx context.Context, row *model.SysEventOutbox) erro
 }
 
 // UpdateBatch 批量全量更新发件箱记录（按固定分片提交，避免单条 SQL 过大）
+//
+// 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/MarkPendingBatch。
 func (r *OutboxRepo) UpdateBatch(ctx context.Context, rows []model.SysEventOutbox) error {
 	if len(rows) == 0 {
 		return nil
@@ -84,6 +88,98 @@ func (r *OutboxRepo) UpdateBatch(ctx context.Context, rows []model.SysEventOutbo
 		}
 	}
 	return nil
+}
+
+// MarkFetchedBatch 仅将仍为 PENDING 的记录批量标记为 FETCHED，返回实际更新成功的 ID
+func (r *OutboxRepo) MarkFetchedBatch(ctx context.Context, ids []int64, fetchTime time.Time) ([]int64, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	result := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id IN ? AND status = ?", ids, model.OutboxStatusPending).
+		Updates(map[string]any{
+			"status":     model.OutboxStatusFetched,
+			"fetch_time": fetchTime,
+		})
+	if result.Error != nil {
+		return nil, errors.Wrap(result.Error, "批量标记发件箱事件为已抓取失败")
+	}
+	if result.RowsAffected == int64(len(ids)) {
+		return ids, nil
+	}
+
+	var fetchedIDs []int64
+	if err := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id IN ? AND status = ?", ids, model.OutboxStatusFetched).
+		Pluck("id", &fetchedIDs).Error; err != nil {
+		return nil, errors.Wrap(err, "查询已标记发件箱事件失败")
+	}
+	return fetchedIDs, nil
+}
+
+// MarkPendingBatch 仅将仍为 FETCHED 且已超时的记录批量恢复为 PENDING，返回实际更新行数
+func (r *OutboxRepo) MarkPendingBatch(ctx context.Context, ids []int64, fetchTimeBefore time.Time) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id IN ? AND status = ? AND fetch_time < ?",
+			ids, model.OutboxStatusFetched, fetchTimeBefore).
+		Updates(map[string]any{
+			"status":     model.OutboxStatusPending,
+			"fetch_time": nil,
+		})
+	if result.Error != nil {
+		return 0, errors.Wrap(result.Error, "批量重置发件箱事件为待处理失败")
+	}
+	return result.RowsAffected, nil
+}
+
+// MarkSentSuccess 仅将仍为 FETCHED 的记录标记为发送成功，返回是否实际更新
+func (r *OutboxRepo) MarkSentSuccess(ctx context.Context, id int64, sentTime time.Time) (bool, error) {
+	result := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id = ? AND status = ?", id, model.OutboxStatusFetched).
+		Updates(map[string]any{
+			"status":    model.OutboxStatusSentSuccess,
+			"sent_time": sentTime,
+		})
+	if result.Error != nil {
+		return false, errors.Wrap(result.Error, "标记发件箱事件发送成功失败")
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// MarkSentFail 仅将仍为 FETCHED 的记录标记为发送失败，返回是否实际更新
+func (r *OutboxRepo) MarkSentFail(ctx context.Context, id int64) (bool, error) {
+	result := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id = ? AND status = ?", id, model.OutboxStatusFetched).
+		Updates(map[string]any{
+			"status": model.OutboxStatusSentFail,
+		})
+	if result.Error != nil {
+		return false, errors.Wrap(result.Error, "标记发件箱事件发送失败失败")
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// MarkSentSuccessFromDlq 将非发送成功状态的事件标记为发送成功，用于死信重投成功后的回写
+func (r *OutboxRepo) MarkSentSuccessFromDlq(ctx context.Context, id int64, sentTime time.Time) (bool, error) {
+	result := db.Exec(ctx, r.DB).
+		Model(&model.SysEventOutbox{}).
+		Where("id = ? AND status <> ?", id, model.OutboxStatusSentSuccess).
+		Updates(map[string]any{
+			"status":    model.OutboxStatusSentSuccess,
+			"sent_time": sentTime,
+		})
+	if result.Error != nil {
+		return false, errors.Wrap(result.Error, "标记死信发件箱事件发送成功失败")
+	}
+	return result.RowsAffected > 0, nil
 }
 
 // RestorePendingBatch 将指定发件箱记录批量恢复为待处理状态（仅处理 FETCHED 记录）

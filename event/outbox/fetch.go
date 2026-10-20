@@ -65,14 +65,30 @@ func (f *Fetcher) doTask(ctx context.Context) error {
 	}
 
 	now := time.Now()
+	ids := make([]int64, 0, len(rows))
 	for i := range rows {
 		rows[i].Status = model.OutboxStatusFetched
 		rows[i].FetchTime = &now
+		ids = append(ids, rows[i].ID)
 	}
-	if err := f.outboxRepo.UpdateBatch(ctx, rows); err != nil {
+	fetchedIDs, err := f.outboxRepo.MarkFetchedBatch(ctx, ids, now)
+	if err != nil {
 		return err
 	}
+	if len(fetchedIDs) == 0 {
+		return nil
+	}
 
-	f.processor.OfferBatch(ctx, rows)
+	fetchedSet := make(map[int64]struct{}, len(fetchedIDs))
+	for _, id := range fetchedIDs {
+		fetchedSet[id] = struct{}{}
+	}
+	fetchedRows := make([]model.SysEventOutbox, 0, len(fetchedIDs))
+	for i := range rows {
+		if _, ok := fetchedSet[rows[i].ID]; ok {
+			fetchedRows = append(fetchedRows, rows[i])
+		}
+	}
+	f.processor.OfferBatch(ctx, fetchedRows)
 	return nil
 }

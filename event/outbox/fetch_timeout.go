@@ -59,16 +59,17 @@ func (f *FetchTimeout) doTask(ctx context.Context) error {
 		"sample", buildOutboxSample(rows),
 	)
 
+	ids := make([]int64, 0, len(rows))
 	for i := range rows {
-		rows[i].Status = model.OutboxStatusPending
-		rows[i].FetchTime = nil
+		ids = append(ids, rows[i].ID)
 	}
-	if err := f.outboxRepo.UpdateBatch(ctx, rows); err != nil {
+	resetCount, err := f.outboxRepo.MarkPendingBatch(ctx, ids, timeoutBefore)
+	if err != nil {
 		return err
 	}
 
 	logger.Warn(ctx, "[消息队列事件]FETCHED 超时消息重置完成",
-		"count", len(rows), "serviceName", f.cfg.ServiceName)
+		"count", resetCount, "serviceName", f.cfg.ServiceName)
 	return nil
 }
 

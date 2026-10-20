@@ -21,7 +21,7 @@ import (
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
-// Receiver 幂等消息队列事件接收器
+// Receiver 幂等消息队列事件接收器；消费侧按 (ServiceName, EventID) 去重，要求发布侧 EventID 全局唯一
 type Receiver struct {
 	inboxRepo    *repo.InboxRepo
 	inboxDlqRepo *repo.InboxDlqRepo

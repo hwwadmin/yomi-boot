@@ -176,7 +176,7 @@ services/{domain}/
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
-| `event` | 可选 Outbox/Inbox 事件组件（`publisher_enabled` / `consumer_enabled` 任一为 true 时由插件启动） |
+| `event` | 可选 Outbox/Inbox 事件组件（`publisher_enabled` / `consumer_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
 | `router` | `Registrar` 接口与路由注册 |
 | `handler` | `BindAndHandle` 等协议适配 |
 | `shared` | 跨服务通用 dto（含微服务请求/响应信封）、enums、常量 |

@@ -111,6 +111,172 @@ func TestOutboxRepoUpdateBatchShardsStatements(t *testing.T) {
 	}
 }
 
+// TestOutboxRepoMarkFetchedBatchOnlyPending 验证只有 PENDING 记录会被标记为 FETCHED
+func TestOutboxRepoMarkFetchedBatchOnlyPending(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusPending},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusPending},
+		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusSentSuccess},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	now := time.Now()
+	fetched, err := r.MarkFetchedBatch(context.Background(), []int64{1, 2, 3}, now)
+	if err != nil {
+		t.Fatalf("标记 FETCHED 失败: %v", err)
+	}
+	if len(fetched) != 2 {
+		t.Fatalf("期望 2 条实际更新，实际 %d 条: %v", len(fetched), fetched)
+	}
+
+	var stored []model.SysEventOutbox
+	if err := gormDB.Order("id ASC").Find(&stored).Error; err != nil {
+		t.Fatalf("查询发件箱数据失败: %v", err)
+	}
+	if stored[0].Status != model.OutboxStatusFetched || stored[0].FetchTime == nil {
+		t.Fatalf("PENDING 记录应变为 FETCHED: %+v", stored[0])
+	}
+	if stored[1].Status != model.OutboxStatusFetched || stored[1].FetchTime == nil {
+		t.Fatalf("PENDING 记录应变为 FETCHED: %+v", stored[1])
+	}
+	if stored[2].Status != model.OutboxStatusSentSuccess {
+		t.Fatalf("SENT_SUCCESS 记录不应被覆盖: %+v", stored[2])
+	}
+}
+
+// TestOutboxRepoMarkPendingBatchOnlyTimeoutFetched 验证只有超时 FETCHED 记录会被重置
+func TestOutboxRepoMarkPendingBatchOnlyTimeoutFetched(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	oldTime := time.Now().Add(-10 * time.Minute)
+	freshTime := time.Now()
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldTime},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &freshTime},
+		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusSentSuccess, FetchTime: &oldTime},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	affected, err := r.MarkPendingBatch(context.Background(), []int64{1, 2, 3}, time.Now().Add(-5*time.Minute))
+	if err != nil {
+		t.Fatalf("重置 PENDING 失败: %v", err)
+	}
+	if affected != 1 {
+		t.Fatalf("期望实际更新 1 条，实际 %d 条", affected)
+	}
+
+	var stored []model.SysEventOutbox
+	if err := gormDB.Order("id ASC").Find(&stored).Error; err != nil {
+		t.Fatalf("查询发件箱数据失败: %v", err)
+	}
+	if stored[0].Status != model.OutboxStatusPending || stored[0].FetchTime != nil {
+		t.Fatalf("超时 FETCHED 记录应重置为 PENDING: %+v", stored[0])
+	}
+	if stored[1].Status != model.OutboxStatusFetched || stored[1].FetchTime == nil {
+		t.Fatalf("未超时 FETCHED 记录不应被重置: %+v", stored[1])
+	}
+	if stored[2].Status != model.OutboxStatusSentSuccess {
+		t.Fatalf("SENT_SUCCESS 记录不应被重置: %+v", stored[2])
+	}
+}
+
+// TestOutboxRepoMarkSentSuccessOnlyFetched 验证发送成功回写不会覆盖非 FETCHED 状态
+func TestOutboxRepoMarkSentSuccessOnlyFetched(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusFetched},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusSentSuccess},
+		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusPending},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	now := time.Now()
+	if updated, err := r.MarkSentSuccess(context.Background(), 1, now); err != nil || !updated {
+		t.Fatalf("FETCHED 记录应更新成功: updated=%v err=%v", updated, err)
+	}
+	if updated, err := r.MarkSentSuccess(context.Background(), 2, now); err != nil || updated {
+		t.Fatalf("SENT_SUCCESS 记录不应再次更新: updated=%v err=%v", updated, err)
+	}
+	if updated, err := r.MarkSentSuccess(context.Background(), 3, now); err != nil || updated {
+		t.Fatalf("PENDING 记录不应被覆盖: updated=%v err=%v", updated, err)
+	}
+}
+
+// TestOutboxRepoMarkSentFailOnlyFetched 验证发送失败回写不会覆盖非 FETCHED 状态
+func TestOutboxRepoMarkSentFailOnlyFetched(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusFetched},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusSentSuccess},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	if updated, err := r.MarkSentFail(context.Background(), 1); err != nil || !updated {
+		t.Fatalf("FETCHED 记录应更新为 SENT_FAIL: updated=%v err=%v", updated, err)
+	}
+	if updated, err := r.MarkSentFail(context.Background(), 2); err != nil || updated {
+		t.Fatalf("SENT_SUCCESS 记录不应被覆盖: updated=%v err=%v", updated, err)
+	}
+}
+
+// TestOutboxRepoMarkSentSuccessFromDlq 验证死信成功回写只处理非成功状态
+func TestOutboxRepoMarkSentSuccessFromDlq(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusSentFail},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusSentSuccess},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	now := time.Now()
+	if updated, err := r.MarkSentSuccessFromDlq(context.Background(), 1, now); err != nil || !updated {
+		t.Fatalf("SENT_FAIL 记录应更新成功: updated=%v err=%v", updated, err)
+	}
+	if updated, err := r.MarkSentSuccessFromDlq(context.Background(), 2, now); err != nil || updated {
+		t.Fatalf("SENT_SUCCESS 记录不应再次更新: updated=%v err=%v", updated, err)
+	}
+}
+
 // TestOutboxRepoRestorePendingBatch 验证批量恢复只重置 FETCHED 记录
 func TestOutboxRepoRestorePendingBatch(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
