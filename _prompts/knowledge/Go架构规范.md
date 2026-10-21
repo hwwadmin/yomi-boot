@@ -173,7 +173,7 @@ services/{domain}/
 | 目录 | 包 |
 | ---- | -- |
 | `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
-| `boot/` | `bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`requestguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
+| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`requestguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
 | `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`ratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
 | `cloud/` | `consul`、`dtm`、`rpc` |
 
@@ -274,11 +274,18 @@ cmd/main.go
             └─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustBuildServer(infra, registrars, middlewares)
 ```
 
+业务入口也可直接使用根包 `boot` 的快捷入口：
+
+- `boot.Run(name, envPrefix, wire)`：默认配置路径与默认中间件链。
+- `boot.RunWithOptions(opts, wire)`：自定义 `ConfigPath`、`InfraOptions` 或中间件工厂。
+
+两者内部完成 `MustInitInfra → wireHandlers → MustBuildServer → runner.RunServer`，低层 API 仍然可用。
+
 #### 3.4.3 bootstrap 约定
 
 - 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要消息消费者时另增 `*_consumer_plugin.go`。
 - `server.go` 内的 `NewServer(configPath string) *runner.ServerBundle` 手写组合根，通过 `wireHandlers(infra)` 显式 `NewXxx` 构造依赖链。
-- `main.go` 只调用 `runner.Run`；`internal/bootstrap/server.go` 只组装与 wiring。
+- `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `runner.Run`）；`internal/bootstrap/server.go` 只组装与 wiring。
 - `MustBuildServer` 返回的 `runner.ServerBundle.Cleanup` 绑定 `infra.Cleanup()`，停机时先 HTTP `Shutdown`，再逆序执行插件 `Close`。
 
 #### 3.4.4 插件生命周期

@@ -12,10 +12,27 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | 目录 | 职责 |
 | ---- | ---- |
 | `ai/` | 可选 AI 能力簇（LLM、Embedding、Jev、RAG、VectorDB）；不进 bootstrap、不读 YAML、不参与插件生命周期 |
-| `boot/` | 项目基础件：配置、日志、HTTP 内核、上下文、生命周期、加密、错误与共享工具 |
+| `boot/` | 项目基础件：启动快捷入口、配置、日志、HTTP 内核、上下文、生命周期、加密、错误与共享工具 |
 | `component/` | 通用组件：DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket 等 |
 | `cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
 
+## 快速启动
+
+业务入口可直接使用根包 `boot` 完成基础设施初始化、路由装配、HTTP 服务构建与优雅停机：
+
+```go
+package main
+
+import "gitee.com/hq_project/yomi-boot/boot"
+
+func main() {
+	boot.Run("note-service", "YOMI_NOTE", func(infra *boot.Infra) []boot.Registrar {
+		return wireHandlers(infra) // wireHandlers 为业务装配函数
+	})
+}
+```
+
+需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `bootstrap.MustInitInfra`、`bootstrap.MustBuildServer`、`runner.Run` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
 
 ## 中间件推荐适配版本
 
