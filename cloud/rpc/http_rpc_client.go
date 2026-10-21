@@ -230,12 +230,20 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 		}
 
-		// 成功响应照常返回；慢调用触发的熔断打开只影响后续调用
-		if c.breaker.record(ticket, attemptResult{
-			slow:    elapsed > c.breaker.slowThreshold(),
-			counted: true,
-		}) {
+		// 成功响应照常返回；只有本次结果真正打开了熔断才记 breaker.open，
+		// 避免熔断已被其他调用打开时把快速成功误标成 slow
+		slow := elapsed > c.breaker.slowThreshold()
+		switch c.breaker.recordOutcome(ticket, attemptResult{slow: slow, counted: true}) {
+		case breakerRecordOpenedByFailure:
+			c.logBreakerOpen(ctx, req.Endpoint, attempt, "failure_rate", nil)
+		case breakerRecordOpenedBySlow:
 			c.logBreakerOpen(ctx, req.Endpoint, attempt, "slow", nil)
+		case breakerRecordOpenedByProbe:
+			reason := "probe"
+			if slow {
+				reason = "slow"
+			}
+			c.logBreakerOpen(ctx, req.Endpoint, attempt, reason, nil)
 		}
 		ok, hookErr := req.BizHook(callCtx, BizHookContext{
 			Endpoint: req.Endpoint,

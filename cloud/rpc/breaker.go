@@ -91,34 +91,48 @@ func (b *circuitBreaker) acquireProbe() breakerTicket {
 	return breakerTicket{probe: true, seq: b.probeSeq}
 }
 
-// record 记录一次传输尝试；closed 态累计窗口，half-open 态只认当前探测票据
-// 半开探测健康则立即关闭，否则重新打开并重置计时
-// 返回 true 表示记录后熔断处于打开状态，调用方应停止后续重试
+// breakerRecordResult 描述一次 record 对熔断状态的影响
+type breakerRecordResult int
+
+const (
+	breakerRecordClosed          breakerRecordResult = iota // 记录后未打开
+	breakerRecordOpenedByFailure                            // 本次记录触发失败率打开
+	breakerRecordOpenedBySlow                               // 本次记录触发慢调用率打开
+	breakerRecordOpenedByProbe                              // 半开探测不健康，重新打开
+	breakerRecordAlreadyOpen                                // 记录时已经打开
+)
+
+// record 记录一次传输尝试；返回 true 表示记录后熔断处于打开状态，调用方应停止后续重试
 func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool {
+	return b.recordOutcome(ticket, result) != breakerRecordClosed
+}
+
+// recordOutcome 记录一次传输尝试并返回状态变化；closed 态累计窗口，half-open 态只认当前探测票据
+func (b *circuitBreaker) recordOutcome(ticket breakerTicket, result attemptResult) breakerRecordResult {
 	if b == nil {
-		return false
+		return breakerRecordClosed
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	switch b.state {
 	case breakerOpen:
-		return true
+		return breakerRecordAlreadyOpen
 	case breakerHalfOpen:
 		if !ticket.probe || ticket.seq != b.probeSeq {
-			return false
+			return breakerRecordClosed
 		}
 		b.probeInFlight = false
 		if probePassed(result) {
 			b.close()
-			return false
+			return breakerRecordClosed
 		}
 		b.open()
-		return true
+		return breakerRecordOpenedByProbe
 	default:
 		// 丢弃上一轮半开遗留的探测结果
 		if ticket.probe && ticket.seq != b.probeSeq {
-			return false
+			return breakerRecordClosed
 		}
 		b.window = append(b.window, result)
 		if len(b.window) > b.cfg.WindowSize {
@@ -132,13 +146,13 @@ func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool
 		}
 		if len(b.failureWindow) >= b.cfg.MinRequests && b.failureRate() >= b.cfg.FailureRate {
 			b.open()
-			return true
+			return breakerRecordOpenedByFailure
 		}
 		if len(b.window) >= b.cfg.MinRequests && b.slowRate() >= b.cfg.SlowRate {
 			b.open()
-			return true
+			return breakerRecordOpenedBySlow
 		}
-		return false
+		return breakerRecordClosed
 	}
 }
 

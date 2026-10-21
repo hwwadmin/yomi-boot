@@ -329,3 +329,50 @@ func TestCircuitBreaker_HalfOpenFailureResetsTimer(t *testing.T) {
 		t.Fatalf("探测失败后应重置打开计时，first=%v now=%v", firstOpenUntil, b.openUntil)
 	}
 }
+
+// TestCircuitBreaker_RecordOutcome 验证 recordOutcome 区分本次打开、已打开和未打开
+func TestCircuitBreaker_RecordOutcome(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 1
+	cfg.MinRequests = 1
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	b := newCircuitBreaker(cfg)
+
+	ticket, _ := b.allow()
+	if got := b.recordOutcome(ticket, attemptResult{failure: true, counted: true}); got != breakerRecordOpenedByFailure {
+		t.Fatalf("首次失败打开应返回 OpenedByFailure，实际 %d", got)
+	}
+	if got := b.recordOutcome(ticket, attemptResult{failure: true, counted: true}); got != breakerRecordAlreadyOpen {
+		t.Fatalf("已打开时应返回 AlreadyOpen，实际 %d", got)
+	}
+
+	time.Sleep(30 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	if got := b.recordOutcome(probe, attemptResult{counted: true}); got != breakerRecordClosed {
+		t.Fatalf("半开探测成功应返回 Closed，实际 %d", got)
+	}
+
+	slowBreaker := newCircuitBreaker(cfg)
+	slowTicket, _ := slowBreaker.allow()
+	if got := slowBreaker.recordOutcome(slowTicket, attemptResult{slow: true, counted: true}); got != breakerRecordOpenedBySlow {
+		t.Fatalf("慢成功打开应返回 OpenedBySlow，实际 %d", got)
+	}
+
+	failCfg := testBreakerConfig()
+	failCfg.WindowSize = 2
+	failCfg.MinRequests = 2
+	failCfg.FailureRate = 0.5
+	failCfg.SlowRate = 1
+	failBreaker := newCircuitBreaker(failCfg)
+	failTicket, _ := failBreaker.allow()
+	if got := failBreaker.recordOutcome(failTicket, attemptResult{failure: true, counted: true}); got != breakerRecordClosed {
+		t.Fatalf("样本不足时不应打开，实际 %d", got)
+	}
+	if got := failBreaker.recordOutcome(failTicket, attemptResult{counted: true}); got != breakerRecordOpenedByFailure {
+		t.Fatalf("成功样本补足窗口后应由失败率打开，实际 %d", got)
+	}
+}
