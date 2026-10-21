@@ -11,10 +11,10 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/logger"
 )
 
-// defaultMaxLogBodyBytes 是请求/响应体日志的截断上限
+// defaultMaxLogBodyBytes 请求/响应体日志的截断上限
 const defaultMaxLogBodyBytes = 4 << 10
 
-// logRequest 记录请求体（Info）；仅在 LogBodies 开启时调用
+// logRequest 记录请求体（Info），由 LogBodies 控制
 func (c *HttpRpcClient) logRequest(ctx context.Context, endpoint string, payload []byte) {
 	logger.Info(ctx, "rpc.request",
 		"service", c.serviceName,
@@ -23,7 +23,7 @@ func (c *HttpRpcClient) logRequest(ctx context.Context, endpoint string, payload
 	)
 }
 
-// logResponse 记录响应体（Info）；仅在 LogBodies 开启时调用
+// logResponse 记录响应体（Info），由 LogBodies 控制
 func (c *HttpRpcClient) logResponse(ctx context.Context, endpoint string, attempt, status int, body []byte) {
 	fields := []any{
 		"service", c.serviceName,
@@ -63,7 +63,7 @@ func statusCodeOf(err error) int {
 	return 0
 }
 
-// retryLogFields 构造重试/预算日志的公共字段；不输出请求/响应体
+// retryLogFields 构造重试和预算日志的公共字段
 func (c *HttpRpcClient) retryLogFields(endpoint string, attempt, maxAttempts int, delay time.Duration, err error) []any {
 	fields := []any{
 		"service", c.serviceName,
@@ -76,18 +76,17 @@ func (c *HttpRpcClient) retryLogFields(endpoint string, attempt, maxAttempts int
 	return appendStatusFields(fields, err)
 }
 
-// logRetry 记录一次即将执行的重试，不输出请求/响应体
-// 单次重试用 Info；预算耗尽/熔断打开仍用 Warn，避免把高频重试混进告警
+// logRetry 记录一次重试（Info）
 func (c *HttpRpcClient) logRetry(ctx context.Context, endpoint string, attempt, maxAttempts int, delay time.Duration, err error) {
 	logger.Info(ctx, "rpc.retry", c.retryLogFields(endpoint, attempt, maxAttempts, delay, err)...)
 }
 
-// logBudgetExhausted 记录因本次调用预算不足而放弃重试
+// logBudgetExhausted 记录预算不足、结束重试
 func (c *HttpRpcClient) logBudgetExhausted(ctx context.Context, endpoint string, attempt, maxAttempts int, delay time.Duration, err error) {
 	logger.Warn(ctx, "rpc.retry.budget_exhausted", c.retryLogFields(endpoint, attempt, maxAttempts, delay, err)...)
 }
 
-// logBreakerOpen 记录熔断打开；err 只用于补充状态码/Retry-After，不输出响应体
+// logBreakerOpen 记录熔断打开；err 用于补充状态码和 Retry-After
 func (c *HttpRpcClient) logBreakerOpen(ctx context.Context, endpoint string, attempt int, reason string, err error) {
 	fields := []any{
 		"service", c.serviceName,
@@ -99,7 +98,7 @@ func (c *HttpRpcClient) logBreakerOpen(ctx context.Context, endpoint string, att
 	logger.Warn(ctx, "rpc.breaker.open", fields...)
 }
 
-// logBreakerReject 记录因熔断打开而拒绝的调用
+// logBreakerReject 记录熔断打开时被拦截的调用
 func (c *HttpRpcClient) logBreakerReject(ctx context.Context, endpoint string, attempt int) {
 	logger.Debug(ctx, "rpc.breaker.reject",
 		"service", c.serviceName,
@@ -126,7 +125,7 @@ func (c *HttpRpcClient) logRetryRecovered(ctx context.Context, endpoint string, 
 	)
 }
 
-// appendStatusFields 追加 HTTP 状态码与 Retry-After；不输出下游响应体
+// appendStatusFields 追加 HTTP 状态码和 Retry-After
 func appendStatusFields(fields []any, err error) []any {
 	var statusErr *HTTPStatusError
 	if errors.As(err, &statusErr) {
@@ -138,7 +137,7 @@ func appendStatusFields(fields []any, err error) []any {
 	return fields
 }
 
-// reasonOf 返回错误的简短类别，用于日志；不包含下游响应体
+// reasonOf 返回错误的日志类别（如 http、transport、protocol）
 func reasonOf(err error) string {
 	if err == nil {
 		return ""

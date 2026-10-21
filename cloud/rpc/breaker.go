@@ -12,15 +12,14 @@ import (
 // breakerState 熔断器状态
 type breakerState int
 
-// 熔断器状态取值
+// 状态取值：closed 关闭、open 打开、half-open 半开
 const (
 	breakerClosed breakerState = iota
 	breakerOpen
 	breakerHalfOpen
 )
 
-// breakerTicket 标记一次调用是否持有半开探测位
-// 非探测调用的零值 ticket 不会影响半开状态
+// breakerTicket 标记一次调用是否持有半开探测位；非探测调用使用零值
 type breakerTicket struct {
 	probe bool
 	seq   uint64
@@ -30,7 +29,7 @@ type breakerTicket struct {
 type attemptResult struct {
 	failure   bool // failure 表示传输失败
 	slow      bool // slow 表示响应耗时超过阈值
-	counted   bool // counted 表示计入失败率样本；4xx/429/3xx 不计入
+	counted   bool // counted 表示结果进入失败率样本（5xx/408、2xx、网络/协议错误）
 	throttled bool // throttled 表示下游限流；半开探测遇到时重新打开
 }
 
@@ -56,8 +55,7 @@ func newCircuitBreaker(cfg BreakerOptions) *circuitBreaker {
 	}
 }
 
-// allow 判断当前是否允许发起调用，并返回本次调用的探测票据
-// 熔断打开时返回 ErrCircuitOpen；冷却结束后只放行一个半开探测请求
+// allow 返回本次调用的探测票据；熔断打开时返回 ErrCircuitOpen，冷却结束后放行一个探测请求
 func (b *circuitBreaker) allow() (breakerTicket, error) {
 	if b == nil {
 		return breakerTicket{}, nil
@@ -95,7 +93,7 @@ func (b *circuitBreaker) acquireProbe() breakerTicket {
 // breakerRecordResult 描述一次 record 对熔断状态的影响
 type breakerRecordResult int
 
-// 记录结果取值
+// 记录结果：未打开、本次打开、已打开
 const (
 	breakerRecordClosed          breakerRecordResult = iota // 记录后未打开
 	breakerRecordOpenedByFailure                            // 本次记录触发失败率打开
@@ -104,12 +102,12 @@ const (
 	breakerRecordAlreadyOpen                                // 记录时已经打开
 )
 
-// record 记录一次传输尝试；返回 true 表示记录后熔断处于打开状态，调用方应停止后续重试
+// record 记录一次尝试；熔断打开时返回 true，调用方停止重试
 func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool {
 	return b.recordOutcome(ticket, result) != breakerRecordClosed
 }
 
-// recordOutcome 记录一次传输尝试并返回状态变化；closed 态累计窗口，half-open 态只认当前探测票据
+// recordOutcome 记录一次尝试并返回结果；closed 态累计窗口，half-open 态只认当前探测票据
 func (b *circuitBreaker) recordOutcome(ticket breakerTicket, result attemptResult) breakerRecordResult {
 	if b == nil {
 		return breakerRecordClosed
@@ -132,7 +130,7 @@ func (b *circuitBreaker) recordOutcome(ticket breakerTicket, result attemptResul
 		b.open()
 		return breakerRecordOpenedByProbe
 	default:
-		// 丢弃上一轮半开遗留的探测结果
+		// 过期探测票据的结果不进入窗口
 		if ticket.probe && ticket.seq != b.probeSeq {
 			return breakerRecordClosed
 		}
@@ -158,14 +156,12 @@ func (b *circuitBreaker) recordOutcome(ticket breakerTicket, result attemptResul
 	}
 }
 
-// probePassed 判断半开探测结果是否健康：不失败、不慢、不被限流
-// 慢调用和 429 虽然不算 failure，但也不代表下游已恢复，仍重新打开
+// probePassed 判断探测结果是否健康：无失败、无慢调用、未被限流；慢调用和 429 视为不健康
 func probePassed(result attemptResult) bool {
 	return !result.failure && !result.slow && !result.throttled
 }
 
-// onNeutral 记录中性结果：调用方取消等不反映下游健康度，不累计窗口，只释放当前探测位
-// 半开状态保持不变，下一次调用可以重新探测
+// onNeutral 处理中性结果：保持熔断状态，释放探测位，下一次调用可重新探测
 func (b *circuitBreaker) onNeutral(ticket breakerTicket) {
 	if b == nil {
 		return

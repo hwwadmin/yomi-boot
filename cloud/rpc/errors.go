@@ -21,7 +21,7 @@ var (
 	ErrDiscovery = errors.NewNoStack("DISCOVERY_ERROR")
 	// ErrRequest 本地请求构建异常
 	ErrRequest = errors.NewNoStack("REQUEST_ERROR")
-	// ErrBizRejected 业务 hook 判定失败但没有给出具体错误
+	// ErrBizRejected 业务 hook 判定失败且未返回具体错误
 	ErrBizRejected = errors.NewNoStack("BIZ_REJECTED")
 )
 
@@ -67,8 +67,8 @@ func (e *HTTPStatusError) StatusCode() int {
 	return e.Code
 }
 
-// Retryable 判断当前状态码是否可重试
-// 429 不自动重试，由调用方根据 RetryAfter 决定
+// Retryable 返回状态码是否可重试
+// 429 由调用方按 RetryAfter 处理
 func (e *HTTPStatusError) Retryable() bool {
 	if e == nil {
 		return false
@@ -138,7 +138,7 @@ func (e *retryableError) Is(target error) bool {
 	return target == ErrTransport || target == ErrDownstream
 }
 
-// discoveryError 标记服务发现错误；可重试，但不计入下游熔断
+// discoveryError 标记服务发现错误；参与重试，不影响下游熔断
 type discoveryError struct {
 	err error
 }
@@ -164,7 +164,7 @@ func (e *discoveryError) Is(target error) bool {
 	return target == ErrDiscovery
 }
 
-// requestError 标记本地请求构建错误；不可重试，也不计入熔断
+// requestError 标记本地请求错误；不进入重试和熔断
 type requestError struct {
 	err error
 }

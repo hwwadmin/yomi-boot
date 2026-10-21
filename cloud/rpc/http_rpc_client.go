@@ -18,7 +18,7 @@ import (
 )
 
 // HttpRpcClient 基于 HTTP 的 RpcService 实现
-// 只负责端点解析、发送请求、反序列化响应与传输级韧性
+// 负责端点解析、发送请求、反序列化响应、重试和熔断
 type HttpRpcClient struct {
 	serviceName string
 	resolver    EndpointResolver
@@ -30,14 +30,11 @@ type HttpRpcClient struct {
 // 编译期验证接口实现
 var _ RpcService = (*HttpRpcClient)(nil)
 
-// NewHttpRpcClient 创建绑定到指定服务名的 HTTP RPC 客户端
-// resolver 负责端点解析；Consul 场景传 consul.NewConsulRPCResolver(client)
-// serviceName 为目标服务的注册名
-// 默认使用共享传输（每 host 最多 100 个空闲连接），默认不跟随重定向；
-// 需要 mTLS/私有 CA/代理/连接池时用 WithTransport，需要跟随重定向时用 WithCheckRedirect
-// 需要打印请求/响应体时用 WithLogBodies（建议仅 dev 开启，默认关闭）
-// resolver 为空或 serviceName 为空时 panic，用于启动装配阶段 Fail Fast
-// 每个 client 使用独立熔断器；同一服务建议复用一个 client
+// NewHttpRpcClient 创建绑定服务名的 HTTP RPC 客户端
+// resolver 负责端点解析；Consul 场景用 consul.NewConsulRPCResolver(client)
+// 默认共享传输、不跟随重定向；WithTransport、WithCheckRedirect、WithLogBodies 可按需调整
+// resolver 为空或服务名为空时 panic，适合启动阶段装配
+// 每个 client 独立熔断；同一服务建议复用一个 client
 func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
 	if resolver == nil {
 		panic(errors.New("rpc: EndpointResolver 不能为空"))
@@ -61,8 +58,8 @@ func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...Cli
 }
 
 // Invoke 实现 RpcService.Invoke
-// 传输成功 = HTTP 200 且响应反序列化成功；业务成功由 req.BizHook 判定
-// 半开状态下只放行一个探测请求，探测不做内部重试
+// 传输成功指 HTTP 200 且响应反序列化成功；业务成功由 req.BizHook 判定
+// 半开状态下探测只尝试一次
 func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if c == nil || c.httpClient == nil {
 		return errors.New("HttpRpcClient 未初始化")
@@ -86,14 +83,13 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	callCtx, cancel := context.WithTimeout(callerCtx, timeout)
 	defer cancel()
 
-	// 先过熔断再序列化：熔断打开时不浪费序列化；序列化失败释放半开探测位
+	// 熔断通过后再序列化；序列化失败时释放探测位
 	ticket, err := c.breaker.allow()
 	if err != nil {
 		c.logBreakerReject(ctx, req.Endpoint, 0)
 		return err
 	}
-	// 兜底释放探测位：正常路径由 record/onNeutral 结算；panic 或未来新增的提前返回
-	// 也要把半开探测位放掉，避免熔断永久卡在半开
+	// 正常路径由 record/onNeutral 结算探测位；异常退出时由这里释放
 	defer func() { c.breaker.onNeutral(ticket) }()
 	payload, err := json.Marshal(req.ReqBody)
 	if err != nil {
@@ -120,8 +116,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			return err
 		}
 		if attempt > 1 {
-			// 每次重试重新过熔断：上一轮失败可能已把熔断打开；
-			// 半开探测失败后这里会拿到 ErrCircuitOpen，保证一次探测只发一个请求
+			// 重试前重新检查熔断；半开时这里返回 ErrCircuitOpen，探测只发一个请求
 			var allowErr error
 			ticket, allowErr = c.breaker.allow()
 			if allowErr != nil {
@@ -132,7 +127,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				return allowErr
 			}
 		}
-		// 半开探测只放行一个请求：本次票据是探测票据时，不做内部重试
+		// 探测票据只尝试一次
 		probeOnly := ticket.probe
 		if probeOnly {
 			c.logBreakerProbe(ctx, req.Endpoint, attempt)
@@ -145,7 +140,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			// 探测不做发现重试：中性结果只释放探测位，下一次调用重新探测
+			// 探测遇到发现错误时释放探测位，下一次调用重新探测
 			if probeOnly || !shouldRetry(callCtx, err, attempt, maxAttempts) {
 				c.breaker.onNeutral(ticket)
 				return err
@@ -165,7 +160,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 				return err
 			}
-			// 发现失败不反映下游健康度；释放探测位后下一轮重新 allow
+			// 发现错误按中性处理，下一轮重新获取票据
 			c.breaker.onNeutral(ticket)
 			continue
 		}
@@ -190,12 +185,12 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			// 熔断打开后立即停止本次调用的剩余重试，避免继续打已判定故障的下游
+			// 熔断打开后结束本次调用，返回当前错误
 			if c.breaker.record(ticket, c.classify(err, elapsed)) {
 				c.logBreakerOpen(ctx, req.Endpoint, attempt, reasonOf(err), err)
 				return err
 			}
-			// 半开探测只发一个请求，不进入重试
+			// 探测只尝试一次
 			if probeOnly {
 				return err
 			}
@@ -207,7 +202,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			if errors.As(err, &statusErr) && statusErr.RetryAfter > delay {
 				delay = statusErr.RetryAfter
 			}
-			// 等待放不进剩余预算时直接返回本次下游错误，别换成 context deadline exceeded
+			// 剩余预算不够等待时直接返回下游错误
 			if !canWait(callCtx, delay) {
 				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 				return err
@@ -237,8 +232,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 		}
 
-		// 成功响应照常返回；只有本次结果真正打开了熔断才记 breaker.open，
-		// 避免熔断已被其他调用打开时把快速成功误标成 slow
+		// 成功响应照常返回；仅当本次结果打开熔断时记录 breaker.open
 		slow := elapsed > c.breaker.slowThreshold()
 		switch c.breaker.recordOutcome(ticket, attemptResult{slow: slow, counted: true}) {
 		case breakerRecordOpenedByFailure:
@@ -286,14 +280,14 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 	return url, nil
 }
 
-// maxDrainBytes 是 void 调用排空响应体的上限；小响应可复用连接，大响应直接关闭
+// maxDrainBytes 是 void 调用排空响应体的上限，便于复用连接
 const maxDrainBytes = 4 << 10
 
 // doRequest 发送一次 HTTP POST 并按需读取响应体
-// needBody=false 时最多排空 maxDrainBytes 后丢弃 body；此时非 200 只用状态码、状态文本和 Retry-After
-// needBody=true 时非 200 会读取并返回已读 body；Detail 取前 200 字节，body 供调用方记录日志
-// 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
-// 出错时若已读到 body 会一并返回，仅供调用方记录日志，不得当成功响应使用
+// needBody=false 时排空响应体；非 200 只返回状态码、状态文本和 Retry-After
+// needBody=true 时非 200 也读取 body；Detail 取前 200 字节，body 供日志使用
+// 非 200 返回 HTTPStatusError；200 读取或解析超限返回 ProtocolError
+// 出错时返回已读 body，供调用方记录日志
 func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool, maxBytes int64) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, &requestError{err: errors.New("请求地址不能为空")}
@@ -307,8 +301,7 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		// CheckRedirect 返回错误时，Go 会同时返回上一次响应（Body 已由 Client 关闭）
-		// 和 *url.Error；这是本地重定向策略拒绝，不是下游故障：不重试、不计熔断。
+		// CheckRedirect 拒绝时 Client 会返回响应和 *url.Error；按本地 requestError 处理
 		if resp != nil {
 			return nil, &requestError{err: errors.Wrap(err, "重定向策略拒绝")}
 		}
@@ -392,9 +385,9 @@ func parseRetryAfter(value string) time.Duration {
 	return 0
 }
 
-// classify 将传输错误归类为熔断结果
-// 5xx/408 计失败并计入失败率样本；2xx 计入样本；4xx/429/3xx 不计失败率样本；
-// 429 标记 throttled，半开探测遇到时重新打开；协议错误和网络错误计失败
+// classify 按状态码和耗时归类熔断结果
+// 5xx/408、协议错误、网络错误计失败；2xx 计成功样本；4xx/429/3xx 不进失败率样本
+// 429 另记 throttled，半开探测遇到时重新打开
 func (c *HttpRpcClient) classify(err error, elapsed time.Duration) attemptResult {
 	slow := elapsed > c.breaker.slowThreshold()
 	var statusErr *HTTPStatusError

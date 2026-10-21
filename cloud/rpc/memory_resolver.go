@@ -17,7 +17,7 @@ type MemoryEndpointResolver struct {
 }
 
 // NewMemoryEndpointResolver 创建本地内存端点解析器
-// 构造时拷贝并规整配置，调用方后续修改原 map 不会影响解析器
+// 构造时拷贝并规整配置；解析器与调用方后续对原 map 的修改隔离
 func NewMemoryEndpointResolver(endpoints map[string]string) *MemoryEndpointResolver {
 	copied := make(map[string]string, len(endpoints))
 	for serviceName, baseURL := range endpoints {

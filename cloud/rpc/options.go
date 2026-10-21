@@ -9,32 +9,31 @@ import (
 
 // 默认参数：请求超时、重试退避、响应上限、连接池与熔断
 const (
-	defaultRequestTimeout = 3 * time.Second // defaultRequestTimeout 是 InvokeRequest.Timeout 的默认值
+	defaultRequestTimeout = 3 * time.Second // 单次调用默认超时
 
-	defaultMaxAttempts      = 3                      // defaultMaxAttempts 是默认最大尝试次数
-	defaultBaseBackoff      = 50 * time.Millisecond  // defaultBaseBackoff 是首次重试退避
-	defaultMaxBackoff       = 200 * time.Millisecond // defaultMaxBackoff 是退避上限
-	defaultHTTPTimeout      = 30 * time.Second       // defaultHTTPTimeout 是单次 HTTP 尝试的后备超时
-	defaultMaxResponseBytes = 4 << 20                // defaultMaxResponseBytes 是默认响应体上限（4 MiB）
+	defaultMaxAttempts      = 3                      // 默认最大尝试次数
+	defaultBaseBackoff      = 50 * time.Millisecond  // 首次重试退避
+	defaultMaxBackoff       = 200 * time.Millisecond // 退避上限
+	defaultHTTPTimeout      = 30 * time.Second       // 单次 HTTP 尝试的后备超时
+	defaultMaxResponseBytes = 4 << 20                // 响应体上限（4 MiB）
 
-	defaultMaxIdleConns        = 200 // defaultMaxIdleConns 是默认空闲连接总数
-	defaultMaxIdleConnsPerHost = 100 // defaultMaxIdleConnsPerHost 是默认每个 host 的空闲连接数
+	defaultMaxIdleConns        = 200 // 空闲连接总数
+	defaultMaxIdleConnsPerHost = 100 // 每 host 空闲连接数
 
-	defaultBreakerWindowSize    = 100             // defaultBreakerWindowSize 是默认熔断窗口大小
-	defaultBreakerMinRequests   = 20              // defaultBreakerMinRequests 是默认熔断最小请求数
-	defaultBreakerFailureRate   = 0.5             // defaultBreakerFailureRate 是默认失败率阈值
-	defaultBreakerSlowRate      = 0.5             // defaultBreakerSlowRate 是默认慢调用率阈值
-	defaultBreakerSlowThreshold = 2 * time.Second // defaultBreakerSlowThreshold 是默认慢调用阈值
-	defaultBreakerOpenDuration  = 5 * time.Second // defaultBreakerOpenDuration 是默认熔断打开时长
+	defaultBreakerWindowSize    = 100             // 熔断窗口大小
+	defaultBreakerMinRequests   = 20              // 熔断最小样本数
+	defaultBreakerFailureRate   = 0.5             // 失败率阈值
+	defaultBreakerSlowRate      = 0.5             // 慢调用率阈值
+	defaultBreakerSlowThreshold = 2 * time.Second // 慢调用阈值
+	defaultBreakerOpenDuration  = 5 * time.Second // 熔断打开时长
 )
 
 // BreakerOptions 熔断器参数
-// 失败率或慢调用率达到阈值且对应窗口样本数达到 MinRequests 时打开熔断
-// 窗口按尝试次数计数（一次调用的每次重试各算一条）
-// 失败率只看计入失败率的样本，慢调用率看全部尝试
+// 失败率或慢调用率达到阈值且对应窗口样本数达到 MinRequests 时打开
+// 窗口按尝试计数；失败率看计入失败率的样本，慢调用率看全部尝试
 type BreakerOptions struct {
 	WindowSize    int           // WindowSize 是滑动窗口保留的尝试数，默认 100
-	MinRequests   int           // MinRequests 是窗口内达到该样本数后才评估（按尝试计），默认 20
+	MinRequests   int           // MinRequests 是窗口内样本数达到该值后评估（按尝试计），默认 20
 	FailureRate   float64       // FailureRate 是失败率阈值，默认 0.5
 	SlowRate      float64       // SlowRate 是慢调用率阈值，默认 0.5
 	SlowThreshold time.Duration // SlowThreshold 是慢调用耗时阈值，默认 2s
@@ -42,15 +41,15 @@ type BreakerOptions struct {
 }
 
 // httpClientOptions HTTP RPC 客户端内部参数
-// 只保留客户端级配置；单次调用的超时、次数、响应上限由 InvokeRequest 控制
+// 保存客户端级配置；单次调用的超时、次数、响应上限由 InvokeRequest 控制
 type httpClientOptions struct {
-	HTTPTimeout   time.Duration                                      // HTTPTimeout 是单次 HTTP 尝试的后备超时，默认 30s
-	BaseBackoff   time.Duration                                      // BaseBackoff 是首次重试退避，默认 50ms
-	MaxBackoff    time.Duration                                      // MaxBackoff 是退避上限，默认 200ms
-	Transport     http.RoundTripper                                  // Transport 是自定义传输；nil 时使用默认共享传输
-	CheckRedirect func(req *http.Request, via []*http.Request) error // CheckRedirect 是重定向策略；nil 时禁止跟随
-	LogBodies     bool                                               // LogBodies 控制 Debug 日志是否打印请求/响应体，默认关闭
-	Breaker       BreakerOptions                                     // Breaker 是当前 client 的熔断参数
+	HTTPTimeout   time.Duration                                      // 单次 HTTP 尝试的后备超时，默认 30s
+	BaseBackoff   time.Duration                                      // 首次重试退避，默认 50ms
+	MaxBackoff    time.Duration                                      // 退避上限，默认 200ms
+	Transport     http.RoundTripper                                  // 自定义传输；nil 时使用默认共享传输
+	CheckRedirect func(req *http.Request, via []*http.Request) error // 重定向策略；nil 时使用默认策略
+	LogBodies     bool                                               // 是否打印请求/响应体（Info），默认关闭
+	Breaker       BreakerOptions                                     // 当前 client 的熔断参数
 }
 
 // ClientOption 修改 HTTP RPC 客户端参数
@@ -87,9 +86,8 @@ func WithTransport(transport http.RoundTripper) ClientOption {
 	}
 }
 
-// WithCheckRedirect 设置重定向策略；默认不跟随重定向，3xx 按 HTTPStatusError 返回
-// 需要跟随重定向时传自定义函数，并在函数内限制次数以避免重定向循环
-// 传 nil 时保持默认不跟随策略
+// WithCheckRedirect 设置重定向策略；默认不跟随，3xx 作为 HTTPStatusError 返回
+// 跟随重定向时传自定义函数，并自行限制重定向次数；nil 保持默认策略
 func WithCheckRedirect(fn func(req *http.Request, via []*http.Request) error) ClientOption {
 	return func(o *httpClientOptions) {
 		if fn != nil {
@@ -115,18 +113,16 @@ func WithLogBodies(enabled bool) ClientOption {
 	}
 }
 
-// defaultCheckRedirect 不跟随重定向：内部 RPC 的 POST 不应被 301/302 改成 GET，
-// 也不应把请求体重发到新地址；3xx 由调用方按 HTTPStatusError 处理
+// defaultCheckRedirect 关闭自动跟随；3xx 作为 HTTPStatusError 交给调用方，
+// POST 方法和请求体保持不变
 func defaultCheckRedirect(*http.Request, []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
-// defaultTransport 是 RPC 客户端共享的默认传输；调高空闲连接数，
-// 避免 http.DefaultTransport 默认的 MaxIdleConnsPerHost=2 在高并发下频繁重建连接
+// defaultTransport 是 RPC 客户端共享的默认传输；调高空闲连接数，提高高并发下的连接复用
 var defaultTransport = newDefaultTransport()
 
-// newDefaultTransport 克隆 http.DefaultTransport 并调整连接池参数
-// 若全局传输已被替换为自定义 RoundTripper，则直接复用，不调整连接池
+// newDefaultTransport 克隆 http.DefaultTransport 并调整连接池；全局传输为自定义实现时直接复用
 func newDefaultTransport() http.RoundTripper {
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok || base == nil {

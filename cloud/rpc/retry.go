@@ -11,7 +11,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// shouldRetry 判断是否继续重试：未超次数、上下文未取消且错误可重试
+// shouldRetry 返回能否重试：还有次数、上下文有效且错误可重试
 func shouldRetry(ctx context.Context, err error, attempt, maxAttempts int) bool {
 	if attempt >= maxAttempts {
 		return false
@@ -50,13 +50,12 @@ func isRetryable(err error) bool {
 	return errors.As(err, &retryErr)
 }
 
-// backoffDuration 计算第 attempt 次失败后的退避（attempt 从 1 起为首次失败）
-// 指数退避后在上半区间 [d/2, d] 内抖动，避免多实例同时重试；抖动不会超过 max
+// backoffDuration 返回第 attempt 次失败后的退避：指数增长后在上半区间 [d/2, d] 抖动，结果不超过 max
 func backoffDuration(attempt int, base, max time.Duration) time.Duration {
 	return jitterBackoff(backoffBase(attempt, base, max))
 }
 
-// backoffBase 计算不含抖动的指数退避，结果不超过 max
+// backoffBase 返回不含抖动的指数退避，结果不超过 max
 func backoffBase(attempt int, base, max time.Duration) time.Duration {
 	if attempt < 1 {
 		attempt = 1
@@ -78,7 +77,7 @@ func backoffBase(attempt int, base, max time.Duration) time.Duration {
 	return d
 }
 
-// jitterBackoff 在 [d/2, d] 内随机抖动，向下抖动以保证不超过配置的退避上限
+// jitterBackoff 返回 [d/2, d] 内的随机抖动，结果不超过 d
 func jitterBackoff(d time.Duration) time.Duration {
 	if d <= 0 {
 		return d

@@ -7,49 +7,48 @@ import (
 	"time"
 )
 
-// EndpointResolver 将服务名与逻辑端点解析为完整 URL
-// Consul 场景可使用 consul.NewConsulRPCResolver(client) 适配
-// 本地/测试场景可使用 MemoryEndpointResolver
+// EndpointResolver 把服务名和逻辑端点解析成完整 URL
+// Consul 场景使用 consul.NewConsulRPCResolver(client)
+// 本地/测试场景使用 MemoryEndpointResolver
 type EndpointResolver interface {
 	ResolveHTTPBase(ctx context.Context, serviceName, pathSuffix string) (string, error)
 }
 
-// InvokeRequest 描述一次 RPC 调用
+// InvokeRequest 一次 RPC 调用
 type InvokeRequest struct {
-	Endpoint         string        // Endpoint 是调用方传入的逻辑端点
-	ReqBody          any           // ReqBody 是请求对象（只读；可能含敏感信息）
-	RespBody         any           // RespBody 是响应对象；nil 表示不需要响应体
-	BizHook          BizHookFunc   // BizHook 是业务成功判定；不能为 nil
-	Timeout          time.Duration // Timeout 是整次调用超时，<=0 时使用内置默认 3s
-	MaxAttempts      int           // MaxAttempts 是最多尝试次数，<=0 时使用内置默认 3
-	MaxResponseBytes int64         // MaxResponseBytes 是响应体上限，<=0 时使用内置默认 4 MiB
+	Endpoint         string        // 逻辑端点
+	ReqBody          any           // 请求对象，只读，可能含敏感信息
+	RespBody         any           // 响应对象；nil 时不读取响应体
+	BizHook          BizHookFunc   // 业务成功判定，必填
+	Timeout          time.Duration // 整次调用超时，<=0 时默认 3s
+	MaxAttempts      int           // 最大尝试次数，<=0 时默认 3
+	MaxResponseBytes int64         // 响应体上限，<=0 时默认 4 MiB
 }
 
-// BizHookContext 业务判定所需的调用上下文
-// Endpoint 是调用方传入的逻辑端点，不是解析后的完整 URL
-// hook 只能读取本结构，不得修改 ReqBody/RespBody
+// BizHookContext 业务判定上下文
+// Endpoint 是调用方传入的逻辑端点，不是解析后的 URL
+// hook 只读 ReqBody/RespBody
 type BizHookContext struct {
-	Endpoint string // Endpoint 是调用方传入的逻辑端点
-	ReqBody  any    // ReqBody 是调用方传入的请求对象（只读；可能含敏感信息）
-	RespBody any    // RespBody 是已反序列化的响应对象（只读）
+	Endpoint string // 逻辑端点
+	ReqBody  any    // 请求对象，只读
+	RespBody any    // 已反序列化的响应对象，只读
 }
 
-// BizHookFunc 在传输成功（HTTP 200 且反序列化成功）后判断业务是否成功
-// ok=true 表示业务成功；ok=false 表示业务失败
-// 返回 error 时 Invoke 原样返回；ok=false 且 error 为 nil 时返回 ErrBizRejected
-// hook 必须非 nil；纯传输使用 NoopBizHook
-// hook 可能被并发调用，需自行保证线程安全
+// BizHookFunc 在传输成功后判定业务是否成功（HTTP 200 且反序列化成功）
+// error 非 nil 时原样返回；ok=false 且 error=nil 时返回 ErrBizRejected
+// hook 必填；纯传输使用 NoopBizHook
+// hook 可能并发调用，需保证线程安全
 type BizHookFunc func(ctx context.Context, call BizHookContext) (ok bool, err error)
 
-// NoopBizHook 只做传输、不判断业务；ok 永远为 true
+// NoopBizHook 跳过业务判定，始终返回成功
 func NoopBizHook(context.Context, BizHookContext) (bool, error) {
 	return true, nil
 }
 
-// RpcService 跨服务 RPC 传输门面
-// 只负责发送请求、反序列化响应与传输级韧性；业务成功由 req.BizHook 判定
+// RpcService 跨服务 RPC 传输接口
+// 负责发送请求、反序列化响应、重试和熔断；业务成功由 req.BizHook 判定
 type RpcService interface {
-	// Invoke 调用远程端点，将响应体反序列化到 req.RespBody
-	// req.BizHook 不能为 nil；纯传输使用 NoopBizHook
+	// Invoke 调用远程端点，把响应体反序列化到 req.RespBody
+	// BizHook 必填；纯传输使用 NoopBizHook
 	Invoke(ctx context.Context, req InvokeRequest) error
 }
