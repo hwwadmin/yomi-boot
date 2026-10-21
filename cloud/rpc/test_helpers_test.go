@@ -17,6 +17,16 @@ func newTestServiceName() string {
 	return fmt.Sprintf("test-svc-%d", testServiceSeq.Add(1))
 }
 
+// invokeTest 用默认超时构造 InvokeRequest 调用客户端
+func invokeTest(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any, hook BizHookFunc) error {
+	return c.Invoke(ctx, InvokeRequest{
+		Endpoint: endpoint,
+		ReqBody:  reqBody,
+		RespBody: respBody,
+		BizHook:  hook,
+	})
+}
+
 // testEnvelope 测试用读响应信封
 type testEnvelope struct {
 	Code  string          `json:"code"`

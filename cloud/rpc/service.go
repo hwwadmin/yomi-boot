@@ -2,7 +2,22 @@
 
 package rpc
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// DefaultRequestTimeout 是 InvokeRequest.Timeout 的默认值
+const DefaultRequestTimeout = 3 * time.Second
+
+// InvokeRequest 描述一次 RPC 调用
+type InvokeRequest struct {
+	Endpoint string        // Endpoint 是调用方传入的逻辑端点
+	ReqBody  any           // ReqBody 是请求对象（只读；可能含敏感信息）
+	RespBody any           // RespBody 是响应对象；nil 表示不需要响应体
+	BizHook  BizHookFunc   // BizHook 是业务成功判定；不能为 nil
+	Timeout  time.Duration // Timeout 是整次调用超时，<=0 时使用 DefaultRequestTimeout
+}
 
 // BizHookContext 业务判定所需的调用上下文
 // Endpoint 是调用方传入的逻辑端点，不是解析后的完整 URL
@@ -26,9 +41,9 @@ func NoopBizHook(context.Context, BizHookContext) (bool, error) {
 }
 
 // RpcService 跨服务 RPC 传输门面
-// 只负责发送请求、反序列化响应与传输级韧性；业务成功由 bizHook 判定
+// 只负责发送请求、反序列化响应与传输级韧性；业务成功由 req.BizHook 判定
 type RpcService interface {
-	// Invoke 调用远程端点，将响应体反序列化到 respBody
-	// bizHook 不能为 nil；纯传输使用 NoopBizHook
-	Invoke(ctx context.Context, endpoint string, reqBody any, respBody any, bizHook BizHookFunc) error
+	// Invoke 调用远程端点，将响应体反序列化到 req.RespBody
+	// req.BizHook 不能为 nil；纯传输使用 NoopBizHook
+	Invoke(ctx context.Context, req InvokeRequest) error
 }

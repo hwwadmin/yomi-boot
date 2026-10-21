@@ -11,6 +11,42 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
+// TestInvoke_RequestTimeout 验证请求级超时计入熔断失败且不自动重试
+func TestInvoke_RequestTimeout(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithMaxAttempts(3),
+		WithHTTPTimeout(time.Second),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x",
+		RespBody: &env,
+		BizHook:  checkTestEnvelope,
+		Timeout:  20 * time.Millisecond,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("期望 context.DeadlineExceeded，实际 %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("请求级超时不应自动重试，hits=%d", hits.Load())
+	}
+	if state, _ := breakerSnapshot(client); state != breakerOpen {
+		t.Fatalf("请求级超时应计熔断失败，state=%d", state)
+	}
+}
+
 // TestInvoke_ClientTimeoutCountsAsFailure 验证客户端 HTTP 超时计入熔断失败
 func TestInvoke_ClientTimeoutCountsAsFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -28,13 +64,13 @@ func TestInvoke_ClientTimeoutCountsAsFailure(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
 		t.Fatal("期望客户端超时")
 	}
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("客户端超时应计失败并打开熔断，state=%d", state)
 	}
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
 	}
 }
@@ -54,21 +90,21 @@ func TestInvoke_CanceledContextIsNeutral(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	_ = client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	if _, size := breakerSnapshot(client); size != 1 {
 		t.Fatalf("首次 503 后窗口长度=%d，期望 1", size)
 	}
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := client.Invoke(canceled, "/x", nil, &env, checkTestEnvelope); !errors.Is(err, context.Canceled) {
+	if err := invokeTest(client, canceled, "/x", nil, &env, checkTestEnvelope); !errors.Is(err, context.Canceled) {
 		t.Fatalf("期望 context.Canceled，实际 %v", err)
 	}
 	if _, size := breakerSnapshot(client); size != 1 {
 		t.Fatalf("取消请求不应写入熔断窗口，长度=%d", size)
 	}
 
-	_ = client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("第二次 503 后应打开熔断，state=%d", state)
 	}
@@ -89,7 +125,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	_ = client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -103,7 +139,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if err := client.Invoke(ctx, "/x", nil, &env, checkTestEnvelope); !errors.Is(err, context.DeadlineExceeded) {
+	if err := invokeTest(client, ctx, "/x", nil, &env, checkTestEnvelope); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("期望 context.DeadlineExceeded，实际 %v", err)
 	}
 	if _, size := breakerSnapshot(client); size != 1 {
@@ -113,7 +149,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 	client.httpClient = &http.Client{Timeout: time.Second}
 	client.testResolve = func(context.Context, string) (string, error) { return bad.URL, nil }
 	client.opts.MaxAttempts = 1
-	_ = client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("第二次 503 后应打开熔断，state=%d", state)
 	}
@@ -137,14 +173,14 @@ func TestInvoke_SlowCallOpensBreaker(t *testing.T) {
 	)
 	var env testEnvelope
 	for i := 0; i < 2; i++ {
-		if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+		if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 			t.Fatalf("第 %d 次调用: %v", i+1, err)
 		}
 	}
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("慢调用率达到阈值后应打开熔断，state=%d", state)
 	}
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
 	}
 }
@@ -168,7 +204,7 @@ func TestInvoke_HookErrorDoesNotTripBreaker(t *testing.T) {
 	)
 	var env testEnvelope
 	for i := 0; i < 2; i++ {
-		err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+		err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 		var biz *errors.BizError
 		if !errors.As(err, &biz) || biz.Code != "INVALID_INPUT" {
 			t.Fatalf("第 %d 次期望 INVALID_INPUT，实际 %v", i+1, err)
@@ -210,10 +246,10 @@ func TestNewHttpRpcClient_SharesBreakerByService(t *testing.T) {
 	}
 
 	var env testEnvelope
-	if err := c1.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
+	if err := invokeTest(c1, context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
 		t.Fatal("503 应返回错误")
 	}
-	if err := c2.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+	if err := invokeTest(c2, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("同服务第二个 client 应命中共享熔断，实际 %v", err)
 	}
 	if hits.Load() != 1 {
@@ -270,13 +306,13 @@ func TestInvoke_OpenBreakerSkipsMarshal(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	_ = client.Invoke(context.Background(), "/x", nil, &env, NoopBizHook)
+	_ = invokeTest(client, context.Background(), "/x", nil, &env, NoopBizHook)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("首次 503 后应打开熔断，state=%d", state)
 	}
 
 	var calls atomic.Int64
-	err := client.Invoke(context.Background(), "/x", marshalSpy{calls: &calls}, &env, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", marshalSpy{calls: &calls}, &env, NoopBizHook)
 	if !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
 	}
@@ -305,11 +341,11 @@ func TestInvoke_MarshalFailureReleasesProbe(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	_ = client.Invoke(context.Background(), "/x", nil, &env, NoopBizHook)
+	_ = invokeTest(client, context.Background(), "/x", nil, &env, NoopBizHook)
 	time.Sleep(20 * time.Millisecond)
 
 	var calls atomic.Int64
-	err := client.Invoke(context.Background(), "/x", marshalSpy{calls: &calls}, &env, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", marshalSpy{calls: &calls}, &env, NoopBizHook)
 	if err == nil || errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("期望序列化错误，实际 %v", err)
 	}
@@ -338,7 +374,7 @@ func TestInvoke_NilBizHookRejected(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL)
-	if err := client.Invoke(context.Background(), "/x", nil, nil, nil); err == nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, nil, nil); err == nil {
 		t.Fatal("nil bizHook 应返回错误")
 	}
 	if hits.Load() != 0 {
@@ -355,7 +391,7 @@ func TestInvoke_NoopBizHook(t *testing.T) {
 
 	client := newTestRPCClient(server.URL)
 	var env testEnvelope
-	if err := client.Invoke(context.Background(), "/x", nil, &env, NoopBizHook); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, NoopBizHook); err != nil {
 		t.Fatalf("NoopBizHook 只做传输，实际 %v", err)
 	}
 	if env.Code != "INVALID_INPUT" {
@@ -382,7 +418,7 @@ func TestInvoke_429NotRetried(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusTooManyRequests {
 		t.Fatalf("期望 HTTP 429，实际 %v", err)
@@ -412,7 +448,7 @@ func TestInvoke_HookRejectsWithoutError(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	err := client.Invoke(context.Background(), "/x", nil, &env, func(context.Context, BizHookContext) (bool, error) {
+	err := invokeTest(client, context.Background(), "/x", nil, &env, func(context.Context, BizHookContext) (bool, error) {
 		return false, nil
 	})
 	if !errors.Is(err, ErrBizRejected) {

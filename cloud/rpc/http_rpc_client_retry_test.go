@@ -45,7 +45,7 @@ func TestInvoke_RetriesThenSucceeds(t *testing.T) {
 		WithHTTPTimeout(2*time.Second),
 	)
 	var env testEnvelope
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if hits.Load() != 3 {
@@ -65,7 +65,7 @@ func TestInvoke_BizErrorNotRetried(t *testing.T) {
 
 	client := newTestRPCClient(server.URL, WithMaxAttempts(3), WithBackoff(time.Millisecond, time.Millisecond))
 	var env testEnvelope
-	err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	if err == nil {
 		t.Fatal("期望业务错误")
 	}
@@ -95,7 +95,7 @@ func TestInvoke_500CountsAsFailureButNotRetried(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusInternalServerError {
 		t.Fatalf("期望 HTTP 500，实际 %v", err)
@@ -106,7 +106,7 @@ func TestInvoke_500CountsAsFailureButNotRetried(t *testing.T) {
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("500 应计失败并打开熔断，state=%d", state)
 	}
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestInvoke_4xxDoesNotTripBreaker(t *testing.T) {
 	)
 	var env testEnvelope
 	for i := 0; i < 2; i++ {
-		err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+		err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 		var statusErr *HTTPStatusError
 		if !errors.As(err, &statusErr) || statusErr.Code != http.StatusBadRequest {
 			t.Fatalf("第 %d 次期望 HTTP 400，实际 %v", i+1, err)
@@ -155,7 +155,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		return "", errors.New("consul down")
 	}
 
-	err := client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
 	var discoveryErr *discoveryError
 	if !errors.As(err, &discoveryErr) {
 		t.Fatalf("期望 discoveryError，实际 %v", err)
@@ -164,7 +164,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		t.Fatalf("发现失败不应打开下游熔断，state=%d", state)
 	}
 
-	_ = client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
+	_ = invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
 	if calls.Load() != 2 {
 		t.Fatalf("发现失败不应打开熔断，calls=%d", calls.Load())
 	}
@@ -185,7 +185,7 @@ func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
 		return "10.0.0.1:8080/x", nil
 	}
 
-	err := client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
 	var localErr *requestError
 	if !errors.As(err, &localErr) {
 		t.Fatalf("期望 requestError，实际 %v", err)

@@ -6,9 +6,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 const maxInt64JSON = 9223372036854775807
+
+// TestDefaultRequestTimeout 验证默认请求超时为 3 秒
+func TestDefaultRequestTimeout(t *testing.T) {
+	if DefaultRequestTimeout != 3*time.Second {
+		t.Fatalf("DefaultRequestTimeout: got %v want 3s", DefaultRequestTimeout)
+	}
+}
 
 // TestInvoke_PreservesInt64Precision 验证大整数经 RPC 响应解析后不丢失精度
 func TestInvoke_PreservesInt64Precision(t *testing.T) {
@@ -20,7 +28,7 @@ func TestInvoke_PreservesInt64Precision(t *testing.T) {
 
 	client := newTestRPCClient(server.URL)
 	var env testEnvelope
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 
@@ -45,7 +53,7 @@ func TestInvoke_PreservesInt64InPageResponse(t *testing.T) {
 
 	client := newTestRPCClient(server.URL)
 	var env testEnvelope
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if env.Total != maxInt64JSON {

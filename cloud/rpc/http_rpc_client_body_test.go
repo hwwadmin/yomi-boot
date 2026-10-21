@@ -66,7 +66,7 @@ func TestInvoke_VoidSkipsBodyRead(t *testing.T) {
 		return "http://example.test/x", nil
 	}
 
-	if err := client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if reads.Load() != 0 || bytesRead.Load() != 0 {
@@ -86,7 +86,7 @@ func TestInvoke_VoidNon200DiscardsBody(t *testing.T) {
 		return "http://example.test/x", nil
 	}
 
-	err := client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusInternalServerError {
 		t.Fatalf("期望 HTTP 500，实际 %v", err)
@@ -109,7 +109,7 @@ func TestInvoke_BodyReadWhenNeeded(t *testing.T) {
 	}
 
 	var env testEnvelope
-	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if reads.Load() == 0 || bytesRead.Load() == 0 {

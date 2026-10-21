@@ -10,10 +10,10 @@ import (
 )
 
 // TestRpcService 可配置的 RpcService 测试桩
-// bizHook 必须非 nil；零值实例在 bizHook 非 nil 时 Invoke 返回 nil
+// req.BizHook 必须非 nil；零值实例在 BizHook 非 nil 时 Invoke 返回 nil
 type TestRpcService struct {
 	// InvokeFunc 自定义 Invoke 行为，为 nil 时返回 nil
-	InvokeFunc func(ctx context.Context, endpoint string, reqBody any, respBody any, bizHook rpc.BizHookFunc) error
+	InvokeFunc func(ctx context.Context, req rpc.InvokeRequest) error
 }
 
 // 编译期验证接口实现
@@ -24,13 +24,13 @@ func NewTestRpcService() *TestRpcService {
 	return &TestRpcService{}
 }
 
-// Invoke 实现 RpcService.Invoke；bizHook 不能为 nil
-func (m *TestRpcService) Invoke(ctx context.Context, endpoint string, reqBody any, respBody any, bizHook rpc.BizHookFunc) error {
-	if bizHook == nil {
-		return errors.New("rpctest: bizHook 不能为空")
+// Invoke 实现 RpcService.Invoke；req.BizHook 不能为 nil
+func (m *TestRpcService) Invoke(ctx context.Context, req rpc.InvokeRequest) error {
+	if req.BizHook == nil {
+		return errors.New("rpctest: BizHook 不能为空")
 	}
 	if m.InvokeFunc != nil {
-		return m.InvokeFunc(ctx, endpoint, reqBody, respBody, bizHook)
+		return m.InvokeFunc(ctx, req)
 	}
 	return nil
 }

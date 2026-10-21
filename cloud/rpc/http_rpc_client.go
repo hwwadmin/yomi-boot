@@ -49,28 +49,36 @@ func NewHttpRpcClient(consulClient *consul.Client, serviceName string, opts ...C
 }
 
 // Invoke 实现 RpcService.Invoke
-// 传输成功 = HTTP 200 且响应反序列化成功；业务成功由 bizHook 判定
-func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any, respBody any, bizHook BizHookFunc) error {
+// 传输成功 = HTTP 200 且响应反序列化成功；业务成功由 req.BizHook 判定
+func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if c == nil || c.httpClient == nil {
 		return errors.New("HttpRpcClient 未初始化")
 	}
-	if bizHook == nil {
-		return errors.New("rpc: bizHook 不能为空；纯传输请使用 rpc.NoopBizHook")
+	if req.BizHook == nil {
+		return errors.New("rpc: BizHook 不能为空；纯传输请使用 rpc.NoopBizHook")
 	}
 	ctx = appctx.OrBackground(ctx)
-	if err := ctx.Err(); err != nil {
+	callerCtx := ctx
+	if err := callerCtx.Err(); err != nil {
 		return err
 	}
 	if c.testResolve == nil && c.serviceName == "" {
 		return errors.New("rpc: 服务名不能为空")
 	}
 
+	timeout := req.Timeout
+	if timeout <= 0 {
+		timeout = DefaultRequestTimeout
+	}
+	callCtx, cancel := context.WithTimeout(callerCtx, timeout)
+	defer cancel()
+
 	// 先过熔断再序列化：熔断打开时不浪费序列化；序列化失败释放半开探测位
 	ticket, err := c.breaker.allow()
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(reqBody)
+	payload, err := json.Marshal(req.ReqBody)
 	if err != nil {
 		c.breaker.onNeutral(ticket)
 		return errors.Wrap(err, "序列化请求体失败")
@@ -82,22 +90,22 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
+		if err := callCtx.Err(); err != nil {
 			c.breaker.onNeutral(ticket)
 			return err
 		}
 
-		url, err := c.resolveEndpoint(ctx, endpoint)
+		url, err := c.resolveEndpoint(callCtx, req.Endpoint)
 		if err != nil {
-			if ctx.Err() != nil {
+			if callerCtx.Err() != nil {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			if !shouldRetry(ctx, err, attempt, maxAttempts) {
+			if !shouldRetry(callCtx, err, attempt, maxAttempts) {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			if sleepErr := sleepBackoff(ctx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
+			if sleepErr := sleepBackoff(callCtx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
 				c.breaker.onNeutral(ticket)
 				return sleepErr
 			}
@@ -105,10 +113,10 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 		}
 
 		start := time.Now()
-		body, err := c.doRequest(ctx, url, payload, respBody != nil)
+		body, err := c.doRequest(callCtx, url, payload, req.RespBody != nil)
 		elapsed := time.Since(start)
 		if err != nil {
-			if ctx.Err() != nil {
+			if callerCtx.Err() != nil {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
@@ -117,17 +125,17 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 				return err
 			}
 			c.breaker.record(ticket, c.classify(err, elapsed))
-			if !shouldRetry(ctx, err, attempt, maxAttempts) {
+			if !shouldRetry(callCtx, err, attempt, maxAttempts) {
 				return err
 			}
-			if sleepErr := sleepBackoff(ctx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
+			if sleepErr := sleepBackoff(callCtx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
 				return sleepErr
 			}
 			continue
 		}
 
-		if respBody != nil {
-			if err := json.Unmarshal(body, respBody); err != nil {
+		if req.RespBody != nil {
+			if err := json.Unmarshal(body, req.RespBody); err != nil {
 				protocolErr := &ProtocolError{Reason: "解析下游响应失败", Err: err}
 				c.breaker.record(ticket, attemptResult{
 					failure: true,
@@ -142,10 +150,10 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 			slow:    elapsed > c.breaker.slowThreshold(),
 			counted: true,
 		})
-		ok, hookErr := bizHook(ctx, BizHookContext{
-			Endpoint: endpoint,
-			ReqBody:  reqBody,
-			RespBody: respBody,
+		ok, hookErr := req.BizHook(callCtx, BizHookContext{
+			Endpoint: req.Endpoint,
+			ReqBody:  req.ReqBody,
+			RespBody: req.RespBody,
 		})
 		if hookErr != nil {
 			return hookErr
@@ -181,7 +189,7 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 }
 
 // doRequest 发送一次 HTTP POST 并按需读取响应体
-// needBody=false 时 200 直接丢弃 body，非 200 只读少量前缀用于错误详情
+// needBody=false 时 200 和非 200 都直接丢弃 body；非 200 只用状态码、状态文本和 Retry-After
 // 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
 func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
