@@ -105,7 +105,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 		}
 
 		start := time.Now()
-		body, err := c.doRequest(ctx, url, payload)
+		body, err := c.doRequest(ctx, url, payload, respBody != nil)
 		elapsed := time.Since(start)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -180,9 +180,10 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 	return url, nil
 }
 
-// doRequest 发送一次 HTTP POST 并读取响应体
+// doRequest 发送一次 HTTP POST 并按需读取响应体
+// needBody=false 时 200 直接丢弃 body，非 200 只读少量前缀用于错误详情
 // 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
-func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte) ([]byte, error) {
+func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, &requestError{err: errors.New("请求地址不能为空")}
 	}
@@ -201,6 +202,17 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 		return nil, wrapRetryable(errors.Wrap(err, "调用下游服务失败"))
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if !needBody {
+		if resp.StatusCode == http.StatusOK {
+			return nil, nil
+		}
+		return nil, &HTTPStatusError{
+			Code:       resp.StatusCode,
+			Detail:     http.StatusText(resp.StatusCode),
+			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+		}
+	}
 
 	maxBytes := c.opts.MaxResponseBytes
 	if maxBytes <= 0 {
