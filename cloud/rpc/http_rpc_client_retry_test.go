@@ -18,7 +18,7 @@ func newTestRPCClient(serverURL string, opts ...ClientOption) *HttpRpcClient {
 		serviceName: "test-svc",
 		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
 		opts:        cfg,
-		breaker:     newCircuitBreaker(cfg.BreakerFailures, cfg.BreakerOpenDuration),
+		breaker:     newCircuitBreaker(cfg.Breaker),
 	}
 	c.testResolve = func(context.Context, string) (string, error) {
 		return serverURL, nil
@@ -30,13 +30,12 @@ func newTestRPCClient(serverURL string, opts ...ClientOption) *HttpRpcClient {
 func TestInvoke_RetriesThenSucceeds(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := hits.Add(1)
-		if n < 3 {
+		if hits.Add(1) < 3 {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":"OK","msg":"","timestamp":1,"data":{"ok":true}}`))
+		_, _ = w.Write([]byte(`{"code":"OK","data":{"ok":true}}`))
 	}))
 	defer server.Close()
 
@@ -45,8 +44,8 @@ func TestInvoke_RetriesThenSucceeds(t *testing.T) {
 		WithBackoff(1*time.Millisecond, 2*time.Millisecond),
 		WithHTTPTimeout(2*time.Second),
 	)
-	var resp map[string]any
-	if err := client.Invoke(context.Background(), "/x", nil, &resp); err != nil {
+	var env testEnvelope
+	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if hits.Load() != 3 {
@@ -60,12 +59,13 @@ func TestInvoke_BizErrorNotRetried(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":"INVALID_INPUT","msg":"bad","timestamp":1}`))
+		_, _ = w.Write([]byte(`{"code":"INVALID_INPUT","msg":"bad"}`))
 	}))
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL, WithMaxAttempts(3), WithBackoff(time.Millisecond, time.Millisecond))
-	err := client.Invoke(context.Background(), "/x", nil, nil)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
 	if err == nil {
 		t.Fatal("期望业务错误")
 	}
@@ -78,23 +78,122 @@ func TestInvoke_BizErrorNotRetried(t *testing.T) {
 	}
 }
 
-// TestInvoke_CircuitBreakerOpens 验证连续失败后熔断打开
-func TestInvoke_CircuitBreakerOpens(t *testing.T) {
+// TestInvoke_500CountsAsFailureButNotRetried 验证 500 计熔断失败但不重试
+func TestInvoke_500CountsAsFailureButNotRetried(t *testing.T) {
+	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
+		hits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(1),
-		WithBreaker(2, time.Minute),
-		WithHTTPTimeout(2*time.Second),
+		WithMaxAttempts(3),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
 	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusInternalServerError {
+		t.Fatalf("期望 HTTP 500，实际 %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("500 不应重试，hits=%d", hits.Load())
+	}
+	if state, _ := breakerSnapshot(client); state != breakerOpen {
+		t.Fatalf("500 应计失败并打开熔断，state=%d", state)
+	}
+	if err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
+	}
+}
 
-	_ = client.Invoke(context.Background(), "/x", nil, nil)
-	_ = client.Invoke(context.Background(), "/x", nil, nil)
-	err := client.Invoke(context.Background(), "/x", nil, nil)
-	if !errors.Is(err, ErrCircuitOpen) {
-		t.Fatalf("期望熔断打开，实际 %v", err)
+// TestInvoke_4xxDoesNotTripBreaker 验证 4xx 不计熔断失败
+func TestInvoke_4xxDoesNotTripBreaker(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithMaxAttempts(3),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	for i := 0; i < 2; i++ {
+		err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+		var statusErr *HTTPStatusError
+		if !errors.As(err, &statusErr) || statusErr.Code != http.StatusBadRequest {
+			t.Fatalf("第 %d 次期望 HTTP 400，实际 %v", i+1, err)
+		}
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("4xx 不应打开熔断，hits=%d", hits.Load())
+	}
+}
+
+// TestInvoke_DiscoveryErrorNotCountedAsBreaker 验证发现失败可重试但不计下游熔断
+func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
+	var calls atomic.Int64
+	client := newTestRPCClient("",
+		WithMaxAttempts(1),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	client.testResolve = func(context.Context, string) (string, error) {
+		calls.Add(1)
+		return "", errors.New("consul down")
+	}
+
+	err := client.Invoke(context.Background(), "/x", nil, nil, nil)
+	var discoveryErr *discoveryError
+	if !errors.As(err, &discoveryErr) {
+		t.Fatalf("期望 discoveryError，实际 %v", err)
+	}
+	if state, _ := breakerSnapshot(client); state != breakerClosed {
+		t.Fatalf("发现失败不应打开下游熔断，state=%d", state)
+	}
+
+	_ = client.Invoke(context.Background(), "/x", nil, nil, nil)
+	if calls.Load() != 2 {
+		t.Fatalf("发现失败不应打开熔断，calls=%d", calls.Load())
+	}
+}
+
+// TestInvoke_LocalRequestErrorNotRetried 验证本地请求构建错误不重试、不计熔断
+func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
+	var calls atomic.Int64
+	client := newTestRPCClient("",
+		WithMaxAttempts(3),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	client.testResolve = func(context.Context, string) (string, error) {
+		calls.Add(1)
+		return "10.0.0.1:8080/x", nil
+	}
+
+	err := client.Invoke(context.Background(), "/x", nil, nil, nil)
+	var localErr *requestError
+	if !errors.As(err, &localErr) {
+		t.Fatalf("期望 requestError，实际 %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("本地错误不应重试，calls=%d", calls.Load())
+	}
+	if state, _ := breakerSnapshot(client); state != breakerClosed {
+		t.Fatalf("本地错误不应打开熔断，state=%d", state)
 	}
 }

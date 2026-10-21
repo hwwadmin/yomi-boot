@@ -1,6 +1,5 @@
-// Package rpc 提供读路径重试判定与退避
-//
 // @author zwei
+
 package rpc
 
 import (
@@ -11,34 +10,43 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// isRetryableRPCError 仅传输类故障可重试：网络/发现、502/503/504/408
-// 业务错误、4xx、解析错误均不重试
-func isRetryableRPCError(err error) bool {
+// shouldRetry 判断是否继续重试：未超次数、上下文未取消且错误可重试
+func shouldRetry(ctx context.Context, err error, attempt, maxAttempts int) bool {
+	if attempt >= maxAttempts {
+		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	return isRetryable(err)
+}
+
+// isRetryable 判断错误是否属于可重试的传输错误
+func isRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	var biz *errors.BizError
-	if errors.As(err, &biz) {
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.Retryable()
+	}
+	var protocolErr *ProtocolError
+	if errors.As(err, &protocolErr) {
 		return false
 	}
-	var hs *httpStatusError
-	if errors.As(err, &hs) {
-		return hs.retryable()
+	var localErr *requestError
+	if errors.As(err, &localErr) {
+		return false
 	}
-	var re *retryableError
-	return errors.As(err, &re)
-}
-
-// isTransportSuccess 下游已响应且可判定服务存活（业务成功或业务错误信封）
-func isTransportSuccess(err error) bool {
-	if err == nil {
+	var discoveryErr *discoveryError
+	if errors.As(err, &discoveryErr) {
 		return true
 	}
-	var biz *errors.BizError
-	return errors.As(err, &biz)
+	var retryErr *retryableError
+	return errors.As(err, &retryErr)
 }
 
 // backoffDuration 计算第 attempt 次失败后的退避（attempt 从 1 起为首次失败）

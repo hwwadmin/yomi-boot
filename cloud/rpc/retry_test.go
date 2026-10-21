@@ -9,25 +9,32 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// TestIsRetryableRPCError 验证可重试 RPC 错误判定
-func TestIsRetryableRPCError(t *testing.T) {
+// TestIsRetryable 验证可重试 RPC 错误判定
+func TestIsRetryable(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
 		want bool
 	}{
 		{"nil", nil, false},
-		{"biz", errors.NewBiz("INVALID_INPUT", "bad"), false},
-		{"retryable wrap", wrapRetryable(errors.New("dial")), true},
-		{"502", &httpStatusError{code: http.StatusBadGateway, detail: "bad"}, true},
-		{"503", &httpStatusError{code: http.StatusServiceUnavailable, detail: "ua"}, true},
-		{"400", &httpStatusError{code: http.StatusBadRequest, detail: "bad"}, false},
+		{"408", &HTTPStatusError{Code: http.StatusRequestTimeout}, true},
+		{"429", &HTTPStatusError{Code: http.StatusTooManyRequests}, true},
+		{"502", &HTTPStatusError{Code: http.StatusBadGateway}, true},
+		{"503", &HTTPStatusError{Code: http.StatusServiceUnavailable}, true},
+		{"504", &HTTPStatusError{Code: http.StatusGatewayTimeout}, true},
+		{"400", &HTTPStatusError{Code: http.StatusBadRequest}, false},
+		{"401", &HTTPStatusError{Code: http.StatusUnauthorized}, false},
+		{"500", &HTTPStatusError{Code: http.StatusInternalServerError}, false},
+		{"protocol", &ProtocolError{Reason: "bad body"}, false},
+		{"request", &requestError{err: errors.New("bad url")}, false},
+		{"discovery", &discoveryError{err: errors.New("consul down")}, true},
+		{"network", wrapRetryable(errors.New("dial")), true},
 		{"canceled", context.Canceled, false},
 		{"deadline", context.DeadlineExceeded, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isRetryableRPCError(tc.err); got != tc.want {
+			if got := isRetryable(tc.err); got != tc.want {
 				t.Fatalf("got %v want %v", got, tc.want)
 			}
 		})

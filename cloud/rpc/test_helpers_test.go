@@ -1,0 +1,38 @@
+package rpc
+
+import (
+	"context"
+	"encoding/json"
+
+	"gitee.com/hq_project/yomi-boot/boot/errors"
+)
+
+// testEnvelope 测试用读响应信封
+type testEnvelope struct {
+	Code  string          `json:"code"`
+	Msg   string          `json:"msg"`
+	Data  json.RawMessage `json:"data"`
+	Total int64           `json:"total"`
+}
+
+// checkTestEnvelope 测试用业务判定 hook
+func checkTestEnvelope(_ context.Context, call BizHookContext) error {
+	env, ok := call.RespBody.(*testEnvelope)
+	if !ok {
+		return errors.New("bad envelope type")
+	}
+	if env.Code == "" {
+		return errors.Sentinel(ErrDownstream)
+	}
+	if env.Code != "OK" {
+		return errors.NewBiz(env.Code, env.Msg)
+	}
+	return nil
+}
+
+// breakerSnapshot 读取熔断器状态与窗口长度
+func breakerSnapshot(c *HttpRpcClient) (breakerState, int) {
+	c.breaker.mu.Lock()
+	defer c.breaker.mu.Unlock()
+	return c.breaker.state, len(c.breaker.window)
+}

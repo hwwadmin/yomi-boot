@@ -3,47 +3,182 @@ package rpc
 import (
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// TestCircuitBreaker_OpenAndHalfOpen 验证熔断打开、半开探测与关闭
-func TestCircuitBreaker_OpenAndHalfOpen(t *testing.T) {
-	b := newCircuitBreaker(2, 50*time.Millisecond)
+// testBreakerConfig 返回测试用熔断参数
+func testBreakerConfig() BreakerOptions {
+	return BreakerOptions{
+		WindowSize:    4,
+		MinRequests:   4,
+		FailureRate:   0.5,
+		SlowRate:      0.5,
+		SlowThreshold: 10 * time.Millisecond,
+		OpenDuration:  20 * time.Millisecond,
+	}
+}
 
-	if err := b.allow(); err != nil {
+// TestCircuitBreaker_OpensByFailureRate 验证失败率达到阈值后打开
+func TestCircuitBreaker_OpensByFailureRate(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, err := b.allow()
+	if err != nil {
 		t.Fatalf("closed 应允许: %v", err)
 	}
-	b.onFailure()
-	if err := b.allow(); err != nil {
-		t.Fatalf("未达阈值仍应允许: %v", err)
+	b.record(ticket, attemptResult{failure: true})
+	b.record(ticket, attemptResult{failure: true})
+	b.record(ticket, attemptResult{})
+	b.record(ticket, attemptResult{})
+	if b.state != breakerOpen {
+		t.Fatalf("失败率达到 0.5 应打开，state=%d", b.state)
 	}
-	b.onFailure()
-	if err := b.allow(); err == nil {
-		t.Fatal("达到阈值后应打开熔断")
+	if _, err := b.allow(); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("打开后应返回 ErrCircuitOpen，实际 %v", err)
 	}
+}
 
-	time.Sleep(60 * time.Millisecond)
-	if err := b.allow(); err != nil {
-		t.Fatalf("冷却后 half-open 应允许探测: %v", err)
+// TestCircuitBreaker_OpensBySlowRate 验证慢调用率达到阈值后打开
+func TestCircuitBreaker_OpensBySlowRate(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	b.record(ticket, attemptResult{slow: true})
+	b.record(ticket, attemptResult{slow: true})
+	b.record(ticket, attemptResult{})
+	b.record(ticket, attemptResult{})
+	if b.state != breakerOpen {
+		t.Fatalf("慢调用率达到 0.5 应打开，state=%d", b.state)
 	}
-	// half-open 探测进行中，第二个请求应拒绝
-	if err := b.allow(); err == nil {
-		t.Fatal("half-open 探测进行中应拒绝其它请求")
+}
+
+// TestCircuitBreaker_MinRequests 验证窗口请求数不足时不打开
+func TestCircuitBreaker_MinRequests(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 5
+	cfg.MinRequests = 5
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	b := newCircuitBreaker(cfg)
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true})
 	}
-	b.onSuccess()
-	if err := b.allow(); err != nil {
-		t.Fatalf("探测成功后应关闭熔断: %v", err)
+	if b.state != breakerClosed {
+		t.Fatalf("未达到 MinRequests 不应打开，state=%d", b.state)
+	}
+	b.record(ticket, attemptResult{failure: true})
+	if b.state != breakerOpen {
+		t.Fatalf("达到 MinRequests 且失败率为 1 应打开，state=%d", b.state)
+	}
+}
+
+// TestCircuitBreaker_HalfOpenSuccessCloses 验证半开探测成功后关闭
+func TestCircuitBreaker_HalfOpenSuccessCloses(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true})
+	}
+	if b.state != breakerOpen {
+		t.Fatalf("应已打开，state=%d", b.state)
+	}
+	time.Sleep(30 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	if b.state != breakerHalfOpen {
+		t.Fatalf("应处于半开，state=%d", b.state)
+	}
+	b.record(probe, attemptResult{})
+	if b.state != breakerClosed {
+		t.Fatalf("探测成功应关闭，state=%d", b.state)
 	}
 }
 
 // TestCircuitBreaker_HalfOpenFailureReopens 验证半开探测失败后重新打开
 func TestCircuitBreaker_HalfOpenFailureReopens(t *testing.T) {
-	b := newCircuitBreaker(1, 20*time.Millisecond)
-	_ = b.allow()
-	b.onFailure()
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true})
+	}
 	time.Sleep(30 * time.Millisecond)
-	_ = b.allow()
-	b.onFailure()
-	if err := b.allow(); err == nil {
-		t.Fatal("half-open 失败后应重新打开")
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	b.record(probe, attemptResult{failure: true})
+	if b.state != breakerOpen {
+		t.Fatalf("探测失败应重新打开，state=%d", b.state)
+	}
+	if _, err := b.allow(); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("重新打开后应返回 ErrCircuitOpen，实际 %v", err)
+	}
+}
+
+// TestCircuitBreaker_HalfOpenSlowReopens 验证半开探测慢调用后重新打开
+func TestCircuitBreaker_HalfOpenSlowReopens(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true})
+	}
+	time.Sleep(30 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	b.record(probe, attemptResult{slow: true})
+	if b.state != breakerOpen {
+		t.Fatalf("探测慢调用应重新打开，state=%d", b.state)
+	}
+}
+
+// TestCircuitBreaker_NeutralReleasesProbe 验证中性结果释放半开探测位且不改变状态
+func TestCircuitBreaker_NeutralReleasesProbe(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true})
+	}
+	time.Sleep(30 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	b.onNeutral(probe)
+	if b.state != breakerHalfOpen {
+		t.Fatalf("中性结果不应改变状态，state=%d", b.state)
+	}
+	if _, err := b.allow(); err != nil {
+		t.Fatalf("中性结果应释放半开探测位，实际 %v", err)
+	}
+}
+
+// TestCircuitBreaker_StaleProbeIgnored 验证上一轮半开探测结果不影响新一轮
+func TestCircuitBreaker_StaleProbeIgnored(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true})
+	}
+	time.Sleep(30 * time.Millisecond)
+	oldProbe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	b.onNeutral(oldProbe)
+	newProbe, err := b.allow()
+	if err != nil {
+		t.Fatalf("释放探测位后应允许新探测: %v", err)
+	}
+	b.record(oldProbe, attemptResult{})
+	if b.state != breakerHalfOpen {
+		t.Fatalf("旧探测结果不应关闭熔断，state=%d", b.state)
+	}
+	b.record(newProbe, attemptResult{})
+	if b.state != breakerClosed {
+		t.Fatalf("新探测成功后应关闭，state=%d", b.state)
 	}
 }

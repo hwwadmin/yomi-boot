@@ -1,7 +1,5 @@
-// Package rpc 基于 HTTP 协议的 RPC 服务调用实现，通过 Consul 服务发现完成端点解析与远程调用
-//
-// 面向同步读路径：轻量重试（退避）+ 按下游服务熔断。跨域写走 DTM，不在此叠加重试语义。
-// 响应信封为微服务间固定契约（见微服务调用规范），与对外 Encoder 无关。
+// @author zwei
+
 package rpc
 
 import (
@@ -11,42 +9,21 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"gitee.com/hq_project/yomi-boot/boot/appctx"
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/traceid"
 	"gitee.com/hq_project/yomi-boot/cloud/consul"
 )
 
-// ErrDownstream 下游服务异常
-var ErrDownstream = errors.NewNoStack("DOWNSTREAM_ERROR")
-
-// circuitOpenError 熔断打开；Error 为 CIRCUIT_OPEN，Unwrap 到 ErrDownstream 以支持 errors.Is
-type circuitOpenError struct{}
-
-// Error 返回熔断打开错误码
-func (circuitOpenError) Error() string { return "CIRCUIT_OPEN" }
-
-// Unwrap 返回下游异常哨兵，便于 errors.Is 匹配 ErrDownstream
-func (circuitOpenError) Unwrap() error { return ErrDownstream }
-
-// ErrCircuitOpen 下游熔断已打开（errors.Is 仍匹配 ErrDownstream）
-var ErrCircuitOpen error = circuitOpenError{}
-
-// rpcEnvelope 微服务间读响应信封；Data 用 RawMessage 延迟解码，避免 int64 精度丢失。
-type rpcEnvelope struct {
-	Code  string          `json:"code"`
-	Msg   string          `json:"msg"`
-	Data  json.RawMessage `json:"data"`
-	Total int64           `json:"total"`
-}
-
-// HttpRpcClient 基于 HTTP 协议的 RpcService 实现
-// 内部组合 Consul 服务发现与标准 HTTP 客户端，完成端点解析、请求发送与响应反序列化
+// HttpRpcClient 基于 HTTP 的 RpcService 实现
+// 只负责服务发现、发送请求、反序列化响应与传输级韧性
 type HttpRpcClient struct {
 	serviceName string
 	consul      *consul.Client
 	httpClient  *http.Client
-	opts        ClientOptions
+	opts        clientOptions
 	breaker     *circuitBreaker
 	// testResolve 仅测试注入：非 nil 时替代 Consul 解析
 	testResolve func(ctx context.Context, endpoint string) (string, error)
@@ -64,8 +41,104 @@ func NewHttpRpcClient(consulClient *consul.Client, serviceName string, opts ...C
 		consul:      consulClient,
 		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
 		opts:        cfg,
-		breaker:     newCircuitBreaker(cfg.BreakerFailures, cfg.BreakerOpenDuration),
+		breaker:     newCircuitBreaker(cfg.Breaker),
 	}
+}
+
+// Invoke 实现 RpcService.Invoke
+// 传输成功 = HTTP 200 且响应反序列化成功；业务成功由 bizHook 判定
+func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any, respBody any, bizHook BizHookFunc) error {
+	if c == nil || c.httpClient == nil {
+		return errors.New("HttpRpcClient 未初始化")
+	}
+	ctx = appctx.OrBackground(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if c.testResolve == nil && strings.TrimSpace(c.serviceName) == "" {
+		return errors.New("rpc: 服务名不能为空")
+	}
+
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return errors.Wrap(err, "序列化请求体失败")
+	}
+	ticket, err := c.breaker.allow()
+	if err != nil {
+		return err
+	}
+
+	maxAttempts := c.opts.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = defaultMaxAttempts
+	}
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			c.breaker.onNeutral(ticket)
+			return err
+		}
+
+		url, err := c.resolveEndpoint(ctx, endpoint)
+		if err != nil {
+			if ctx.Err() != nil {
+				c.breaker.onNeutral(ticket)
+				return err
+			}
+			if !shouldRetry(ctx, err, attempt, maxAttempts) {
+				c.breaker.onNeutral(ticket)
+				return err
+			}
+			if sleepErr := sleepBackoff(ctx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
+				c.breaker.onNeutral(ticket)
+				return sleepErr
+			}
+			continue
+		}
+
+		start := time.Now()
+		body, err := c.doRequest(ctx, url, payload)
+		elapsed := time.Since(start)
+		if err != nil {
+			if ctx.Err() != nil {
+				c.breaker.onNeutral(ticket)
+				return err
+			}
+			if isLocalError(err) {
+				c.breaker.onNeutral(ticket)
+				return err
+			}
+			c.breaker.record(ticket, c.classify(err, elapsed))
+			if !shouldRetry(ctx, err, attempt, maxAttempts) {
+				return err
+			}
+			if sleepErr := sleepBackoff(ctx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
+				return sleepErr
+			}
+			continue
+		}
+
+		if respBody != nil {
+			if err := json.Unmarshal(body, respBody); err != nil {
+				protocolErr := &ProtocolError{Reason: "解析下游响应失败", Err: err}
+				c.breaker.record(ticket, attemptResult{failure: true, slow: elapsed > c.breaker.slowThreshold()})
+				return protocolErr
+			}
+		}
+
+		c.breaker.record(ticket, attemptResult{slow: elapsed > c.breaker.slowThreshold()})
+		if bizHook != nil {
+			if err := bizHook(ctx, BizHookContext{
+				Endpoint: endpoint,
+				ReqBody:  reqBody,
+				RespBody: respBody,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return errors.New("rpc: 未产生有效尝试")
 }
 
 // resolveEndpoint 通过 Consul 服务发现将 endpoint 解析为完整 HTTP URL
@@ -76,192 +149,88 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 	if c.testResolve != nil {
 		url, err := c.testResolve(ctx, endpoint)
 		if err != nil {
-			return "", wrapRetryable(err)
+			return "", &discoveryError{err: err}
 		}
 		return url, nil
 	}
 	if c.consul == nil {
-		return "", errors.New("HttpRpcClient 未初始化")
+		return "", errors.New("HttpRpcClient 未初始化: consul 客户端为 nil")
 	}
 	url, err := c.consul.ResolveHTTPBase(ctx, c.serviceName, endpoint)
 	if err != nil {
-		return "", wrapRetryable(err)
+		return "", &discoveryError{err: err}
 	}
 	return url, nil
 }
 
-// Invoke 实现 RpcService.Invoke，发送 HTTP POST 请求并反序列化响应到 respData
-func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any, respData any) error {
-	_, err := c.invokeWithRetry(ctx, endpoint, reqBody, respData)
-	return err
-}
-
-// InvokePage 实现 RpcService.InvokePage，发送 HTTP POST 分页请求并返回总条数
-func (c *HttpRpcClient) InvokePage(ctx context.Context, endpoint string, reqBody any, respData any) (int64, error) {
-	return c.invokeWithRetry(ctx, endpoint, reqBody, respData)
-}
-
-// invokeWithRetry 读路径：熔断检查 → 解析地址 → 调用；传输失败短退避重试并重新发现
-func (c *HttpRpcClient) invokeWithRetry(ctx context.Context, endpoint string, reqBody any, respData any) (int64, error) {
-	if c == nil {
-		return 0, errors.New("HttpRpcClient 未初始化")
-	}
-	if err := c.breaker.allow(); err != nil {
-		return 0, err
-	}
-
-	maxAttempts := c.opts.MaxAttempts
-	if maxAttempts <= 0 {
-		maxAttempts = defaultMaxAttempts
-	}
-
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
-			c.recordAttemptResult(lastErr)
-			return 0, err
-		}
-
-		url, err := c.resolveEndpoint(ctx, endpoint)
-		if err != nil {
-			lastErr = err
-			if !c.shouldRetry(ctx, err, attempt, maxAttempts) {
-				c.recordAttemptResult(err)
-				return 0, err
-			}
-			if sleepErr := sleepBackoff(ctx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
-				c.recordAttemptResult(err)
-				return 0, sleepErr
-			}
-			continue
-		}
-
-		total, err := c.doPostInternal(ctx, url, reqBody, respData)
-		if err == nil {
-			c.breaker.onSuccess()
-			return total, nil
-		}
-		lastErr = err
-		if isTransportSuccess(err) {
-			c.breaker.onSuccess()
-			return 0, err
-		}
-		if !c.shouldRetry(ctx, err, attempt, maxAttempts) {
-			c.recordAttemptResult(err)
-			return 0, err
-		}
-		if sleepErr := sleepBackoff(ctx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
-			c.recordAttemptResult(err)
-			return 0, sleepErr
-		}
-	}
-	c.recordAttemptResult(lastErr)
-	return 0, lastErr
-}
-
-// shouldRetry 判断是否继续重试：未超次数、上下文未取消且错误可重试
-func (c *HttpRpcClient) shouldRetry(ctx context.Context, err error, attempt, maxAttempts int) bool {
-	if attempt >= maxAttempts {
-		return false
-	}
-	if ctx.Err() != nil {
-		return false
-	}
-	return isRetryableRPCError(err)
-}
-
-// recordAttemptResult 按本次结果更新熔断：传输成功/非重试失败记成功，可重试失败记失败
-func (c *HttpRpcClient) recordAttemptResult(err error) {
-	if isTransportSuccess(err) {
-		c.breaker.onSuccess()
-		return
-	}
-	if isRetryableRPCError(err) {
-		c.breaker.onFailure()
-		return
-	}
-	// 非传输失败（如 4xx、解析错误）：服务通常仍存活，不累计熔断
-	c.breaker.onSuccess()
-}
-
-// doRequest 执行 HTTP POST 请求的公共流程：前置校验、序列化、发送请求、读取响应体
-func (c *HttpRpcClient) doRequest(ctx context.Context, url string, reqBody any) ([]byte, error) {
-	// 前置校验：客户端可用性
-	if c == nil || c.httpClient == nil {
-		return nil, errors.New("HttpRpcClient 未初始化")
-	}
-	// 前置校验：请求地址非空
+// doRequest 发送一次 HTTP POST 并读取响应体
+// 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
+func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
-		return nil, errors.New("请求地址不能为空")
+		return nil, &requestError{err: errors.New("请求地址不能为空")}
 	}
-
-	// 序列化请求体
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, errors.Wrap(err, "序列化请求体失败")
-	}
-
-	// 构建 HTTP 请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return nil, errors.Wrap(err, "创建请求失败")
+		return nil, &requestError{err: errors.Wrap(err, "创建请求失败")}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	traceid.SetTraceID(ctx, req)
 
-	// 发送 HTTP 请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, errors.Wrap(err, "调用下游服务失败")
+			return nil, err
 		}
 		return nil, wrapRetryable(errors.Wrap(err, "调用下游服务失败"))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// 读取响应体
-	body, err := io.ReadAll(resp.Body)
+	maxBytes := c.opts.MaxResponseBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultMaxResponseBytes
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, wrapRetryable(errors.Wrap(err, "读取下游响应失败"))
 	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		detail := strings.TrimSpace(string(body))
+	if int64(len(data)) > maxBytes {
+		if resp.StatusCode == http.StatusOK {
+			return nil, &ProtocolError{Reason: "响应体超过上限"}
+		}
+		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: "响应体超过上限"}
+	}
+	if resp.StatusCode != http.StatusOK {
+		detail := strings.TrimSpace(string(data))
 		if detail == "" {
 			detail = http.StatusText(resp.StatusCode)
 		} else if len(detail) > 200 {
 			detail = detail[:200] + "..."
 		}
-		return nil, &httpStatusError{code: resp.StatusCode, detail: detail}
+		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: detail}
 	}
-	return body, nil
+	return data, nil
 }
 
-// doPostInternal 执行一次 HTTP POST 调用，按微服务间信封解析并填充 respData；分页响应时返回 total
-func (c *HttpRpcClient) doPostInternal(ctx context.Context, url string, reqBody any, respData any) (int64, error) {
-	body, err := c.doRequest(ctx, url, reqBody)
-	if err != nil {
-		return 0, err
-	}
-
-	var envelope rpcEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return 0, errors.Wrap(err, "解析下游响应失败")
-	}
-
-	if envelope.Code != "OK" {
-		if envelope.Code != "" {
-			return 0, errors.NewBiz(envelope.Code, envelope.Msg)
-		}
-		return 0, errors.Sentinel(ErrDownstream)
-	}
-
-	if respData != nil && len(envelope.Data) > 0 {
-		trimmed := bytes.TrimSpace(envelope.Data)
-		if len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) {
-			if err := json.Unmarshal(envelope.Data, respData); err != nil {
-				return 0, errors.Wrap(err, "解析下游 data 失败")
-			}
+// classify 将传输错误归类为熔断结果
+// 5xx/408 计失败；4xx/429/3xx 不计失败；协议错误和网络错误计失败
+func (c *HttpRpcClient) classify(err error, elapsed time.Duration) attemptResult {
+	slow := elapsed > c.breaker.slowThreshold()
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) {
+		return attemptResult{
+			failure: statusErr.Code >= http.StatusInternalServerError || statusErr.Code == http.StatusRequestTimeout,
+			slow:    slow,
 		}
 	}
-	return envelope.Total, nil
+	var protocolErr *ProtocolError
+	if errors.As(err, &protocolErr) {
+		return attemptResult{failure: true, slow: slow}
+	}
+	return attemptResult{failure: true}
+}
+
+// isLocalError 判断是否为本地请求构建错误
+func isLocalError(err error) bool {
+	var localErr *requestError
+	return errors.As(err, &localErr)
 }
