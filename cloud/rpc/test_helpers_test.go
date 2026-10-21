@@ -27,6 +27,17 @@ func invokeTest(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody,
 	})
 }
 
+// invokeTestWith 指定最大尝试次数调用客户端
+func invokeTestWith(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any, hook BizHookFunc, attempts int) error {
+	return c.Invoke(ctx, InvokeRequest{
+		Endpoint:    endpoint,
+		ReqBody:     reqBody,
+		RespBody:    respBody,
+		BizHook:     hook,
+		MaxAttempts: attempts,
+	})
+}
+
 // testEnvelope 测试用读响应信封
 type testEnvelope struct {
 	Code  string          `json:"code"`

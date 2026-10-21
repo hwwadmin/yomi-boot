@@ -84,9 +84,13 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		return errors.Wrap(err, "序列化请求体失败")
 	}
 
-	maxAttempts := c.opts.MaxAttempts
+	maxAttempts := req.MaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = defaultMaxAttempts
+	}
+	maxBytes := req.MaxResponseBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultMaxResponseBytes
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -113,7 +117,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		}
 
 		start := time.Now()
-		body, err := c.doRequest(callCtx, url, payload, req.RespBody != nil)
+		body, err := c.doRequest(callCtx, url, payload, req.RespBody != nil, maxBytes)
 		elapsed := time.Since(start)
 		if err != nil {
 			if callerCtx.Err() != nil {
@@ -191,7 +195,7 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 // doRequest 发送一次 HTTP POST 并按需读取响应体
 // needBody=false 时 200 和非 200 都直接丢弃 body；非 200 只用状态码、状态文本和 Retry-After
 // 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
-func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool) ([]byte, error) {
+func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool, maxBytes int64) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, &requestError{err: errors.New("请求地址不能为空")}
 	}
@@ -222,7 +226,6 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 		}
 	}
 
-	maxBytes := c.opts.MaxResponseBytes
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxResponseBytes
 	}

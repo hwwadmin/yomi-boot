@@ -12,11 +12,13 @@ const DefaultRequestTimeout = 3 * time.Second
 
 // InvokeRequest 描述一次 RPC 调用
 type InvokeRequest struct {
-	Endpoint string        // Endpoint 是调用方传入的逻辑端点
-	ReqBody  any           // ReqBody 是请求对象（只读；可能含敏感信息）
-	RespBody any           // RespBody 是响应对象；nil 表示不需要响应体
-	BizHook  BizHookFunc   // BizHook 是业务成功判定；不能为 nil
-	Timeout  time.Duration // Timeout 是整次调用超时，<=0 时使用 DefaultRequestTimeout
+	Endpoint         string        // Endpoint 是调用方传入的逻辑端点
+	ReqBody          any           // ReqBody 是请求对象（只读；可能含敏感信息）
+	RespBody         any           // RespBody 是响应对象；nil 表示不需要响应体
+	BizHook          BizHookFunc   // BizHook 是业务成功判定；不能为 nil
+	Timeout          time.Duration // Timeout 是整次调用超时，<=0 时使用 DefaultRequestTimeout
+	MaxAttempts      int           // MaxAttempts 是最多尝试次数，<=0 时使用内置默认 3
+	MaxResponseBytes int64         // MaxResponseBytes 是响应体上限，<=0 时使用内置默认 4 MiB
 }
 
 // BizHookContext 业务判定所需的调用上下文

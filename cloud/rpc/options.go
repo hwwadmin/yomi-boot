@@ -31,32 +31,22 @@ type BreakerOptions struct {
 }
 
 // clientOptions RPC 客户端内部参数
+// 只保留客户端级配置；单次调用的超时、次数、响应上限由 InvokeRequest 控制
 type clientOptions struct {
-	HTTPTimeout      time.Duration
-	MaxAttempts      int
-	BaseBackoff      time.Duration
-	MaxBackoff       time.Duration
-	MaxResponseBytes int64
-	Breaker          BreakerOptions
+	HTTPTimeout time.Duration  // HTTPTimeout 是单次 HTTP 尝试的后备超时，默认 30s
+	BaseBackoff time.Duration  // BaseBackoff 是首次重试退避，默认 50ms
+	MaxBackoff  time.Duration  // MaxBackoff 是退避上限，默认 200ms
+	Breaker     BreakerOptions // Breaker 是服务级熔断参数
 }
 
 // ClientOption 修改 RPC 客户端参数
 type ClientOption func(*clientOptions)
 
-// WithHTTPTimeout 设置单次 HTTP 请求超时
+// WithHTTPTimeout 设置单次 HTTP 尝试的后备超时
 func WithHTTPTimeout(d time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if d > 0 {
 			o.HTTPTimeout = d
-		}
-	}
-}
-
-// WithMaxAttempts 设置最大尝试次数（含首次）
-func WithMaxAttempts(n int) ClientOption {
-	return func(o *clientOptions) {
-		if n > 0 {
-			o.MaxAttempts = n
 		}
 	}
 }
@@ -73,15 +63,6 @@ func WithBackoff(base, max time.Duration) ClientOption {
 	}
 }
 
-// WithMaxResponseBytes 设置响应体最大字节数
-func WithMaxResponseBytes(n int64) ClientOption {
-	return func(o *clientOptions) {
-		if n > 0 {
-			o.MaxResponseBytes = n
-		}
-	}
-}
-
 // WithBreaker 设置熔断器参数
 // 熔断器按 serviceName 共享；同一服务只有第一次创建时的配置生效
 func WithBreaker(cfg BreakerOptions) ClientOption {
@@ -93,12 +74,10 @@ func WithBreaker(cfg BreakerOptions) ClientOption {
 // defaultClientOptions 返回客户端默认参数
 func defaultClientOptions() clientOptions {
 	return clientOptions{
-		HTTPTimeout:      defaultHTTPTimeout,
-		MaxAttempts:      defaultMaxAttempts,
-		BaseBackoff:      defaultBaseBackoff,
-		MaxBackoff:       defaultMaxBackoff,
-		MaxResponseBytes: defaultMaxResponseBytes,
-		Breaker:          defaultBreakerOptions(),
+		HTTPTimeout: defaultHTTPTimeout,
+		BaseBackoff: defaultBaseBackoff,
+		MaxBackoff:  defaultMaxBackoff,
+		Breaker:     defaultBreakerOptions(),
 	}
 }
 
@@ -130,9 +109,6 @@ func normalizeClientOptions(cfg clientOptions) clientOptions {
 	if cfg.HTTPTimeout <= 0 {
 		cfg.HTTPTimeout = defaultHTTPTimeout
 	}
-	if cfg.MaxAttempts <= 0 {
-		cfg.MaxAttempts = defaultMaxAttempts
-	}
 	if cfg.BaseBackoff <= 0 {
 		cfg.BaseBackoff = defaultBaseBackoff
 	}
@@ -141,9 +117,6 @@ func normalizeClientOptions(cfg clientOptions) clientOptions {
 	}
 	if cfg.MaxBackoff < cfg.BaseBackoff {
 		cfg.MaxBackoff = cfg.BaseBackoff
-	}
-	if cfg.MaxResponseBytes <= 0 {
-		cfg.MaxResponseBytes = defaultMaxResponseBytes
 	}
 	cfg.Breaker = normalizeBreakerOptions(cfg.Breaker)
 	return cfg

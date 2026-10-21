@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
@@ -114,5 +115,35 @@ func TestInvoke_BodyReadWhenNeeded(t *testing.T) {
 	}
 	if reads.Load() == 0 || bytesRead.Load() == 0 {
 		t.Fatalf("需要响应体时应读取 body，reads=%d bytes=%d", reads.Load(), bytesRead.Load())
+	}
+}
+
+// TestInvoke_RequestMaxResponseBytesOverride 验证按调用覆盖响应体上限
+func TestInvoke_RequestMaxResponseBytesOverride(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL)
+	var env testEnvelope
+	if err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:         "/x",
+		RespBody:         &env,
+		BizHook:          checkTestEnvelope,
+		MaxResponseBytes: 1024,
+	}); err != nil {
+		t.Fatalf("请求级上限应覆盖客户端默认值: %v", err)
+	}
+
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:         "/x",
+		RespBody:         &env,
+		BizHook:          checkTestEnvelope,
+		MaxResponseBytes: 4,
+	})
+	var protocolErr *ProtocolError
+	if !errors.As(err, &protocolErr) {
+		t.Fatalf("超过请求级上限应返回 ProtocolError，实际 %v", err)
 	}
 }

@@ -40,7 +40,6 @@ func TestInvoke_RetriesThenSucceeds(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(3),
 		WithBackoff(1*time.Millisecond, 2*time.Millisecond),
 		WithHTTPTimeout(2*time.Second),
 	)
@@ -63,7 +62,7 @@ func TestInvoke_BizErrorNotRetried(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestRPCClient(server.URL, WithMaxAttempts(3), WithBackoff(time.Millisecond, time.Millisecond))
+	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
 	var env testEnvelope
 	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
 	if err == nil {
@@ -88,7 +87,6 @@ func TestInvoke_500CountsAsFailureButNotRetried(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(3),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
@@ -121,7 +119,6 @@ func TestInvoke_4xxDoesNotTripBreaker(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(3),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
@@ -144,7 +141,6 @@ func TestInvoke_4xxDoesNotTripBreaker(t *testing.T) {
 func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 	var calls atomic.Int64
 	client := newTestRPCClient("",
-		WithMaxAttempts(1),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
@@ -155,7 +151,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		return "", errors.New("consul down")
 	}
 
-	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
+	err := invokeTestWith(client, context.Background(), "/x", nil, nil, NoopBizHook, 1)
 	var discoveryErr *discoveryError
 	if !errors.As(err, &discoveryErr) {
 		t.Fatalf("期望 discoveryError，实际 %v", err)
@@ -164,7 +160,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		t.Fatalf("发现失败不应打开下游熔断，state=%d", state)
 	}
 
-	_ = invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, nil, NoopBizHook, 1)
 	if calls.Load() != 2 {
 		t.Fatalf("发现失败不应打开熔断，calls=%d", calls.Load())
 	}
@@ -174,7 +170,6 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
 	var calls atomic.Int64
 	client := newTestRPCClient("",
-		WithMaxAttempts(3),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
@@ -195,5 +190,32 @@ func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
 	}
 	if state, _ := breakerSnapshot(client); state != breakerClosed {
 		t.Fatalf("本地错误不应打开熔断，state=%d", state)
+	}
+}
+
+// TestInvoke_RequestMaxAttemptsOverride 验证按调用覆盖最大尝试次数
+func TestInvoke_RequestMaxAttemptsOverride(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBackoff(time.Millisecond, time.Millisecond),
+	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		MaxAttempts: 1,
+	})
+	if err == nil {
+		t.Fatal("502 应返回错误")
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("请求级 MaxAttempts=1 应只尝试一次，hits=%d", hits.Load())
 	}
 }

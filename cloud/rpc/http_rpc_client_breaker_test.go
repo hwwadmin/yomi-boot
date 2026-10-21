@@ -22,7 +22,6 @@ func TestInvoke_RequestTimeout(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(3),
 		WithHTTPTimeout(time.Second),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
@@ -56,7 +55,6 @@ func TestInvoke_ClientTimeoutCountsAsFailure(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(1),
 		WithHTTPTimeout(20*time.Millisecond),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
@@ -83,14 +81,13 @@ func TestInvoke_CanceledContextIsNeutral(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(1),
 		WithBreaker(BreakerOptions{
 			WindowSize: 2, MinRequests: 2, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
 		}),
 	)
 	var env testEnvelope
-	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
 	if _, size := breakerSnapshot(client); size != 1 {
 		t.Fatalf("首次 503 后窗口长度=%d，期望 1", size)
 	}
@@ -104,7 +101,7 @@ func TestInvoke_CanceledContextIsNeutral(t *testing.T) {
 		t.Fatalf("取消请求不应写入熔断窗口，长度=%d", size)
 	}
 
-	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("第二次 503 后应打开熔断，state=%d", state)
 	}
@@ -118,14 +115,13 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 	defer bad.Close()
 
 	client := newTestRPCClient(bad.URL,
-		WithMaxAttempts(1),
 		WithBreaker(BreakerOptions{
 			WindowSize: 2, MinRequests: 2, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
 		}),
 	)
 	var env testEnvelope
-	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
 
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -135,7 +131,6 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 
 	client.httpClient = &http.Client{Timeout: time.Second}
 	client.testResolve = func(context.Context, string) (string, error) { return slow.URL, nil }
-	client.opts.MaxAttempts = 3
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -148,8 +143,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 
 	client.httpClient = &http.Client{Timeout: time.Second}
 	client.testResolve = func(context.Context, string) (string, error) { return bad.URL, nil }
-	client.opts.MaxAttempts = 1
-	_ = invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("第二次 503 后应打开熔断，state=%d", state)
 	}
@@ -196,7 +190,6 @@ func TestInvoke_HookErrorDoesNotTripBreaker(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(3),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
@@ -233,23 +226,23 @@ func TestNewHttpRpcClient_SharesBreakerByService(t *testing.T) {
 		SlowThreshold: time.Minute, OpenDuration: time.Minute,
 	}
 	resolve := func(context.Context, string) (string, error) { return server.URL, nil }
-	c1 := NewHttpRpcClient(nil, name, WithMaxAttempts(1), WithBreaker(cfg))
+	c1 := NewHttpRpcClient(nil, name, WithBreaker(cfg))
 	c1.testResolve = resolve
-	c2 := NewHttpRpcClient(nil, name, WithMaxAttempts(1), WithBreaker(cfg))
+	c2 := NewHttpRpcClient(nil, name, WithBreaker(cfg))
 	c2.testResolve = resolve
 	if c1.breaker != c2.breaker {
 		t.Fatal("同一 serviceName 应共享 breaker")
 	}
-	other := NewHttpRpcClient(nil, newTestServiceName(), WithMaxAttempts(1), WithBreaker(cfg))
+	other := NewHttpRpcClient(nil, newTestServiceName(), WithBreaker(cfg))
 	if other.breaker == c1.breaker {
 		t.Fatal("不同 serviceName 不应共享 breaker")
 	}
 
 	var env testEnvelope
-	if err := invokeTest(c1, context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
+	if err := invokeTestWith(c1, context.Background(), "/x", nil, &env, checkTestEnvelope, 1); err == nil {
 		t.Fatal("503 应返回错误")
 	}
-	if err := invokeTest(c2, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+	if err := invokeTestWith(c2, context.Background(), "/x", nil, &env, checkTestEnvelope, 1); !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("同服务第二个 client 应命中共享熔断，实际 %v", err)
 	}
 	if hits.Load() != 1 {
@@ -299,14 +292,13 @@ func TestInvoke_OpenBreakerSkipsMarshal(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(1),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
 		}),
 	)
 	var env testEnvelope
-	_ = invokeTest(client, context.Background(), "/x", nil, &env, NoopBizHook)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, NoopBizHook, 1)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("首次 503 后应打开熔断，state=%d", state)
 	}
@@ -334,14 +326,13 @@ func TestInvoke_MarshalFailureReleasesProbe(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(1),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: 10 * time.Millisecond,
 		}),
 	)
 	var env testEnvelope
-	_ = invokeTest(client, context.Background(), "/x", nil, &env, NoopBizHook)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, NoopBizHook, 1)
 	time.Sleep(20 * time.Millisecond)
 
 	var calls atomic.Int64
@@ -410,7 +401,6 @@ func TestInvoke_429NotRetried(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithMaxAttempts(3),
 		WithBackoff(time.Millisecond, time.Millisecond),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
