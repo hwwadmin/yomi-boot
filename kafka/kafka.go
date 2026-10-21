@@ -127,7 +127,7 @@ func buildWriter(cfg Config, brokers []string) (*kafkago.Writer, error) {
 	writer := &kafkago.Writer{
 		Addr:         kafkago.TCP(brokers...),
 		Balancer:     &kafkago.LeastBytes{},
-		RequiredAcks: requiredAcksFromConfig(cfg.RequiredAcks),
+		RequiredAcks: requiredAcksFromConfig(cfg.RequiredAcksOrDefault()),
 	}
 	if cfg.BatchSize > 0 {
 		writer.BatchSize = cfg.BatchSize

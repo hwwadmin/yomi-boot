@@ -141,11 +141,12 @@ func (b *MockBroker) Publish(ctx context.Context, topic string, msgs ...kafkago.
 
 // KafkaConfig 返回可用于 gitee.com/hq_project/yomi-boot kafka 组件的最小配置。
 func (b *MockBroker) KafkaConfig() kafka.Config {
+	requiredAcks := -1
 	return kafka.Config{
 		Brokers:             b.Brokers(),
 		ClientID:            "yomi-kafka-test",
 		DialTimeoutSeconds:  5,
-		RequiredAcks:        -1,
+		RequiredAcks:        &requiredAcks,
 		BatchSize:           1,
 		BatchTimeoutSeconds: 1,
 		MinBytes:            1,

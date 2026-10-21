@@ -27,7 +27,7 @@ type Config struct {
 	Brokers             []string            `mapstructure:"brokers"`               // Brokers 是 Kafka broker 地址列表
 	ClientID            string              `mapstructure:"client_id"`             // ClientID 是客户端标识
 	DialTimeoutSeconds  int                 `mapstructure:"dial_timeout_seconds"`  // DialTimeoutSeconds 是连接超时秒数
-	RequiredAcks        int                 `mapstructure:"required_acks"`         // RequiredAcks 是生产者确认级别，-1/0/1
+	RequiredAcks        *int                `mapstructure:"required_acks"`         // RequiredAcks 是生产者确认级别，-1/0/1；nil 默认 -1（acks=all），显式 0 才表示 RequireNone
 	BatchSize           int                 `mapstructure:"batch_size"`            // BatchSize 是生产者批量发送条数，0 表示使用 kafka-go 默认值
 	BatchTimeoutSeconds int                 `mapstructure:"batch_timeout_seconds"` // BatchTimeoutSeconds 是生产者批量发送超时秒数，0 表示使用 kafka-go 默认值
 	MinBytes            int                 `mapstructure:"min_bytes"`             // MinBytes 是消费者单次拉取最小字节数
@@ -48,6 +48,14 @@ func (c Config) EnabledOrDefault() bool {
 	return config.BoolOrDefault(c.Enabled)
 }
 
+// RequiredAcksOrDefault 返回生产者确认级别，未配置默认 -1（acks=all）
+func (c Config) RequiredAcksOrDefault() int {
+	if c.RequiredAcks == nil {
+		return -1
+	}
+	return *c.RequiredAcks
+}
+
 // Validate 校验 Kafka 配置语义（仅 enabled=true 时校验）
 func (c Config) Validate() error {
 	if !c.EnabledOrDefault() {
@@ -64,7 +72,8 @@ func (c Config) Validate() error {
 	if c.DialTimeoutSeconds <= 0 {
 		return errors.New("kafka.dial_timeout_seconds 必须大于 0")
 	}
-	if c.RequiredAcks != -1 && c.RequiredAcks != 0 && c.RequiredAcks != 1 {
+	requiredAcks := c.RequiredAcksOrDefault()
+	if requiredAcks != -1 && requiredAcks != 0 && requiredAcks != 1 {
 		return errors.New("kafka.required_acks 仅支持 -1、0、1")
 	}
 	if c.BatchSize < 0 {
