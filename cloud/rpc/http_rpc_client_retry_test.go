@@ -13,17 +13,9 @@ import (
 
 // newTestRPCClient 构造带测试服务发现的 HTTP RPC 客户端
 func newTestRPCClient(serverURL string, opts ...ClientOption) *HttpRpcClient {
-	cfg := applyHTTPClientOptions(opts)
-	c := &HttpRpcClient{
-		serviceName: newTestServiceName(),
-		resolver: resolverFunc(func(context.Context, string, string) (string, error) {
-			return serverURL, nil
-		}),
-		httpClient: &http.Client{Timeout: cfg.HTTPTimeout},
-		opts:       cfg,
-		breaker:    newCircuitBreaker(cfg.Breaker),
-	}
-	return c
+	return NewHttpRpcClient(resolverFunc(func(context.Context, string, string) (string, error) {
+		return serverURL, nil
+	}), newTestServiceName(), opts...)
 }
 
 // TestInvoke_RetriesThenSucceeds 验证传输失败重试后成功

@@ -33,6 +33,8 @@ var _ RpcService = (*HttpRpcClient)(nil)
 // NewHttpRpcClient 创建绑定到指定服务名的 HTTP RPC 客户端
 // resolver 负责端点解析；Consul 场景传 consul.NewConsulRPCResolver(client)
 // serviceName 为目标服务的注册名
+// 默认使用共享传输（每 host 最多 100 个空闲连接），默认不跟随重定向；
+// 需要 mTLS/私有 CA/代理/连接池时用 WithTransport，需要跟随重定向时用 WithCheckRedirect
 // 每个 client 使用独立熔断器；同一服务建议复用一个 client
 func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
 	serviceName = strings.TrimSpace(serviceName)
@@ -40,9 +42,13 @@ func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...Cli
 	return &HttpRpcClient{
 		serviceName: serviceName,
 		resolver:    resolver,
-		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
-		opts:        cfg,
-		breaker:     newCircuitBreaker(cfg.Breaker),
+		httpClient: &http.Client{
+			Timeout:       cfg.HTTPTimeout,
+			Transport:     cfg.Transport,
+			CheckRedirect: cfg.CheckRedirect,
+		},
+		opts:    cfg,
+		breaker: newCircuitBreaker(cfg.Breaker),
 	}
 }
 
