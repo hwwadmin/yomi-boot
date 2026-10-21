@@ -5,18 +5,20 @@ package rpc
 import "time"
 
 const (
-	defaultMaxAttempts      = 3
-	defaultBaseBackoff      = 50 * time.Millisecond
-	defaultMaxBackoff       = 200 * time.Millisecond
-	defaultHTTPTimeout      = 30 * time.Second
-	defaultMaxResponseBytes = 4 << 20 // 4 MiB
+	defaultRequestTimeout = 3 * time.Second // defaultRequestTimeout 是 InvokeRequest.Timeout 的默认值
 
-	defaultBreakerWindowSize    = 100
-	defaultBreakerMinRequests   = 20
-	defaultBreakerFailureRate   = 0.5
-	defaultBreakerSlowRate      = 0.5
-	defaultBreakerSlowThreshold = 2 * time.Second
-	defaultBreakerOpenDuration  = 5 * time.Second
+	defaultMaxAttempts      = 3                      // defaultMaxAttempts 是默认最大尝试次数
+	defaultBaseBackoff      = 50 * time.Millisecond  // defaultBaseBackoff 是首次重试退避
+	defaultMaxBackoff       = 200 * time.Millisecond // defaultMaxBackoff 是退避上限
+	defaultHTTPTimeout      = 30 * time.Second       // defaultHTTPTimeout 是单次 HTTP 尝试的后备超时
+	defaultMaxResponseBytes = 4 << 20                // defaultMaxResponseBytes 是默认响应体上限（4 MiB）
+
+	defaultBreakerWindowSize    = 100             // defaultBreakerWindowSize 是默认熔断窗口大小
+	defaultBreakerMinRequests   = 20              // defaultBreakerMinRequests 是默认熔断最小请求数
+	defaultBreakerFailureRate   = 0.5             // defaultBreakerFailureRate 是默认失败率阈值
+	defaultBreakerSlowRate      = 0.5             // defaultBreakerSlowRate 是默认慢调用率阈值
+	defaultBreakerSlowThreshold = 2 * time.Second // defaultBreakerSlowThreshold 是默认慢调用阈值
+	defaultBreakerOpenDuration  = 5 * time.Second // defaultBreakerOpenDuration 是默认熔断打开时长
 )
 
 // BreakerOptions 熔断器参数
@@ -30,21 +32,21 @@ type BreakerOptions struct {
 	OpenDuration  time.Duration // OpenDuration 是熔断打开时长，默认 5s
 }
 
-// clientOptions RPC 客户端内部参数
+// httpClientOptions HTTP RPC 客户端内部参数
 // 只保留客户端级配置；单次调用的超时、次数、响应上限由 InvokeRequest 控制
-type clientOptions struct {
+type httpClientOptions struct {
 	HTTPTimeout time.Duration  // HTTPTimeout 是单次 HTTP 尝试的后备超时，默认 30s
 	BaseBackoff time.Duration  // BaseBackoff 是首次重试退避，默认 50ms
 	MaxBackoff  time.Duration  // MaxBackoff 是退避上限，默认 200ms
 	Breaker     BreakerOptions // Breaker 是服务级熔断参数
 }
 
-// ClientOption 修改 RPC 客户端参数
-type ClientOption func(*clientOptions)
+// ClientOption 修改 HTTP RPC 客户端参数
+type ClientOption func(*httpClientOptions)
 
 // WithHTTPTimeout 设置单次 HTTP 尝试的后备超时
 func WithHTTPTimeout(d time.Duration) ClientOption {
-	return func(o *clientOptions) {
+	return func(o *httpClientOptions) {
 		if d > 0 {
 			o.HTTPTimeout = d
 		}
@@ -53,7 +55,7 @@ func WithHTTPTimeout(d time.Duration) ClientOption {
 
 // WithBackoff 设置重试退避基数与上限
 func WithBackoff(base, max time.Duration) ClientOption {
-	return func(o *clientOptions) {
+	return func(o *httpClientOptions) {
 		if base > 0 {
 			o.BaseBackoff = base
 		}
@@ -66,14 +68,14 @@ func WithBackoff(base, max time.Duration) ClientOption {
 // WithBreaker 设置熔断器参数
 // 熔断器按 serviceName 共享；同一服务只有第一次创建时的配置生效
 func WithBreaker(cfg BreakerOptions) ClientOption {
-	return func(o *clientOptions) {
+	return func(o *httpClientOptions) {
 		o.Breaker = cfg
 	}
 }
 
-// defaultClientOptions 返回客户端默认参数
-func defaultClientOptions() clientOptions {
-	return clientOptions{
+// defaultHTTPClientOptions 返回 HTTP RPC 客户端默认参数
+func defaultHTTPClientOptions() httpClientOptions {
+	return httpClientOptions{
 		HTTPTimeout: defaultHTTPTimeout,
 		BaseBackoff: defaultBaseBackoff,
 		MaxBackoff:  defaultMaxBackoff,
@@ -93,19 +95,19 @@ func defaultBreakerOptions() BreakerOptions {
 	}
 }
 
-// applyClientOptions 合并选项并归一化参数
-func applyClientOptions(opts []ClientOption) clientOptions {
-	cfg := defaultClientOptions()
+// applyHTTPClientOptions 合并选项并归一化参数
+func applyHTTPClientOptions(opts []ClientOption) httpClientOptions {
+	cfg := defaultHTTPClientOptions()
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&cfg)
 		}
 	}
-	return normalizeClientOptions(cfg)
+	return normalizeHTTPClientOptions(cfg)
 }
 
-// normalizeClientOptions 填充非法或缺失的客户端参数
-func normalizeClientOptions(cfg clientOptions) clientOptions {
+// normalizeHTTPClientOptions 填充非法或缺失的客户端参数
+func normalizeHTTPClientOptions(cfg httpClientOptions) httpClientOptions {
 	if cfg.HTTPTimeout <= 0 {
 		cfg.HTTPTimeout = defaultHTTPTimeout
 	}

@@ -13,7 +13,7 @@ import (
 
 // newTestRPCClient 构造带测试服务发现的 HTTP RPC 客户端
 func newTestRPCClient(serverURL string, opts ...ClientOption) *HttpRpcClient {
-	cfg := applyClientOptions(opts)
+	cfg := applyHTTPClientOptions(opts)
 	c := &HttpRpcClient{
 		serviceName: newTestServiceName(),
 		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},

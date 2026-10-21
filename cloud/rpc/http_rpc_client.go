@@ -24,7 +24,7 @@ type HttpRpcClient struct {
 	serviceName string
 	consul      *consul.Client
 	httpClient  *http.Client
-	opts        clientOptions
+	opts        httpClientOptions
 	breaker     *circuitBreaker
 	// testResolve 仅测试注入：非 nil 时替代 Consul 解析
 	testResolve func(ctx context.Context, endpoint string) (string, error)
@@ -38,7 +38,7 @@ var _ RpcService = (*HttpRpcClient)(nil)
 // 熔断器按 serviceName 进程内共享；同一服务第一个 client 的 BreakerOptions 生效
 func NewHttpRpcClient(consulClient *consul.Client, serviceName string, opts ...ClientOption) *HttpRpcClient {
 	serviceName = strings.TrimSpace(serviceName)
-	cfg := applyClientOptions(opts)
+	cfg := applyHTTPClientOptions(opts)
 	return &HttpRpcClient{
 		serviceName: serviceName,
 		consul:      consulClient,
@@ -68,7 +68,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 
 	timeout := req.Timeout
 	if timeout <= 0 {
-		timeout = DefaultRequestTimeout
+		timeout = defaultRequestTimeout
 	}
 	callCtx, cancel := context.WithTimeout(callerCtx, timeout)
 	defer cancel()

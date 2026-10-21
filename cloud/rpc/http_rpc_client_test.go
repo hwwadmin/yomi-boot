@@ -13,8 +13,8 @@ const maxInt64JSON = 9223372036854775807
 
 // TestDefaultRequestTimeout 验证默认请求超时为 3 秒
 func TestDefaultRequestTimeout(t *testing.T) {
-	if DefaultRequestTimeout != 3*time.Second {
-		t.Fatalf("DefaultRequestTimeout: got %v want 3s", DefaultRequestTimeout)
+	if defaultRequestTimeout != 3*time.Second {
+		t.Fatalf("defaultRequestTimeout: got %v want 3s", defaultRequestTimeout)
 	}
 }
 
