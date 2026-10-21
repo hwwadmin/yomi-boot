@@ -46,6 +46,7 @@ type httpClientOptions struct {
 	MaxBackoff    time.Duration                                      // MaxBackoff 是退避上限，默认 200ms
 	Transport     http.RoundTripper                                  // Transport 是自定义传输；nil 时使用默认共享传输
 	CheckRedirect func(req *http.Request, via []*http.Request) error // CheckRedirect 是重定向策略；nil 时禁止跟随
+	LogBodies     bool                                               // LogBodies 控制 Debug 日志是否打印请求/响应体，默认关闭
 	Breaker       BreakerOptions                                     // Breaker 是当前 client 的熔断参数
 }
 
@@ -99,6 +100,14 @@ func WithCheckRedirect(fn func(req *http.Request, via []*http.Request) error) Cl
 func WithBreaker(cfg BreakerOptions) ClientOption {
 	return func(o *httpClientOptions) {
 		o.Breaker = cfg
+	}
+}
+
+// WithLogBodies 控制 Debug 日志是否打印请求体和响应体，默认关闭
+// 建议仅在 dev 打开；请求/响应体可能含敏感信息，日志最多保留 4 KiB
+func WithLogBodies(enabled bool) ClientOption {
+	return func(o *httpClientOptions) {
+		o.LogBodies = enabled
 	}
 }
 

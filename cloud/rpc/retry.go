@@ -4,6 +4,7 @@ package rpc
 
 import (
 	"context"
+	"math/rand/v2"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/appctx"
@@ -50,7 +51,13 @@ func isRetryable(err error) bool {
 }
 
 // backoffDuration 计算第 attempt 次失败后的退避（attempt 从 1 起为首次失败）
+// 指数退避后在上半区间 [d/2, d] 内抖动，避免多实例同时重试；抖动不会超过 max
 func backoffDuration(attempt int, base, max time.Duration) time.Duration {
+	return jitterBackoff(backoffBase(attempt, base, max))
+}
+
+// backoffBase 计算不含抖动的指数退避，结果不超过 max
+func backoffBase(attempt int, base, max time.Duration) time.Duration {
 	if attempt < 1 {
 		attempt = 1
 	}
@@ -69,6 +76,18 @@ func backoffDuration(attempt int, base, max time.Duration) time.Duration {
 		return max
 	}
 	return d
+}
+
+// jitterBackoff 在 [d/2, d] 内随机抖动，向下抖动以保证不超过配置的退避上限
+func jitterBackoff(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	half := d / 2
+	if half <= 0 {
+		return d
+	}
+	return half + time.Duration(rand.Int64N(int64(half)+1))
 }
 
 // canWait 判断 ctx 的剩余预算是否足以完整等待 d；无 deadline 时视为可以等待

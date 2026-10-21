@@ -264,7 +264,7 @@ func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
 		RespBody:    &env,
 		BizHook:     checkTestEnvelope,
 		MaxAttempts: 3,
-		Timeout:     time.Second,
+		Timeout:     2 * time.Second,
 	})
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusServiceUnavailable {
@@ -275,5 +275,34 @@ func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
 	}
 	if hits.Load() != 1 {
 		t.Fatalf("预算不足时不应重试，hits=%d", hits.Load())
+	}
+}
+
+// TestInvoke_DiscoveryBudgetExhaustedPreservesError 验证发现重试预算不足时返回发现错误
+func TestInvoke_DiscoveryBudgetExhaustedPreservesError(t *testing.T) {
+	var calls atomic.Int64
+	client := NewHttpRpcClient(resolverFunc(func(context.Context, string, string) (string, error) {
+		calls.Add(1)
+		return "", errors.New("consul down")
+	}), "svc",
+		WithBackoff(200*time.Millisecond, 200*time.Millisecond),
+	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		MaxAttempts: 3,
+		Timeout:     50 * time.Millisecond,
+	})
+	var discoveryErr *discoveryError
+	if !errors.As(err, &discoveryErr) {
+		t.Fatalf("期望发现错误，实际 %v", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("不应把发现错误替换成 DeadlineExceeded: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("预算不足时不应继续重试，resolver 调用 %d 次", calls.Load())
 	}
 }

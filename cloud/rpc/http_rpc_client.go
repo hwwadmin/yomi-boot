@@ -35,6 +35,7 @@ var _ RpcService = (*HttpRpcClient)(nil)
 // serviceName 为目标服务的注册名
 // 默认使用共享传输（每 host 最多 100 个空闲连接），默认不跟随重定向；
 // 需要 mTLS/私有 CA/代理/连接池时用 WithTransport，需要跟随重定向时用 WithCheckRedirect
+// 需要打印请求/响应体时用 WithLogBodies（建议仅 dev 开启，默认关闭）
 // 每个 client 使用独立熔断器；同一服务建议复用一个 client
 func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
 	serviceName = strings.TrimSpace(serviceName)
@@ -81,6 +82,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	// 先过熔断再序列化：熔断打开时不浪费序列化；序列化失败释放半开探测位
 	ticket, err := c.breaker.allow()
 	if err != nil {
+		c.logBreakerReject(ctx, req.Endpoint, 0)
 		return err
 	}
 	// 兜底释放探测位：正常路径由 record/onNeutral 结算；panic 或未来新增的提前返回
@@ -90,6 +92,9 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if err != nil {
 		c.breaker.onNeutral(ticket)
 		return &requestError{err: errors.Wrap(err, "序列化请求体失败")}
+	}
+	if c.opts.LogBodies {
+		c.logRequest(ctx, req.Endpoint, payload)
 	}
 
 	maxAttempts := req.MaxAttempts
@@ -113,6 +118,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			var allowErr error
 			ticket, allowErr = c.breaker.allow()
 			if allowErr != nil {
+				c.logBreakerReject(ctx, req.Endpoint, attempt)
 				if lastErr != nil {
 					return lastErr
 				}
@@ -121,6 +127,9 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		}
 		// 半开探测只放行一个请求：本次票据是探测票据时，不做内部重试
 		probeOnly := ticket.probe
+		if probeOnly {
+			c.logBreakerProbe(ctx, req.Endpoint, attempt)
+		}
 
 		url, err := c.resolveEndpoint(callCtx, req.Endpoint)
 		if err != nil {
@@ -134,9 +143,20 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			if sleepErr := sleepBackoff(callCtx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
+			delay := backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)
+			if !canWait(callCtx, delay) {
 				c.breaker.onNeutral(ticket)
-				return sleepErr
+				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
+				return err
+			}
+			c.logRetry(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
+			if sleepErr := sleepBackoff(callCtx, delay); sleepErr != nil {
+				c.breaker.onNeutral(ticket)
+				if callerCtx.Err() != nil {
+					return sleepErr
+				}
+				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
+				return err
 			}
 			// 发现失败不反映下游健康度；释放探测位后下一轮重新 allow
 			c.breaker.onNeutral(ticket)
@@ -146,6 +166,13 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		start := time.Now()
 		body, err := c.doRequest(callCtx, url, payload, req.RespBody != nil, maxBytes)
 		elapsed := time.Since(start)
+		if c.opts.LogBodies {
+			if err != nil {
+				c.logResponse(ctx, req.Endpoint, attempt, statusCodeOf(err), body)
+			} else if len(body) > 0 {
+				c.logResponse(ctx, req.Endpoint, attempt, http.StatusOK, body)
+			}
+		}
 		if err != nil {
 			lastErr = err
 			if callerCtx.Err() != nil {
@@ -158,6 +185,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 			// 熔断打开后立即停止本次调用的剩余重试，避免继续打已判定故障的下游
 			if c.breaker.record(ticket, c.classify(err, elapsed)) {
+				c.logBreakerOpen(ctx, req.Endpoint, attempt, reasonOf(err), err)
 				return err
 			}
 			// 半开探测只发一个请求，不进入重试
@@ -174,12 +202,15 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 			// 等待放不进剩余预算时直接返回本次下游错误，别换成 context deadline exceeded
 			if !canWait(callCtx, delay) {
+				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 				return err
 			}
+			c.logRetry(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 			if sleepErr := sleepBackoff(callCtx, delay); sleepErr != nil {
 				if callerCtx.Err() != nil {
 					return sleepErr
 				}
+				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 				return err
 			}
 			continue
@@ -188,20 +219,24 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		if req.RespBody != nil {
 			if err := json.Unmarshal(body, req.RespBody); err != nil {
 				protocolErr := &ProtocolError{Reason: "解析下游响应失败", Err: err}
-				c.breaker.record(ticket, attemptResult{
+				if c.breaker.record(ticket, attemptResult{
 					failure: true,
 					slow:    elapsed > c.breaker.slowThreshold(),
 					counted: true,
-				})
+				}) {
+					c.logBreakerOpen(ctx, req.Endpoint, attempt, "protocol", protocolErr)
+				}
 				return protocolErr
 			}
 		}
 
 		// 成功响应照常返回；慢调用触发的熔断打开只影响后续调用
-		c.breaker.record(ticket, attemptResult{
+		if c.breaker.record(ticket, attemptResult{
 			slow:    elapsed > c.breaker.slowThreshold(),
 			counted: true,
-		})
+		}) {
+			c.logBreakerOpen(ctx, req.Endpoint, attempt, "slow", nil)
+		}
 		ok, hookErr := req.BizHook(callCtx, BizHookContext{
 			Endpoint: req.Endpoint,
 			ReqBody:  req.ReqBody,
@@ -212,6 +247,9 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		}
 		if !ok {
 			return errors.Sentinel(ErrBizRejected)
+		}
+		if attempt > 1 {
+			c.logRetryRecovered(ctx, req.Endpoint, attempt)
 		}
 		return nil
 	}
@@ -239,6 +277,7 @@ const maxDrainBytes = 4 << 10
 // doRequest 发送一次 HTTP POST 并按需读取响应体
 // needBody=false 时最多排空 maxDrainBytes 后丢弃 body；非 200 只用状态码、状态文本和 Retry-After
 // 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
+// 出错时若已读到 body 会一并返回，仅供调用方记录日志，不得当成功响应使用
 func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool, maxBytes int64) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, &requestError{err: errors.New("请求地址不能为空")}
@@ -281,9 +320,9 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 	if int64(len(data)) > maxBytes {
 		if resp.StatusCode == http.StatusOK {
-			return nil, &ProtocolError{Reason: "响应体超过上限"}
+			return data, &ProtocolError{Reason: "响应体超过上限"}
 		}
-		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: "响应体超过上限", RetryAfter: retryAfter}
+		return data, &HTTPStatusError{Code: resp.StatusCode, Detail: "响应体超过上限", RetryAfter: retryAfter}
 	}
 	if resp.StatusCode != http.StatusOK {
 		detail := strings.TrimSpace(string(data))
@@ -292,7 +331,7 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 		} else if len(detail) > 200 {
 			detail = detail[:200] + "..."
 		}
-		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: detail, RetryAfter: retryAfter}
+		return data, &HTTPStatusError{Code: resp.StatusCode, Detail: detail, RetryAfter: retryAfter}
 	}
 	return data, nil
 }

@@ -58,18 +58,30 @@ func TestParseRetryAfter(t *testing.T) {
 	}
 }
 
-// TestBackoffDuration 验证退避时长计算
+// TestBackoffDuration 验证指数退避与 [d/2, d] 抖动范围
 func TestBackoffDuration(t *testing.T) {
 	base := 50 * time.Millisecond
-	max := 200 * time.Millisecond
-	if d := backoffDuration(1, base, max); d != base {
-		t.Fatalf("attempt1: got %v want %v", d, base)
+	upper := 200 * time.Millisecond
+	cases := []struct {
+		attempt int
+		lower   time.Duration
+		upper   time.Duration
+	}{
+		{1, 25 * time.Millisecond, 50 * time.Millisecond},
+		{2, 50 * time.Millisecond, 100 * time.Millisecond},
+		{3, 100 * time.Millisecond, 200 * time.Millisecond},
+		{10, 100 * time.Millisecond, 200 * time.Millisecond},
 	}
-	if d := backoffDuration(2, base, max); d != 100*time.Millisecond {
-		t.Fatalf("attempt2: got 100ms")
+	for _, tc := range cases {
+		for i := 0; i < 50; i++ {
+			d := backoffDuration(tc.attempt, base, upper)
+			if d < tc.lower || d > tc.upper {
+				t.Fatalf("attempt %d: got %v want [%v,%v]", tc.attempt, d, tc.lower, tc.upper)
+			}
+		}
 	}
-	if d := backoffDuration(3, base, max); d != max {
-		t.Fatalf("attempt3: got %v want %v", d, max)
+	if d := backoffDuration(1, 500*time.Millisecond, upper); d < 100*time.Millisecond || d > upper {
+		t.Fatalf("base 超过上限时应夹到 [100ms,200ms]，实际 %v", d)
 	}
 }
 
