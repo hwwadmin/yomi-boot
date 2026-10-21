@@ -45,7 +45,7 @@ func TestReceiverShouldMoveToInboxDlq(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &Receiver{
 				inboxDlqRepo: tc.repo,
-				cfg:          cfg.Runtime{ConsumerMaxRetry: tc.maxRetry},
+				cfg:          cfg.Runtime{InboxDlqMaxRetry: tc.maxRetry},
 			}
 			if got := r.shouldMoveToInboxDlq(tc.retryCount); got != tc.want {
 				t.Fatalf("shouldMoveToInboxDlq 期望 %v，实际 %v", tc.want, got)
@@ -93,8 +93,8 @@ func TestTruncateInboxDlqError(t *testing.T) {
 	}
 }
 
-// TestConfigValidateConsumerMaxRetry 验证消费最大重试配置的合法域
-func TestConfigValidateConsumerMaxRetry(t *testing.T) {
+// TestConfigValidateInboxDlqMaxRetry 验证消费最大重试配置的合法域
+func TestConfigValidateInboxDlqMaxRetry(t *testing.T) {
 	enabled := true
 	cases := []struct {
 		name    string
@@ -110,7 +110,7 @@ func TestConfigValidateConsumerMaxRetry(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			value := tc.value
-			config := Config{ConsumerEnabled: &enabled, ConsumerMaxRetry: &value}
+			config := Config{InboxEnabled: &enabled, InboxDlqMaxRetry: &value}
 			err := config.Validate()
 			if tc.wantErr && err == nil {
 				t.Fatal("期望配置校验失败")
@@ -159,7 +159,7 @@ func TestReceiverMovesToInboxDlqAfterRetryExhausted(t *testing.T) {
 		repo.NewInboxDlqRepo(gormDB),
 		db.NewTxManager(gormDB),
 		factory,
-		cfg.Runtime{ServiceName: "svc", ConsumerMaxRetry: 2},
+		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 2},
 		gen,
 	)
 	handler := receiver.WrapHandler(func(context.Context, Event) error {

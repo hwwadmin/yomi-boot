@@ -10,8 +10,8 @@ import (
 // TestConfigConsumerDefaults 校验消费重试与收件箱死信重投的默认值
 func TestConfigConsumerDefaults(t *testing.T) {
 	config := Config{}
-	if got := config.ConsumerMaxRetryOrDefault(); got != 20 {
-		t.Fatalf("consumer_max_retry 默认值期望 20，实际 %d", got)
+	if got := config.InboxDlqMaxRetryOrDefault(); got != 20 {
+		t.Fatalf("inbox_dlq_max_retry 默认值期望 20，实际 %d", got)
 	}
 	if got := config.InboxDlqFrequencyOrDefault(); got != 30*time.Second {
 		t.Fatalf("inbox_dlq_frequency_ms 默认值期望 30s，实际 %s", got)
@@ -97,26 +97,26 @@ func TestConfigValidateFrequencyMinimum(t *testing.T) {
 		},
 		{
 			name: "fetch default value",
-			cfg:  Config{PublisherEnabled: &enabled},
+			cfg:  Config{OutboxEnabled: &enabled},
 		},
 		{
 			name:    "fetch below minimum",
-			cfg:     Config{PublisherEnabled: &enabled, FetchFrequencyMS: 1},
+			cfg:     Config{OutboxEnabled: &enabled, FetchFrequencyMS: 1},
 			wantErr: true,
 		},
 		{
 			name:    "fetch at minimum",
-			cfg:     Config{PublisherEnabled: &enabled, FetchFrequencyMS: 50},
+			cfg:     Config{OutboxEnabled: &enabled, FetchFrequencyMS: 50},
 			wantErr: false,
 		},
 		{
 			name:    "dlq below minimum",
-			cfg:     Config{PublisherEnabled: &enabled, OutboxDlqFrequencyMS: 49},
+			cfg:     Config{OutboxEnabled: &enabled, OutboxDlqFrequencyMS: 49},
 			wantErr: true,
 		},
 		{
 			name:    "dlq at minimum",
-			cfg:     Config{PublisherEnabled: &enabled, OutboxDlqFrequencyMS: 50},
+			cfg:     Config{OutboxEnabled: &enabled, OutboxDlqFrequencyMS: 50},
 			wantErr: false,
 		},
 	}

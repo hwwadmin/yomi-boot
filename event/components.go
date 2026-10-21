@@ -80,7 +80,7 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 	outboxRepo := repo.NewOutboxRepo(deps.DB)
 	inboxRepo := repo.NewInboxRepo(deps.DB)
 
-	if runtime.PublisherEnabled {
+	if runtime.OutboxEnabled {
 		if deps.KafkaPublisher == nil {
 			return nil, errors.New("event: Kafka 发布者未初始化")
 		}
@@ -93,7 +93,7 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 		c.kafkaPublisher = deps.KafkaPublisher
 	}
 
-	if runtime.ConsumerEnabled {
+	if runtime.InboxEnabled {
 		if deps.DistLockFactory == nil {
 			return nil, errors.New("event: 分布式锁工厂未初始化")
 		}
@@ -111,8 +111,8 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 
 	logger.InfoWithoutCtx("[消息队列事件]主体服务名",
 		"serviceName", runtime.ServiceName,
-		"publisherEnabled", runtime.PublisherEnabled,
-		"consumerEnabled", runtime.ConsumerEnabled,
+		"outboxEnabled", runtime.OutboxEnabled,
+		"inboxEnabled", runtime.InboxEnabled,
 	)
 	return c, nil
 }
@@ -151,7 +151,7 @@ func (c *Components) Start(parentCtx context.Context) error {
 	runCtx, cancel := context.WithCancel(parentCtx)
 	c.cancel = cancel
 
-	if c.cfg.PublisherEnabled {
+	if c.cfg.OutboxEnabled {
 		if c.processor == nil {
 			processor, err := outbox.NewProcessor(
 				c.cfg, c.outboxRepo, c.dlqHandler, c.kafkaPublisher, c.txExecutor, runCtx,
@@ -183,7 +183,7 @@ func (c *Components) Start(parentCtx context.Context) error {
 		logger.InfoWithoutCtx("[消息队列事件]发布侧未启用，跳过发件箱后台任务")
 	}
 
-	if c.cfg.ConsumerEnabled {
+	if c.cfg.InboxEnabled {
 		if c.inboxDlqHandler == nil {
 			cancel()
 			return errors.New("event: 收件箱死信处理器未初始化")
@@ -204,8 +204,8 @@ func (c *Components) Start(parentCtx context.Context) error {
 	c.started = true
 	logger.InfoWithoutCtx("[消息队列事件]后台任务已启动",
 		"serviceName", c.cfg.ServiceName,
-		"publisherEnabled", c.cfg.PublisherEnabled,
-		"consumerEnabled", c.cfg.ConsumerEnabled,
+		"outboxEnabled", c.cfg.OutboxEnabled,
+		"inboxEnabled", c.cfg.InboxEnabled,
 		"outboxCleanupEnabled", c.cfg.OutboxCleanup.Enabled,
 		"inboxCleanupEnabled", c.cfg.InboxCleanup.Enabled,
 	)

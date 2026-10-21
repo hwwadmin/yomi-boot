@@ -25,7 +25,7 @@ const (
 	defaultEventOutboxDlqSize        = 5000
 	defaultEventOutboxDlqMaxRetry    = 30
 	defaultEventFetchTimeoutMins     = 5
-	defaultEventConsumerMaxRetry     = 20
+	defaultEventInboxDlqMaxRetry     = 20
 	defaultEventInboxDlqFrequencyMS  = 30000
 	defaultEventInboxDlqSize         = 100
 	defaultEventCleanupRetentionDays = 30
@@ -36,8 +36,8 @@ const (
 
 // Config 表示消息队列事件配置
 type Config struct {
-	PublisherEnabled *bool  `mapstructure:"publisher_enabled"`  // PublisherEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递），未配置默认 false
-	ConsumerEnabled  *bool  `mapstructure:"consumer_enabled"`   // ConsumerEnabled 是否启用消费侧（Receiver/Inbox），未配置默认 false
+	OutboxEnabled    *bool  `mapstructure:"outbox_enabled"`     // OutboxEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递），未配置默认 false
+	InboxEnabled     *bool  `mapstructure:"inbox_enabled"`      // InboxEnabled 是否启用消费侧（Receiver/Inbox），未配置默认 false
 	ServiceName      string `mapstructure:"service_name"`       // ServiceName 是归属业务系统名称，未配置时使用 app.name
 	FetchFrequencyMS int    `mapstructure:"fetch_frequency_ms"` // FetchFrequencyMS 是发件箱抓取频率（毫秒）
 	FetchSize        int    `mapstructure:"fetch_size"`         // FetchSize 是单次抓取待发件箱事件数量
@@ -50,7 +50,7 @@ type Config struct {
 	FetchTimeoutMinutes  int  `mapstructure:"fetch_timeout_minutes"`   // FetchTimeoutMinutes 是 FETCHED 状态超时回收时间（分钟）
 
 	// inbox DLQ
-	ConsumerMaxRetry    *int `mapstructure:"consumer_max_retry"`     // ConsumerMaxRetry 是消费失败最大重试次数（不含首次处理），nil 默认 20，0 不重试，-1 无限；Kafka MaxHandlerRetries 须为 -1 或不小于本值，否则 Kafka 会先丢弃消息
+	InboxDlqMaxRetry    *int `mapstructure:"inbox_dlq_max_retry"`    // InboxDlqMaxRetry 是消费失败最大重试次数（不含首次处理），nil 默认 20，0 不重试，-1 无限；Kafka MaxHandlerRetries 须为 -1 或不小于本值，否则 Kafka 会先丢弃消息
 	InboxDlqFrequencyMS int  `mapstructure:"inbox_dlq_frequency_ms"` // InboxDlqFrequencyMS 是收件箱死信后台重投频率（毫秒），未配置默认 30000
 	InboxDlqSize        int  `mapstructure:"inbox_dlq_size"`         // InboxDlqSize 是收件箱死信单次重投数量，未配置默认 100
 
@@ -69,19 +69,19 @@ type Config struct {
 	InboxCleanupMaxBatches  int   `mapstructure:"inbox_cleanup_max_batches"`  // InboxCleanupMaxBatches 是收件箱单轮最大清理批数，未配置默认 20
 }
 
-// PublisherEnabledOrDefault 返回是否启用发布侧，未配置默认 false
-func (c Config) PublisherEnabledOrDefault() bool {
-	return config.BoolOrDefault(c.PublisherEnabled)
+// OutboxEnabledOrDefault 返回是否启用发布侧，未配置默认 false
+func (c Config) OutboxEnabledOrDefault() bool {
+	return config.BoolOrDefault(c.OutboxEnabled)
 }
 
-// ConsumerEnabledOrDefault 返回是否启用消费侧，未配置默认 false
-func (c Config) ConsumerEnabledOrDefault() bool {
-	return config.BoolOrDefault(c.ConsumerEnabled)
+// InboxEnabledOrDefault 返回是否启用消费侧，未配置默认 false
+func (c Config) InboxEnabledOrDefault() bool {
+	return config.BoolOrDefault(c.InboxEnabled)
 }
 
 // AnyEnabledOrDefault 返回发布侧或消费侧是否任一启用
 func (c Config) AnyEnabledOrDefault() bool {
-	return c.PublisherEnabledOrDefault() || c.ConsumerEnabledOrDefault()
+	return c.OutboxEnabledOrDefault() || c.InboxEnabledOrDefault()
 }
 
 // ServiceNameOrDefault 返回归属业务系统名称
@@ -151,12 +151,12 @@ func (c Config) FetchTimeoutOrDefault() time.Duration {
 	return time.Duration(c.FetchTimeoutMinutes) * time.Minute
 }
 
-// ConsumerMaxRetryOrDefault 返回消费失败最大重试次数
-func (c Config) ConsumerMaxRetryOrDefault() int {
-	if c.ConsumerMaxRetry == nil {
-		return defaultEventConsumerMaxRetry
+// InboxDlqMaxRetryOrDefault 返回消费失败最大重试次数
+func (c Config) InboxDlqMaxRetryOrDefault() int {
+	if c.InboxDlqMaxRetry == nil {
+		return defaultEventInboxDlqMaxRetry
 	}
-	return *c.ConsumerMaxRetry
+	return *c.InboxDlqMaxRetry
 }
 
 // InboxDlqFrequencyOrDefault 返回收件箱死信后台重投频率
@@ -258,8 +258,8 @@ func (c Config) Validate() error {
 	if c.FetchTimeoutMinutes < 0 {
 		return errors.New("event.fetch_timeout_minutes 不能小于 0")
 	}
-	if c.ConsumerMaxRetry != nil && *c.ConsumerMaxRetry < -1 {
-		return errors.New("event.consumer_max_retry 不能小于 -1")
+	if c.InboxDlqMaxRetry != nil && *c.InboxDlqMaxRetry < -1 {
+		return errors.New("event.inbox_dlq_max_retry 不能小于 -1")
 	}
 	if c.InboxDlqFrequencyMS < 0 {
 		return errors.New("event.inbox_dlq_frequency_ms 不能小于 0")
@@ -311,7 +311,7 @@ func runtimeFrom(eventCfg Config, appName string) cfg.Runtime {
 		OutboxDlqSize:      eventCfg.OutboxDlqSizeOrDefault(),
 		OutboxDlqMaxRetry:  eventCfg.OutboxDlqMaxRetryOrDefault(),
 		FetchTimeout:       eventCfg.FetchTimeoutOrDefault(),
-		ConsumerMaxRetry:   eventCfg.ConsumerMaxRetryOrDefault(),
+		InboxDlqMaxRetry:   eventCfg.InboxDlqMaxRetryOrDefault(),
 		InboxDlqFrequency:  eventCfg.InboxDlqFrequencyOrDefault(),
 		InboxDlqSize:       eventCfg.InboxDlqSizeOrDefault(),
 		OutboxCleanup: cleanupRuntime(
@@ -328,7 +328,7 @@ func runtimeFrom(eventCfg Config, appName string) cfg.Runtime {
 			eventCfg.InboxCleanupBatchSize,
 			eventCfg.InboxCleanupMaxBatches,
 		),
-		PublisherEnabled: eventCfg.PublisherEnabledOrDefault(),
-		ConsumerEnabled:  eventCfg.ConsumerEnabledOrDefault(),
+		OutboxEnabled: eventCfg.OutboxEnabledOrDefault(),
+		InboxEnabled:  eventCfg.InboxEnabledOrDefault(),
 	}
 }

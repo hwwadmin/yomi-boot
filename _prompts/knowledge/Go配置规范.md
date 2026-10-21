@@ -103,7 +103,7 @@ biz:
 - 典型开关（以各配置段字段名为准）：
   - `db.enabled`、`redis.enabled`、`auth.enabled`
   - `consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`
-  - `event.publisher_enabled`、`event.consumer_enabled`
+  - `event.outbox_enabled`、`event.inbox_enabled`
   - `pprof.enabled`、`http_record.enabled`
   - `idempotency.stale_cleaner_enabled` 等同类开关
 - 部署形态（轻量单体 / 大单体 / 分布式微服务）的推荐开关组合见 [Go架构规范](./Go架构规范.md) §3.1.0 与 §3.4.5。

@@ -55,7 +55,7 @@ domain / repo        无感知 DTM
 ```
 
 - **默认方案**：DTM Saga + 各服务本地子事务（barrier 保证幂等）+ `gitee.com/hq_project/yomi-boot/idempotency` 业务幂等。
-- **可选方案**：`gitee.com/hq_project/yomi-boot/event` Outbox/Inbox（`event.publisher_enabled` / `event.consumer_enabled` 启用时）；当前领域服务默认未开启。
+- **可选方案**：`gitee.com/hq_project/yomi-boot/event` Outbox/Inbox（`event.outbox_enabled` / `event.inbox_enabled` 启用时）；当前领域服务默认未开启。
 
 ### 3.2 各层事务职责
 

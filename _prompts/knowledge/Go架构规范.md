@@ -176,7 +176,7 @@ services/{domain}/
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
-| `event` | 可选 Outbox/Inbox 事件组件（`publisher_enabled` / `consumer_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
+| `event` | 可选 Outbox/Inbox 事件组件（`outbox_enabled` / `inbox_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
 | `router` | `Registrar` 接口与路由注册 |
 | `handler` | `BindAndHandle` 等协议适配 |
 | `shared` | 跨服务通用 dto（含微服务请求/响应信封）、enums、常量 |
@@ -232,7 +232,7 @@ services/{domain}/
 | ---- | ---- | ---- |
 | `gitee.com/hq_project/yomi-boot/idempotency/sys_biz.sql` | `sys_biz` | 业务幂等表 |
 | `gitee.com/hq_project/yomi-boot/dtm/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
-| `gitee.com/hq_project/yomi-boot/event/sql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.publisher_enabled` / `event.consumer_enabled` 启用时使用 |
+| `gitee.com/hq_project/yomi-boot/event/sql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
 
 **gitee.com/hq_project/yomi-boot 明确不包含**：业务 handler/usecase、各领域 `bizerr` 哨兵。
 
@@ -308,7 +308,7 @@ type myConsumerPlugin struct {
 | 13 | token | `auth.enabled=true` |
 | 14 | httprecord | `http_record.enabled=true` 时按 provider 装配，否则 Nop |
 | 15 | consul | `consul.enabled=true` |
-| 16 | event | `publisher_enabled` / `consumer_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
+| 16 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
 | 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
@@ -332,7 +332,7 @@ type myConsumerPlugin struct {
 | 领域 | `InfraOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
 | 带消息消费的领域 | 上栏 + `AddCustomPlugin(消费者插件)` | 消费启停由自定义插件与配置控制 |
 
-各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`auth.enabled`、`event.publisher_enabled` / `event.consumer_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
+各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`auth.enabled`、`event.outbox_enabled` / `event.inbox_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
 
 **形态裁剪参考（改配置即可，不必改 gitee.com/hq_project/yomi-boot 源码）**：
 
@@ -342,7 +342,7 @@ type myConsumerPlugin struct {
 | 大单体 | 上栏 + 按需 `redis` 幂等/锁、`cronjob` | 无跨进程时不必开 `consul`/`dtm`；异步消息有需求再开 `kafka` 或 `redis_stream` |
 | 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `auth`；跨域写开 `dtm`；异步按需 `kafka`/`redis_stream`/`event` | 按服务类型裁剪（领域通常关 `auth`） |
 
-说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.publisher_enabled` / `event.consumer_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
+说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
 
 ### 3.5 业务工程依赖 gitee.com/hq_project/yomi-boot
 

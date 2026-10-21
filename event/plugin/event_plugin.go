@@ -50,7 +50,7 @@ func (p *eventPlugin) Init(host *plugin.Host) {
 		logger.ErrorWithoutCtx("event 初始化失败", "error", errors.New("IDGenerator 未初始化"))
 		panic(errors.New("event: 需要 IDGenerator"))
 	}
-	if cfg.PublisherEnabledOrDefault() {
+	if cfg.OutboxEnabledOrDefault() {
 		if host.KafkaPublisher == nil {
 			logger.ErrorWithoutCtx("event 初始化失败", "error", errors.New("KafkaPublisher 未初始化"))
 			panic(errors.New("event: 发布侧需要 KafkaPublisher"))
@@ -60,7 +60,7 @@ func (p *eventPlugin) Init(host *plugin.Host) {
 			panic(errors.New("event: 发布侧需要 DistLockFactory"))
 		}
 	}
-	if cfg.ConsumerEnabledOrDefault() && host.DistLockFactory == nil {
+	if cfg.InboxEnabledOrDefault() && host.DistLockFactory == nil {
 		logger.ErrorWithoutCtx("event 初始化失败", "error", errors.New("DistLockFactory 未初始化"))
 		panic(errors.New("event: 消费侧需要 DistLockFactory"))
 	}

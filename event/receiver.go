@@ -70,7 +70,7 @@ const inboxDlqInsertTimeout = 5 * time.Second
 const inboxDlqErrorMsgLimit = 4000
 
 // WrapHandler 将业务处理函数包装为 Kafka 消费 handler。
-// 业务失败达到 ConsumerMaxRetry 后写入 sys_event_inbox_dlq 并 ack；
+// 业务失败达到 InboxDlqMaxRetry 后写入 sys_event_inbox_dlq 并 ack；
 // Kafka 的 MaxHandlerRetries 必须为 -1 或不小于该值，否则 Kafka 会先丢弃消息。
 func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yomikafka.ConsumeHandler {
 	if fn == nil {
@@ -80,7 +80,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 		}
 	}
 
-	trackRetries := r.inboxDlqRepo != nil && r.cfg.ConsumerMaxRetry >= 0
+	trackRetries := r.inboxDlqRepo != nil && r.cfg.InboxDlqMaxRetry >= 0
 	retryTracker := newMessageRetryTracker()
 	return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		if len(msg.Value) == 0 {
@@ -220,7 +220,7 @@ func invokeEventHandler(fn func(ctx context.Context, evt Event) error, ctx conte
 
 // shouldMoveToInboxDlq 判断当前失败次数是否已达到转入收件箱死信的条件
 func (r *Receiver) shouldMoveToInboxDlq(retryCount int) bool {
-	return r.inboxDlqRepo != nil && r.cfg.ConsumerMaxRetry >= 0 && retryCount >= r.cfg.ConsumerMaxRetry
+	return r.inboxDlqRepo != nil && r.cfg.InboxDlqMaxRetry >= 0 && retryCount >= r.cfg.InboxDlqMaxRetry
 }
 
 // moveToInboxDlq 将超过重试上限的事件写入收件箱死信

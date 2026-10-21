@@ -27,13 +27,13 @@ type Runtime struct {
 	OutboxDlqSize      int           // OutboxDlqSize 是发件箱死信队列单次抓取数量
 	OutboxDlqMaxRetry  int           // OutboxDlqMaxRetry 是发件箱死信队列最大重试次数
 	FetchTimeout       time.Duration
-	ConsumerMaxRetry   int           // ConsumerMaxRetry 是消费失败最大重试次数（不含首次处理），0 不重试，负数无限
+	InboxDlqMaxRetry   int           // InboxDlqMaxRetry 是消费失败最大重试次数（不含首次处理），0 不重试，负数无限
 	InboxDlqFrequency  time.Duration // InboxDlqFrequency 是收件箱死信后台重投频率
 	InboxDlqSize       int           // InboxDlqSize 是收件箱死信单次重投数量
 	OutboxCleanup      CleanupRuntime
 	InboxCleanup       CleanupRuntime
-	PublisherEnabled   bool // 发布侧（写 Outbox + 发件箱后台投递）
-	ConsumerEnabled    bool // 消费侧（Receiver/Inbox）
+	OutboxEnabled      bool // 发布侧（写 Outbox + 发件箱后台投递）
+	InboxEnabled       bool // 消费侧（Receiver/Inbox）
 }
 
 // LockKey 返回消息队列事件消费侧分布式锁 Redis Key
