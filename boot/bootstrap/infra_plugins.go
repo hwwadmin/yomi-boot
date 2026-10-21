@@ -16,8 +16,8 @@ import (
 	httprecordplugin "gitee.com/hq_project/yomi-boot/component/httprecord/plugin"
 	idempotencyplugin "gitee.com/hq_project/yomi-boot/component/idempotency/plugin"
 	kafkaplugin "gitee.com/hq_project/yomi-boot/component/kafka/plugin"
-	ratelimitplugin "gitee.com/hq_project/yomi-boot/component/ratelimit/plugin"
 	redisplugin "gitee.com/hq_project/yomi-boot/component/redis/plugin"
+	redisratelimitplugin "gitee.com/hq_project/yomi-boot/component/redisratelimit/plugin"
 	redisstreamplugin "gitee.com/hq_project/yomi-boot/component/redisstream/plugin"
 	tokenplugin "gitee.com/hq_project/yomi-boot/component/token/plugin"
 )
@@ -37,7 +37,7 @@ import (
 //  3. pprof       — pprof.enabled=true 时启动（默认 false）
 //  4. db          — db.enabled=true 时启动（写入 Host.DbType）
 //  5. redis        — redis.enabled=true 时启动
-//  6. ratelimit    — 始终写入 RateLimiter（未启用时为 Noop；启用时依赖 RedisService）
+//  6. redisratelimit — 始终写入 RateLimiter（未启用时为 Noop；启用时依赖 RedisService）
 //  7. kafka        — kafka.enabled=true 时启动
 //  8. redisstream  — redis_stream.enabled=true 时启动（依赖 RedisClient）
 //  9. snowflake    — 始终启动
@@ -64,7 +64,7 @@ func buildInfraPlugins(opts InfraOptions) []plugin.Plugin {
 		pprofplugin.NewPprof(),
 		dbplugin.NewDB(),
 		redisplugin.NewRedis(),
-		ratelimitplugin.NewRateLimit(),
+		redisratelimitplugin.NewRedisRateLimit(),
 		kafkaplugin.NewKafka(),
 		redisstreamplugin.NewRedisStream(),
 		snowflakeplugin.NewSnowflake(),

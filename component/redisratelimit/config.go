@@ -1,7 +1,7 @@
-// Package ratelimit 提供限流配置
+// Package redisratelimit 提供限流配置
 //
 // @author zwei
-package ratelimit
+package redisratelimit
 
 import (
 	"strings"

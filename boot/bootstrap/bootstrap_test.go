@@ -15,7 +15,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/logger"
 	"gitee.com/hq_project/yomi-boot/boot/router"
 	"gitee.com/hq_project/yomi-boot/component/httprecord"
-	"gitee.com/hq_project/yomi-boot/component/ratelimit"
+	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/token"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
@@ -114,7 +114,7 @@ func middlewareTestRegistry() *config.Registry {
 		cors.ConfigSection(),
 		token.ConfigSection(),
 		httprecord.ConfigSection(),
-		ratelimit.ConfigSection(),
+		redisratelimit.ConfigSection(),
 	)
 }
 

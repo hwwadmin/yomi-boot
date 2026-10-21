@@ -1,10 +1,10 @@
-// Package ratelimit 提供调用式分布式限流能力
+// Package redisratelimit 提供调用式分布式限流能力
 //
 // 依赖现有 boot/redis.RedisService（OpsRateLimit4Allow），不新建 Redis 连接。
 // 用法：在 usecase 入口显式调用 Allow/AllowN；超限返回 ErrRateLimited。
 //
 // @author zwei
-package ratelimit
+package redisratelimit
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func New(redisService yomiredis.RedisService, cfg Config) LimitService {
 		return noopLimiter{}
 	}
 	if redisService == nil {
-		panic("ratelimit: RedisService 不能为 nil")
+		panic("redisratelimit: RedisService 不能为 nil")
 	}
 	return &limiter{
 		redis:    redisService,
@@ -58,10 +58,10 @@ func (l *limiter) Allow(ctx context.Context, key string, rule Rule) error {
 // AllowN 实现 LimitService.AllowN
 func (l *limiter) AllowN(ctx context.Context, key string, n int64, rule Rule) error {
 	if l == nil || l.redis == nil {
-		return errors.New("ratelimit: LimitService 未初始化")
+		return errors.New("redisratelimit: LimitService 未初始化")
 	}
 	if n <= 0 {
-		return errors.New("ratelimit: n 必须大于 0")
+		return errors.New("redisratelimit: n 必须大于 0")
 	}
 	if err := rule.Validate(); err != nil {
 		return err
@@ -74,10 +74,10 @@ func (l *limiter) AllowN(ctx context.Context, key string, n int64, rule Rule) er
 	allowed, err := l.redis.OpsRateLimit4Allow(ctx, fullKey, rule.Limit, n, rule.Window)
 	if err != nil {
 		if l.failOpen {
-			logger.Warn(ctx, "ratelimit redis 故障，按 fail_open 放行", "key", fullKey, "error", err)
+			logger.Warn(ctx, "redisratelimit redis 故障，按 fail_open 放行", "key", fullKey, "error", err)
 			return nil
 		}
-		return errors.Wrap(err, "ratelimit redis 故障")
+		return errors.Wrap(err, "redisratelimit redis 故障")
 	}
 	if !allowed {
 		return errors.Sentinel(ErrRateLimited)

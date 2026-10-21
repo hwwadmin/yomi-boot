@@ -19,8 +19,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/idempotency"
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
 	"gitee.com/hq_project/yomi-boot/component/oss"
-	"gitee.com/hq_project/yomi-boot/component/ratelimit"
 	"gitee.com/hq_project/yomi-boot/component/redis"
+	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/token"
 )
@@ -44,7 +44,7 @@ func DefaultConfigRegistry() *config.Registry {
 			event.ConfigSection(),
 			snowflake.ConfigSection(),
 			idempotency.ConfigSection(),
-			ratelimit.ConfigSection(),
+			redisratelimit.ConfigSection(),
 			oss.ConfigSection(),
 			bootpprof.ConfigSection(),
 		)

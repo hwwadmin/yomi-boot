@@ -15,8 +15,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/event"
 	"gitee.com/hq_project/yomi-boot/component/httprecord"
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
-	"gitee.com/hq_project/yomi-boot/component/ratelimit"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/redis"
+	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/token"
 
@@ -31,7 +31,7 @@ type Infra struct {
 	DbType               enums.DbType                 // 数据库类型（db 插件写入）
 	RedisService         yomiredis.RedisService       // Redis 访问服务，业务层经此访问 Redis
 	DistLockFactory      distlock.DistLockFactory     // 分布式锁工厂，基于 Redis 实现
-	RateLimiter          ratelimit.LimitService       // 调用式限流（依赖 RedisService；未启用时为 Noop）
+	RateLimiter          redisratelimit.LimitService  // 调用式限流（依赖 RedisService；未启用时为 Noop）
 	KafkaPublisher       yomikafka.PublisherService   // Kafka 生产者
 	KafkaConsumer        yomikafka.ConsumerService    // Kafka 消费者
 	RedisStreamPublisher redisstream.PublisherService // Redis Stream 发布者

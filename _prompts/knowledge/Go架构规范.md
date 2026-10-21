@@ -97,11 +97,11 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按四层组织：`ai/`（可选 AI 能力簇）、`boot/`（项目基础件）、`component/`（单一中间件/外部服务的通用组件）、`cloud/`（跨服务/多实例分布式组件）。
-- `boot/` 提供 config、plugin（生命周期框架）、logger、router、runner、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、testclient、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、ratelimit、oss、idempotency、event、distlock、roundrobin、cronjob 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
+- `boot/` 提供 config、plugin（生命周期框架）、logger、router、runner、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、testclient、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、idempotency、event、distlock、roundrobin、cronjob 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
 - 各组件 `plugin` 子包跟随组件目录：`boot/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
-- `gitee.com/hq_project/yomi-boot/component/ratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
+- `gitee.com/hq_project/yomi-boot/component/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
 
 ### 3.2 标准目录结构（模式）
 
@@ -174,7 +174,7 @@ services/{domain}/
 | ---- | -- |
 | `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
 | `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
-| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`ratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
+| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
 | `cloud/` | `consul`、`dtm`、`rpc` |
 
 依赖方向：`ai → boot`，`component → boot`，`cloud → boot + component`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`。
@@ -197,7 +197,7 @@ services/{domain}/
 | `shared` | 跨服务通用 dto（含微服务请求/响应信封）、enums、常量 |
 | `utils` | 通用辅助函数收口（`ginutil`、`ptrutil`、`timeutil`、`validateutil` 等子包） |
 | `redis` | `RedisService` 接口与 `RedisHelper` 实现（含 `OpsRateLimit4Allow` 滑动窗口限流原语） |
-| `ratelimit` | 调用式限流门面 `LimitService`（`Allow`/`AllowN`）；依赖 `RedisService`，不进默认中间件链 |
+| `redisratelimit` | 调用式限流门面 `LimitService`（`Allow`/`AllowN`）；依赖 `RedisService`，不进默认中间件链 |
 | `bc` | 密码学基础设施能力簇（Bootstrap Crypto）；无状态按需 import，不挂 Infra |
 | `bc/passwd` | 密码单向哈希/校验（bcrypt，≤72 字节） |
 | `bc/random` | 密码学安全随机（Bytes/Hex/URLSafe） |
@@ -319,7 +319,7 @@ type myConsumerPlugin struct {
 | 3 | pprof | `pprof.enabled=true` 时启动（默认 false） |
 | 4 | db | `db.enabled=true` |
 | 5 | redis | `redis.enabled=true` |
-| 6 | ratelimit | 始终写入 RateLimiter（未启用时为 Noop） |
+| 6 | redisratelimit | 始终写入 RateLimiter（未启用时为 Noop） |
 | 7 | kafka | `kafka.enabled=true` |
 | 8 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
 | 9 | snowflake | 始终 |
@@ -519,7 +519,7 @@ kafka: ...
 | DB / 本地事务 / Repository 基类 | `db` |
 | 业务幂等 | `idempotency` |
 | 跨域 Saga | `dtm` |
-| Redis / 分布式锁 / 调用式限流 | `redis`、`distlock`、`ratelimit` |
+| Redis / 分布式锁 / 调用式限流 | `redis`、`distlock`、`redisratelimit` |
 | 定时任务 | `cronjob`（内部轮询用 `roundrobin`） |
 | 服务发现与读 RPC | `consul`、`rpc` |
 | 异步消息 | 按需选用 `kafka` 或 `redisstream`；可靠领域事件另看 `event` |

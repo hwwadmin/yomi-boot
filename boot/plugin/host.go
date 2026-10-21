@@ -14,8 +14,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/event"
 	"gitee.com/hq_project/yomi-boot/component/httprecord"
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
-	"gitee.com/hq_project/yomi-boot/component/ratelimit"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/redis"
+	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/token"
 
@@ -35,7 +35,7 @@ type Host struct {
 	RedisClient           *redisv9.Client
 	RedisService          yomiredis.RedisService
 	DistLockFactory       distlock.DistLockFactory
-	RateLimiter           ratelimit.LimitService
+	RateLimiter           redisratelimit.LimitService
 	KafkaComponents       *yomikafka.Components
 	KafkaPublisher        yomikafka.PublisherService
 	KafkaConsumer         yomikafka.ConsumerService

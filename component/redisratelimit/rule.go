@@ -1,7 +1,7 @@
-// Package ratelimit 提供调用式分布式限流能力
+// Package redisratelimit 提供调用式分布式限流能力
 //
 // @author zwei
-package ratelimit
+package redisratelimit
 
 import (
 	"time"
@@ -18,13 +18,13 @@ type Rule struct {
 // Validate 校验规则参数
 func (r Rule) Validate() error {
 	if r.Limit <= 0 {
-		return errors.New("ratelimit: Rule.Limit 必须大于 0")
+		return errors.New("redisratelimit: Rule.Limit 必须大于 0")
 	}
 	if r.Window <= 0 {
-		return errors.New("ratelimit: Rule.Window 必须大于 0")
+		return errors.New("redisratelimit: Rule.Window 必须大于 0")
 	}
 	if r.Window.Milliseconds() <= 0 {
-		return errors.New("ratelimit: Rule.Window 转换为毫秒后必须大于 0")
+		return errors.New("redisratelimit: Rule.Window 转换为毫秒后必须大于 0")
 	}
 	return nil
 }
