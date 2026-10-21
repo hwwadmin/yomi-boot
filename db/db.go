@@ -6,8 +6,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -17,7 +15,6 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
 // Open 根据配置初始化 DB 连接；调用方应确保 cfg 已通过 Validate。
@@ -87,19 +84,6 @@ func open(cfg Config) (*gorm.DB, func(), error) {
 	)
 
 	return db, stop, nil
-}
-
-// newGormLogger 按配置构建 GORM logger（慢 SQL 阈值可配）
-func newGormLogger(cfg Config) gormlogger.Interface {
-	return gormlogger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		gormlogger.Config{
-			SlowThreshold:             cfg.SlowThreshold(),
-			LogLevel:                  gormlogger.Warn,
-			IgnoreRecordNotFoundError: false,
-			Colorful:                  true,
-		},
-	)
 }
 
 // buildDSN 根据不同数据库类型返回对应格式的连接串
