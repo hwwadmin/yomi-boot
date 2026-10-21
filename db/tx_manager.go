@@ -5,20 +5,28 @@ package db
 
 import (
 	"context"
+	"time"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"gorm.io/gorm"
 )
 
+// DefaultAutonomousTimeout 是自治事务未指定超时（timeout <= 0）时使用的默认超时
+const DefaultAutonomousTimeout = 3 * time.Second
+
 // txKey 是事务对象在上下文中的键
 type txKey struct{}
 
-// TxExecutor 表示本地事务执行器，供 usecase 注入；生产环境由 TxManager 实现，单元测试可注入 stub
+// TxExecutor 表示事务执行器，供 usecase 注入；生产环境由 TxManager 实现，单元测试可注入 stub
 type TxExecutor interface {
 	// Execute 在事务边界内执行回调；回调返回 error 时回滚，否则提交
 	Execute(ctx context.Context, fn func(ctx context.Context) error) error
+	// ExecuteAutonomous 在独立连接上执行自治事务；timeout <= 0 时使用 DefaultAutonomousTimeout
+	ExecuteAutonomous(ctx context.Context, timeout time.Duration, fn func(ctx context.Context) error) error
 }
 
-// TxManager 表示本地事务管理器
+// TxManager 表示事务管理器
 type TxManager struct {
 	db *gorm.DB
 }
@@ -65,5 +73,31 @@ func (m *TxManager) Execute(ctx context.Context, fn func(ctx context.Context) er
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txCtx := WithTx(ctx, tx)
 		return fn(txCtx)
+	})
+}
+
+// ExecuteAutonomous 在独立连接上执行自治事务：回调返回 error 时回滚，否则提交。
+// 与 ctx 中已有的事务互不影响：外层回滚不会撤销这里的写入，这里的失败也不会回滚外层。
+// 回调 ctx 不随调用方取消（保留 ctx 值），超时由 timeout 控制，timeout <= 0 时取默认值。
+// 每次调用额外占用一条连接，须为 max_open_conns 预留余量；回调内不得使用外层事务对象。
+func (m *TxManager) ExecuteAutonomous(ctx context.Context, timeout time.Duration, fn func(ctx context.Context) error) error {
+	if fn == nil {
+		return nil
+	}
+	if m.db == nil || m.db.Statement == nil {
+		return errors.New("自治事务不可用：TxManager 未绑定连接池")
+	}
+	if committer, ok := m.db.Statement.ConnPool.(gorm.TxCommitter); ok && committer != nil {
+		return errors.New("自治事务须使用连接池，TxManager 不能由事务对象构造")
+	}
+	if timeout <= 0 {
+		timeout = DefaultAutonomousTimeout
+	}
+
+	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+
+	return m.db.WithContext(actx).Transaction(func(tx *gorm.DB) error {
+		return fn(WithTx(actx, tx))
 	})
 }

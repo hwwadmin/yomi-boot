@@ -141,6 +141,86 @@ func TestExec_AppliesCallerCtxInsideTx(t *testing.T) {
 	}
 }
 
+// TestTxManager_ExecuteAutonomous_OuterRollbackKeepsWrite 验证自治事务独立提交：外层回滚不撤销自治写入
+func TestTxManager_ExecuteAutonomous_OuterRollbackKeepsWrite(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
+	defer cleanup()
+
+	manager := NewTxManager(gormDB)
+	ctx := context.Background()
+
+	err := manager.Execute(ctx, func(txCtx context.Context) error {
+		if err := Exec(txCtx, gormDB).Create(&txTestModel{ID: 41, Name: "outer"}).Error; err != nil {
+			return err
+		}
+		if err := manager.ExecuteAutonomous(txCtx, 0, func(actx context.Context) error {
+			return Exec(actx, gormDB).Create(&txTestModel{ID: 42, Name: "autonomous"}).Error
+		}); err != nil {
+			return err
+		}
+		return errors.New("外层主动回滚")
+	})
+	if err == nil {
+		t.Fatal("外层返回错误时期望 Execute 返回错误")
+	}
+
+	var rows []txTestModel
+	if err := gormDB.Where("id IN ?", []int64{41, 42}).Find(&rows).Error; err != nil {
+		t.Fatalf("查询结果失败: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != 42 {
+		t.Fatalf("期望仅保留自治写入 42，实际 %+v", rows)
+	}
+}
+
+// TestTxManager_ExecuteAutonomous_IgnoresCanceledCtx 验证自治事务不随调用方取消：取消后仍提交
+func TestTxManager_ExecuteAutonomous_IgnoresCanceledCtx(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
+	defer cleanup()
+
+	manager := NewTxManager(gormDB)
+
+	err := manager.Execute(context.Background(), func(txCtx context.Context) error {
+		canceled, cancel := context.WithCancel(txCtx)
+		cancel()
+		return manager.ExecuteAutonomous(canceled, 0, func(actx context.Context) error {
+			return Exec(actx, gormDB).Create(&txTestModel{ID: 51, Name: "autonomous"}).Error
+		})
+	})
+	if err != nil {
+		t.Fatalf("自治事务不应受调用方取消影响: %v", err)
+	}
+
+	var count int64
+	if err := gormDB.Model(&txTestModel{}).Where("id = ?", 51).Count(&count).Error; err != nil {
+		t.Fatalf("查询结果失败: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("期望自治写入落库，实际 %d 条", count)
+	}
+}
+
+// TestTxManager_ExecuteAutonomous_RejectsTxManager 验证用事务对象构造的 TxManager 拒绝自治事务
+func TestTxManager_ExecuteAutonomous_RejectsTxManager(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
+	defer cleanup()
+
+	manager := NewTxManager(gormDB)
+
+	err := manager.Execute(context.Background(), func(txCtx context.Context) error {
+		tx, ok := GetTx(txCtx)
+		if !ok {
+			t.Fatal("期望上下文中存在事务")
+		}
+		return NewTxManager(tx).ExecuteAutonomous(txCtx, 0, func(context.Context) error {
+			return nil
+		})
+	})
+	if err == nil {
+		t.Fatal("用事务对象构造的 TxManager 应拒绝自治事务")
+	}
+}
+
 // txTestModel 事务管理器单测用 GORM 模型
 type txTestModel struct {
 	ID   int64  `gorm:"column:id;primaryKey"`

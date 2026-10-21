@@ -444,3 +444,43 @@ func TestLock_MutualExclusion(t *testing.T) {
 		t.Fatalf("counter 期望 8，实际 %d", counter.Load())
 	}
 }
+
+// TestUnlock_StolenLockReturnsErrLockLost 验证 Key 被其他实例持有后 Unlock 返回 ErrLockLost 并清理状态
+func TestUnlock_StolenLockReturnsErrLockLost(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	factory, err := NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory 失败: %v", err)
+	}
+	ctx := context.Background()
+	key := "test:unlock-stolen"
+	lock := factory.GetLock(key, WithTTL(5*time.Second))
+
+	if err := lock.Lock(ctx); err != nil {
+		t.Fatalf("Lock 失败: %v", err)
+	}
+	// 模拟锁过期后被其他实例获取：Key 仍在，但 token 已不属于本实例
+	if err := client.Set(ctx, key, "another-owner-token", 5*time.Second).Err(); err != nil {
+		t.Fatalf("Set 失败: %v", err)
+	}
+
+	if err := lock.Unlock(ctx); !errors.Is(err, ErrLockLost) {
+		t.Fatalf("锁被抢后 Unlock 期望 ErrLockLost，实际 %v", err)
+	}
+	if err := lock.Unlock(ctx); !errors.Is(err, ErrLockNotHeld) {
+		t.Fatalf("锁被抢清理后再次 Unlock 期望 ErrLockNotHeld，实际 %v", err)
+	}
+
+	// 清掉他人的 Key，确认实例已清理、可重新加锁
+	if err := client.Del(ctx, key).Err(); err != nil {
+		t.Fatalf("Del 失败: %v", err)
+	}
+	if err := lock.Lock(ctx); err != nil {
+		t.Fatalf("状态清理后重新 Lock 失败: %v", err)
+	}
+	if err := lock.Unlock(ctx); err != nil {
+		t.Fatalf("重新 Unlock 失败: %v", err)
+	}
+}

@@ -173,6 +173,16 @@ func TestUnlock_ReturnsErrLockLostWhenLost(t *testing.T) {
 	if err := lock.Unlock(ctx); !errors.Is(err, ErrLockLost) {
 		t.Fatalf("lost 状态下 Unlock 期望 ErrLockLost，实际 %v", err)
 	}
+	// 锁已丢失时 Unlock 也必须清理本地状态，否则实例会永久停留在持锁状态。
+	if err := lock.Unlock(ctx); !errors.Is(err, ErrLockNotHeld) {
+		t.Fatalf("lost 清理后再次 Unlock 期望 ErrLockNotHeld，实际 %v", err)
+	}
+	if err := lock.Lock(ctx); err != nil {
+		t.Fatalf("lost 清理后重新 Lock 失败: %v", err)
+	}
+	if err := lock.Unlock(ctx); err != nil {
+		t.Fatalf("重新 Lock 后 Unlock 失败: %v", err)
+	}
 }
 
 // TestExtendContext_TimeoutBounds 验证续期超时下限随 TTL 缩放，不再固化 1s

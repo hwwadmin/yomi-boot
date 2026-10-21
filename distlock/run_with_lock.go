@@ -14,6 +14,7 @@ import (
 // RunWithLock 获取锁后执行 fn，结束时自动 Unlock。
 // 启用看门狗时的推荐入口：fn 收到 HeldContext（锁丢失时 cancel），
 // 正常返回 nil 但锁已丢失时返回 ErrLockLost。
+// 释放锁失败（非 ErrLockNotHeld）时，返回错误会同时保留 fn 的错误与释放失败原因。
 // 未启用看门狗时也可使用，行为等价于 Lock + defer Unlock。
 func RunWithLock(ctx context.Context, lock Lock, fn func(ctx context.Context) error) (err error) {
 	if lock == nil {
@@ -32,9 +33,17 @@ func RunWithLock(ctx context.Context, lock Lock, fn func(ctx context.Context) er
 		unlockCtx, cancel := appctx.BackgroundWithTimeout(5 * time.Second)
 		defer cancel()
 		unlockErr := lock.Unlock(unlockCtx)
-		// fn 返回错误时也应告知调用方互斥保护已失效
-		if errors.Is(unlockErr, ErrLockLost) {
+		switch {
+		case unlockErr == nil:
+		case errors.Is(unlockErr, ErrLockLost):
+			// fn 返回错误时也应告知调用方互斥保护已失效
 			err = errors.Join(ErrLockLost, err)
+		case errors.Is(unlockErr, ErrLockNotHeld):
+			// RunWithLock 成功获取过锁；此分支只可能是 fn 内自行 Unlock（或实例已被释放），
+			// 不属于锁丢失，无需上报。
+		default:
+			// 释放失败同样不能被吞掉，否则调用方会误以为锁已释放
+			err = errors.Join(errors.Wrap(unlockErr, "释放分布式锁失败"), err)
 		}
 	}()
 

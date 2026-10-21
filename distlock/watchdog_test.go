@@ -76,8 +76,17 @@ func TestWatchdog_DisabledLockExpires(t *testing.T) {
 	if err := waiter.Unlock(ctx); err != nil {
 		t.Fatalf("Unlock 失败: %v", err)
 	}
-	if err := holder.Unlock(ctx); err == nil {
-		t.Fatal("过期且锁已被他人获取后 holder Unlock 期望失败")
+	if err := holder.Unlock(ctx); !errors.Is(err, ErrLockLost) {
+		t.Fatalf("过期且锁已被他人获取后 holder Unlock 期望 ErrLockLost，实际 %v", err)
+	}
+	if err := holder.Unlock(ctx); !errors.Is(err, ErrLockNotHeld) {
+		t.Fatalf("清理后再次 Unlock 期望 ErrLockNotHeld，实际 %v", err)
+	}
+	if err := holder.Lock(ctx); err != nil {
+		t.Fatalf("状态清理后 holder 重新 Lock 失败: %v", err)
+	}
+	if err := holder.Unlock(ctx); err != nil {
+		t.Fatalf("holder 重新 Unlock 失败: %v", err)
 	}
 }
 

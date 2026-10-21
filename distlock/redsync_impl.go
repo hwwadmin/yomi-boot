@@ -136,6 +136,8 @@ func (l *redsyncLock) TryLockWithTimeout(ctx context.Context, timeout time.Durat
 // 代价是 UnlockContext 失败时看门狗已停，重试期间不再续期，锁将随 TTL 自然过期（可接受的降级）。
 // 若看门狗已标记 lost，仍会尝试 UnlockContext 清理 Redis 残留（用持锁 token 匹配，不会误删他人锁），
 // 但返回 ErrLockLost 提醒调用方锁已丢失。
+// 若 Redis 侧锁已失效（Key 过期/被删，或 Key 已被其他实例持有），同样清理本地持锁状态并
+// 返回 ErrLockLost；ErrLockNotHeld 仅表示实例从未持有或已释放。
 func (l *redsyncLock) Unlock(ctx context.Context) error {
 	ctx = appctx.OrBackground(ctx)
 
@@ -155,6 +157,14 @@ func (l *redsyncLock) Unlock(ctx context.Context) error {
 	mutex := l.mutex
 	ok, err := mutex.UnlockContext(ctx)
 	if err != nil {
+		// Key 已不存在（过期/被删）或已被其他实例持有：本地锁已失效，
+		// 必须清理状态，否则实例会永久停留在"持锁"状态且无法再次使用。
+		var taken *redsync.ErrTaken
+		if errors.Is(err, redsync.ErrLockAlreadyExpired) || errors.As(err, &taken) {
+			l.mutex = nil
+			l.lost = false
+			return errors.Sentinel(ErrLockLost)
+		}
 		if lost {
 			return errors.Sentinel(ErrLockLost)
 		}
@@ -166,7 +176,8 @@ func (l *redsyncLock) Unlock(ctx context.Context) error {
 		return errors.Sentinel(ErrLockLost)
 	}
 	if !ok {
-		return errors.Sentinel(ErrLockNotHeld)
+		// 当前单 pool 工厂下 UnlockContext 不会返回 (false, nil)；保留为防御分支。
+		return errors.Sentinel(ErrLockLost)
 	}
 	return nil
 }
