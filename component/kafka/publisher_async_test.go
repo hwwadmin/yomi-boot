@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/worker"
+	"gitee.com/hq_project/yomi-boot/component/worker"
 )
 
 // queueFullWorker 模拟工作池队列已满

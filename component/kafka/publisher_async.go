@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/worker"
+	"gitee.com/hq_project/yomi-boot/component/worker"
 )
 
 var _ PublisherService = (*asyncPublisher)(nil)

@@ -173,8 +173,8 @@ services/{domain}/
 | 目录 | 包 |
 | ---- | -- |
 | `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
-| `boot/` | `bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`requestguard`、`shared`、`utils`、`bc`、`ws`、`worker`、`snowflake`、`pprof`、`testclient`、`banner` |
-| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`ratelimit`、`roundrobin`、`cronjob`、`token` |
+| `boot/` | `bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`requestguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
+| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`ratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
 | `cloud/` | `consul`、`dtm`、`rpc` |
 
 依赖方向：`ai → boot`，`component → boot`，`cloud → boot + component`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`。

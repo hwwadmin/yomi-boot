@@ -7,8 +7,8 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/boot/worker"
 	"gitee.com/hq_project/yomi-boot/component/event/cfg"
+	"gitee.com/hq_project/yomi-boot/component/worker"
 )
 
 // stubWorker 仅实现容量查询所需方法的工作池桩

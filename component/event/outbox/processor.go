@@ -11,11 +11,11 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/worker"
 	"gitee.com/hq_project/yomi-boot/component/db"
 	"gitee.com/hq_project/yomi-boot/component/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/event/model"
 	"gitee.com/hq_project/yomi-boot/component/event/repo"
+	"gitee.com/hq_project/yomi-boot/component/worker"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
 )
