@@ -240,3 +240,30 @@ func TestCircuitBreaker_StaleProbeIgnored(t *testing.T) {
 		t.Fatalf("新探测成功后应关闭，state=%d", b.state)
 	}
 }
+
+// TestCircuitBreaker_RecordReportsOpen 验证 record 返回记录后熔断是否处于打开状态
+func TestCircuitBreaker_RecordReportsOpen(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 1
+	cfg.MinRequests = 1
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	b := newCircuitBreaker(cfg)
+
+	ticket, _ := b.allow()
+	if !b.record(ticket, attemptResult{failure: true, counted: true}) {
+		t.Fatal("首次失败打开熔断后应返回 true")
+	}
+	if !b.record(ticket, attemptResult{failure: true, counted: true}) {
+		t.Fatal("open 态应返回 true")
+	}
+
+	time.Sleep(30 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	if b.record(probe, attemptResult{counted: true}) {
+		t.Fatal("半开探测成功应返回 false")
+	}
+}

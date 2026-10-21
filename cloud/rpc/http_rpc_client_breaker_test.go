@@ -448,3 +448,110 @@ func TestInvoke_HookRejectsWithoutError(t *testing.T) {
 		t.Fatalf("业务拒绝不应打开熔断，state=%d", state)
 	}
 }
+
+// TestInvoke_BreakerOpenStopsRetry 验证本次尝试打开熔断后不再发剩余重试
+func TestInvoke_BreakerOpenStopsRetry(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBackoff(time.Millisecond, time.Millisecond),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x", RespBody: &env, BizHook: checkTestEnvelope, MaxAttempts: 5,
+	})
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("期望 HTTP 503，实际 %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("熔断打开后不应继续重试，hits=%d", hits.Load())
+	}
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
+	}
+}
+
+// TestInvoke_HalfOpenProbeSingleAttempt 验证半开探测一次调用只发一个请求
+func TestInvoke_HalfOpenProbeSingleAttempt(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBackoff(time.Millisecond, time.Millisecond),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: 10 * time.Millisecond,
+		}),
+	)
+	var env testEnvelope
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
+	time.Sleep(20 * time.Millisecond)
+
+	before := hits.Load()
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x", RespBody: &env, BizHook: checkTestEnvelope, MaxAttempts: 5,
+	})
+	if err == nil {
+		t.Fatal("探测 503 应返回错误")
+	}
+	if got := hits.Load() - before; got != 1 {
+		t.Fatalf("半开探测一次调用应只发一个请求，实际 %d", got)
+	}
+}
+
+// panicBody 在反序列化时 panic，用于验证半开探测位兜底释放
+type panicBody struct{}
+
+// UnmarshalJSON 故意 panic
+func (*panicBody) UnmarshalJSON([]byte) error { panic("boom") }
+
+// TestInvoke_PanicInUnmarshalReleasesProbe 验证调用方代码 panic 后半开探测位被释放
+func TestInvoke_PanicInUnmarshalReleasesProbe(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: 10 * time.Millisecond,
+		}),
+	)
+	var env testEnvelope
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
+	time.Sleep(20 * time.Millisecond)
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("期望反序列化 panic")
+			}
+		}()
+		_ = invokeTestWith(client, context.Background(), "/x", nil, &panicBody{}, checkTestEnvelope, 1)
+	}()
+
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+		t.Fatalf("panic 后探测位应已释放，实际 %v", err)
+	}
+}

@@ -66,9 +66,24 @@ func TestBackoffDuration(t *testing.T) {
 		t.Fatalf("attempt1: got %v want %v", d, base)
 	}
 	if d := backoffDuration(2, base, max); d != 100*time.Millisecond {
-		t.Fatalf("attempt2: got %v want 100ms", d)
+		t.Fatalf("attempt2: got 100ms")
 	}
 	if d := backoffDuration(3, base, max); d != max {
 		t.Fatalf("attempt3: got %v want %v", d, max)
+	}
+}
+
+// TestCanWait 验证剩余预算判断
+func TestCanWait(t *testing.T) {
+	if !canWait(context.Background(), time.Hour) {
+		t.Fatal("无 deadline 应视为可以等待")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if canWait(ctx, 10*time.Second) {
+		t.Fatal("剩余预算不足时应返回 false")
+	}
+	if !canWait(ctx, time.Millisecond) {
+		t.Fatal("剩余预算充足时应返回 true")
 	}
 }

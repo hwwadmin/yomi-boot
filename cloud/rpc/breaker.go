@@ -90,30 +90,32 @@ func (b *circuitBreaker) allow() (breakerTicket, error) {
 
 // record 记录一次传输尝试；closed 态累计窗口，half-open 态只认当前探测票据
 // 半开探测失败、慢调用或 429 限流都重新打开，避免慢/过载下游仅凭一次探测就被放行
-func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) {
+// 返回 true 表示记录后熔断处于打开状态，调用方应停止后续重试
+func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool {
 	if b == nil {
-		return
+		return false
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	switch b.state {
 	case breakerOpen:
-		return
+		return true
 	case breakerHalfOpen:
 		if !ticket.probe || ticket.seq != b.probeSeq {
-			return
+			return false
 		}
 		b.probeInFlight = false
 		if result.failure || result.slow || result.throttled {
 			b.open()
-			return
+			return true
 		}
 		b.close()
+		return false
 	default:
 		// 丢弃上一轮半开遗留的探测结果
 		if ticket.probe && ticket.seq != b.probeSeq {
-			return
+			return false
 		}
 		b.window = append(b.window, result)
 		if len(b.window) > b.cfg.WindowSize {
@@ -127,11 +129,13 @@ func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) {
 		}
 		if len(b.failureWindow) >= b.cfg.MinRequests && b.failureRate() >= b.cfg.FailureRate {
 			b.open()
-			return
+			return true
 		}
 		if len(b.window) >= b.cfg.MinRequests && b.slowRate() >= b.cfg.SlowRate {
 			b.open()
+			return true
 		}
+		return false
 	}
 }
 

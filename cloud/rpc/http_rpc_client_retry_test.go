@@ -219,3 +219,69 @@ func TestInvoke_RequestMaxAttemptsOverride(t *testing.T) {
 		t.Fatalf("请求级 MaxAttempts=1 应只尝试一次，hits=%d", hits.Load())
 	}
 }
+
+// TestInvoke_RetryAfterHonored 验证内部重试等待 Retry-After
+func TestInvoke_RetryAfterHonored(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
+	var env testEnvelope
+	start := time.Now()
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		MaxAttempts: 2,
+		Timeout:     5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("等待 Retry-After 后应成功: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 900*time.Millisecond {
+		t.Fatalf("应等待约 1s，实际 %v", elapsed)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("hits=%d want 2", hits.Load())
+	}
+}
+
+// TestInvoke_RetryAfterExceedsBudget 验证 Retry-After 放不进预算时直接返回下游错误
+func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		MaxAttempts: 3,
+		Timeout:     time.Second,
+	})
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("期望 HTTP 503，实际 %v", err)
+	}
+	if statusErr.RetryAfter != 2*time.Second {
+		t.Fatalf("RetryAfter: got %v want 2s", statusErr.RetryAfter)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("预算不足时不应重试，hits=%d", hits.Load())
+	}
+}

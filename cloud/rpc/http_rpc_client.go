@@ -76,6 +76,9 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if err != nil {
 		return err
 	}
+	// 兜底释放探测位：正常路径由 record/onNeutral 结算；panic 或未来新增的提前返回
+	// 也要把半开探测位放掉，避免熔断永久卡在半开
+	defer func() { c.breaker.onNeutral(ticket) }()
 	payload, err := json.Marshal(req.ReqBody)
 	if err != nil {
 		c.breaker.onNeutral(ticket)
@@ -91,14 +94,28 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		maxBytes = defaultMaxResponseBytes
 	}
 
+	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if err := callCtx.Err(); err != nil {
 			c.breaker.onNeutral(ticket)
 			return err
 		}
+		if attempt > 1 {
+			// 每次重试重新过熔断：上一轮失败可能已把熔断打开；
+			// 半开探测失败后这里会拿到 ErrCircuitOpen，保证一次探测只发一个请求
+			var allowErr error
+			ticket, allowErr = c.breaker.allow()
+			if allowErr != nil {
+				if lastErr != nil {
+					return lastErr
+				}
+				return allowErr
+			}
+		}
 
 		url, err := c.resolveEndpoint(callCtx, req.Endpoint)
 		if err != nil {
+			lastErr = err
 			if callerCtx.Err() != nil {
 				c.breaker.onNeutral(ticket)
 				return err
@@ -111,6 +128,8 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.breaker.onNeutral(ticket)
 				return sleepErr
 			}
+			// 发现失败不反映下游健康度；释放探测位后下一轮重新 allow
+			c.breaker.onNeutral(ticket)
 			continue
 		}
 
@@ -118,6 +137,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		body, err := c.doRequest(callCtx, url, payload, req.RespBody != nil, maxBytes)
 		elapsed := time.Since(start)
 		if err != nil {
+			lastErr = err
 			if callerCtx.Err() != nil {
 				c.breaker.onNeutral(ticket)
 				return err
@@ -126,12 +146,27 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			c.breaker.record(ticket, c.classify(err, elapsed))
+			// 熔断打开后立即停止本次调用的剩余重试，避免继续打已判定故障的下游
+			if c.breaker.record(ticket, c.classify(err, elapsed)) {
+				return err
+			}
 			if !shouldRetry(callCtx, err, attempt, maxAttempts) {
 				return err
 			}
-			if sleepErr := sleepBackoff(callCtx, backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)); sleepErr != nil {
-				return sleepErr
+			delay := backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)
+			var statusErr *HTTPStatusError
+			if errors.As(err, &statusErr) && statusErr.RetryAfter > delay {
+				delay = statusErr.RetryAfter
+			}
+			// 等待放不进剩余预算时直接返回本次下游错误，别换成 context deadline exceeded
+			if !canWait(callCtx, delay) {
+				return err
+			}
+			if sleepErr := sleepBackoff(callCtx, delay); sleepErr != nil {
+				if callerCtx.Err() != nil {
+					return sleepErr
+				}
+				return err
 			}
 			continue
 		}
@@ -148,6 +183,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 		}
 
+		// 成功响应照常返回；慢调用触发的熔断打开只影响后续调用
 		c.breaker.record(ticket, attemptResult{
 			slow:    elapsed > c.breaker.slowThreshold(),
 			counted: true,

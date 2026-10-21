@@ -71,6 +71,18 @@ func backoffDuration(attempt int, base, max time.Duration) time.Duration {
 	return d
 }
 
+// canWait 判断 ctx 的剩余预算是否足以完整等待 d；无 deadline 时视为可以等待
+func canWait(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return true
+	}
+	return time.Until(deadline) > d
+}
+
 // sleepBackoff 在 ctx 可取消的前提下等待退避时间
 func sleepBackoff(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
