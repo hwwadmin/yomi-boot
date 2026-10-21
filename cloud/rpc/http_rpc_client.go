@@ -36,9 +36,16 @@ var _ RpcService = (*HttpRpcClient)(nil)
 // 默认使用共享传输（每 host 最多 100 个空闲连接），默认不跟随重定向；
 // 需要 mTLS/私有 CA/代理/连接池时用 WithTransport，需要跟随重定向时用 WithCheckRedirect
 // 需要打印请求/响应体时用 WithLogBodies（建议仅 dev 开启，默认关闭）
+// resolver 为空或 serviceName 为空时 panic，用于启动装配阶段 Fail Fast
 // 每个 client 使用独立熔断器；同一服务建议复用一个 client
 func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
+	if resolver == nil {
+		panic(errors.New("rpc: EndpointResolver 不能为空"))
+	}
 	serviceName = strings.TrimSpace(serviceName)
+	if serviceName == "" {
+		panic(errors.New("rpc: 服务名不能为空"))
+	}
 	cfg := applyHTTPClientOptions(opts)
 	return &HttpRpcClient{
 		serviceName: serviceName,

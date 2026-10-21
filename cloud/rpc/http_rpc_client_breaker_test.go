@@ -258,8 +258,11 @@ func TestNewHttpRpcClient_BreakerOptionsIndependent(t *testing.T) {
 		WindowSize: 3, MinRequests: 3, FailureRate: 0.5, SlowRate: 0.5,
 		SlowThreshold: time.Minute, OpenDuration: time.Minute,
 	}
-	c1 := NewHttpRpcClient(nil, name, WithBreaker(first))
-	c2 := NewHttpRpcClient(nil, name, WithBreaker(second))
+	resolve := resolverFunc(func(context.Context, string, string) (string, error) {
+		return "http://example.test", nil
+	})
+	c1 := NewHttpRpcClient(resolve, name, WithBreaker(first))
+	c2 := NewHttpRpcClient(resolve, name, WithBreaker(second))
 	if c1.breaker == c2.breaker {
 		t.Fatal("每个 client 应有独立 breaker")
 	}

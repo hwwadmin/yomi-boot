@@ -14,7 +14,9 @@ import (
 
 // TestNewHttpRpcClient_DefaultTransport 验证默认传输和重定向策略
 func TestNewHttpRpcClient_DefaultTransport(t *testing.T) {
-	client := NewHttpRpcClient(nil, "svc")
+	client := NewHttpRpcClient(resolverFunc(func(context.Context, string, string) (string, error) {
+		return "http://example.test", nil
+	}), "svc")
 	if client.httpClient.Transport != defaultTransport {
 		t.Fatalf("默认应使用共享 transport，实际 %T", client.httpClient.Transport)
 	}

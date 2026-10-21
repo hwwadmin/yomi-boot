@@ -70,3 +70,32 @@ func TestInvoke_PreservesInt64InPageResponse(t *testing.T) {
 		t.Fatalf("items: got %+v, want one item with id %d", items, maxInt64JSON)
 	}
 }
+
+// TestNewHttpRpcClient_Validation 验证构造函数对空 resolver/空服务名 Fail Fast
+func TestNewHttpRpcClient_Validation(t *testing.T) {
+	assertPanic := func(fn func()) {
+		t.Helper()
+		defer func() {
+			if recover() == nil {
+				t.Fatal("期望 panic")
+			}
+		}()
+		fn()
+	}
+
+	assertPanic(func() {
+		NewHttpRpcClient(nil, "svc")
+	})
+	assertPanic(func() {
+		NewHttpRpcClient(resolverFunc(func(context.Context, string, string) (string, error) {
+			return "http://example.test", nil
+		}), "  ")
+	})
+
+	client := NewHttpRpcClient(resolverFunc(func(context.Context, string, string) (string, error) {
+		return "http://example.test", nil
+	}), "svc")
+	if client == nil {
+		t.Fatal("合法参数应返回 client")
+	}
+}
