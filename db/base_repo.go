@@ -39,8 +39,11 @@ func (r *BaseRepository) Create(ctx context.Context, model any) error {
 	return nil
 }
 
-// CreateInBatches 批量持久化记录
+// CreateInBatches 批量持久化记录；batchSize 必须大于 0
 func (r *BaseRepository) CreateInBatches(ctx context.Context, models any, batchSize int) error {
+	if batchSize <= 0 {
+		return errors.Newf("batchSize 必须大于 0: %d", batchSize)
+	}
 	if err := Exec(ctx, r.DB).CreateInBatches(models, batchSize).Error; err != nil {
 		return errors.Wrap(err, "批量创建记录失败")
 	}
