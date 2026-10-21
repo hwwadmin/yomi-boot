@@ -555,3 +555,50 @@ func TestInvoke_PanicInUnmarshalReleasesProbe(t *testing.T) {
 		t.Fatalf("panic 后探测位应已释放，实际 %v", err)
 	}
 }
+
+// TestInvoke_HalfOpenProbeNoRetryOnDiscoveryError 验证半开探测遇到发现错误不重试
+func TestInvoke_HalfOpenProbeNoRetryOnDiscoveryError(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: 10 * time.Millisecond,
+		}),
+	)
+	var env testEnvelope
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
+	time.Sleep(20 * time.Millisecond)
+
+	var resolveCalls atomic.Int64
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
+		resolveCalls.Add(1)
+		return "", errors.New("consul down")
+	})
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x", RespBody: &env, BizHook: checkTestEnvelope, MaxAttempts: 5,
+	})
+	var discoveryErr *discoveryError
+	if !errors.As(err, &discoveryErr) {
+		t.Fatalf("期望发现错误，实际 %v", err)
+	}
+	if resolveCalls.Load() != 1 {
+		t.Fatalf("半开探测不应重试发现，resolver 调用 %d 次", resolveCalls.Load())
+	}
+
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
+		return server.URL, nil
+	})
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+		t.Fatalf("探测位释放后下一次调用应成功: %v", err)
+	}
+}

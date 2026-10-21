@@ -56,7 +56,7 @@ func newCircuitBreaker(cfg BreakerOptions) *circuitBreaker {
 }
 
 // allow 判断当前是否允许发起调用，并返回本次调用的探测票据
-// 熔断打开时返回 ErrCircuitOpen
+// 熔断打开时返回 ErrCircuitOpen；冷却结束后只放行一个半开探测请求
 func (b *circuitBreaker) allow() (breakerTicket, error) {
 	if b == nil {
 		return breakerTicket{}, nil
@@ -71,25 +71,28 @@ func (b *circuitBreaker) allow() (breakerTicket, error) {
 			return breakerTicket{}, errors.Sentinel(ErrCircuitOpen)
 		}
 		b.state = breakerHalfOpen
-		b.probeSeq++
-		b.probeInFlight = true
 		b.window = nil
 		b.failureWindow = nil
-		return breakerTicket{probe: true, seq: b.probeSeq}, nil
+		return b.acquireProbe(), nil
 	case breakerHalfOpen:
 		if b.probeInFlight {
 			return breakerTicket{}, errors.Sentinel(ErrCircuitOpen)
 		}
-		b.probeSeq++
-		b.probeInFlight = true
-		return breakerTicket{probe: true, seq: b.probeSeq}, nil
+		return b.acquireProbe(), nil
 	default:
 		return breakerTicket{}, nil
 	}
 }
 
+// acquireProbe 占用唯一探测位并返回探测票据；调用方须持有 b.mu
+func (b *circuitBreaker) acquireProbe() breakerTicket {
+	b.probeSeq++
+	b.probeInFlight = true
+	return breakerTicket{probe: true, seq: b.probeSeq}
+}
+
 // record 记录一次传输尝试；closed 态累计窗口，half-open 态只认当前探测票据
-// 半开探测失败、慢调用或 429 限流都重新打开，避免慢/过载下游仅凭一次探测就被放行
+// 半开探测健康则立即关闭，否则重新打开并重置计时
 // 返回 true 表示记录后熔断处于打开状态，调用方应停止后续重试
 func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool {
 	if b == nil {
@@ -106,12 +109,12 @@ func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool
 			return false
 		}
 		b.probeInFlight = false
-		if result.failure || result.slow || result.throttled {
-			b.open()
-			return true
+		if probePassed(result) {
+			b.close()
+			return false
 		}
-		b.close()
-		return false
+		b.open()
+		return true
 	default:
 		// 丢弃上一轮半开遗留的探测结果
 		if ticket.probe && ticket.seq != b.probeSeq {
@@ -139,7 +142,14 @@ func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) bool
 	}
 }
 
+// probePassed 判断半开探测结果是否健康：不失败、不慢、不被限流
+// 慢调用和 429 虽然不算 failure，但也不代表下游已恢复，仍重新打开
+func probePassed(result attemptResult) bool {
+	return !result.failure && !result.slow && !result.throttled
+}
+
 // onNeutral 记录中性结果：调用方取消等不反映下游健康度，不累计窗口，只释放当前探测位
+// 半开状态保持不变，下一次调用可以重新探测
 func (b *circuitBreaker) onNeutral(ticket breakerTicket) {
 	if b == nil {
 		return
@@ -159,7 +169,7 @@ func (b *circuitBreaker) slowThreshold() time.Duration {
 	return b.cfg.SlowThreshold
 }
 
-// open 打开熔断并清空窗口
+// open 打开熔断、重置打开计时并清空窗口
 func (b *circuitBreaker) open() {
 	b.state = breakerOpen
 	b.openUntil = time.Now().Add(b.cfg.OpenDuration)

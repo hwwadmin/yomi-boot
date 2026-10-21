@@ -267,3 +267,65 @@ func TestCircuitBreaker_RecordReportsOpen(t *testing.T) {
 		t.Fatal("半开探测成功应返回 false")
 	}
 }
+
+// TestCircuitBreaker_HalfOpenOnlyOneProbeInFlight 验证半开只放行一个探测请求
+func TestCircuitBreaker_HalfOpenOnlyOneProbeInFlight(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 1
+	cfg.MinRequests = 1
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	b := newCircuitBreaker(cfg)
+
+	ticket, _ := b.allow()
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	time.Sleep(30 * time.Millisecond)
+
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应放行一个探测: %v", err)
+	}
+	if !probe.probe {
+		t.Fatal("半开应返回探测票据")
+	}
+	if _, err := b.allow(); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("半开只允许一个探测，实际 %v", err)
+	}
+	if b.record(probe, attemptResult{counted: true}) {
+		t.Fatal("探测成功应关闭熔断")
+	}
+	if b.state != breakerClosed {
+		t.Fatalf("探测成功后应关闭，state=%d", b.state)
+	}
+}
+
+// TestCircuitBreaker_HalfOpenFailureResetsTimer 验证探测失败后重新打开并重置计时
+func TestCircuitBreaker_HalfOpenFailureResetsTimer(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 1
+	cfg.MinRequests = 1
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	cfg.OpenDuration = 50 * time.Millisecond
+	b := newCircuitBreaker(cfg)
+
+	ticket, _ := b.allow()
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	firstOpenUntil := b.openUntil
+
+	time.Sleep(60 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应放行探测: %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	if !b.record(probe, attemptResult{failure: true, counted: true}) {
+		t.Fatal("探测失败应返回打开状态")
+	}
+	if b.state != breakerOpen {
+		t.Fatalf("探测失败后应重新打开，state=%d", b.state)
+	}
+	if !b.openUntil.After(firstOpenUntil) {
+		t.Fatalf("探测失败后应重置打开计时，first=%v now=%v", firstOpenUntil, b.openUntil)
+	}
+}

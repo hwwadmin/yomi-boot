@@ -48,6 +48,7 @@ func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...Cli
 
 // Invoke 实现 RpcService.Invoke
 // 传输成功 = HTTP 200 且响应反序列化成功；业务成功由 req.BizHook 判定
+// 半开状态下只放行一个探测请求，探测不做内部重试
 func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if c == nil || c.httpClient == nil {
 		return errors.New("HttpRpcClient 未初始化")
@@ -112,6 +113,8 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				return allowErr
 			}
 		}
+		// 半开探测只放行一个请求：本次票据是探测票据时，不做内部重试
+		probeOnly := ticket.probe
 
 		url, err := c.resolveEndpoint(callCtx, req.Endpoint)
 		if err != nil {
@@ -120,7 +123,8 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
-			if !shouldRetry(callCtx, err, attempt, maxAttempts) {
+			// 探测不做发现重试：中性结果只释放探测位，下一次调用重新探测
+			if probeOnly || !shouldRetry(callCtx, err, attempt, maxAttempts) {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
@@ -148,6 +152,10 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 			// 熔断打开后立即停止本次调用的剩余重试，避免继续打已判定故障的下游
 			if c.breaker.record(ticket, c.classify(err, elapsed)) {
+				return err
+			}
+			// 半开探测只发一个请求，不进入重试
+			if probeOnly {
 				return err
 			}
 			if !shouldRetry(callCtx, err, attempt, maxAttempts) {
