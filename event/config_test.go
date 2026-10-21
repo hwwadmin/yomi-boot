@@ -21,6 +21,20 @@ func TestConfigConsumerDefaults(t *testing.T) {
 	}
 }
 
+// TestConfigOutboxDlqDefaults 校验发件箱死信配置默认值
+func TestConfigOutboxDlqDefaults(t *testing.T) {
+	config := Config{}
+	if got := config.OutboxDlqFrequencyOrDefault(); got != time.Second {
+		t.Fatalf("outbox_dlq_frequency_ms 默认值期望 1s，实际 %s", got)
+	}
+	if got := config.OutboxDlqSizeOrDefault(); got != 5000 {
+		t.Fatalf("outbox_dlq_size 默认值期望 5000，实际 %d", got)
+	}
+	if got := config.OutboxDlqMaxRetryOrDefault(); got != 30 {
+		t.Fatalf("outbox_dlq_max_retry 默认值期望 30，实际 %d", got)
+	}
+}
+
 // TestConfigCleanupDefaults 校验 outbox/inbox 清理默认值与独立配置
 func TestConfigCleanupDefaults(t *testing.T) {
 	runtime := runtimeFrom(Config{}, "app")
@@ -79,7 +93,7 @@ func TestConfigValidateFrequencyMinimum(t *testing.T) {
 	}{
 		{
 			name: "disabled accepts small value",
-			cfg:  Config{FetchFrequencyMS: 1, DlqFrequencyMS: 1},
+			cfg:  Config{FetchFrequencyMS: 1, OutboxDlqFrequencyMS: 1},
 		},
 		{
 			name: "fetch default value",
@@ -97,12 +111,12 @@ func TestConfigValidateFrequencyMinimum(t *testing.T) {
 		},
 		{
 			name:    "dlq below minimum",
-			cfg:     Config{PublisherEnabled: &enabled, DlqFrequencyMS: 49},
+			cfg:     Config{PublisherEnabled: &enabled, OutboxDlqFrequencyMS: 49},
 			wantErr: true,
 		},
 		{
 			name:    "dlq at minimum",
-			cfg:     Config{PublisherEnabled: &enabled, DlqFrequencyMS: 50},
+			cfg:     Config{PublisherEnabled: &enabled, OutboxDlqFrequencyMS: 50},
 			wantErr: false,
 		},
 	}

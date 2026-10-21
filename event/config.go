@@ -21,9 +21,9 @@ const (
 	defaultEventFetchFrequencyMS     = 1000
 	defaultEventFetchSize            = 5000
 	defaultEventSentThreadCount      = 2
-	defaultEventDlqFrequencyMS       = 1000
-	defaultEventDlqSize              = 5000
-	defaultEventDlqMaxRetry          = 30
+	defaultEventOutboxDlqFrequencyMS = 1000
+	defaultEventOutboxDlqSize        = 5000
+	defaultEventOutboxDlqMaxRetry    = 30
 	defaultEventFetchTimeoutMins     = 5
 	defaultEventConsumerMaxRetry     = 20
 	defaultEventInboxDlqFrequencyMS  = 30000
@@ -44,10 +44,10 @@ type Config struct {
 	SentThreadCount  int    `mapstructure:"sent_thread_count"`  // SentThreadCount 是发件箱 Kafka 发送工作池并发数
 
 	// outbox DLQ
-	DlqFrequencyMS      int  `mapstructure:"dlq_frequency_ms"`      // DlqFrequencyMS 是死信队列重试轮询频率（毫秒）
-	DlqSize             int  `mapstructure:"dlq_size"`              // DlqSize 是单次抓取死信记录数量
-	DlqMaxRetry         *int `mapstructure:"dlq_max_retry"`         // DlqMaxRetry 是死信队列最大重试次数，nil 默认 30，0 表示不重试
-	FetchTimeoutMinutes int  `mapstructure:"fetch_timeout_minutes"` // FetchTimeoutMinutes 是 FETCHED 状态超时回收时间（分钟）
+	OutboxDlqFrequencyMS int  `mapstructure:"outbox_dlq_frequency_ms"` // OutboxDlqFrequencyMS 是发件箱死信队列重试轮询频率（毫秒）
+	OutboxDlqSize        int  `mapstructure:"outbox_dlq_size"`         // OutboxDlqSize 是单次抓取发件箱死信记录数量
+	OutboxDlqMaxRetry    *int `mapstructure:"outbox_dlq_max_retry"`    // OutboxDlqMaxRetry 是发件箱死信队列最大重试次数，nil 默认 30，0 表示不重试
+	FetchTimeoutMinutes  int  `mapstructure:"fetch_timeout_minutes"`   // FetchTimeoutMinutes 是 FETCHED 状态超时回收时间（分钟）
 
 	// inbox DLQ
 	ConsumerMaxRetry    *int `mapstructure:"consumer_max_retry"`     // ConsumerMaxRetry 是消费失败最大重试次数（不含首次处理），nil 默认 20，0 不重试，-1 无限；Kafka MaxHandlerRetries 须为 -1 或不小于本值，否则 Kafka 会先丢弃消息
@@ -119,28 +119,28 @@ func (c Config) SentThreadCountOrDefault() int {
 	return c.SentThreadCount
 }
 
-// DlqFrequencyOrDefault 返回 DLQ 处理频率
-func (c Config) DlqFrequencyOrDefault() time.Duration {
-	if c.DlqFrequencyMS <= 0 {
-		return time.Duration(defaultEventDlqFrequencyMS) * time.Millisecond
+// OutboxDlqFrequencyOrDefault 返回发件箱死信队列处理频率
+func (c Config) OutboxDlqFrequencyOrDefault() time.Duration {
+	if c.OutboxDlqFrequencyMS <= 0 {
+		return time.Duration(defaultEventOutboxDlqFrequencyMS) * time.Millisecond
 	}
-	return time.Duration(c.DlqFrequencyMS) * time.Millisecond
+	return time.Duration(c.OutboxDlqFrequencyMS) * time.Millisecond
 }
 
-// DlqSizeOrDefault 返回 DLQ 抓取数量
-func (c Config) DlqSizeOrDefault() int {
-	if c.DlqSize <= 0 {
-		return defaultEventDlqSize
+// OutboxDlqSizeOrDefault 返回发件箱死信队列抓取数量
+func (c Config) OutboxDlqSizeOrDefault() int {
+	if c.OutboxDlqSize <= 0 {
+		return defaultEventOutboxDlqSize
 	}
-	return c.DlqSize
+	return c.OutboxDlqSize
 }
 
-// DlqMaxRetryOrDefault 返回 DLQ 最大重试次数
-func (c Config) DlqMaxRetryOrDefault() int {
-	if c.DlqMaxRetry == nil {
-		return defaultEventDlqMaxRetry
+// OutboxDlqMaxRetryOrDefault 返回发件箱死信队列最大重试次数
+func (c Config) OutboxDlqMaxRetryOrDefault() int {
+	if c.OutboxDlqMaxRetry == nil {
+		return defaultEventOutboxDlqMaxRetry
 	}
-	return *c.DlqMaxRetry
+	return *c.OutboxDlqMaxRetry
 }
 
 // FetchTimeoutOrDefault 返回 FETCHED 状态超时时间
@@ -243,17 +243,17 @@ func (c Config) Validate() error {
 	if c.SentThreadCount < 0 {
 		return errors.New("event.sent_thread_count 不能小于 0")
 	}
-	if c.DlqFrequencyMS < 0 {
-		return errors.New("event.dlq_frequency_ms 不能小于 0")
+	if c.OutboxDlqFrequencyMS < 0 {
+		return errors.New("event.outbox_dlq_frequency_ms 不能小于 0")
 	}
-	if c.DlqFrequencyMS > 0 && c.DlqFrequencyMS < minFrequencyMS {
-		return errors.Newf("event.dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
+	if c.OutboxDlqFrequencyMS > 0 && c.OutboxDlqFrequencyMS < minFrequencyMS {
+		return errors.Newf("event.outbox_dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
 	}
-	if c.DlqSize < 0 {
-		return errors.New("event.dlq_size 不能小于 0")
+	if c.OutboxDlqSize < 0 {
+		return errors.New("event.outbox_dlq_size 不能小于 0")
 	}
-	if c.DlqMaxRetry != nil && *c.DlqMaxRetry < 0 {
-		return errors.New("event.dlq_max_retry 不能小于 0")
+	if c.OutboxDlqMaxRetry != nil && *c.OutboxDlqMaxRetry < 0 {
+		return errors.New("event.outbox_dlq_max_retry 不能小于 0")
 	}
 	if c.FetchTimeoutMinutes < 0 {
 		return errors.New("event.fetch_timeout_minutes 不能小于 0")
@@ -303,17 +303,17 @@ func ConfigSection() config.Section {
 // runtimeFrom 从应用配置解析事件运行时配置
 func runtimeFrom(eventCfg Config, appName string) cfg.Runtime {
 	return cfg.Runtime{
-		ServiceName:       eventCfg.ServiceNameOrDefault(appName),
-		FetchFrequency:    eventCfg.FetchFrequencyOrDefault(),
-		FetchSize:         eventCfg.FetchSizeOrDefault(),
-		SentThreadCount:   eventCfg.SentThreadCountOrDefault(),
-		DlqFrequency:      eventCfg.DlqFrequencyOrDefault(),
-		DlqSize:           eventCfg.DlqSizeOrDefault(),
-		DlqMaxRetry:       eventCfg.DlqMaxRetryOrDefault(),
-		FetchTimeout:      eventCfg.FetchTimeoutOrDefault(),
-		ConsumerMaxRetry:  eventCfg.ConsumerMaxRetryOrDefault(),
-		InboxDlqFrequency: eventCfg.InboxDlqFrequencyOrDefault(),
-		InboxDlqSize:      eventCfg.InboxDlqSizeOrDefault(),
+		ServiceName:        eventCfg.ServiceNameOrDefault(appName),
+		FetchFrequency:     eventCfg.FetchFrequencyOrDefault(),
+		FetchSize:          eventCfg.FetchSizeOrDefault(),
+		SentThreadCount:    eventCfg.SentThreadCountOrDefault(),
+		OutboxDlqFrequency: eventCfg.OutboxDlqFrequencyOrDefault(),
+		OutboxDlqSize:      eventCfg.OutboxDlqSizeOrDefault(),
+		OutboxDlqMaxRetry:  eventCfg.OutboxDlqMaxRetryOrDefault(),
+		FetchTimeout:       eventCfg.FetchTimeoutOrDefault(),
+		ConsumerMaxRetry:   eventCfg.ConsumerMaxRetryOrDefault(),
+		InboxDlqFrequency:  eventCfg.InboxDlqFrequencyOrDefault(),
+		InboxDlqSize:       eventCfg.InboxDlqSizeOrDefault(),
 		OutboxCleanup: cleanupRuntime(
 			eventCfg.OutboxCleanupEnabled,
 			eventCfg.OutboxRetentionDays,

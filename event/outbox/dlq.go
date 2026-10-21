@@ -90,7 +90,7 @@ func (d *DlqHandler) ResetRetryCountInTimeRange(ctx context.Context, from, to ti
 // Start 启动 DLQ 重试轮询；启动失败时返回错误
 func (d *DlqHandler) Start(ctx context.Context, factory distlock.DistLockFactory) error {
 	name := d.cfg.RoundRobinName("MqEventPublisherDlq")
-	if err := roundrobin.Start(ctx, roundrobin.Simple(name, d.cfg.DlqFrequency), d.processDlq, factory); err != nil {
+	if err := roundrobin.Start(ctx, roundrobin.Simple(name, d.cfg.OutboxDlqFrequency), d.processDlq, factory); err != nil {
 		return errors.Wrap(err, "event: 启动发件箱死信队列处理器失败(%s)", name)
 	}
 	logger.InfoWithoutCtx("[消息队列事件]死信队列服务名", "name", name)
@@ -99,7 +99,7 @@ func (d *DlqHandler) Start(ctx context.Context, factory distlock.DistLockFactory
 
 // processDlq 从 DLQ 拉取待重试记录并逐一处理
 func (d *DlqHandler) processDlq(ctx context.Context) error {
-	entries, err := d.dlqRepo.Fetch(ctx, d.cfg.ServiceName, d.cfg.DlqSize, d.cfg.DlqMaxRetry, time.Now())
+	entries, err := d.dlqRepo.Fetch(ctx, d.cfg.ServiceName, d.cfg.OutboxDlqSize, d.cfg.OutboxDlqMaxRetry, time.Now())
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (d *DlqHandler) processOne(ctx context.Context, dlq model.SysEventOutboxDlq
 		return
 	}
 
-	if dlq.RetryCount >= d.cfg.DlqMaxRetry {
+	if dlq.RetryCount >= d.cfg.OutboxDlqMaxRetry {
 		return
 	}
 
@@ -159,14 +159,14 @@ func (d *DlqHandler) processOne(ctx context.Context, dlq model.SysEventOutboxDlq
 		dlq.RetryLastTime = &now
 		retryAfter := now.Add(dlqRetryDelay(dlq.RetryCount))
 		dlq.RetryAfterTime = &retryAfter
-		if dlq.RetryCount >= d.cfg.DlqMaxRetry {
+		if dlq.RetryCount >= d.cfg.OutboxDlqMaxRetry {
 			dlq.ErrorMsg = dlqExhaustedErrorMsg(dlq.ErrorMsg)
 			logger.Error(ctx, "DLQ 消息重试次数已超限，已停止重试",
 				"eventId", outbox.EventID,
 				"eventOutboxId", dlq.EventOutboxID,
 				"topic", outbox.Topic,
 				"retryCount", dlq.RetryCount,
-				"dlqMaxRetry", d.cfg.DlqMaxRetry,
+				"dlqMaxRetry", d.cfg.OutboxDlqMaxRetry,
 				"error", err)
 		}
 		if updateErr := d.dlqRepo.Update(ctx, &dlq); updateErr != nil {
