@@ -20,13 +20,13 @@ import (
 
 const fetchTimeoutLogSampleSize = 10
 
-// FetchTimeout 发件箱抓取超时回收器
+// FetchTimeout 发件箱 FETCHED 超时回收器
 type FetchTimeout struct {
 	cfg        cfg.Runtime
 	outboxRepo *repo.OutboxRepo
 }
 
-// NewFetchTimeout 创建抓取超时回收器
+// NewFetchTimeout 创建 FETCHED 超时回收器
 func NewFetchTimeout(runtime cfg.Runtime, outboxRepo *repo.OutboxRepo) *FetchTimeout {
 	return &FetchTimeout{cfg: runtime, outboxRepo: outboxRepo}
 }
@@ -37,11 +37,11 @@ func (f *FetchTimeout) Start(ctx context.Context, factory distlock.DistLockFacto
 	if err := roundrobin.Start(ctx, roundrobin.Simple(name, f.cfg.FetchFrequency), f.doTask, factory); err != nil {
 		return errors.Wrap(err, "event: 启动发件箱超时回收器失败(%s)", name)
 	}
-	logger.InfoWithoutCtx("[消息队列事件]超时抓取器服务名", "name", name)
+	logger.InfoWithoutCtx("[消息队列事件]FETCHED 超时回收器服务名", "name", name)
 	return nil
 }
 
-// doTask 检测并重置抓取超时的事件为待处理状态
+// doTask 检测并重置停留在 FETCHED 状态超时的事件为待处理状态
 func (f *FetchTimeout) doTask(ctx context.Context) error {
 	timeoutBefore := time.Now().Add(-f.cfg.FetchTimeout)
 	rows, err := f.outboxRepo.FetchFetchedTimeout(ctx, f.cfg.ServiceName, timeoutBefore)

@@ -36,18 +36,18 @@ const (
 
 // Config 表示消息队列事件配置
 type Config struct {
-	OutboxEnabled    *bool  `mapstructure:"outbox_enabled"`     // OutboxEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递），未配置默认 false
-	InboxEnabled     *bool  `mapstructure:"inbox_enabled"`      // InboxEnabled 是否启用消费侧（Receiver/Inbox），未配置默认 false
-	ServiceName      string `mapstructure:"service_name"`       // ServiceName 是归属业务系统名称，未配置时使用 app.name
-	FetchFrequencyMS int    `mapstructure:"fetch_frequency_ms"` // FetchFrequencyMS 是发件箱抓取频率（毫秒）
-	FetchSize        int    `mapstructure:"fetch_size"`         // FetchSize 是单次抓取待发件箱事件数量
-	SentThreadCount  int    `mapstructure:"sent_thread_count"`  // SentThreadCount 是发件箱 Kafka 发送工作池并发数
+	OutboxEnabled       *bool  `mapstructure:"outbox_enabled"`        // OutboxEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递），未配置默认 false
+	InboxEnabled        *bool  `mapstructure:"inbox_enabled"`         // InboxEnabled 是否启用消费侧（Receiver/Inbox），未配置默认 false
+	ServiceName         string `mapstructure:"service_name"`          // ServiceName 是归属业务系统名称，未配置时使用 app.name
+	FetchFrequencyMS    int    `mapstructure:"fetch_frequency_ms"`    // FetchFrequencyMS 是发件箱抓取频率（毫秒）
+	FetchSize           int    `mapstructure:"fetch_size"`            // FetchSize 是单次抓取待发件箱事件数量
+	SentThreadCount     int    `mapstructure:"sent_thread_count"`     // SentThreadCount 是发件箱 Kafka 发送工作池并发数
+	FetchTimeoutMinutes int    `mapstructure:"fetch_timeout_minutes"` // FetchTimeoutMinutes 是发件箱事件停留在 FETCHED 状态的最长分钟数；超过后重置为 PENDING 重新投递，未配置或 <=0 时默认 5 分钟
 
 	// outbox DLQ
 	OutboxDlqFrequencyMS int  `mapstructure:"outbox_dlq_frequency_ms"` // OutboxDlqFrequencyMS 是发件箱死信队列重试轮询频率（毫秒）
 	OutboxDlqSize        int  `mapstructure:"outbox_dlq_size"`         // OutboxDlqSize 是单次抓取发件箱死信记录数量
 	OutboxDlqMaxRetry    *int `mapstructure:"outbox_dlq_max_retry"`    // OutboxDlqMaxRetry 是发件箱死信队列最大重试次数，nil 默认 30，0 表示不重试
-	FetchTimeoutMinutes  int  `mapstructure:"fetch_timeout_minutes"`   // FetchTimeoutMinutes 是 FETCHED 状态超时回收时间（分钟）
 
 	// inbox DLQ
 	InboxDlqMaxRetry    *int `mapstructure:"inbox_dlq_max_retry"`    // InboxDlqMaxRetry 是消费失败最大重试次数（不含首次处理），nil 默认 20，0 不重试，-1 无限；Kafka MaxHandlerRetries 须为 -1 或不小于本值，否则 Kafka 会先丢弃消息
@@ -143,7 +143,7 @@ func (c Config) OutboxDlqMaxRetryOrDefault() int {
 	return *c.OutboxDlqMaxRetry
 }
 
-// FetchTimeoutOrDefault 返回 FETCHED 状态超时时间
+// FetchTimeoutOrDefault 返回 FETCHED 事件超时重置为 PENDING 的时长
 func (c Config) FetchTimeoutOrDefault() time.Duration {
 	if c.FetchTimeoutMinutes <= 0 {
 		return time.Duration(defaultEventFetchTimeoutMins) * time.Minute

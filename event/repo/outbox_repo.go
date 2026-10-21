@@ -68,7 +68,7 @@ func (r *OutboxRepo) FetchPending(ctx context.Context, serviceName string, size 
 	return rows, nil
 }
 
-// FetchFetchedTimeout 获取抓取超时事件
+// FetchFetchedTimeout 获取停留在 FETCHED 状态超时的事件
 func (r *OutboxRepo) FetchFetchedTimeout(ctx context.Context, serviceName string, timeoutBefore time.Time) ([]model.SysEventOutbox, error) {
 	var rows []model.SysEventOutbox
 	err := db.Exec(ctx, r.DB).
@@ -77,7 +77,7 @@ func (r *OutboxRepo) FetchFetchedTimeout(ctx context.Context, serviceName string
 			serviceName, model.OutboxStatusFetched, timeoutBefore).
 		Find(&rows).Error
 	if err != nil {
-		return nil, errors.Wrap(err, "查询抓取超时发件箱事件失败")
+		return nil, errors.Wrap(err, "查询 FETCHED 超时发件箱事件失败")
 	}
 	return rows, nil
 }
