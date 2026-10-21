@@ -12,7 +12,7 @@ import (
 	stderrors "errors"
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // wrapSentinel 将本包哨兵与上游原因同时放入错误链，便于按错误链判断；原因为空时仅拍哨兵栈

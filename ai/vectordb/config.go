@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // Provider 向量库实现标识

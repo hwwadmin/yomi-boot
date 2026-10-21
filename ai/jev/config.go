@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // Protocol Jev 上游协议标识

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // TestNewSplitterDefault 覆盖零配置默认策略

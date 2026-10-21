@@ -4,7 +4,7 @@
 
 package rag
 
-import "gitee.com/hq_project/yomi-boot/errors"
+import "gitee.com/hq_project/yomi-boot/boot/errors"
 
 // fixedSplitter 按固定 rune 窗口切分，不识别词语或句末
 type fixedSplitter struct {

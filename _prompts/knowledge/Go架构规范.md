@@ -62,7 +62,7 @@
 #### 3.1.0 gitee.com/hq_project/yomi-boot 部署形态无关（配置裁剪）
 
 - gitee.com/hq_project/yomi-boot 是**能力库 + 插件生命周期**，不是「必须微服务」的运行时。
-- 插件在 `bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `infra_plugins.go` 与各 `{lib}/plugin`）。
+- 插件在 `boot/bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `boot/bootstrap/infra_plugins.go` 与各组件 `plugin/` 子包）。
 - 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见 [Go配置规范](./Go配置规范.md)「能力按需裁剪」与本文 §3.4.5。
 - 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 gitee.com/hq_project/yomi-boot 的唯一用法。
 - 单体形态下：可无 Consul/DTM/Kafka/Redis Stream；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
@@ -96,10 +96,12 @@
 
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
-- `gitee.com/hq_project/yomi-boot/` 提供 config、plugin（生命周期框架）、各库 `*/plugin` 内置生命周期实现、logger、db、redis、router、runner、consul、dtm、rpc、distlock、errors、traceid、token、kafka、**redisstream**、httprecord、snowflake、**pprof**、**idempotency**、**ratelimit**、**bc**、**event**、**roundrobin**、**cronjob**、**appctx**、**banner**、**worker**、**testclient**、**ai/llm**、**ai/embedding**、**ai/jev**、**ai/rag**、**ai/vectordb** 等能力；**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
+- 仓库按四层组织：`ai/`（可选 AI 能力簇）、`boot/`（项目基础件）、`component/`（单一中间件/外部服务的通用组件）、`cloud/`（跨服务/多实例分布式组件）。
+- `boot/` 提供 config、plugin（生命周期框架）、logger、router、runner、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、testclient、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、ratelimit、oss、idempotency、event、distlock、roundrobin、cronjob 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
+- 各组件 `plugin` 子包跟随组件目录：`boot/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
-- `gitee.com/hq_project/yomi-boot/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
-- `gitee.com/hq_project/yomi-boot/ratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
+- `gitee.com/hq_project/yomi-boot/component/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
+- `gitee.com/hq_project/yomi-boot/component/ratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
 
 ### 3.2 标准目录结构（模式）
 
@@ -108,8 +110,10 @@
 ```text
 # gitee.com/hq_project/yomi-boot 仓库（本库）
 gitee.com/hq_project/yomi-boot/                               # module: gitee.com/hq_project/yomi-boot
-├── bootstrap/, plugin/, config/, ...
-└── （能力包见 §3.3）
+├── ai/                          # 可选 AI 能力簇（不进 bootstrap）
+├── boot/                        # 项目基础件
+├── component/                   # 通用组件
+└── cloud/                       # 分布式组件
 
 # 业务工程仓库（示例）
 {business-repo}/
@@ -164,15 +168,26 @@ services/{domain}/
 
 ### 3.3 gitee.com/hq_project/yomi-boot 模块职责
 
+归属速查：
+
+| 目录 | 包 |
+| ---- | -- |
+| `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
+| `boot/` | `bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`requestguard`、`shared`、`utils`、`bc`、`ws`、`worker`、`snowflake`、`pprof`、`testclient`、`banner` |
+| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`ratelimit`、`roundrobin`、`cronjob`、`token` |
+| `cloud/` | `consul`、`dtm`、`rpc` |
+
+依赖方向：`ai → boot`，`component → boot`，`cloud → boot + component`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`。
+
 | 包 | 职责 |
 | -- | ---- |
 | `bootstrap` | `MustInitInfra`、`MustBuildServer`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
 | `plugin` | 生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`（与 `config` 同层） |
-| `{lib}/plugin` | 各库内置生命周期插件实现（如 `db/plugin`、`redis/plugin`；`tx` 挂在 `db/plugin`）；包名 `{lib}plugin` |
+| `{lib}/plugin` | 各组件的内置生命周期插件实现，跟随组件目录：`component/db/plugin`、`component/redis/plugin`、`cloud/consul/plugin` 等；`tx` 挂在 `component/db/plugin`；包名 `{lib}plugin` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
-| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
+| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `boot/pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
@@ -229,9 +244,9 @@ services/{domain}/
 
 | 文件 | 表名 | 说明 |
 | ---- | ---- | ---- |
-| `gitee.com/hq_project/yomi-boot/idempotency/sys_biz.sql` | `sys_biz` | 业务幂等表 |
-| `gitee.com/hq_project/yomi-boot/dtm/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
-| `gitee.com/hq_project/yomi-boot/event/sql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
+| `gitee.com/hq_project/yomi-boot/component/idempotency/sys_biz.sql` | `sys_biz` | 业务幂等表 |
+| `gitee.com/hq_project/yomi-boot/cloud/dtm/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
+| `gitee.com/hq_project/yomi-boot/component/event/sql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
 
 **gitee.com/hq_project/yomi-boot 明确不包含**：业务 handler/usecase、各领域 `bizerr` 哨兵。
 
@@ -252,11 +267,11 @@ cmd/main.go
   └─ runner.Run(name, bootstrap.NewServer)
        └─ services/*/internal/bootstrap/server.go
             ├─ InfraOptions（按需 AddConfigSection / AddCustomPlugin）
-            ├─ gitee.com/hq_project/yomi-boot/bootstrap.MustInitInfra(configPath, envPrefix, opts)
+            ├─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustInitInfra(configPath, envPrefix, opts)
             │     ├─ DefaultConfigRegistry + MustLoadDocument
             │     └─ plugin.Run(host, buildInfraPlugins(opts))   # 按序 Init；是否启动看各段 enabled
             ├─ wireHandlers(infra) → []router.Registrar         # 手写 wiring，在 server.go 内
-            └─ gitee.com/hq_project/yomi-boot/bootstrap.MustBuildServer(infra, registrars, middlewares)
+            └─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustBuildServer(infra, registrars, middlewares)
 ```
 
 #### 3.4.3 bootstrap 约定
@@ -268,7 +283,7 @@ cmd/main.go
 
 #### 3.4.4 插件生命周期
 
-**接口**（`gitee.com/hq_project/yomi-boot/plugin`；内置实现见各库 `gitee.com/hq_project/yomi-boot/{lib}/plugin`）：
+**接口**（`gitee.com/hq_project/yomi-boot/boot/plugin`；内置实现见各组件的 `plugin` 子包，如 `component/db/plugin`、`cloud/consul/plugin`）：
 
 ```go
 type Plugin interface {
@@ -369,7 +384,7 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 - 入口编排 handler 注册**相对路径**，完整 URL = `http.router_prefix` + 相对路径。
 - **入口编排对外主输入**：默认推荐 **POST + JSON Body**；允许 GET（CDN/SEO）。若 GET 仅用 Query 承载主输入，须在该接口契约中**显式约定**（非默认）。
 - 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。详见 [微服务调用规范](./微服务调用规范.md) §3.1.1。
-- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`gitee.com/hq_project/yomi-boot/traceid`），**不在** JSON Body 信封中传递。
+- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`gitee.com/hq_project/yomi-boot/boot/traceid`），**不在** JSON Body 信封中传递。
 - 微服务间请求/响应契约见 [微服务调用规范](./微服务调用规范.md) §3（权威）。
 - 对外出口编码适配见 [API编码适配规范](./API编码适配规范.md)（**不**规定 HTTP 方法；方法以本节约定为准）。
 - 路径中资源段使用**单数名词**，禁止无意义复数。
@@ -384,16 +399,16 @@ CORS → traceid → httprecord → AccessMiddleware → requestguard → Recove
 
 - **顺序约束**：`httprecord` 与文件 `AccessMiddleware` 必须位于 `requestguard` **外侧**。`requestguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
 - `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时直接放行。
-- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/rpc` 自动回填 Header。
+- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)。
 - 领域**读**（微服务间）：对内信封与 HTTP 状态见 [微服务调用规范](./微服务调用规范.md) §3.3.1。
-- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`gitee.com/hq_project/yomi-boot/dtm`）。
+- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`gitee.com/hq_project/yomi-boot/cloud/dtm`）。
 
 ### 3.8 pprof 排障
 
 - 配置项：`pprof.enabled`（默认 `false`）、`pprof.addr`（独立 debug 端口，由各可部署单元自行配置，避免端口冲突）。
-- 由 `pprof/plugin` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
+- 由 `boot/pprof/plugin` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
 - 常用命令：
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/profile?seconds=30`
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/heap`
@@ -401,9 +416,9 @@ CORS → traceid → httprecord → AccessMiddleware → requestguard → Recove
 
 ### 3.9 配置约定
 
-环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`gitee.com/hq_project/yomi-boot/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
+环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`gitee.com/hq_project/yomi-boot/boot/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
 
-`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/config.Load` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
+`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/boot/config.Load` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
 
 ```yaml
 # 入口编排 config/local.yml 示意
@@ -541,7 +556,7 @@ kafka: ...
 
 - 业务以独立工程 + 可部署单元组织；禁止在业务工程根目录放置业务 `internal/biz` 或业务装配入口（应落在各可部署单元内）。基于 gitee.com/hq_project/yomi-boot 的单进程部署仍属合法形态（见 §3.1.0）。
 - 禁止领域进程之间 HTTP 互调（分布式形态；单体进程内模块调用不受此限）。
-- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `auth` 段）。
+- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/component/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `auth` 段）。
 - 禁止服务间默认使用 gRPC 等其他 RPC 协议替代 HTTP（分布式形态）。
 - 禁止在 JSON Body 中传递 `traceId`（统一使用 Header `X-Trace-ID`）。
 - 禁止在领域 handler/usecase 中读取 token 或 `SessionFromContext`（分布式形态下的领域服务类型）。

@@ -7,6 +7,15 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 可通过 [https://gitee.com/hq_project/yomi-boot-template](https://gitee.com/hq_project/yomi-boot-template) 模板项目快速开始。
 
+## 目录结构
+
+| 目录 | 职责 |
+| ---- | ---- |
+| `ai/` | 可选 AI 能力簇（LLM、Embedding、Jev、RAG、VectorDB）；不进 bootstrap、不读 YAML、不参与插件生命周期 |
+| `boot/` | 项目基础件：配置、日志、HTTP 内核、上下文、生命周期、加密、进程内工具 |
+| `component/` | 通用组件：DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度等 |
+| `cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
+
 
 ## 中间件推荐适配版本
 

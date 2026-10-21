@@ -4,7 +4,7 @@
 
 package jev
 
-import "gitee.com/hq_project/yomi-boot/errors"
+import "gitee.com/hq_project/yomi-boot/boot/errors"
 
 var (
 	// ErrInvalidArgument 配置或请求未通过本包校验；不含上游 HTTP 400

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // validCfg 返回可通过构造校验的占位配置；不发起网络

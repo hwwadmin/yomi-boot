@@ -22,11 +22,11 @@
 
 ### 2.1 适用范围
 
-- 适用于 `gitee.com/hq_project/yomi-boot/errors` 系统级错误包（`errors.New`、`errors.Wrap`、`errors.Stack` 等）。
-- 适用于 `gitee.com/hq_project/yomi-boot/errors.BizError`（可选，用于域错误携带 Code/Message）。
-- 适用于 `gitee.com/hq_project/yomi-boot/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
-- 适用于 `gitee.com/hq_project/yomi-boot/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
-- 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/bootstrap` 中间件链 Recovery）。
+- 适用于 `gitee.com/hq_project/yomi-boot/boot/errors` 系统级错误包（`errors.New`、`errors.Wrap`、`errors.Stack` 等）。
+- 适用于 `gitee.com/hq_project/yomi-boot/boot/errors.BizError`（可选，用于域错误携带 Code/Message）。
+- 适用于 `gitee.com/hq_project/yomi-boot/boot/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
+- 适用于 `gitee.com/hq_project/yomi-boot/boot/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
+- 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/boot/bootstrap` 中间件链 Recovery）。
 
 ### 2.2 关联文档
 
@@ -46,14 +46,14 @@
 
 | 层级 | 包路径 | 用途 | 关键特征 |
 | ---- | ------ | ---- | -------- |
-| 系统级错误 | `gitee.com/hq_project/yomi-boot/errors` | 非业务错误（基础设施、IO、序列化等），带调用栈 | 基于 `github.com/pkg/errors`；`New`/`Newf`/`Wrap`/`Sentinel` 拍栈 |
+| 系统级错误 | `gitee.com/hq_project/yomi-boot/boot/errors` | 非业务错误（基础设施、IO、序列化等），带调用栈 | 基于 `github.com/pkg/errors`；`New`/`Newf`/`Wrap`/`Sentinel` 拍栈 |
 | 简单哨兵 | `shared/error` 或各库就近 | 框架/通用失败；`Error()` **即为线上 code** | 用 `errors.NewNoStack` 定义（无栈身份）；返回时 `errors.Sentinel` |
-| 业务异常（可选） | `gitee.com/hq_project/yomi-boot/errors.BizError` | 域规则违背，需同时带 Code 与调试 Message | `NewBiz` / `NewBizf` / `WrapBiz`；按 Code 做 `errors.Is` |
+| 业务异常（可选） | `gitee.com/hq_project/yomi-boot/boot/errors.BizError` | 域规则违背，需同时带 Code 与调试 Message | `NewBiz` / `NewBizf` / `WrapBiz`；按 Code 做 `errors.Is` |
 
-#### 3.1.1 系统级错误 `gitee.com/hq_project/yomi-boot/errors`
+#### 3.1.1 系统级错误 `gitee.com/hq_project/yomi-boot/boot/errors`
 
 ```go
-import "gitee.com/hq_project/yomi-boot/errors"
+import "gitee.com/hq_project/yomi-boot/boot/errors"
 
 func New(text string) error                          // 创建并拍栈（一次性错误）
 func Newf(format string, args ...any) error          // 格式化创建并拍栈
@@ -71,7 +71,7 @@ func Stack(err error) string
 #### 3.1.2 简单哨兵（推荐框架与通用错误）
 
 ```go
-// gitee.com/hq_project/yomi-boot/shared/error — 仅跨库通用（无栈身份）
+// gitee.com/hq_project/yomi-boot/boot/shared/error — 仅跨库通用（无栈身份）
 var ErrInternal = errors.NewNoStack("INTERNAL_ERROR") // 系统内部错误
 
 // 库私有：在使用处就近定义，禁止一个 errors.go 堆砌无关哨兵
@@ -82,12 +82,12 @@ var ErrTokenRequired = errors.NewNoStack("TOKEN_REQUIRED") // 缺少访问令牌
 return errors.Sentinel(ErrTokenRequired)
 ```
 
-- **通用**（多库共用）→ `gitee.com/hq_project/yomi-boot/shared/error`。
+- **通用**（多库共用）→ `gitee.com/hq_project/yomi-boot/boot/shared/error`。
 - **非通用** → 哪个库用就在哪个库定义；不要集中到无关包。
 - **权限类**（如 `PERMISSION_DENIED`）由**业务**定义，gitee.com/hq_project/yomi-boot 不提供。
 - **禁止**裸 `return ErrXxx`；中间层对已 `Sentinel`/`Wrap` 的 err 只透传，禁止再包。
 
-#### 3.1.3 业务异常 `gitee.com/hq_project/yomi-boot/errors.BizError`（域错误可选）
+#### 3.1.3 业务异常 `gitee.com/hq_project/yomi-boot/boot/errors.BizError`（域错误可选）
 
 ```go
 type BizError struct {
@@ -192,8 +192,8 @@ BindAndHandle / Handle / ...
 
 | 层级 | 示例 | 定义位置 |
 | ---- | ---- | -------- |
-| 系统通用 | `INTERNAL_ERROR`、`INVALID_BODY`、`INVALID_INPUT`、`REQUEST_TIMEOUT`、`REQUEST_BODY_TOO_LARGE` | `gitee.com/hq_project/yomi-boot/shared/error` |
-| 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `gitee.com/hq_project/yomi-boot/token` 就近 |
+| 系统通用 | `INTERNAL_ERROR`、`INVALID_BODY`、`INVALID_INPUT`、`REQUEST_TIMEOUT`、`REQUEST_BODY_TOO_LARGE` | `gitee.com/hq_project/yomi-boot/boot/shared/error` |
+| 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `gitee.com/hq_project/yomi-boot/component/token` 就近 |
 | 限流 / 下游 | `RATE_LIMITED`、`DOWNSTREAM_ERROR` | 对应库就近 |
 | 业务域 | `USER_NOT_FOUND` 等 | 各服务 `bizerr` |
 | 权限域 | `PERMISSION_DENIED` 等 | **仅业务仓**，gitee.com/hq_project/yomi-boot 不定义 |
@@ -202,10 +202,10 @@ BindAndHandle / Handle / ...
 
 | 内容 | 位置 |
 | ---- | ---- |
-| 跨库通用哨兵 | `gitee.com/hq_project/yomi-boot/shared/error/error.go` |
+| 跨库通用哨兵 | `gitee.com/hq_project/yomi-boot/boot/shared/error/error.go` |
 | 库私有哨兵 | 使用该错误的源文件内就近 `var` |
 | 服务域哨兵 | `services/{unit}/internal/biz/bizerr/` 或入口编排 `internal/bizerr/` |
-| `BizError` 类型 | `gitee.com/hq_project/yomi-boot/errors/biz_error.go` |
+| `BizError` 类型 | `gitee.com/hq_project/yomi-boot/boot/errors/biz_error.go` |
 
 ### 3.5 启动阶段异常（Fail Fast）
 

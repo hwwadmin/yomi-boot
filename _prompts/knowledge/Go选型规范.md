@@ -86,12 +86,12 @@
 | Kafka 消息 | `kafka/` + `github.com/segmentio/kafka-go` | 跨服务事件流、较长留存/回放等场景按需启用 | 业务直依赖其它 Kafka 客户端 |
 | Redis Stream 消息 | `redisstream/` + `go-redis` | 同 Redis 运维面的轻量 Stream 队列，按需启用；不耦合 `RedisService` | 业务直写 XADD/XREADGROUP 散落各处 |
 | 可靠领域事件 | `event/`（Outbox/Inbox） | DB 侧可靠投递；当前传输侧接 Kafka，按需启用 | 用消息中间件替代本地事务边界 |
-| 分布式锁 | `github.com/go-redsync/redsync/v4`（经 `gitee.com/hq_project/yomi-boot/distlock` 封装） | 基于 Redis 的分布式锁，支持看门狗、超时、可选 Key 命名空间 | 其他分布式锁实现 |
-| 业务日历定时任务 | `github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/cronjob` 封装） | cron 表达式触发 + distlock 集群互斥；与 runner/`ctx` 同生命周期 | 业务模块直接依赖 `robfig/cron`；用 `roundrobin` 冒充日历任务 |
-| HTTP RPC | `gitee.com/hq_project/yomi-boot/rpc`（`gitee.com/hq_project/yomi-boot/rpc` 包） | 轻量 HTTP RPC 读封装：Consul 发现、JSON 信封、传输层短退避重试与 per-service 熔断；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
+| 分布式锁 | `github.com/go-redsync/redsync/v4`（经 `gitee.com/hq_project/yomi-boot/component/distlock` 封装） | 基于 Redis 的分布式锁，支持看门狗、超时、可选 Key 命名空间 | 其他分布式锁实现 |
+| 业务日历定时任务 | `github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/component/cronjob` 封装） | cron 表达式触发 + distlock 集群互斥；与 runner/`ctx` 同生命周期 | 业务模块直接依赖 `robfig/cron`；用 `roundrobin` 冒充日历任务 |
+| HTTP RPC | `gitee.com/hq_project/yomi-boot/cloud/rpc`（`gitee.com/hq_project/yomi-boot/cloud/rpc` 包） | 轻量 HTTP RPC 读封装：Consul 发现、JSON 信封、传输层短退避重试与 per-service 熔断；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
 | 并发控制 | `context` + `sync` + `golang.org/x/sync/errgroup` | 生命周期和错误传播清晰，接近原生模型 | 自定义协程框架 |
 | 日志 | `go.uber.org/zap` | 结构化日志，控制台 + JSON 文件双路输出 | `log/slog`、`logrus` 作为默认入口 |
-| 性能剖析 | `net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/pprof` 封装） | 独立 debug 端口，CPU/内存/goroutine 排障 | OpenTelemetry、`prometheus/client_golang`、黑盒观测 SDK |
+| 性能剖析 | `net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/boot/pprof` 封装） | 独立 debug 端口，CPU/内存/goroutine 排障 | OpenTelemetry、`prometheus/client_golang`、黑盒观测 SDK |
 | 测试 | `testing` + `httptest` + `github.com/google/go-cmp/cmp` + `testcontainers-go` | 标准库优先，最小辅助库补齐对比和集成测试 | 大量 mock 框架作为默认测试方案 |
 | DI | 手写 Wiring，各服务 `internal/bootstrap/server.go` 组合根 | 依赖关系显式、调试简单、与 Go 风格一致 | `fx`、`dig`、`github.com/google/wire` 等 DI 框架 |
 | 服务注册发现 | Consul | 微服务注册、健康检查、HTTP 服务发现 | Eureka、Nacos 作为默认方案 |
@@ -121,14 +121,14 @@
 #### 3.3.3 日志与性能剖析
 
 - 日志默认选型：`go.uber.org/zap`。
-- 性能剖析默认选型：`net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/pprof` 提供独立 debug 端口）。
+- 性能剖析默认选型：`net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/boot/pprof` 提供独立 debug 端口）。
 - 选型理由：
   - `zap` 性能高、结构化能力强，适合控制台与 JSON 文件双路输出场景。
   - `pprof` 为标准库能力，零额外依赖，适合 CPU、堆内存、goroutine 泄漏等排障场景。
 - 配套约束：
-  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `pprof/plugin` 在 `MustInitInfra` 阶段启动。
+  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `boot/pprof/plugin` 在 `MustInitInfra` 阶段启动。
   - pprof 端口仅供内网排障，不注册 Consul、不挂业务网关。
-  - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
+  - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/boot/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
 - 不作为默认：`log/slog`、`logrus`；OpenTelemetry、`prometheus/client_golang`、Grafana/Jaeger 等观测平台（当前阶段不建设）。
 
 #### 3.3.4 数据库与缓存
@@ -142,16 +142,16 @@
 
 #### 3.3.5 外部调用、服务发现、分布式事务与消息能力
 
-- **服务间通信**：HTTP/HTTPS only；BFF 经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，基于 `gitee.com/hq_project/yomi-boot/rpc`）调用领域服务，**默认不使用 gRPC**。
-- HTTP Client：`gitee.com/hq_project/yomi-boot/rpc` 封装 POST JSON + Consul 发现；由领域 client 使用，信封口径见 [微服务调用规范](./微服务调用规范.md) §3.2。
+- **服务间通信**：HTTP/HTTPS only；BFF 经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，基于 `gitee.com/hq_project/yomi-boot/cloud/rpc`）调用领域服务，**默认不使用 gRPC**。
+- HTTP Client：`gitee.com/hq_project/yomi-boot/cloud/rpc` 封装 POST JSON + Consul 发现；由领域 client 使用，信封口径见 [微服务调用规范](./微服务调用规范.md) §3.2。
 - JSON：`encoding/json`（标准库）。
 - **服务注册发现**：Consul；各服务启动注册，BFF 按服务名发现下游。
 - **分布式事务**：DTM Saga；BFF 提交 Saga，领域服务在 barrier 下执行本地子事务。
 - **消息能力**（均为可选，按配置启用，互不替代）：
-  - `gitee.com/hq_project/yomi-boot/kafka/`：Kafka 发布/消费；测试用 `kafka/kafkatest`（底层 `franz-go/kfake`），**franz-go 不得进入生产代码路径**。
-  - `gitee.com/hq_project/yomi-boot/redisstream/`：Redis Stream 发布/消费组；复用 `RedisClient`，不耦合 `RedisService`。
-  - `gitee.com/hq_project/yomi-boot/event/`：Outbox/Inbox 可靠领域事件（当前传输侧接 Kafka）。
-- **WebSocket**（可选）：`gitee.com/hq_project/yomi-boot/ws/`（底层 `github.com/coder/websocket`）；独立端口 Server / Client，构造期 Config 多实例装配，无 yml 段与默认插件；单条消息大小由 `WriteMaxPayloadSize` / `ReadMaxPayloadSize` 约束；可选 `MaxFramePayloadSize` 做出站协议分片（0=关闭；超限自动 continuation；可与压缩同开，压缩时帧长尽力而为）。小文件可直接走 WS（体量对齐 `WriteMaxPayloadSize`，默认 256KiB）；大文件经 `oss`（RustFS / S3 / OSS）上传或预签名直传，WS 只推 uri / 进度 / 完成失败等控制报文，勿靠调高读写上限整包传输。
+  - `gitee.com/hq_project/yomi-boot/component/kafka/`：Kafka 发布/消费；测试用 `kafka/kafkatest`（底层 `franz-go/kfake`），**franz-go 不得进入生产代码路径**。
+  - `gitee.com/hq_project/yomi-boot/component/redisstream/`：Redis Stream 发布/消费组；复用 `RedisClient`，不耦合 `RedisService`。
+  - `gitee.com/hq_project/yomi-boot/component/event/`：Outbox/Inbox 可靠领域事件（当前传输侧接 Kafka）。
+- **WebSocket**（可选）：`gitee.com/hq_project/yomi-boot/boot/ws/`（底层 `github.com/coder/websocket`）；独立端口 Server / Client，构造期 Config 多实例装配，无 yml 段与默认插件；单条消息大小由 `WriteMaxPayloadSize` / `ReadMaxPayloadSize` 约束；可选 `MaxFramePayloadSize` 做出站协议分片（0=关闭；超限自动 continuation；可与压缩同开，压缩时帧长尽力而为）。小文件可直接走 WS（体量对齐 `WriteMaxPayloadSize`，默认 256KiB）；大文件经 `oss`（RustFS / S3 / OSS）上传或预签名直传，WS 只推 uri / 进度 / 完成失败等控制报文，勿靠调高读写上限整包传输。
 - **向量库**（可选）：`gitee.com/hq_project/yomi-boot/ai/vectordb/`（底层 `github.com/milvus-io/milvus/client/v2` + 进程内 memory）；构造期 `New`/`MustNew` 传入 Config，无 yml 段与默认插件。一实例锁定 Dimension 与 Metric（`COSINE` 默认，可配 `L2` / `IP`）。业务禁止直引 Milvus SDK。
 - **RAG 检索增强数据层**（可选）：`gitee.com/hq_project/yomi-boot/ai/rag/` 组合 `ai/embedding` + `ai/vectordb`，提供多种切块策略（recursive / fixed / sentence / markdown，可自定义 `Splitter`）、入库、检索与删除，不含大模型问答；同一个 Engine 可服务多个集合，集合名按调用传入，构造期 `New`/`MustNew` 只传依赖，无 yml 段与默认插件。业务需要问答时，可在业务侧用 `ai/llm` 组合检索结果自行实现。
 - 服务间默认同步通信仍是 HTTP；异步是否启用、选用哪种消息能力由业务场景决定。
@@ -165,7 +165,7 @@
 
 #### 3.3.7 依赖注入与参数校验
 
-- DI：手写 Wiring，各微服务 `internal/bootstrap/server.go` 为组合根；共享基础设施由 `gitee.com/hq_project/yomi-boot/bootstrap.MustInitInfra` 经插件链初始化（Fail Fast），通过显式 `NewXxx` 构造函数链完成业务依赖装配。
+- DI：手写 Wiring，各微服务 `internal/bootstrap/server.go` 为组合根；共享基础设施由 `gitee.com/hq_project/yomi-boot/boot/bootstrap.MustInitInfra` 经插件链初始化（Fail Fast），通过显式 `NewXxx` 构造函数链完成业务依赖装配。
 - 共享基础设施收口在 `gitee.com/hq_project/yomi-boot` module，各业务服务 `go.mod`：标准 `require gitee.com/hq_project/yomi-boot`（本地可用 `go.work` / 相对路径 `replace`）。
 - 参数校验：显式代码校验，必要时局部补充轻量校验库。
 - 不作为默认：反射式/代码生成 DI 框架（如 `fx`、`dig`、`github.com/google/wire`）；大范围 tag 反射校验框架。
@@ -179,9 +179,9 @@
 
 #### 3.3.9 业务日历定时任务
 
-- 默认选型：`github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/cronjob` 封装）。
-- 选型理由：日历表达式触发成熟；集群互斥复用 `gitee.com/hq_project/yomi-boot/distlock`；生命周期仅认 `ctx`，与 runner / plugin 拼装一致。
-- 配套约束：业务模块禁止直接依赖 `robfig/cron`；内部固定间隔轮询（Outbox 等）继续使用 `gitee.com/hq_project/yomi-boot/roundrobin`，不得用本能力冒充。
+- 默认选型：`github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/component/cronjob` 封装）。
+- 选型理由：日历表达式触发成熟；集群互斥复用 `gitee.com/hq_project/yomi-boot/component/distlock`；生命周期仅认 `ctx`，与 runner / plugin 拼装一致。
+- 配套约束：业务模块禁止直接依赖 `robfig/cron`；内部固定间隔轮询（Outbox 等）继续使用 `gitee.com/hq_project/yomi-boot/component/roundrobin`，不得用本能力冒充。
 - 不作为默认：各服务自行引入 cron 库、中心化调度框架、用 `roundrobin` 表达日历任务。
 
 ### 3.4 不作为默认选型的技术
@@ -214,7 +214,7 @@
 - [ ] 数据库引擎与 SQL 访问方案已分开描述，默认口径为 MySQL + `gorm`
 - [ ] 本地事务使用 `gorm.DB.Transaction`，未引入额外事务框架
 - [ ] 配置使用 `viper`，未并存第二套配置库；所有配置项已在 yml 中显化
-- [ ] 日志使用 `go.uber.org/zap`，统一通过 `gitee.com/hq_project/yomi-boot/logger` 输出，未并存 `log/slog`、`logrus` 等第二套日志入口
+- [ ] 日志使用 `go.uber.org/zap`，统一通过 `gitee.com/hq_project/yomi-boot/boot/logger` 输出，未并存 `log/slog`、`logrus` 等第二套日志入口
 - [ ] 服务间通信默认 HTTP/HTTPS，未将 gRPC 作为服务间默认协议
 - [ ] 服务注册发现使用 Consul；跨域写使用 DTM Saga
 - [ ] DI 通过各服务 `internal/bootstrap/server.go` 手写 Wiring，未引入 Google `wire` / `fx` / `dig` 等 DI 框架

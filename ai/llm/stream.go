@@ -10,7 +10,7 @@ import (
 	"io"
 	"sync"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // chunkPump 协议流拉取下一增量；结束返回 io.EOF

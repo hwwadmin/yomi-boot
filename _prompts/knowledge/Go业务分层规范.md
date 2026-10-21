@@ -65,12 +65,12 @@ handler/                         biz/handler/
                                   biz/repo/
 ```
 
-> BFF 不含 `token/` 和 `client/` 内部目录：令牌能力由 `gitee.com/hq_project/yomi-boot/token` 统一提供，下游调用经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 gitee.com/hq_project/yomi-boot）。
+> BFF 不含 `token/` 和 `client/` 内部目录：令牌能力由 `gitee.com/hq_project/yomi-boot/component/token` 统一提供，下游调用经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 gitee.com/hq_project/yomi-boot）。
 
 | 能力 | BFF | 领域 |
 | ---- | --- | ---- |
 | 跨域 HTTP | ✓ 领域 client | ✗ |
-| 读 token / 鉴权 | ✓ gitee.com/hq_project/yomi-boot/token | ✗ |
+| 读 token / 鉴权 | ✓ gitee.com/hq_project/yomi-boot/component/token | ✗ |
 | 只读聚合 | ✓ bff | ✗ |
 | DTM Saga 提交 | ✓ saga | ✗ |
 | 本地 DB 事务 | ✗ | ✓ usecase |
@@ -87,7 +87,7 @@ handler/                         biz/handler/
 | `bff/` | 多服务只读聚合 |
 | `saga/` | 跨域写 Saga 编排 |
 
-> 令牌能力经 `gitee.com/hq_project/yomi-boot/token` 注入；下游调用经领域 client。
+> 令牌能力经 `gitee.com/hq_project/yomi-boot/component/token` 注入；下游调用经领域 client。
 
 ### 3.4 领域各层职责
 
@@ -129,8 +129,8 @@ handler/                         biz/handler/
 #### 3.4.6 internal/bizerr/
 
 - 本服务领域专属业务异常哨兵（如 `bizerr.ErrUserNotFound`），使用 `errors.NewBiz` / `errors.NewNoStack` 定义；返回时经 `errors.Sentinel` 拍真实调用点栈。
-- 跨库通用哨兵收口在 `gitee.com/hq_project/yomi-boot/shared/error`（`NewNoStack`）；库私有哨兵在对应库就近定义；**无** `response/code.go`。
-- 跨服务通用 dto/utils 使用 `gitee.com/hq_project/yomi-boot/shared`；跨服务枚举使用 `{client}/{domain}/enums`。
+- 跨库通用哨兵收口在 `gitee.com/hq_project/yomi-boot/boot/shared/error`（`NewNoStack`）；库私有哨兵在对应库就近定义；**无** `response/code.go`。
+- 跨服务通用 dto/utils 使用 `gitee.com/hq_project/yomi-boot/boot/shared`；跨服务枚举使用 `{client}/{domain}/enums`。
 
 ### 3.5 跨域协作规则
 
@@ -177,9 +177,9 @@ Client → BFF handler → saga → DTM → 单分支 Action/Compensate handler 
 
 ```text
 handler → usecase → domain/contract
-usecase → domain/contract, gitee.com/hq_project/yomi-boot/db, gitee.com/hq_project/yomi-boot/dtm（barrier）, gitee.com/hq_project/yomi-boot/idempotency（写幂等）
+usecase → domain/contract, gitee.com/hq_project/yomi-boot/component/db, gitee.com/hq_project/yomi-boot/cloud/dtm（barrier）, gitee.com/hq_project/yomi-boot/component/idempotency（写幂等）
 service → domain/contract, repo/contract
-repo/db → domain/contract, gitee.com/hq_project/yomi-boot/db
+repo/db → domain/contract, gitee.com/hq_project/yomi-boot/component/db
 ```
 
 禁止：

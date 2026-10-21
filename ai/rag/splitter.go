@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/errors"
+	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
 // Splitter 文本切块策略门面；实现须并发安全
