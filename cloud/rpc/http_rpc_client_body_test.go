@@ -63,9 +63,9 @@ func TestInvoke_VoidSkipsBodyRead(t *testing.T) {
 		status: http.StatusOK, body: []byte(`{"code":"OK"}`),
 		reads: &reads, bytesRead: &bytesRead,
 	}}
-	client.testResolve = func(context.Context, string) (string, error) {
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
 		return "http://example.test/x", nil
-	}
+	})
 
 	if err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook); err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -83,9 +83,9 @@ func TestInvoke_VoidNon200DiscardsBody(t *testing.T) {
 		status: http.StatusInternalServerError, body: bytes.Repeat([]byte("x"), 10000),
 		reads: &reads, bytesRead: &bytesRead,
 	}}
-	client.testResolve = func(context.Context, string) (string, error) {
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
 		return "http://example.test/x", nil
-	}
+	})
 
 	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
 	var statusErr *HTTPStatusError
@@ -105,9 +105,9 @@ func TestInvoke_BodyReadWhenNeeded(t *testing.T) {
 		status: http.StatusOK, body: []byte(`{"code":"OK"}`),
 		reads: &reads, bytesRead: &bytesRead,
 	}}
-	client.testResolve = func(context.Context, string) (string, error) {
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
 		return "http://example.test/x", nil
-	}
+	})
 
 	var env testEnvelope
 	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {

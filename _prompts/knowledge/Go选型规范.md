@@ -88,7 +88,7 @@
 | 可靠领域事件 | `event/`（Outbox/Inbox） | DB 侧可靠投递；当前传输侧接 Kafka，按需启用 | 用消息中间件替代本地事务边界 |
 | 分布式锁 | `github.com/go-redsync/redsync/v4`（经 `gitee.com/hq_project/yomi-boot/component/distlock` 封装） | 基于 Redis 的分布式锁，支持看门狗、超时、可选 Key 命名空间 | 其他分布式锁实现 |
 | 业务日历定时任务 | `github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/component/cronjob` 封装） | cron 表达式触发 + distlock 集群互斥；与 runner/`ctx` 同生命周期 | 业务模块直接依赖 `robfig/cron`；用 `roundrobin` 冒充日历任务 |
-| HTTP RPC | `gitee.com/hq_project/yomi-boot/cloud/rpc`（`gitee.com/hq_project/yomi-boot/cloud/rpc` 包） | 轻量 HTTP RPC 读传输：Consul 发现、POST JSON、反序列化、传输层短退避重试与按 HTTP 状态码/耗时熔断；业务信封由领域 client 自行解析；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
+| HTTP RPC | `gitee.com/hq_project/yomi-boot/cloud/rpc`（`gitee.com/hq_project/yomi-boot/cloud/rpc` 包） | 轻量 HTTP RPC 读传输：EndpointResolver 端点解析（Consul 场景用适配器）、POST JSON、反序列化、传输层短退避重试与按 HTTP 状态码/耗时熔断；业务信封由领域 client 自行解析；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
 | 并发控制 | `context` + `sync` + `golang.org/x/sync/errgroup` | 生命周期和错误传播清晰，接近原生模型 | 自定义协程框架 |
 | 日志 | `go.uber.org/zap` | 结构化日志，控制台 + JSON 文件双路输出 | `log/slog`、`logrus` 作为默认入口 |
 | 性能剖析 | `net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/boot/pprof` 封装） | 独立 debug 端口，CPU/内存/goroutine 排障 | OpenTelemetry、`prometheus/client_golang`、黑盒观测 SDK |
@@ -143,7 +143,7 @@
 #### 3.3.5 外部调用、服务发现、分布式事务与消息能力
 
 - **服务间通信**：HTTP/HTTPS only；BFF 经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，基于 `gitee.com/hq_project/yomi-boot/cloud/rpc`）调用领域服务，**默认不使用 gRPC**。
-- HTTP Client：`gitee.com/hq_project/yomi-boot/cloud/rpc` 封装 POST JSON + Consul 发现；业务信封由领域 client 自行解析；由领域 client 使用，口径见 [微服务调用规范](./微服务调用规范.md) §3.2。
+- HTTP Client：`gitee.com/hq_project/yomi-boot/cloud/rpc` 封装 POST JSON + EndpointResolver 端点解析（Consul 场景用适配器）；业务信封由领域 client 自行解析；由领域 client 使用，口径见 [微服务调用规范](./微服务调用规范.md) §3.2。
 - JSON：`encoding/json`（标准库）。
 - **服务注册发现**：Consul；各服务启动注册，BFF 按服务名发现下游。
 - **分布式事务**：DTM Saga；BFF 提交 Saga，领域服务在 barrier 下执行本地子事务。

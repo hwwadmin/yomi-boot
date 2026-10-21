@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// EndpointResolver 将服务名与逻辑端点解析为完整 URL
+// Consul 场景可使用 consul.NewRPCResolver(client) 适配
+type EndpointResolver interface {
+	ResolveHTTPBase(ctx context.Context, serviceName, pathSuffix string) (string, error)
+}
+
 // InvokeRequest 描述一次 RPC 调用
 type InvokeRequest struct {
 	Endpoint         string        // Endpoint 是调用方传入的逻辑端点

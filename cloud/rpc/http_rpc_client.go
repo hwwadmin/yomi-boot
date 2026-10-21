@@ -15,33 +15,31 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/appctx"
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/traceid"
-	"gitee.com/hq_project/yomi-boot/cloud/consul"
 )
 
 // HttpRpcClient 基于 HTTP 的 RpcService 实现
-// 只负责服务发现、发送请求、反序列化响应与传输级韧性
+// 只负责端点解析、发送请求、反序列化响应与传输级韧性
 type HttpRpcClient struct {
 	serviceName string
-	consul      *consul.Client
+	resolver    EndpointResolver
 	httpClient  *http.Client
 	opts        httpClientOptions
 	breaker     *circuitBreaker
-	// testResolve 仅测试注入：非 nil 时替代 Consul 解析
-	testResolve func(ctx context.Context, endpoint string) (string, error)
 }
 
 // 编译期验证接口实现
 var _ RpcService = (*HttpRpcClient)(nil)
 
 // NewHttpRpcClient 创建绑定到指定服务名的 HTTP RPC 客户端
-// consulClient 用于服务发现，serviceName 为目标微服务的 Consul 注册名
+// resolver 负责端点解析；Consul 场景传 consul.NewRPCResolver(client)
+// serviceName 为目标服务的注册名
 // 熔断器按 serviceName 进程内共享；同一服务第一个 client 的 BreakerOptions 生效
-func NewHttpRpcClient(consulClient *consul.Client, serviceName string, opts ...ClientOption) *HttpRpcClient {
+func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
 	serviceName = strings.TrimSpace(serviceName)
 	cfg := applyHTTPClientOptions(opts)
 	return &HttpRpcClient{
 		serviceName: serviceName,
-		consul:      consulClient,
+		resolver:    resolver,
 		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
 		opts:        cfg,
 		breaker:     breakerForService(serviceName, cfg.Breaker),
@@ -62,7 +60,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if err := callerCtx.Err(); err != nil {
 		return err
 	}
-	if c.testResolve == nil && c.serviceName == "" {
+	if c.serviceName == "" {
 		return errors.New("rpc: 服务名不能为空")
 	}
 
@@ -170,22 +168,15 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	return errors.New("rpc: 未产生有效尝试")
 }
 
-// resolveEndpoint 通过 Consul 服务发现将 endpoint 解析为完整 HTTP URL
+// resolveEndpoint 通过 EndpointResolver 将 endpoint 解析为完整 HTTP URL
 func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (string, error) {
 	if c == nil {
 		return "", errors.New("HttpRpcClient 未初始化")
 	}
-	if c.testResolve != nil {
-		url, err := c.testResolve(ctx, endpoint)
-		if err != nil {
-			return "", &discoveryError{err: err}
-		}
-		return url, nil
+	if c.resolver == nil {
+		return "", errors.New("HttpRpcClient 未初始化: EndpointResolver 为 nil")
 	}
-	if c.consul == nil {
-		return "", errors.New("HttpRpcClient 未初始化: consul 客户端为 nil")
-	}
-	url, err := c.consul.ResolveHTTPBase(ctx, c.serviceName, endpoint)
+	url, err := c.resolver.ResolveHTTPBase(ctx, c.serviceName, endpoint)
 	if err != nil {
 		return "", &discoveryError{err: err}
 	}

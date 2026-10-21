@@ -27,6 +27,14 @@ func invokeTest(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody,
 	})
 }
 
+// resolverFunc 将函数适配为 EndpointResolver
+type resolverFunc func(ctx context.Context, serviceName, pathSuffix string) (string, error)
+
+// ResolveHTTPBase 实现 EndpointResolver
+func (f resolverFunc) ResolveHTTPBase(ctx context.Context, serviceName, pathSuffix string) (string, error) {
+	return f(ctx, serviceName, pathSuffix)
+}
+
 // invokeTestWith 指定最大尝试次数调用客户端
 func invokeTestWith(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any, hook BizHookFunc, attempts int) error {
 	return c.Invoke(ctx, InvokeRequest{

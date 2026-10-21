@@ -16,12 +16,12 @@ func newTestRPCClient(serverURL string, opts ...ClientOption) *HttpRpcClient {
 	cfg := applyHTTPClientOptions(opts)
 	c := &HttpRpcClient{
 		serviceName: newTestServiceName(),
-		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
-		opts:        cfg,
-		breaker:     newCircuitBreaker(cfg.Breaker),
-	}
-	c.testResolve = func(context.Context, string) (string, error) {
-		return serverURL, nil
+		resolver: resolverFunc(func(context.Context, string, string) (string, error) {
+			return serverURL, nil
+		}),
+		httpClient: &http.Client{Timeout: cfg.HTTPTimeout},
+		opts:       cfg,
+		breaker:    newCircuitBreaker(cfg.Breaker),
 	}
 	return c
 }
@@ -146,10 +146,10 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
 		}),
 	)
-	client.testResolve = func(context.Context, string) (string, error) {
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
 		calls.Add(1)
 		return "", errors.New("consul down")
-	}
+	})
 
 	err := invokeTestWith(client, context.Background(), "/x", nil, nil, NoopBizHook, 1)
 	var discoveryErr *discoveryError
@@ -175,10 +175,10 @@ func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
 		}),
 	)
-	client.testResolve = func(context.Context, string) (string, error) {
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
 		calls.Add(1)
 		return "10.0.0.1:8080/x", nil
-	}
+	})
 
 	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
 	var localErr *requestError

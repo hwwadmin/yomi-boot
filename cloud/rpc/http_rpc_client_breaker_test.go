@@ -130,7 +130,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 	defer slow.Close()
 
 	client.httpClient = &http.Client{Timeout: time.Second}
-	client.testResolve = func(context.Context, string) (string, error) { return slow.URL, nil }
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) { return slow.URL, nil })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -142,7 +142,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 	}
 
 	client.httpClient = &http.Client{Timeout: time.Second}
-	client.testResolve = func(context.Context, string) (string, error) { return bad.URL, nil }
+	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) { return bad.URL, nil })
 	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("第二次 503 后应打开熔断，state=%d", state)
@@ -225,15 +225,13 @@ func TestNewHttpRpcClient_SharesBreakerByService(t *testing.T) {
 		WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 		SlowThreshold: time.Minute, OpenDuration: time.Minute,
 	}
-	resolve := func(context.Context, string) (string, error) { return server.URL, nil }
-	c1 := NewHttpRpcClient(nil, name, WithBreaker(cfg))
-	c1.testResolve = resolve
-	c2 := NewHttpRpcClient(nil, name, WithBreaker(cfg))
-	c2.testResolve = resolve
+	resolve := resolverFunc(func(context.Context, string, string) (string, error) { return server.URL, nil })
+	c1 := NewHttpRpcClient(resolve, name, WithBreaker(cfg))
+	c2 := NewHttpRpcClient(resolve, name, WithBreaker(cfg))
 	if c1.breaker != c2.breaker {
 		t.Fatal("同一 serviceName 应共享 breaker")
 	}
-	other := NewHttpRpcClient(nil, newTestServiceName(), WithBreaker(cfg))
+	other := NewHttpRpcClient(resolve, newTestServiceName(), WithBreaker(cfg))
 	if other.breaker == c1.breaker {
 		t.Fatal("不同 serviceName 不应共享 breaker")
 	}
