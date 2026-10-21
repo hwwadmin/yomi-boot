@@ -41,19 +41,25 @@ func GetTx(ctx context.Context) (*gorm.DB, bool) {
 	return tx, ok
 }
 
-// Exec 根据上下文返回当前可用的 GORM 实例（事务内返回 tx，否则返回 db）
+// Exec 根据上下文返回当前可用的 GORM 实例（事务内返回 tx，否则返回 db）。
+// 事务内同样把调用方 ctx 应用到本次查询，使超时、取消与 ctx 值生效。
 func Exec(ctx context.Context, db *gorm.DB) *gorm.DB {
 	if tx, ok := GetTx(ctx); ok {
-		return tx
+		return tx.WithContext(ctx)
 	}
 
 	return db.WithContext(ctx)
 }
 
-// Execute 在本地事务中执行回调，回调返回 error 时自动回滚，否则自动提交
+// Execute 在本地事务中执行回调，回调返回 error 时自动回滚，否则自动提交。
+// ctx 已在事务中时为嵌套调用：复用该事务，不再新开连接，提交或回滚由最外层决定。
 func (m *TxManager) Execute(ctx context.Context, fn func(ctx context.Context) error) error {
 	if fn == nil {
 		return nil
+	}
+
+	if _, ok := GetTx(ctx); ok {
+		return fn(ctx)
 	}
 
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
