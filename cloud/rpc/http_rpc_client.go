@@ -35,14 +35,16 @@ var _ RpcService = (*HttpRpcClient)(nil)
 
 // NewHttpRpcClient 创建绑定到指定服务名的 HTTP RPC 客户端
 // consulClient 用于服务发现，serviceName 为目标微服务的 Consul 注册名
+// 熔断器按 serviceName 进程内共享；同一服务第一个 client 的 BreakerOptions 生效
 func NewHttpRpcClient(consulClient *consul.Client, serviceName string, opts ...ClientOption) *HttpRpcClient {
+	serviceName = strings.TrimSpace(serviceName)
 	cfg := applyClientOptions(opts)
 	return &HttpRpcClient{
 		serviceName: serviceName,
 		consul:      consulClient,
 		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
 		opts:        cfg,
-		breaker:     newCircuitBreaker(cfg.Breaker),
+		breaker:     breakerForService(serviceName, cfg.Breaker),
 	}
 }
 
@@ -59,7 +61,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if c.testResolve == nil && strings.TrimSpace(c.serviceName) == "" {
+	if c.testResolve == nil && c.serviceName == "" {
 		return errors.New("rpc: 服务名不能为空")
 	}
 

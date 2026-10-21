@@ -182,6 +182,66 @@ func TestInvoke_HookErrorDoesNotTripBreaker(t *testing.T) {
 	}
 }
 
+// TestNewHttpRpcClient_SharesBreakerByService 验证同一服务共享熔断器
+func TestNewHttpRpcClient_SharesBreakerByService(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	name := newTestServiceName()
+	cfg := BreakerOptions{
+		WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+		SlowThreshold: time.Minute, OpenDuration: time.Minute,
+	}
+	resolve := func(context.Context, string) (string, error) { return server.URL, nil }
+	c1 := NewHttpRpcClient(nil, name, WithMaxAttempts(1), WithBreaker(cfg))
+	c1.testResolve = resolve
+	c2 := NewHttpRpcClient(nil, name, WithMaxAttempts(1), WithBreaker(cfg))
+	c2.testResolve = resolve
+	if c1.breaker != c2.breaker {
+		t.Fatal("同一 serviceName 应共享 breaker")
+	}
+	other := NewHttpRpcClient(nil, newTestServiceName(), WithMaxAttempts(1), WithBreaker(cfg))
+	if other.breaker == c1.breaker {
+		t.Fatal("不同 serviceName 不应共享 breaker")
+	}
+
+	var env testEnvelope
+	if err := c1.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
+		t.Fatal("503 应返回错误")
+	}
+	if err := c2.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("同服务第二个 client 应命中共享熔断，实际 %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("共享熔断后不应再次请求下游，hits=%d", hits.Load())
+	}
+}
+
+// TestNewHttpRpcClient_BreakerConfigFirstWins 验证同一服务第一次创建的熔断配置生效
+func TestNewHttpRpcClient_BreakerConfigFirstWins(t *testing.T) {
+	name := newTestServiceName()
+	first := BreakerOptions{
+		WindowSize: 7, MinRequests: 7, FailureRate: 1, SlowRate: 1,
+		SlowThreshold: time.Minute, OpenDuration: time.Minute,
+	}
+	second := BreakerOptions{
+		WindowSize: 3, MinRequests: 3, FailureRate: 0.5, SlowRate: 0.5,
+		SlowThreshold: time.Minute, OpenDuration: time.Minute,
+	}
+	c1 := NewHttpRpcClient(nil, name, WithBreaker(first))
+	c2 := NewHttpRpcClient(nil, name, WithBreaker(second))
+	if c1.breaker != c2.breaker {
+		t.Fatal("同一 serviceName 应共享 breaker")
+	}
+	if c2.breaker.cfg.WindowSize != 7 || c2.breaker.cfg.MinRequests != 7 {
+		t.Fatalf("应复用第一次配置，实际 window=%d min=%d", c2.breaker.cfg.WindowSize, c2.breaker.cfg.MinRequests)
+	}
+}
+
 // TestInvoke_NilBizHookRejected 验证 bizHook 必填
 func TestInvoke_NilBizHookRejected(t *testing.T) {
 	var hits atomic.Int64

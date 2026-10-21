@@ -3,9 +3,19 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync/atomic"
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
+
+// testServiceSeq 为每个测试客户端生成唯一服务名，避免进程级 breaker 共享串测
+var testServiceSeq atomic.Uint64
+
+// newTestServiceName 返回测试用唯一服务名
+func newTestServiceName() string {
+	return fmt.Sprintf("test-svc-%d", testServiceSeq.Add(1))
+}
 
 // testEnvelope 测试用读响应信封
 type testEnvelope struct {

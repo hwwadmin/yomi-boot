@@ -83,6 +83,7 @@ func WithMaxResponseBytes(n int64) ClientOption {
 }
 
 // WithBreaker 设置熔断器参数
+// 熔断器按 serviceName 共享；同一服务只有第一次创建时的配置生效
 func WithBreaker(cfg BreakerOptions) ClientOption {
 	return func(o *clientOptions) {
 		o.Breaker = cfg

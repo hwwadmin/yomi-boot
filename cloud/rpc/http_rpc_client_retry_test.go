@@ -15,7 +15,7 @@ import (
 func newTestRPCClient(serverURL string, opts ...ClientOption) *HttpRpcClient {
 	cfg := applyClientOptions(opts)
 	c := &HttpRpcClient{
-		serviceName: "test-svc",
+		serviceName: newTestServiceName(),
 		httpClient:  &http.Client{Timeout: cfg.HTTPTimeout},
 		opts:        cfg,
 		breaker:     newCircuitBreaker(cfg.Breaker),
