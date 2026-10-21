@@ -79,7 +79,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	payload, err := json.Marshal(req.ReqBody)
 	if err != nil {
 		c.breaker.onNeutral(ticket)
-		return errors.Wrap(err, "序列化请求体失败")
+		return &requestError{err: errors.Wrap(err, "序列化请求体失败")}
 	}
 
 	maxAttempts := req.MaxAttempts

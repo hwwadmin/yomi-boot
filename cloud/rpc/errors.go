@@ -10,11 +10,20 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// ErrDownstream 下游服务异常
-var ErrDownstream = errors.NewNoStack("DOWNSTREAM_ERROR")
-
-// ErrBizRejected 业务 hook 判定失败但没有给出具体错误
-var ErrBizRejected = errors.NewNoStack("BIZ_REJECTED")
+var (
+	// ErrDownstream 下游/传输类异常（HTTP 状态错误、熔断打开、协议或网络失败）
+	ErrDownstream = errors.NewNoStack("DOWNSTREAM_ERROR")
+	// ErrTransport 传输/网络异常
+	ErrTransport = errors.NewNoStack("TRANSPORT_ERROR")
+	// ErrProtocol 响应协议异常（无法解析或超出上限）
+	ErrProtocol = errors.NewNoStack("PROTOCOL_ERROR")
+	// ErrDiscovery 服务发现异常
+	ErrDiscovery = errors.NewNoStack("DISCOVERY_ERROR")
+	// ErrRequest 本地请求构建异常
+	ErrRequest = errors.NewNoStack("REQUEST_ERROR")
+	// ErrBizRejected 业务 hook 判定失败但没有给出具体错误
+	ErrBizRejected = errors.NewNoStack("BIZ_REJECTED")
+)
 
 // circuitOpenError 熔断打开；Error 为 CIRCUIT_OPEN，Unwrap 到 ErrDownstream 以支持 errors.Is
 type circuitOpenError struct{}
@@ -98,6 +107,11 @@ func (e *ProtocolError) Unwrap() error {
 	return e.Err
 }
 
+// Is 支持 errors.Is(err, ErrProtocol/ErrDownstream)
+func (e *ProtocolError) Is(target error) bool {
+	return target == ErrProtocol || target == ErrDownstream
+}
+
 // retryableError 标记可重试的传输错误
 type retryableError struct {
 	err error
@@ -117,6 +131,11 @@ func (e *retryableError) Unwrap() error {
 		return nil
 	}
 	return e.err
+}
+
+// Is 支持 errors.Is(err, ErrTransport/ErrDownstream)
+func (e *retryableError) Is(target error) bool {
+	return target == ErrTransport || target == ErrDownstream
 }
 
 // discoveryError 标记服务发现错误；可重试，但不计入下游熔断
@@ -140,6 +159,11 @@ func (e *discoveryError) Unwrap() error {
 	return e.err
 }
 
+// Is 支持 errors.Is(err, ErrDiscovery)
+func (e *discoveryError) Is(target error) bool {
+	return target == ErrDiscovery
+}
+
 // requestError 标记本地请求构建错误；不可重试，也不计入熔断
 type requestError struct {
 	err error
@@ -159,6 +183,11 @@ func (e *requestError) Unwrap() error {
 		return nil
 	}
 	return e.err
+}
+
+// Is 支持 errors.Is(err, ErrRequest)
+func (e *requestError) Is(target error) bool {
+	return target == ErrRequest
 }
 
 // wrapRetryable 将传输错误包装为可重试错误
