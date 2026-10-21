@@ -16,10 +16,14 @@ import (
 // idleWarmTimeout 启动预热超时
 const idleWarmTimeout = 30 * time.Second
 
+// idleKeepTimeout 保活补连接的等待上限，避免与业务抢连接时长时间阻塞
+const idleKeepTimeout = 2 * time.Second
+
 // idleKeeper 在后台维持最小空闲连接数（Go database/sql 无原生 min idle）
 type idleKeeper struct {
 	db       *sql.DB
 	minIdle  int
+	maxIdle  int
 	interval time.Duration
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -40,7 +44,7 @@ func maintainInterval(idleTimeout time.Duration) time.Duration {
 	return half
 }
 
-// warmIdle 同时占用 n 条连接并 Ping，释放后池中至少留下 n 条空闲（受 max_open 约束）
+// warmIdle 同时占用 n 条连接并 Ping，释放后池中空闲数提升到 n（受 max_idle 约束）
 func warmIdle(ctx context.Context, sqlDB *sql.DB, n int) error {
 	if n <= 0 {
 		return nil
@@ -65,8 +69,10 @@ func warmIdle(ctx context.Context, sqlDB *sql.DB, n int) error {
 	return nil
 }
 
-// ensureMinIdle 在容量允许时把空闲连接补到 minIdle
-func ensureMinIdle(ctx context.Context, sqlDB *sql.DB, minIdle int) error {
+// ensureMinIdle 在容量允许时把空闲连接补到 minIdle。
+// 抬高空闲数必须同时持有 minIdle 条连接（复用已有空闲连接也算占用），
+// 因此按 max_idle 与池剩余容量裁剪持有量；无提升空间时直接跳过，不阻塞业务。
+func ensureMinIdle(ctx context.Context, sqlDB *sql.DB, minIdle, maxIdle int) error {
 	if minIdle <= 0 {
 		return nil
 	}
@@ -74,11 +80,26 @@ func ensureMinIdle(ctx context.Context, sqlDB *sql.DB, minIdle int) error {
 	if stats.Idle >= minIdle {
 		return nil
 	}
-	return warmIdle(ctx, sqlDB, minIdle)
+
+	hold := minIdle
+	if maxIdle > 0 && hold > maxIdle {
+		hold = maxIdle
+	}
+	if stats.MaxOpenConnections > 0 {
+		// max_open - in_use 包含当前空闲连接与可新开的空位，持有量不超过它才不会等待连接
+		if avail := stats.MaxOpenConnections - stats.InUse; hold > avail {
+			hold = avail
+		}
+	}
+	// 持有量不超过当前空闲数时只会复用已有空闲连接，无法提升，跳过本轮
+	if hold <= stats.Idle {
+		return nil
+	}
+	return warmIdle(ctx, sqlDB, hold)
 }
 
 // startIdleKeeper 启动最小空闲保活；返回 stop，可重复调用且幂等
-func startIdleKeeper(sqlDB *sql.DB, minIdle int, interval time.Duration) *idleKeeper {
+func startIdleKeeper(sqlDB *sql.DB, minIdle, maxIdle int, interval time.Duration) *idleKeeper {
 	if minIdle <= 0 || sqlDB == nil {
 		return nil
 	}
@@ -89,6 +110,7 @@ func startIdleKeeper(sqlDB *sql.DB, minIdle int, interval time.Duration) *idleKe
 	k := &idleKeeper{
 		db:       sqlDB,
 		minIdle:  minIdle,
+		maxIdle:  maxIdle,
 		interval: interval,
 		cancel:   cancel,
 		done:     make(chan struct{}),
@@ -106,8 +128,8 @@ func (k *idleKeeper) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cctx, cancel := context.WithTimeout(ctx, idleWarmTimeout)
-			err := ensureMinIdle(cctx, k.db, k.minIdle)
+			cctx, cancel := context.WithTimeout(ctx, idleKeepTimeout)
+			err := ensureMinIdle(cctx, k.db, k.minIdle, k.maxIdle)
 			cancel()
 			if err != nil && ctx.Err() == nil {
 				logger.WarnWithoutCtx("维持最小空闲连接失败", "min_idle", k.minIdle, "error", err)

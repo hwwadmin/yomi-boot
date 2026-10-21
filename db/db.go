@@ -67,7 +67,7 @@ func open(cfg Config) (*gorm.DB, func(), error) {
 			_ = sqlDB.Close()
 			return nil, nil, err
 		}
-		keeper := startIdleKeeper(sqlDB, cfg.MinIdleConns, maintainInterval(idleTimeout))
+		keeper := startIdleKeeper(sqlDB, cfg.MinIdleConns, cfg.MaxIdleConns, maintainInterval(idleTimeout))
 		if keeper != nil {
 			stop = keeper.Stop
 		}
