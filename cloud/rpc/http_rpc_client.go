@@ -65,13 +65,15 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 		return errors.New("rpc: 服务名不能为空")
 	}
 
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return errors.Wrap(err, "序列化请求体失败")
-	}
+	// 先过熔断再序列化：熔断打开时不浪费序列化；序列化失败释放半开探测位
 	ticket, err := c.breaker.allow()
 	if err != nil {
 		return err
+	}
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		c.breaker.onNeutral(ticket)
+		return errors.Wrap(err, "序列化请求体失败")
 	}
 
 	maxAttempts := c.opts.MaxAttempts

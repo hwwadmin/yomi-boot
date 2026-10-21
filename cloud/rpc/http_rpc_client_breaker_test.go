@@ -242,6 +242,92 @@ func TestNewHttpRpcClient_BreakerConfigFirstWins(t *testing.T) {
 	}
 }
 
+// marshalSpy 记录 json.Marshal 调用并返回错误
+type marshalSpy struct {
+	calls *atomic.Int64
+}
+
+// MarshalJSON 记录调用并返回错误
+func (m marshalSpy) MarshalJSON() ([]byte, error) {
+	m.calls.Add(1)
+	return nil, errors.New("marshal failed")
+}
+
+// TestInvoke_OpenBreakerSkipsMarshal 验证熔断打开时不序列化请求
+func TestInvoke_OpenBreakerSkipsMarshal(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithMaxAttempts(1),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	_ = client.Invoke(context.Background(), "/x", nil, &env, NoopBizHook)
+	if state, _ := breakerSnapshot(client); state != breakerOpen {
+		t.Fatalf("首次 503 后应打开熔断，state=%d", state)
+	}
+
+	var calls atomic.Int64
+	err := client.Invoke(context.Background(), "/x", marshalSpy{calls: &calls}, &env, NoopBizHook)
+	if !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("熔断打开时不应序列化请求，calls=%d", calls.Load())
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("熔断打开时不应请求下游，hits=%d", hits.Load())
+	}
+}
+
+// TestInvoke_MarshalFailureReleasesProbe 验证序列化失败释放半开探测位
+func TestInvoke_MarshalFailureReleasesProbe(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithMaxAttempts(1),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: 10 * time.Millisecond,
+		}),
+	)
+	var env testEnvelope
+	_ = client.Invoke(context.Background(), "/x", nil, &env, NoopBizHook)
+	time.Sleep(20 * time.Millisecond)
+
+	var calls atomic.Int64
+	err := client.Invoke(context.Background(), "/x", marshalSpy{calls: &calls}, &env, NoopBizHook)
+	if err == nil || errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("期望序列化错误，实际 %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("序列化应被调用一次，calls=%d", calls.Load())
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("序列化失败不应请求下游，hits=%d", hits.Load())
+	}
+
+	client.breaker.mu.Lock()
+	state, probe := client.breaker.state, client.breaker.probeInFlight
+	client.breaker.mu.Unlock()
+	if state != breakerHalfOpen || probe {
+		t.Fatalf("序列化失败应释放探测位，state=%d probe=%v", state, probe)
+	}
+}
+
 // TestInvoke_NilBizHookRejected 验证 bizHook 必填
 func TestInvoke_NilBizHookRejected(t *testing.T) {
 	var hits atomic.Int64
