@@ -1,4 +1,4 @@
-package requestguard
+package httpguard
 
 import (
 	"bytes"

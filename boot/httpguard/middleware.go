@@ -1,7 +1,7 @@
-// Package requestguard 提供 HTTP 请求守卫能力（请求体大小限制与请求级超时）
+// Package httpguard 提供 HTTP 请求守卫能力（请求体大小限制与请求级超时）
 //
 // @author zwei
-package requestguard
+package httpguard
 
 import (
 	"context"

@@ -173,7 +173,7 @@ services/{domain}/
 | 目录 | 包 |
 | ---- | -- |
 | `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
-| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`requestguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
+| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
 | `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`ratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
 | `cloud/` | `consul`、`dtm`、`rpc` |
 
@@ -401,10 +401,10 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 `DefaultMiddlewares` 统一装配下列链；`token.AuthMiddleware` / `httprecord` / access 均在中间件内按各自 `enabled` 决定是否生效。
 
 ```text
-CORS → traceid → httprecord → AccessMiddleware → requestguard → Recovery → token.AuthMiddleware → handler
+CORS → traceid → httprecord → AccessMiddleware → httpguard → Recovery → token.AuthMiddleware → handler
 ```
 
-- **顺序约束**：`httprecord` 与文件 `AccessMiddleware` 必须位于 `requestguard` **外侧**。`requestguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
+- **顺序约束**：`httprecord` 与文件 `AccessMiddleware` 必须位于 `httpguard` **外侧**。`httpguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
 - `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时直接放行。
 - `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。

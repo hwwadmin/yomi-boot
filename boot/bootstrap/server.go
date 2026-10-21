@@ -8,8 +8,8 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/cors"
+	"gitee.com/hq_project/yomi-boot/boot/httpguard"
 	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/requestguard"
 	"gitee.com/hq_project/yomi-boot/boot/response"
 	"gitee.com/hq_project/yomi-boot/boot/router"
 	"gitee.com/hq_project/yomi-boot/boot/runner"
@@ -33,7 +33,7 @@ func DefaultMiddlewares(infra *Infra) []gin.HandlerFunc {
 		traceid.Middleware(),
 		httprecord.MiddlewareHandler(infra.HttpRecordService, *httpRecordCfg, infra.AppCtx),
 		logger.AccessMiddleware(logCfg.Access),
-		requestguard.Middleware(*httpCfg),
+		httpguard.Middleware(*httpCfg),
 		gin.Recovery(),
 		token.AuthMiddleware(infra.TokenService, *authCfg),
 	}
