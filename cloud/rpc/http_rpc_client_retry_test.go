@@ -155,7 +155,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		return "", errors.New("consul down")
 	}
 
-	err := client.Invoke(context.Background(), "/x", nil, nil, nil)
+	err := client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
 	var discoveryErr *discoveryError
 	if !errors.As(err, &discoveryErr) {
 		t.Fatalf("期望 discoveryError，实际 %v", err)
@@ -164,7 +164,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		t.Fatalf("发现失败不应打开下游熔断，state=%d", state)
 	}
 
-	_ = client.Invoke(context.Background(), "/x", nil, nil, nil)
+	_ = client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
 	if calls.Load() != 2 {
 		t.Fatalf("发现失败不应打开熔断，calls=%d", calls.Load())
 	}
@@ -185,7 +185,7 @@ func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
 		return "10.0.0.1:8080/x", nil
 	}
 
-	err := client.Invoke(context.Background(), "/x", nil, nil, nil)
+	err := client.Invoke(context.Background(), "/x", nil, nil, NoopBizHook)
 	var localErr *requestError
 	if !errors.As(err, &localErr) {
 		t.Fatalf("期望 requestError，实际 %v", err)

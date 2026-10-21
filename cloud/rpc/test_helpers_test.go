@@ -16,18 +16,18 @@ type testEnvelope struct {
 }
 
 // checkTestEnvelope 测试用业务判定 hook
-func checkTestEnvelope(_ context.Context, call BizHookContext) error {
+func checkTestEnvelope(_ context.Context, call BizHookContext) (bool, error) {
 	env, ok := call.RespBody.(*testEnvelope)
 	if !ok {
-		return errors.New("bad envelope type")
+		return false, errors.New("bad envelope type")
 	}
 	if env.Code == "" {
-		return errors.Sentinel(ErrDownstream)
+		return false, errors.Sentinel(ErrDownstream)
 	}
 	if env.Code != "OK" {
-		return errors.NewBiz(env.Code, env.Msg)
+		return false, errors.NewBiz(env.Code, env.Msg)
 	}
-	return nil
+	return true, nil
 }
 
 // breakerSnapshot 读取熔断器状态与窗口长度

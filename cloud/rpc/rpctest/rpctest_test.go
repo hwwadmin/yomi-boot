@@ -14,14 +14,17 @@ func TestTestRpcService_Invoke(t *testing.T) {
 		gotEndpoint = endpoint
 		return nil
 	}}
-	if err := s.Invoke(context.Background(), "/x", nil, nil, nil); err != nil {
+	if err := s.Invoke(context.Background(), "/x", nil, nil, rpc.NoopBizHook); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if gotEndpoint != "/x" {
 		t.Fatalf("endpoint: got %q want /x", gotEndpoint)
 	}
 
-	if err := (&TestRpcService{}).Invoke(context.Background(), "/x", nil, nil, nil); err != nil {
+	if err := (&TestRpcService{}).Invoke(context.Background(), "/x", nil, nil, rpc.NoopBizHook); err != nil {
 		t.Fatalf("零值 Invoke 应返回 nil，实际 %v", err)
+	}
+	if err := (&TestRpcService{}).Invoke(context.Background(), "/x", nil, nil, nil); err == nil {
+		t.Fatal("nil bizHook 应返回错误")
 	}
 }

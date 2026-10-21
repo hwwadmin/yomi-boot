@@ -181,3 +181,63 @@ func TestInvoke_HookErrorDoesNotTripBreaker(t *testing.T) {
 		t.Fatalf("业务 hook 错误不应改变熔断状态，state=%d", state)
 	}
 }
+
+// TestInvoke_NilBizHookRejected 验证 bizHook 必填
+func TestInvoke_NilBizHookRejected(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL)
+	if err := client.Invoke(context.Background(), "/x", nil, nil, nil); err == nil {
+		t.Fatal("nil bizHook 应返回错误")
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("nil bizHook 不应发起请求，hits=%d", hits.Load())
+	}
+}
+
+// TestInvoke_NoopBizHook 验证纯传输的显式入口
+func TestInvoke_NoopBizHook(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"code":"INVALID_INPUT","msg":"bad"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL)
+	var env testEnvelope
+	if err := client.Invoke(context.Background(), "/x", nil, &env, NoopBizHook); err != nil {
+		t.Fatalf("NoopBizHook 只做传输，实际 %v", err)
+	}
+	if env.Code != "INVALID_INPUT" {
+		t.Fatalf("响应应已反序列化，code=%q", env.Code)
+	}
+}
+
+// TestInvoke_HookRejectsWithoutError 验证 false+nil 返回 ErrBizRejected
+func TestInvoke_HookRejectsWithoutError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), "/x", nil, &env, func(context.Context, BizHookContext) (bool, error) {
+		return false, nil
+	})
+	if !errors.Is(err, ErrBizRejected) {
+		t.Fatalf("期望 ErrBizRejected，实际 %v", err)
+	}
+	if state, _ := breakerSnapshot(client); state != breakerClosed {
+		t.Fatalf("业务拒绝不应打开熔断，state=%d", state)
+	}
+}

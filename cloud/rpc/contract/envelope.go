@@ -53,11 +53,19 @@ func (e *Envelope) Decode(v any) error {
 	return nil
 }
 
+// OK 返回业务是否成功；失败时携带具体错误
+func (e *Envelope) OK() (bool, error) {
+	if err := e.Err(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // CheckEnvelope 作为 rpc.BizHookFunc 使用，校验信封业务码
-func CheckEnvelope(_ context.Context, call rpc.BizHookContext) error {
+func CheckEnvelope(_ context.Context, call rpc.BizHookContext) (bool, error) {
 	env, ok := call.RespBody.(*Envelope)
 	if !ok {
-		return errors.New("rpc: 响应类型不是 *contract.Envelope")
+		return false, errors.New("rpc: 响应类型不是 *contract.Envelope")
 	}
-	return env.Err()
+	return env.OK()
 }

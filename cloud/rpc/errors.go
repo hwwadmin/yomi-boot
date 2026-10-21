@@ -12,6 +12,9 @@ import (
 // ErrDownstream 下游服务异常
 var ErrDownstream = errors.NewNoStack("DOWNSTREAM_ERROR")
 
+// ErrBizRejected 业务 hook 判定失败但没有给出具体错误
+var ErrBizRejected = errors.NewNoStack("BIZ_REJECTED")
+
 // circuitOpenError 熔断打开；Error 为 CIRCUIT_OPEN，Unwrap 到 ErrDownstream 以支持 errors.Is
 type circuitOpenError struct{}
 

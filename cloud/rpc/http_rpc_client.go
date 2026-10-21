@@ -51,6 +51,9 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 	if c == nil || c.httpClient == nil {
 		return errors.New("HttpRpcClient 未初始化")
 	}
+	if bizHook == nil {
+		return errors.New("rpc: bizHook 不能为空；纯传输请使用 rpc.NoopBizHook")
+	}
 	ctx = appctx.OrBackground(ctx)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -127,14 +130,16 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 		}
 
 		c.breaker.record(ticket, attemptResult{slow: elapsed > c.breaker.slowThreshold()})
-		if bizHook != nil {
-			if err := bizHook(ctx, BizHookContext{
-				Endpoint: endpoint,
-				ReqBody:  reqBody,
-				RespBody: respBody,
-			}); err != nil {
-				return err
-			}
+		ok, hookErr := bizHook(ctx, BizHookContext{
+			Endpoint: endpoint,
+			ReqBody:  reqBody,
+			RespBody: respBody,
+		})
+		if hookErr != nil {
+			return hookErr
+		}
+		if !ok {
+			return errors.Sentinel(ErrBizRejected)
 		}
 		return nil
 	}

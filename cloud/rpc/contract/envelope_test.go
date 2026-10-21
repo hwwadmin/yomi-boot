@@ -62,22 +62,40 @@ func TestEnvelopeDecode(t *testing.T) {
 	}
 }
 
+// TestEnvelopeOK 验证业务成功判定
+func TestEnvelopeOK(t *testing.T) {
+	if ok, err := (&Envelope{Code: "OK"}).OK(); !ok || err != nil {
+		t.Fatalf("OK 应返回 true,nil，实际 %v,%v", ok, err)
+	}
+
+	ok, err := (&Envelope{Code: "INVALID_INPUT"}).OK()
+	var biz *errors.BizError
+	if ok || !errors.As(err, &biz) || biz.Code != "INVALID_INPUT" {
+		t.Fatalf("期望 false,INVALID_INPUT，实际 %v,%v", ok, err)
+	}
+
+	ok, err = (&Envelope{}).OK()
+	if ok || !errors.Is(err, rpc.ErrDownstream) {
+		t.Fatalf("空 code 应返回 false,ErrDownstream，实际 %v,%v", ok, err)
+	}
+}
+
 // TestCheckEnvelope 验证 hook 适配
 func TestCheckEnvelope(t *testing.T) {
-	if err := CheckEnvelope(context.Background(), rpc.BizHookContext{RespBody: &Envelope{Code: "OK"}}); err != nil {
-		t.Fatalf("OK 应返回 nil，实际 %v", err)
+	if ok, err := CheckEnvelope(context.Background(), rpc.BizHookContext{RespBody: &Envelope{Code: "OK"}}); !ok || err != nil {
+		t.Fatalf("OK 应返回 true,nil，实际 %v,%v", ok, err)
 	}
 
-	err := CheckEnvelope(context.Background(), rpc.BizHookContext{RespBody: &Envelope{Code: "INVALID_INPUT"}})
+	ok, err := CheckEnvelope(context.Background(), rpc.BizHookContext{RespBody: &Envelope{Code: "INVALID_INPUT"}})
 	var biz *errors.BizError
-	if !errors.As(err, &biz) || biz.Code != "INVALID_INPUT" {
-		t.Fatalf("期望 INVALID_INPUT，实际 %v", err)
+	if ok || !errors.As(err, &biz) || biz.Code != "INVALID_INPUT" {
+		t.Fatalf("期望 false,INVALID_INPUT，实际 %v,%v", ok, err)
 	}
 
-	if err := CheckEnvelope(context.Background(), rpc.BizHookContext{RespBody: "wrong"}); err == nil {
-		t.Fatal("错误响应类型应返回错误")
+	if ok, err := CheckEnvelope(context.Background(), rpc.BizHookContext{RespBody: "wrong"}); ok || err == nil {
+		t.Fatal("错误响应类型应返回 false,error")
 	}
-	if err := CheckEnvelope(context.Background(), rpc.BizHookContext{}); err == nil {
-		t.Fatal("nil RespBody 应返回错误")
+	if ok, err := CheckEnvelope(context.Background(), rpc.BizHookContext{}); ok || err == nil {
+		t.Fatal("nil RespBody 应返回 false,error")
 	}
 }
