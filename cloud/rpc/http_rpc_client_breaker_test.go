@@ -602,3 +602,38 @@ func TestInvoke_HalfOpenProbeNoRetryOnDiscoveryError(t *testing.T) {
 		t.Fatalf("探测位释放后下一次调用应成功: %v", err)
 	}
 }
+
+// TestInvoke_RedirectPolicyErrorNotRetried 验证自定义重定向策略拒绝时不重试、不计熔断
+func TestInvoke_RedirectPolicyErrorNotRetried(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/other", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusFound)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL, WithCheckRedirect(func(_ *http.Request, via []*http.Request) error {
+		if len(via) >= 2 {
+			return errors.New("redirect cap")
+		}
+		return nil
+	}))
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x", RespBody: &env, BizHook: checkTestEnvelope, MaxAttempts: 3,
+	})
+	var reqErr *requestError
+	if !errors.As(err, &reqErr) {
+		t.Fatalf("期望 requestError，实际 %v", err)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("重定向策略拒绝不应重试，hits=%d want 2", hits.Load())
+	}
+	if state, size := breakerSnapshot(client); state != breakerClosed || size != 0 {
+		t.Fatalf("不应计入熔断，state=%d window=%d", state, size)
+	}
+}

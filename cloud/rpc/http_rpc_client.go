@@ -291,6 +291,11 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// CheckRedirect 返回错误时，Go 会同时返回上一次响应（Body 已由 Client 关闭）
+		// 和 *url.Error；这是本地重定向策略拒绝，不是下游故障：不重试、不计熔断。
+		if resp != nil {
+			return nil, &requestError{err: errors.Wrap(err, "重定向策略拒绝")}
+		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}

@@ -14,16 +14,16 @@ import (
 // defaultMaxLogBodyBytes 是请求/响应体日志的截断上限
 const defaultMaxLogBodyBytes = 4 << 10
 
-// logRequest 记录请求体；仅在 LogBodies 开启时调用
+// logRequest 记录请求体（Info）；仅在 LogBodies 开启时调用
 func (c *HttpRpcClient) logRequest(ctx context.Context, endpoint string, payload []byte) {
-	logger.Debug(ctx, "rpc.request",
+	logger.Info(ctx, "rpc.request",
 		"service", c.serviceName,
 		"endpoint", endpoint,
 		"body", truncateLogBody(payload),
 	)
 }
 
-// logResponse 记录响应体；仅在 LogBodies 开启时调用
+// logResponse 记录响应体（Info）；仅在 LogBodies 开启时调用
 func (c *HttpRpcClient) logResponse(ctx context.Context, endpoint string, attempt, status int, body []byte) {
 	fields := []any{
 		"service", c.serviceName,
@@ -34,7 +34,7 @@ func (c *HttpRpcClient) logResponse(ctx context.Context, endpoint string, attemp
 		fields = append(fields, "status", status)
 	}
 	fields = append(fields, "body", truncateLogBody(body))
-	logger.Debug(ctx, "rpc.response", fields...)
+	logger.Info(ctx, "rpc.response", fields...)
 }
 
 // truncateLogBody 截断到 4 KiB，保证 UTF-8 有效，并标记截断
@@ -63,8 +63,8 @@ func statusCodeOf(err error) int {
 	return 0
 }
 
-// logRetry 记录一次即将执行的重试，不输出请求/响应体
-func (c *HttpRpcClient) logRetry(ctx context.Context, endpoint string, attempt, maxAttempts int, delay time.Duration, err error) {
+// retryLogFields 构造重试/预算日志的公共字段；不输出请求/响应体
+func (c *HttpRpcClient) retryLogFields(endpoint string, attempt, maxAttempts int, delay time.Duration, err error) []any {
 	fields := []any{
 		"service", c.serviceName,
 		"endpoint", endpoint,
@@ -73,22 +73,18 @@ func (c *HttpRpcClient) logRetry(ctx context.Context, endpoint string, attempt, 
 		"delay", delay.String(),
 		"reason", reasonOf(err),
 	}
-	fields = appendStatusFields(fields, err)
-	logger.Warn(ctx, "rpc.retry", fields...)
+	return appendStatusFields(fields, err)
+}
+
+// logRetry 记录一次即将执行的重试，不输出请求/响应体
+// 单次重试用 Info；预算耗尽/熔断打开仍用 Warn，避免把高频重试混进告警
+func (c *HttpRpcClient) logRetry(ctx context.Context, endpoint string, attempt, maxAttempts int, delay time.Duration, err error) {
+	logger.Info(ctx, "rpc.retry", c.retryLogFields(endpoint, attempt, maxAttempts, delay, err)...)
 }
 
 // logBudgetExhausted 记录因本次调用预算不足而放弃重试
 func (c *HttpRpcClient) logBudgetExhausted(ctx context.Context, endpoint string, attempt, maxAttempts int, delay time.Duration, err error) {
-	fields := []any{
-		"service", c.serviceName,
-		"endpoint", endpoint,
-		"attempt", attempt,
-		"max_attempts", maxAttempts,
-		"delay", delay.String(),
-		"reason", reasonOf(err),
-	}
-	fields = appendStatusFields(fields, err)
-	logger.Warn(ctx, "rpc.retry.budget_exhausted", fields...)
+	logger.Warn(ctx, "rpc.retry.budget_exhausted", c.retryLogFields(endpoint, attempt, maxAttempts, delay, err)...)
 }
 
 // logBreakerOpen 记录熔断打开；err 只用于补充状态码/Retry-After，不输出响应体

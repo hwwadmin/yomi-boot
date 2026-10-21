@@ -103,8 +103,9 @@ func WithBreaker(cfg BreakerOptions) ClientOption {
 	}
 }
 
-// WithLogBodies 控制 Debug 日志是否打印请求体和响应体，默认关闭
-// 建议仅在 dev 打开；请求/响应体可能含敏感信息，日志最多保留 4 KiB
+// WithLogBodies 控制是否打印请求体和响应体，默认关闭
+// 开启后按 Info 级别输出；建议仅在 dev 打开
+// 请求/响应体可能含敏感信息，日志最多保留 4 KiB
 func WithLogBodies(enabled bool) ClientOption {
 	return func(o *httpClientOptions) {
 		o.LogBodies = enabled
