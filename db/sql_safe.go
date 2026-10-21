@@ -4,7 +4,6 @@
 package db
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -51,13 +50,13 @@ func ValidateSQLIdentifier(name string) error {
 		return errors.New("SQL 标识符不能为空")
 	}
 	if len(name) > maxSQLIdentifierLen {
-		return fmt.Errorf("SQL 标识符过长: %s", name)
+		return errors.Newf("SQL 标识符过长: %s", name)
 	}
 	if !sqlIdentifierPattern.MatchString(name) {
-		return fmt.Errorf("非法 SQL 标识符: %s", name)
+		return errors.Newf("非法 SQL 标识符: %s", name)
 	}
 	if _, reserved := sqlReservedWords[strings.ToLower(name)]; reserved {
-		return fmt.Errorf("SQL 保留字不可作为标识符: %s", name)
+		return errors.Newf("SQL 保留字不可作为标识符: %s", name)
 	}
 	return nil
 }

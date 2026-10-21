@@ -27,6 +27,37 @@ type BaseRepository struct {
 	DB *gorm.DB
 }
 
+// idChunkSize 是批量 ID 操作的单片上限，避免触发数据库占位符上限（MySQL/PostgreSQL 均为 65535）
+const idChunkSize = 500
+
+// forEachIDChunk 按 idChunkSize 切分主键列表逐片执行，任一分片失败立即返回
+func forEachIDChunk(ids []int64, fn func(chunk []int64) error) error {
+	for start := 0; start < len(ids); start += idChunkSize {
+		end := start + idChunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := fn(ids[start:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// uniqueIDs 按首次出现顺序去重，避免跨分片重复返回同一行
+func uniqueIDs(ids []int64) []int64 {
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
 // ============================================================================
 // 写入 — Create
 // ============================================================================
@@ -89,14 +120,33 @@ func (r *BaseRepository) FindAll(ctx context.Context, model any, dest any) error
 	return nil
 }
 
-// FindByIDs 根据主键列表批量查询
+// FindByIDs 根据主键列表批量查询，dest 须为非空切片指针；超过 idChunkSize 自动分批并合并结果
 func (r *BaseRepository) FindByIDs(ctx context.Context, ids []int64, model any, dest any) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", ids).Find(dest).Error; err != nil {
-		return errors.Wrap(err, "根据主键列表查询失败")
+	v := reflect.ValueOf(dest)
+	if v.Kind() != reflect.Pointer || v.IsNil() || v.Elem().Kind() != reflect.Slice {
+		return errors.New("FindByIDs dest 须为非空切片指针")
 	}
+	if len(ids) > idChunkSize {
+		ids = uniqueIDs(ids)
+	}
+
+	sliceType := v.Elem().Type()
+	combined := reflect.MakeSlice(sliceType, 0, len(ids))
+	for start := 0; start < len(ids); start += idChunkSize {
+		end := start + idChunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := reflect.New(sliceType)
+		if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", ids[start:end]).Find(chunk.Interface()).Error; err != nil {
+			return errors.Wrap(err, "根据主键列表查询失败")
+		}
+		combined = reflect.AppendSlice(combined, chunk.Elem())
+	}
+	v.Elem().Set(combined)
 	return nil
 }
 
@@ -152,15 +202,18 @@ func (r *BaseRepository) UpdateFieldByID(ctx context.Context, id int64, model an
 	return nil
 }
 
-// UpdateBatch 根据主键列表批量更新
+// UpdateBatch 根据主键列表批量更新；超过 idChunkSize 自动分批。
+// 未在事务中时，任一分片失败后已执行的分片不会回滚
 func (r *BaseRepository) UpdateBatch(ctx context.Context, ids []int64, model any, updates map[string]any) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", ids).Updates(updates).Error; err != nil {
-		return errors.Wrap(err, "批量更新记录失败")
-	}
-	return nil
+	return forEachIDChunk(ids, func(chunk []int64) error {
+		if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", chunk).Updates(updates).Error; err != nil {
+			return errors.Wrap(err, "批量更新记录失败")
+		}
+		return nil
+	})
 }
 
 // ============================================================================
@@ -183,26 +236,32 @@ func (r *BaseRepository) SoftDeleteByID(ctx context.Context, id int64, model any
 	return nil
 }
 
-// DeleteBatch 根据主键列表批量硬删除（跳过 GORM 软删除）
+// DeleteBatch 根据主键列表批量硬删除（跳过 GORM 软删除）；超过 idChunkSize 自动分批。
+// 未在事务中时，任一分片失败后已执行的分片不会回滚
 func (r *BaseRepository) DeleteBatch(ctx context.Context, ids []int64, model any) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := Exec(ctx, r.DB).Unscoped().Where("id IN ?", ids).Delete(model).Error; err != nil {
-		return errors.Wrap(err, "批量删除记录失败")
-	}
-	return nil
+	return forEachIDChunk(ids, func(chunk []int64) error {
+		if err := Exec(ctx, r.DB).Unscoped().Where("id IN ?", chunk).Delete(model).Error; err != nil {
+			return errors.Wrap(err, "批量删除记录失败")
+		}
+		return nil
+	})
 }
 
-// SoftDeleteBatch 根据主键列表批量软删除
+// SoftDeleteBatch 根据主键列表批量软删除；超过 idChunkSize 自动分批。
+// 未在事务中时，任一分片失败后已执行的分片不会回滚
 func (r *BaseRepository) SoftDeleteBatch(ctx context.Context, ids []int64, model any) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", ids).Delete(model).Error; err != nil {
-		return errors.Wrap(err, "批量软删除记录失败")
-	}
-	return nil
+	return forEachIDChunk(ids, func(chunk []int64) error {
+		if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", chunk).Delete(model).Error; err != nil {
+			return errors.Wrap(err, "批量软删除记录失败")
+		}
+		return nil
+	})
 }
 
 // ============================================================================

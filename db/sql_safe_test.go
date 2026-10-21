@@ -2,7 +2,10 @@
 package db
 
 import (
+	"strings"
 	"testing"
+
+	"gitee.com/hq_project/yomi-boot/errors"
 
 	"gorm.io/gorm"
 )
@@ -28,6 +31,19 @@ func TestValidateSQLIdentifier(t *testing.T) {
 		if err := ValidateSQLIdentifier(name); err == nil {
 			t.Errorf("期望非法标识符 %q 被拒绝", name)
 		}
+	}
+}
+
+// TestValidateSQLIdentifier_KeepsStack 验证错误经项目 errors 构造，保留调用栈
+func TestValidateSQLIdentifier_KeepsStack(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateSQLIdentifier("id; DROP TABLE users")
+	if err == nil {
+		t.Fatal("期望非法标识符返回错误")
+	}
+	if !strings.Contains(errors.Stack(err), "sql_safe.go") {
+		t.Fatalf("期望错误保留调用栈，实际 %q", errors.Stack(err))
 	}
 }
 
