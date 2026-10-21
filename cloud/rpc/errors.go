@@ -5,6 +5,7 @@ package rpc
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
@@ -29,8 +30,9 @@ var ErrCircuitOpen error = circuitOpenError{}
 
 // HTTPStatusError 下游返回非 200 状态
 type HTTPStatusError struct {
-	Code   int    // Code 是 HTTP 状态码
-	Detail string // Detail 是截断后的响应体或状态描述
+	Code       int           // Code 是 HTTP 状态码
+	Detail     string        // Detail 是截断后的响应体或状态描述
+	RetryAfter time.Duration // RetryAfter 是 Retry-After 头解析出的等待时间，0 表示未提供
 }
 
 // Error 返回 HTTP 状态错误描述
@@ -38,7 +40,11 @@ func (e *HTTPStatusError) Error() string {
 	if e == nil {
 		return "rpc: http status error"
 	}
-	return fmt.Sprintf("下游 HTTP %d: %s", e.Code, e.Detail)
+	msg := fmt.Sprintf("下游 HTTP %d: %s", e.Code, e.Detail)
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("%s (Retry-After %s)", msg, e.RetryAfter)
+	}
+	return msg
 }
 
 // Unwrap 返回下游异常哨兵
@@ -53,13 +59,14 @@ func (e *HTTPStatusError) StatusCode() int {
 }
 
 // Retryable 判断当前状态码是否可重试
+// 429 不自动重试，由调用方根据 RetryAfter 决定
 func (e *HTTPStatusError) Retryable() bool {
 	if e == nil {
 		return false
 	}
 	switch e.Code {
-	case http.StatusRequestTimeout, http.StatusTooManyRequests,
-		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+	case http.StatusRequestTimeout, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return true
 	default:
 		return false

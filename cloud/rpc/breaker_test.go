@@ -26,10 +26,10 @@ func TestCircuitBreaker_OpensByFailureRate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("closed 应允许: %v", err)
 	}
-	b.record(ticket, attemptResult{failure: true})
-	b.record(ticket, attemptResult{failure: true})
-	b.record(ticket, attemptResult{})
-	b.record(ticket, attemptResult{})
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	b.record(ticket, attemptResult{counted: true})
+	b.record(ticket, attemptResult{counted: true})
 	if b.state != breakerOpen {
 		t.Fatalf("失败率达到 0.5 应打开，state=%d", b.state)
 	}
@@ -42,10 +42,10 @@ func TestCircuitBreaker_OpensByFailureRate(t *testing.T) {
 func TestCircuitBreaker_OpensBySlowRate(t *testing.T) {
 	b := newCircuitBreaker(testBreakerConfig())
 	ticket, _ := b.allow()
-	b.record(ticket, attemptResult{slow: true})
-	b.record(ticket, attemptResult{slow: true})
-	b.record(ticket, attemptResult{})
-	b.record(ticket, attemptResult{})
+	b.record(ticket, attemptResult{slow: true, counted: true})
+	b.record(ticket, attemptResult{slow: true, counted: true})
+	b.record(ticket, attemptResult{counted: true})
+	b.record(ticket, attemptResult{counted: true})
 	if b.state != breakerOpen {
 		t.Fatalf("慢调用率达到 0.5 应打开，state=%d", b.state)
 	}
@@ -61,12 +61,12 @@ func TestCircuitBreaker_MinRequests(t *testing.T) {
 	b := newCircuitBreaker(cfg)
 	ticket, _ := b.allow()
 	for i := 0; i < 4; i++ {
-		b.record(ticket, attemptResult{failure: true})
+		b.record(ticket, attemptResult{failure: true, counted: true})
 	}
 	if b.state != breakerClosed {
 		t.Fatalf("未达到 MinRequests 不应打开，state=%d", b.state)
 	}
-	b.record(ticket, attemptResult{failure: true})
+	b.record(ticket, attemptResult{failure: true, counted: true})
 	if b.state != breakerOpen {
 		t.Fatalf("达到 MinRequests 且失败率为 1 应打开，state=%d", b.state)
 	}
@@ -77,7 +77,7 @@ func TestCircuitBreaker_HalfOpenSuccessCloses(t *testing.T) {
 	b := newCircuitBreaker(testBreakerConfig())
 	ticket, _ := b.allow()
 	for i := 0; i < 4; i++ {
-		b.record(ticket, attemptResult{failure: true})
+		b.record(ticket, attemptResult{failure: true, counted: true})
 	}
 	if b.state != breakerOpen {
 		t.Fatalf("应已打开，state=%d", b.state)
@@ -101,14 +101,14 @@ func TestCircuitBreaker_HalfOpenFailureReopens(t *testing.T) {
 	b := newCircuitBreaker(testBreakerConfig())
 	ticket, _ := b.allow()
 	for i := 0; i < 4; i++ {
-		b.record(ticket, attemptResult{failure: true})
+		b.record(ticket, attemptResult{failure: true, counted: true})
 	}
 	time.Sleep(30 * time.Millisecond)
 	probe, err := b.allow()
 	if err != nil {
 		t.Fatalf("冷却后应进入半开: %v", err)
 	}
-	b.record(probe, attemptResult{failure: true})
+	b.record(probe, attemptResult{failure: true, counted: true})
 	if b.state != breakerOpen {
 		t.Fatalf("探测失败应重新打开，state=%d", b.state)
 	}
@@ -122,16 +122,74 @@ func TestCircuitBreaker_HalfOpenSlowReopens(t *testing.T) {
 	b := newCircuitBreaker(testBreakerConfig())
 	ticket, _ := b.allow()
 	for i := 0; i < 4; i++ {
-		b.record(ticket, attemptResult{failure: true})
+		b.record(ticket, attemptResult{failure: true, counted: true})
 	}
 	time.Sleep(30 * time.Millisecond)
 	probe, err := b.allow()
 	if err != nil {
 		t.Fatalf("冷却后应进入半开: %v", err)
 	}
-	b.record(probe, attemptResult{slow: true})
+	b.record(probe, attemptResult{slow: true, counted: true})
 	if b.state != breakerOpen {
 		t.Fatalf("探测慢调用应重新打开，state=%d", b.state)
+	}
+}
+
+// TestCircuitBreaker_HalfOpen429Reopens 验证半开探测遇到 429 后重新打开
+func TestCircuitBreaker_HalfOpen429Reopens(t *testing.T) {
+	b := newCircuitBreaker(testBreakerConfig())
+	ticket, _ := b.allow()
+	for i := 0; i < 4; i++ {
+		b.record(ticket, attemptResult{failure: true, counted: true})
+	}
+	time.Sleep(30 * time.Millisecond)
+	probe, err := b.allow()
+	if err != nil {
+		t.Fatalf("冷却后应进入半开: %v", err)
+	}
+	b.record(probe, attemptResult{throttled: true})
+	if b.state != breakerOpen {
+		t.Fatalf("探测 429 应重新打开，state=%d", b.state)
+	}
+}
+
+// TestCircuitBreaker_4xxDoesNotDiluteFailureRate 验证 4xx 不稀释失败率
+func TestCircuitBreaker_4xxDoesNotDiluteFailureRate(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 4
+	cfg.MinRequests = 1
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	b := newCircuitBreaker(cfg)
+	ticket, _ := b.allow()
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	for i := 0; i < 3; i++ {
+		b.record(ticket, attemptResult{counted: false})
+	}
+	if b.state != breakerOpen {
+		t.Fatalf("1 个 5xx + 3 个 4xx 应按 1/1 失败率打开，state=%d", b.state)
+	}
+}
+
+// TestCircuitBreaker_4xxNotCountedTowardMinRequests 验证 4xx 不满足最小请求数
+func TestCircuitBreaker_4xxNotCountedTowardMinRequests(t *testing.T) {
+	cfg := testBreakerConfig()
+	cfg.WindowSize = 4
+	cfg.MinRequests = 2
+	cfg.FailureRate = 1
+	cfg.SlowRate = 1
+	b := newCircuitBreaker(cfg)
+	ticket, _ := b.allow()
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	for i := 0; i < 3; i++ {
+		b.record(ticket, attemptResult{counted: false})
+	}
+	if b.state != breakerClosed {
+		t.Fatalf("失败率样本只有 1 个，不应达到 MinRequests，state=%d", b.state)
+	}
+	b.record(ticket, attemptResult{failure: true, counted: true})
+	if b.state != breakerOpen {
+		t.Fatalf("失败率样本达到 2 个且全失败应打开，state=%d", b.state)
 	}
 }
 
@@ -140,7 +198,7 @@ func TestCircuitBreaker_NeutralReleasesProbe(t *testing.T) {
 	b := newCircuitBreaker(testBreakerConfig())
 	ticket, _ := b.allow()
 	for i := 0; i < 4; i++ {
-		b.record(ticket, attemptResult{failure: true})
+		b.record(ticket, attemptResult{failure: true, counted: true})
 	}
 	time.Sleep(30 * time.Millisecond)
 	probe, err := b.allow()
@@ -161,7 +219,7 @@ func TestCircuitBreaker_StaleProbeIgnored(t *testing.T) {
 	b := newCircuitBreaker(testBreakerConfig())
 	ticket, _ := b.allow()
 	for i := 0; i < 4; i++ {
-		b.record(ticket, attemptResult{failure: true})
+		b.record(ticket, attemptResult{failure: true, counted: true})
 	}
 	time.Sleep(30 * time.Millisecond)
 	oldProbe, err := b.allow()

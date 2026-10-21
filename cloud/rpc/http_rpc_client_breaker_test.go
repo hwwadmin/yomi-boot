@@ -217,6 +217,41 @@ func TestInvoke_NoopBizHook(t *testing.T) {
 	}
 }
 
+// TestInvoke_429NotRetried 验证 429 不自动重试且暴露 Retry-After
+func TestInvoke_429NotRetried(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithMaxAttempts(3),
+		WithBackoff(time.Millisecond, time.Millisecond),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	err := client.Invoke(context.Background(), "/x", nil, &env, checkTestEnvelope)
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusTooManyRequests {
+		t.Fatalf("期望 HTTP 429，实际 %v", err)
+	}
+	if statusErr.RetryAfter != time.Minute {
+		t.Fatalf("RetryAfter: got %v want 1m", statusErr.RetryAfter)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("429 不应自动重试，hits=%d", hits.Load())
+	}
+	if state, _ := breakerSnapshot(client); state != breakerClosed {
+		t.Fatalf("429 不应打开熔断，state=%d", state)
+	}
+}
+
 // TestInvoke_HookRejectsWithoutError 验证 false+nil 返回 ErrBizRejected
 func TestInvoke_HookRejectsWithoutError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

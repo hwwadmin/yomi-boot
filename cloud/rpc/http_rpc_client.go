@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -124,12 +125,19 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, endpoint string, reqBody any
 		if respBody != nil {
 			if err := json.Unmarshal(body, respBody); err != nil {
 				protocolErr := &ProtocolError{Reason: "解析下游响应失败", Err: err}
-				c.breaker.record(ticket, attemptResult{failure: true, slow: elapsed > c.breaker.slowThreshold()})
+				c.breaker.record(ticket, attemptResult{
+					failure: true,
+					slow:    elapsed > c.breaker.slowThreshold(),
+					counted: true,
+				})
 				return protocolErr
 			}
 		}
 
-		c.breaker.record(ticket, attemptResult{slow: elapsed > c.breaker.slowThreshold()})
+		c.breaker.record(ticket, attemptResult{
+			slow:    elapsed > c.breaker.slowThreshold(),
+			counted: true,
+		})
 		ok, hookErr := bizHook(ctx, BizHookContext{
 			Endpoint: endpoint,
 			ReqBody:  reqBody,
@@ -198,11 +206,12 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 	if err != nil {
 		return nil, wrapRetryable(errors.Wrap(err, "读取下游响应失败"))
 	}
+	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 	if int64(len(data)) > maxBytes {
 		if resp.StatusCode == http.StatusOK {
 			return nil, &ProtocolError{Reason: "响应体超过上限"}
 		}
-		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: "响应体超过上限"}
+		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: "响应体超过上限", RetryAfter: retryAfter}
 	}
 	if resp.StatusCode != http.StatusOK {
 		detail := strings.TrimSpace(string(data))
@@ -211,27 +220,59 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 		} else if len(detail) > 200 {
 			detail = detail[:200] + "..."
 		}
-		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: detail}
+		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: detail, RetryAfter: retryAfter}
 	}
 	return data, nil
 }
 
+// parseRetryAfter 解析 Retry-After 头，支持秒数与 HTTP 日期；最长 24 小时
+func parseRetryAfter(value string) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	const maxRetryAfter = 24 * time.Hour
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		if seconds > int(maxRetryAfter/time.Second) {
+			return maxRetryAfter
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		if d := time.Until(at); d > 0 {
+			if d > maxRetryAfter {
+				return maxRetryAfter
+			}
+			return d
+		}
+	}
+	return 0
+}
+
 // classify 将传输错误归类为熔断结果
-// 5xx/408 计失败；4xx/429/3xx 不计失败；协议错误和网络错误计失败
+// 5xx/408 计失败并计入失败率样本；2xx 计入样本；4xx/429/3xx 不计失败率样本；
+// 429 标记 throttled，半开探测遇到时重新打开；协议错误和网络错误计失败
 func (c *HttpRpcClient) classify(err error, elapsed time.Duration) attemptResult {
 	slow := elapsed > c.breaker.slowThreshold()
 	var statusErr *HTTPStatusError
 	if errors.As(err, &statusErr) {
+		failure := statusErr.Code >= http.StatusInternalServerError || statusErr.Code == http.StatusRequestTimeout
+		counted := failure || (statusErr.Code >= 200 && statusErr.Code < 300)
 		return attemptResult{
-			failure: statusErr.Code >= http.StatusInternalServerError || statusErr.Code == http.StatusRequestTimeout,
-			slow:    slow,
+			failure:   failure,
+			slow:      slow,
+			counted:   counted,
+			throttled: statusErr.Code == http.StatusTooManyRequests,
 		}
 	}
 	var protocolErr *ProtocolError
 	if errors.As(err, &protocolErr) {
-		return attemptResult{failure: true, slow: slow}
+		return attemptResult{failure: true, slow: slow, counted: true}
 	}
-	return attemptResult{failure: true}
+	return attemptResult{failure: true, counted: true}
 }
 
 // isLocalError 判断是否为本地请求构建错误

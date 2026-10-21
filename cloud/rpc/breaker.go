@@ -27,8 +27,10 @@ type breakerTicket struct {
 
 // attemptResult 一次传输尝试的结果，由客户端按状态码、错误和耗时归类
 type attemptResult struct {
-	failure bool // failure 表示传输失败
-	slow    bool // slow 表示响应耗时超过阈值
+	failure   bool // failure 表示传输失败
+	slow      bool // slow 表示响应耗时超过阈值
+	counted   bool // counted 表示计入失败率样本；4xx/429/3xx 不计入
+	throttled bool // throttled 表示下游限流；半开探测遇到时重新打开
 }
 
 // circuitBreaker 基于滑动窗口的失败率/慢调用率熔断器
@@ -41,7 +43,8 @@ type circuitBreaker struct {
 	openUntil     time.Time
 	probeSeq      uint64
 	probeInFlight bool
-	window        []attemptResult
+	window        []attemptResult // window 记录全部结果，用于慢调用率
+	failureWindow []attemptResult // failureWindow 只记录计入失败率的结果
 }
 
 // newCircuitBreaker 创建熔断器
@@ -71,6 +74,7 @@ func (b *circuitBreaker) allow() (breakerTicket, error) {
 		b.probeSeq++
 		b.probeInFlight = true
 		b.window = nil
+		b.failureWindow = nil
 		return breakerTicket{probe: true, seq: b.probeSeq}, nil
 	case breakerHalfOpen:
 		if b.probeInFlight {
@@ -85,7 +89,7 @@ func (b *circuitBreaker) allow() (breakerTicket, error) {
 }
 
 // record 记录一次传输尝试；closed 态累计窗口，half-open 态只认当前探测票据
-// 半开探测失败或慢调用都重新打开，避免慢下游仅凭一次探测就被放行
+// 半开探测失败、慢调用或 429 限流都重新打开，避免慢/过载下游仅凭一次探测就被放行
 func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) {
 	if b == nil {
 		return
@@ -101,7 +105,7 @@ func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) {
 			return
 		}
 		b.probeInFlight = false
-		if result.failure || result.slow {
+		if result.failure || result.slow || result.throttled {
 			b.open()
 			return
 		}
@@ -115,10 +119,17 @@ func (b *circuitBreaker) record(ticket breakerTicket, result attemptResult) {
 		if len(b.window) > b.cfg.WindowSize {
 			b.window = b.window[len(b.window)-b.cfg.WindowSize:]
 		}
-		if len(b.window) < b.cfg.MinRequests {
+		if result.counted {
+			b.failureWindow = append(b.failureWindow, result)
+			if len(b.failureWindow) > b.cfg.WindowSize {
+				b.failureWindow = b.failureWindow[len(b.failureWindow)-b.cfg.WindowSize:]
+			}
+		}
+		if len(b.failureWindow) >= b.cfg.MinRequests && b.failureRate() >= b.cfg.FailureRate {
+			b.open()
 			return
 		}
-		if b.failureRate() >= b.cfg.FailureRate || b.slowRate() >= b.cfg.SlowRate {
+		if len(b.window) >= b.cfg.MinRequests && b.slowRate() >= b.cfg.SlowRate {
 			b.open()
 		}
 	}
@@ -150,6 +161,7 @@ func (b *circuitBreaker) open() {
 	b.openUntil = time.Now().Add(b.cfg.OpenDuration)
 	b.probeInFlight = false
 	b.window = nil
+	b.failureWindow = nil
 }
 
 // close 关闭熔断并清空窗口
@@ -157,26 +169,27 @@ func (b *circuitBreaker) close() {
 	b.state = breakerClosed
 	b.probeInFlight = false
 	b.window = nil
+	b.failureWindow = nil
 }
 
-// failureRate 返回窗口内的失败率
+// failureRate 返回失败率样本窗口内的失败率
 func (b *circuitBreaker) failureRate() float64 {
-	return b.rate(func(result attemptResult) bool { return result.failure })
+	return rate(b.failureWindow, func(result attemptResult) bool { return result.failure })
 }
 
-// slowRate 返回窗口内的慢调用率
+// slowRate 返回全部结果窗口内的慢调用率
 func (b *circuitBreaker) slowRate() float64 {
-	return b.rate(func(result attemptResult) bool { return result.slow })
+	return rate(b.window, func(result attemptResult) bool { return result.slow })
 }
 
 // rate 返回窗口内满足条件的比例
-func (b *circuitBreaker) rate(match func(attemptResult) bool) float64 {
-	total := len(b.window)
+func rate(window []attemptResult, match func(attemptResult) bool) float64 {
+	total := len(window)
 	if total == 0 {
 		return 0
 	}
 	count := 0
-	for _, result := range b.window {
+	for _, result := range window {
 		if match(result) {
 			count++
 		}
