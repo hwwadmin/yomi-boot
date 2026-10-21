@@ -6,6 +6,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/errors"
@@ -90,10 +91,39 @@ func open(cfg Config) (*gorm.DB, func(), error) {
 func buildDSN(cfg Config) (string, error) {
 	switch cfg.Type {
 	case enums.MySQL:
-		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Params), nil
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database, withMySQLDefaults(cfg.Params)), nil
 	case enums.Postgres:
 		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s %s", cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.Params), nil
 	default:
 		return "", errors.Newf("不支持的数据库类型: %s", cfg.Type)
 	}
+}
+
+// withMySQLDefaults 为 MySQL 参数补齐 parseTime=true 与 loc=Local（未显式配置时），
+// 避免 BaseModel 的 time.Time 列因缺少 parseTime 读取失败或按 UTC 解析导致时区错位
+func withMySQLDefaults(params string) string {
+	params = strings.TrimLeft(params, "?&")
+
+	parts := make([]string, 0, 4)
+	hasParseTime, hasLoc := false, false
+	for _, kv := range strings.Split(params, "&") {
+		if kv == "" {
+			continue
+		}
+		parts = append(parts, kv)
+		key, _, _ := strings.Cut(kv, "=")
+		switch key {
+		case "parseTime":
+			hasParseTime = true
+		case "loc":
+			hasLoc = true
+		}
+	}
+	if !hasParseTime {
+		parts = append(parts, "parseTime=true")
+	}
+	if !hasLoc {
+		parts = append(parts, "loc=Local")
+	}
+	return strings.Join(parts, "&")
 }

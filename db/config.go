@@ -27,7 +27,7 @@ type Config struct {
 	User                   string       `mapstructure:"user"`                       // User 是数据库用户名
 	Password               string       `mapstructure:"password"`                   // Password 是数据库密码
 	Database               string       `mapstructure:"database"`                   // Database 是数据库名
-	Params                 string       `mapstructure:"params"`                     // Params 是 DSN 追加参数；MySQL 可配 parseTime=true&loc=Local 跟随进程时区
+	Params                 string       `mapstructure:"params"`                     // Params 是 DSN 追加参数；MySQL 未配置 parseTime/loc 时自动补 parseTime=true&loc=Local
 	MaxOpenConns           int          `mapstructure:"max_open_conns"`             // MaxOpenConns 是最大连接数
 	MaxIdleConns           int          `mapstructure:"max_idle_conns"`             // MaxIdleConns 是最大空闲连接数
 	MinIdleConns           int          `mapstructure:"min_idle_conns"`             // MinIdleConns 是最小空闲连接数，0不预热不保活，须<=max_idle_conns
