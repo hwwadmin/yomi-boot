@@ -240,13 +240,13 @@ services/{domain}/
 | `ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
 
-**平台共享 DDL**（与封装同包维护，**无**独立 `gitee.com/hq_project/yomi-boot/sql/` 目录）：
+**平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/`）：
 
 | 文件 | 表名 | 说明 |
 | ---- | ---- | ---- |
-| `gitee.com/hq_project/yomi-boot/component/idempotency/sys_biz.sql` | `sys_biz` | 业务幂等表 |
-| `gitee.com/hq_project/yomi-boot/cloud/dtm/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
-| `gitee.com/hq_project/yomi-boot/component/event/sql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
+| `gitee.com/hq_project/yomi-boot/sql/sys_biz.sql` | `sys_biz` | 业务幂等表 |
+| `gitee.com/hq_project/yomi-boot/sql/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
+| `gitee.com/hq_project/yomi-boot/sql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
 
 **gitee.com/hq_project/yomi-boot 明确不包含**：业务 handler/usecase、各领域 `bizerr` 哨兵。
 

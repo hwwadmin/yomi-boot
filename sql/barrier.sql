@@ -1,5 +1,5 @@
 -- 平台共享 DDL：DTM 子事务屏障表（各领域库内各建一份，与业务表同库）
--- 权威定义仅此一份；与 boot/dtm 封装口径一致，勿在各服务 script/sql 下复制。
+-- 权威定义仅此一份；与 cloud/dtm 封装口径一致，勿在各服务 script/sql 下复制。
 
 CREATE TABLE IF NOT EXISTS `sys_barrier` (
     `id`         BIGINT       NOT NULL AUTO_INCREMENT,

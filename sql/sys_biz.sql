@@ -1,5 +1,5 @@
 -- 平台共享 DDL：业务幂等表（各领域库内各建一份）
--- 权威定义仅此一份；与 boot/idempotency 封装口径一致。
+-- 权威定义仅此一份；与 component/idempotency 封装口径一致。
 
 CREATE TABLE IF NOT EXISTS `sys_biz` (
     `id` bigint NOT NULL COMMENT '主键ID',
