@@ -283,7 +283,8 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 const maxDrainBytes = 4 << 10
 
 // doRequest 发送一次 HTTP POST 并按需读取响应体
-// needBody=false 时最多排空 maxDrainBytes 后丢弃 body；非 200 只用状态码、状态文本和 Retry-After
+// needBody=false 时最多排空 maxDrainBytes 后丢弃 body；此时非 200 只用状态码、状态文本和 Retry-After
+// needBody=true 时非 200 会读取并返回已读 body；Detail 取前 200 字节，body 供调用方记录日志
 // 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
 // 出错时若已读到 body 会一并返回，仅供调用方记录日志，不得当成功响应使用
 func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool, maxBytes int64) ([]byte, error) {

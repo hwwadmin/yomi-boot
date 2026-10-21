@@ -12,6 +12,7 @@ import (
 // breakerState 熔断器状态
 type breakerState int
 
+// 熔断器状态取值
 const (
 	breakerClosed breakerState = iota
 	breakerOpen
@@ -94,6 +95,7 @@ func (b *circuitBreaker) acquireProbe() breakerTicket {
 // breakerRecordResult 描述一次 record 对熔断状态的影响
 type breakerRecordResult int
 
+// 记录结果取值
 const (
 	breakerRecordClosed          breakerRecordResult = iota // 记录后未打开
 	breakerRecordOpenedByFailure                            // 本次记录触发失败率打开

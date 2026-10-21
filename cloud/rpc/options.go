@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// 默认参数：请求超时、重试退避、响应上限、连接池与熔断
 const (
 	defaultRequestTimeout = 3 * time.Second // defaultRequestTimeout 是 InvokeRequest.Timeout 的默认值
 
@@ -28,10 +29,12 @@ const (
 )
 
 // BreakerOptions 熔断器参数
-// 失败率或慢调用率达到阈值且窗口内请求数达到 MinRequests 时打开熔断
+// 失败率或慢调用率达到阈值且对应窗口样本数达到 MinRequests 时打开熔断
+// 窗口按尝试次数计数（一次调用的每次重试各算一条）
+// 失败率只看计入失败率的样本，慢调用率看全部尝试
 type BreakerOptions struct {
 	WindowSize    int           // WindowSize 是滑动窗口保留的尝试数，默认 100
-	MinRequests   int           // MinRequests 是窗口内达到该请求数后才评估，默认 20
+	MinRequests   int           // MinRequests 是窗口内达到该样本数后才评估（按尝试计），默认 20
 	FailureRate   float64       // FailureRate 是失败率阈值，默认 0.5
 	SlowRate      float64       // SlowRate 是慢调用率阈值，默认 0.5
 	SlowThreshold time.Duration // SlowThreshold 是慢调用耗时阈值，默认 2s

@@ -9,7 +9,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// testServiceSeq 为每个测试客户端生成唯一服务名，避免进程级 breaker 共享串测
+// testServiceSeq 为每个测试客户端生成唯一服务名，便于日志区分不同测试的 client
 var testServiceSeq atomic.Uint64
 
 // newTestServiceName 返回测试用唯一服务名
