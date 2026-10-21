@@ -55,12 +55,13 @@ func (t *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-// TestInvoke_VoidSkipsBodyRead 验证不需要响应体时不读取 body
-func TestInvoke_VoidSkipsBodyRead(t *testing.T) {
+// TestInvoke_VoidDrainsBody 验证 void 调用排空小 body 以复用连接
+func TestInvoke_VoidDrainsBody(t *testing.T) {
 	var reads, bytesRead atomic.Int64
+	body := []byte(`{"code":"OK"}`)
 	client := newTestRPCClient("")
 	client.httpClient = &http.Client{Transport: &fakeTransport{
-		status: http.StatusOK, body: []byte(`{"code":"OK"}`),
+		status: http.StatusOK, body: body,
 		reads: &reads, bytesRead: &bytesRead,
 	}}
 	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) {
@@ -70,13 +71,13 @@ func TestInvoke_VoidSkipsBodyRead(t *testing.T) {
 	if err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if reads.Load() != 0 || bytesRead.Load() != 0 {
-		t.Fatalf("void 调用不应读取 body，reads=%d bytes=%d", reads.Load(), bytesRead.Load())
+	if bytesRead.Load() != int64(len(body)) || reads.Load() == 0 {
+		t.Fatalf("void 调用应排空小 body，reads=%d bytes=%d", reads.Load(), bytesRead.Load())
 	}
 }
 
-// TestInvoke_VoidNon200DiscardsBody 验证非 200 也直接丢弃 body
-func TestInvoke_VoidNon200DiscardsBody(t *testing.T) {
+// TestInvoke_VoidNon200DrainsBody 验证非 200 也只排空有限 body
+func TestInvoke_VoidNon200DrainsBody(t *testing.T) {
 	var reads, bytesRead atomic.Int64
 	client := newTestRPCClient("")
 	client.httpClient = &http.Client{Transport: &fakeTransport{
@@ -92,8 +93,8 @@ func TestInvoke_VoidNon200DiscardsBody(t *testing.T) {
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusInternalServerError {
 		t.Fatalf("期望 HTTP 500，实际 %v", err)
 	}
-	if reads.Load() != 0 || bytesRead.Load() != 0 {
-		t.Fatalf("void 调用不应读取 body，reads=%d bytes=%d", reads.Load(), bytesRead.Load())
+	if bytesRead.Load() == 0 || bytesRead.Load() > int64(maxDrainBytes+1) {
+		t.Fatalf("非 200 void 调用应只排空有限 body，reads=%d bytes=%d", reads.Load(), bytesRead.Load())
 	}
 }
 

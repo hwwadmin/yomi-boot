@@ -183,8 +183,11 @@ func (c *HttpRpcClient) resolveEndpoint(ctx context.Context, endpoint string) (s
 	return url, nil
 }
 
+// maxDrainBytes 是 void 调用排空响应体的上限；小响应可复用连接，大响应直接关闭
+const maxDrainBytes = 4 << 10
+
 // doRequest 发送一次 HTTP POST 并按需读取响应体
-// needBody=false 时 200 和非 200 都直接丢弃 body；非 200 只用状态码、状态文本和 Retry-After
+// needBody=false 时最多排空 maxDrainBytes 后丢弃 body；非 200 只用状态码、状态文本和 Retry-After
 // 非 200 返回 HTTPStatusError；200 但读取或解析超限返回 ProtocolError
 func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byte, needBody bool, maxBytes int64) ([]byte, error) {
 	if strings.TrimSpace(url) == "" {
@@ -207,6 +210,7 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 	defer func() { _ = resp.Body.Close() }()
 
 	if !needBody {
+		drainBody(resp.Body)
 		if resp.StatusCode == http.StatusOK {
 			return nil, nil
 		}
@@ -241,6 +245,14 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 		return nil, &HTTPStatusError{Code: resp.StatusCode, Detail: detail, RetryAfter: retryAfter}
 	}
 	return data, nil
+}
+
+// drainBody 最多排空 maxDrainBytes+1 字节，随后由调用方关闭响应体
+func drainBody(body io.Reader) {
+	if body == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxDrainBytes+1))
 }
 
 // parseRetryAfter 解析 Retry-After 头，支持秒数与 HTTP 日期；最长 24 小时
