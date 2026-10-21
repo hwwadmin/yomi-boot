@@ -21,7 +21,11 @@ import (
 	yomikafka "gitee.com/hq_project/yomi-boot/kafka"
 )
 
-const dlqExhaustedErrorPrefix = "[EXHAUSTED] "
+const (
+	dlqExhaustedErrorPrefix = "[EXHAUSTED] "
+	dlqErrorMessageLimit    = 4000
+	dlqErrorMessageSuffix   = "...[truncated]"
+)
 
 // DlqHandler 发件箱死信处理器
 type DlqHandler struct {
@@ -211,7 +215,16 @@ func coreErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	return err.Error()
+	return truncateErrorMessage(err.Error())
+}
+
+// truncateErrorMessage 截断过长的错误信息，避免超过 error_msg 的 text 列上限
+func truncateErrorMessage(message string) string {
+	runes := []rune(message)
+	if len(runes) <= dlqErrorMessageLimit {
+		return message
+	}
+	return string(runes[:dlqErrorMessageLimit]) + dlqErrorMessageSuffix
 }
 
 // dlqExhaustedErrorMsg 为已耗尽重试次数的错误信息追加标记前缀
