@@ -211,8 +211,8 @@ func TestInvoke_HookErrorDoesNotTripBreaker(t *testing.T) {
 	}
 }
 
-// TestNewHttpRpcClient_SharesBreakerByService 验证同一服务共享熔断器
-func TestNewHttpRpcClient_SharesBreakerByService(t *testing.T) {
+// TestNewHttpRpcClient_IndependentBreakers 验证每个 client 的熔断器互相独立
+func TestNewHttpRpcClient_IndependentBreakers(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
@@ -228,28 +228,27 @@ func TestNewHttpRpcClient_SharesBreakerByService(t *testing.T) {
 	resolve := resolverFunc(func(context.Context, string, string) (string, error) { return server.URL, nil })
 	c1 := NewHttpRpcClient(resolve, name, WithBreaker(cfg))
 	c2 := NewHttpRpcClient(resolve, name, WithBreaker(cfg))
-	if c1.breaker != c2.breaker {
-		t.Fatal("同一 serviceName 应共享 breaker")
-	}
-	other := NewHttpRpcClient(resolve, newTestServiceName(), WithBreaker(cfg))
-	if other.breaker == c1.breaker {
-		t.Fatal("不同 serviceName 不应共享 breaker")
+	if c1.breaker == c2.breaker {
+		t.Fatal("每个 client 应有独立 breaker")
 	}
 
 	var env testEnvelope
 	if err := invokeTestWith(c1, context.Background(), "/x", nil, &env, checkTestEnvelope, 1); err == nil {
 		t.Fatal("503 应返回错误")
 	}
-	if err := invokeTestWith(c2, context.Background(), "/x", nil, &env, checkTestEnvelope, 1); !errors.Is(err, ErrCircuitOpen) {
-		t.Fatalf("同服务第二个 client 应命中共享熔断，实际 %v", err)
+	if state, _ := breakerSnapshot(c1); state != breakerOpen {
+		t.Fatalf("c1 的熔断应打开，state=%d", state)
 	}
-	if hits.Load() != 1 {
-		t.Fatalf("共享熔断后不应再次请求下游，hits=%d", hits.Load())
+	if err := invokeTestWith(c2, context.Background(), "/x", nil, &env, checkTestEnvelope, 1); errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("c2 不应受 c1 熔断影响，实际 %v", err)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("两个 client 应各自请求下游，hits=%d", hits.Load())
 	}
 }
 
-// TestNewHttpRpcClient_BreakerConfigFirstWins 验证同一服务第一次创建的熔断配置生效
-func TestNewHttpRpcClient_BreakerConfigFirstWins(t *testing.T) {
+// TestNewHttpRpcClient_BreakerOptionsIndependent 验证每个 client 使用自己的熔断配置
+func TestNewHttpRpcClient_BreakerOptionsIndependent(t *testing.T) {
 	name := newTestServiceName()
 	first := BreakerOptions{
 		WindowSize: 7, MinRequests: 7, FailureRate: 1, SlowRate: 1,
@@ -261,11 +260,14 @@ func TestNewHttpRpcClient_BreakerConfigFirstWins(t *testing.T) {
 	}
 	c1 := NewHttpRpcClient(nil, name, WithBreaker(first))
 	c2 := NewHttpRpcClient(nil, name, WithBreaker(second))
-	if c1.breaker != c2.breaker {
-		t.Fatal("同一 serviceName 应共享 breaker")
+	if c1.breaker == c2.breaker {
+		t.Fatal("每个 client 应有独立 breaker")
 	}
-	if c2.breaker.cfg.WindowSize != 7 || c2.breaker.cfg.MinRequests != 7 {
-		t.Fatalf("应复用第一次配置，实际 window=%d min=%d", c2.breaker.cfg.WindowSize, c2.breaker.cfg.MinRequests)
+	if c1.breaker.cfg.WindowSize != 7 || c1.breaker.cfg.MinRequests != 7 {
+		t.Fatalf("c1 配置不应被覆盖，实际 window=%d min=%d", c1.breaker.cfg.WindowSize, c1.breaker.cfg.MinRequests)
+	}
+	if c2.breaker.cfg.WindowSize != 3 || c2.breaker.cfg.MinRequests != 3 {
+		t.Fatalf("c2 配置不应被覆盖，实际 window=%d min=%d", c2.breaker.cfg.WindowSize, c2.breaker.cfg.MinRequests)
 	}
 }
 

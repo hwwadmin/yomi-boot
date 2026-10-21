@@ -47,20 +47,6 @@ type circuitBreaker struct {
 	failureWindow []attemptResult // failureWindow 只记录计入失败率的结果
 }
 
-// breakerRegistry 按服务名共享熔断器；条目数受下游服务数量约束
-var breakerRegistry sync.Map
-
-// breakerForService 获取或创建服务级熔断器
-// 同一服务第一次创建时的 BreakerOptions 生效，后续 client 复用该实例
-func breakerForService(serviceName string, cfg BreakerOptions) *circuitBreaker {
-	if existing, ok := breakerRegistry.Load(serviceName); ok {
-		return existing.(*circuitBreaker)
-	}
-	created := newCircuitBreaker(cfg)
-	actual, _ := breakerRegistry.LoadOrStore(serviceName, created)
-	return actual.(*circuitBreaker)
-}
-
 // newCircuitBreaker 创建熔断器
 func newCircuitBreaker(cfg BreakerOptions) *circuitBreaker {
 	return &circuitBreaker{

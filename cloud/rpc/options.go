@@ -38,7 +38,7 @@ type httpClientOptions struct {
 	HTTPTimeout time.Duration  // HTTPTimeout 是单次 HTTP 尝试的后备超时，默认 30s
 	BaseBackoff time.Duration  // BaseBackoff 是首次重试退避，默认 50ms
 	MaxBackoff  time.Duration  // MaxBackoff 是退避上限，默认 200ms
-	Breaker     BreakerOptions // Breaker 是服务级熔断参数
+	Breaker     BreakerOptions // Breaker 是当前 client 的熔断参数
 }
 
 // ClientOption 修改 HTTP RPC 客户端参数
@@ -65,8 +65,8 @@ func WithBackoff(base, max time.Duration) ClientOption {
 	}
 }
 
-// WithBreaker 设置熔断器参数
-// 熔断器按 serviceName 共享；同一服务只有第一次创建时的配置生效
+// WithBreaker 设置当前 client 的熔断器参数
+// 每个 client 使用独立熔断器
 func WithBreaker(cfg BreakerOptions) ClientOption {
 	return func(o *httpClientOptions) {
 		o.Breaker = cfg
