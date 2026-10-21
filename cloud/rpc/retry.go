@@ -11,7 +11,9 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// shouldRetry 返回能否重试：还有次数、上下文有效且错误可重试
+// shouldRetry 判断是否继续重试：未超次数、调用方上下文未取消且错误可重试
+// ctx 是调用方上下文，不是单次尝试的上下文；调用方还活着时，
+// DeadlineExceeded 视为单次尝试/发现超时，按可重试传输错误处理
 func shouldRetry(ctx context.Context, err error, attempt, maxAttempts int) bool {
 	if attempt >= maxAttempts {
 		return false
@@ -19,10 +21,25 @@ func shouldRetry(ctx context.Context, err error, attempt, maxAttempts int) bool 
 	if ctx.Err() != nil {
 		return false
 	}
+	if errors.Is(err, context.DeadlineExceeded) && !isLocalOrProtocolError(err) {
+		return true
+	}
 	return isRetryable(err)
 }
 
+// isLocalOrProtocolError 判断错误是否为本地请求错误或响应协议错误
+// 这两类错误即使包装了 DeadlineExceeded 也不重试
+func isLocalOrProtocolError(err error) bool {
+	var protocolErr *ProtocolError
+	if errors.As(err, &protocolErr) {
+		return true
+	}
+	var localErr *requestError
+	return errors.As(err, &localErr)
+}
+
 // isRetryable 判断错误是否属于可重试的传输错误
+// 只做错误类型判定；单次尝试超时与调用方到期的区分在 shouldRetry
 func isRetryable(err error) bool {
 	if err == nil {
 		return false

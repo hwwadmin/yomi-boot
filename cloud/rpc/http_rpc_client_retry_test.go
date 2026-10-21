@@ -33,14 +33,105 @@ func TestInvoke_RetriesThenSucceeds(t *testing.T) {
 
 	client := newTestRPCClient(server.URL,
 		WithBackoff(1*time.Millisecond, 2*time.Millisecond),
-		WithHTTPTimeout(2*time.Second),
 	)
 	var env testEnvelope
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		MaxAttempts: 3,
+	})
+	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if hits.Load() != 3 {
 		t.Fatalf("hits=%d want 3", hits.Load())
+	}
+}
+
+// TestInvoke_AttemptTimeoutRetriesUntilAttemptsExhausted 验证单次尝试超时按 MaxAttempts 重试
+func TestInvoke_AttemptTimeoutRetriesUntilAttemptsExhausted(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		Timeout:     20 * time.Millisecond,
+		MaxAttempts: 3,
+	})
+	if err == nil {
+		t.Fatal("全部尝试超时应返回错误")
+	}
+	if hits.Load() != 3 {
+		t.Fatalf("单次超时应重试到 MaxAttempts，hits=%d", hits.Load())
+	}
+}
+
+// TestInvoke_AttemptTimeoutRetriesThenSucceeds 验证单次超时后重试成功
+func TestInvoke_AttemptTimeoutRetriesThenSucceeds(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			time.Sleep(100 * time.Millisecond)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
+	var env testEnvelope
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		Timeout:     20 * time.Millisecond,
+		MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatalf("单次超时应重试并成功: %v", err)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("hits=%d want 2", hits.Load())
+	}
+}
+
+// TestInvoke_CallerDeadlineStopsAttemptRetry 验证调用方 deadline 到期后不再重试
+func TestInvoke_CallerDeadlineStopsAttemptRetry(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
+	defer cancel()
+	var env testEnvelope
+	err := client.Invoke(ctx, InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		Timeout:     50 * time.Millisecond,
+		MaxAttempts: 3,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("期望调用方 DeadlineExceeded，实际 %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("调用方到期后不应重试，hits=%d", hits.Load())
 	}
 }
 
@@ -247,7 +338,7 @@ func TestInvoke_RetryAfterHonored(t *testing.T) {
 	}
 }
 
-// TestInvoke_RetryAfterExceedsBudget 验证 Retry-After 放不进预算时直接返回下游错误
+// TestInvoke_RetryAfterExceedsBudget 验证 Retry-After 放不进调用方预算时直接返回下游错误
 func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -258,13 +349,15 @@ func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	var env testEnvelope
-	err := client.Invoke(context.Background(), InvokeRequest{
+	err := client.Invoke(ctx, InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
 		BizHook:     checkTestEnvelope,
 		MaxAttempts: 3,
-		Timeout:     2 * time.Second,
+		Timeout:     3 * time.Second,
 	})
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusServiceUnavailable {
@@ -274,11 +367,11 @@ func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
 		t.Fatalf("RetryAfter: got %v want 2s", statusErr.RetryAfter)
 	}
 	if hits.Load() != 1 {
-		t.Fatalf("预算不足时不应重试，hits=%d", hits.Load())
+		t.Fatalf("调用方预算不足时不应重试，hits=%d", hits.Load())
 	}
 }
 
-// TestInvoke_DiscoveryBudgetExhaustedPreservesError 验证发现重试预算不足时返回发现错误
+// TestInvoke_DiscoveryBudgetExhaustedPreservesError 验证发现重试放不进调用方预算时返回发现错误
 func TestInvoke_DiscoveryBudgetExhaustedPreservesError(t *testing.T) {
 	var calls atomic.Int64
 	client := NewHttpRpcClient(resolverFunc(func(context.Context, string, string) (string, error) {
@@ -287,13 +380,15 @@ func TestInvoke_DiscoveryBudgetExhaustedPreservesError(t *testing.T) {
 	}), "svc",
 		WithBackoff(200*time.Millisecond, 200*time.Millisecond),
 	)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 	var env testEnvelope
-	err := client.Invoke(context.Background(), InvokeRequest{
+	err := client.Invoke(ctx, InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
 		BizHook:     checkTestEnvelope,
 		MaxAttempts: 3,
-		Timeout:     50 * time.Millisecond,
+		Timeout:     3 * time.Second,
 	})
 	var discoveryErr *discoveryError
 	if !errors.As(err, &discoveryErr) {
@@ -303,6 +398,6 @@ func TestInvoke_DiscoveryBudgetExhaustedPreservesError(t *testing.T) {
 		t.Fatalf("不应把发现错误替换成 DeadlineExceeded: %v", err)
 	}
 	if calls.Load() != 1 {
-		t.Fatalf("预算不足时不应继续重试，resolver 调用 %d 次", calls.Load())
+		t.Fatalf("调用方预算不足时不应继续重试，resolver 调用 %d 次", calls.Load())
 	}
 }

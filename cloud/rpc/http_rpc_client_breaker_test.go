@@ -11,8 +11,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// TestInvoke_RequestTimeout 验证请求级超时计入熔断失败且不自动重试
-func TestInvoke_RequestTimeout(t *testing.T) {
+// TestInvoke_AttemptTimeoutCountsAsFailure 验证单次尝试超时计入熔断失败；默认只尝试一次
+func TestInvoke_AttemptTimeoutCountsAsFailure(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
@@ -22,7 +22,6 @@ func TestInvoke_RequestTimeout(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithHTTPTimeout(time.Second),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
@@ -39,37 +38,95 @@ func TestInvoke_RequestTimeout(t *testing.T) {
 		t.Fatalf("期望 context.DeadlineExceeded，实际 %v", err)
 	}
 	if hits.Load() != 1 {
-		t.Fatalf("请求级超时不应自动重试，hits=%d", hits.Load())
+		t.Fatalf("默认 MaxAttempts=1，hits=%d", hits.Load())
 	}
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
-		t.Fatalf("请求级超时应计熔断失败，state=%d", state)
+		t.Fatalf("单次尝试超时应计熔断失败，state=%d", state)
+	}
+	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
 	}
 }
 
-// TestInvoke_ClientTimeoutCountsAsFailure 验证客户端 HTTP 超时计入熔断失败
-func TestInvoke_ClientTimeoutCountsAsFailure(t *testing.T) {
+// TestInvoke_AttemptTimeoutStopsWhenBreakerOpens 验证单次超时打开熔断后不再重试
+func TestInvoke_AttemptTimeoutStopsWhenBreakerOpens(t *testing.T) {
+	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithHTTPTimeout(20*time.Millisecond),
+		WithBackoff(time.Millisecond, time.Millisecond),
 		WithBreaker(BreakerOptions{
 			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: time.Minute, OpenDuration: time.Minute,
 		}),
 	)
 	var env testEnvelope
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err == nil {
-		t.Fatal("期望客户端超时")
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		Timeout:     20 * time.Millisecond,
+		MaxAttempts: 3,
+	})
+	if err == nil {
+		t.Fatal("期望超时错误")
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("熔断打开后不应继续重试，hits=%d", hits.Load())
 	}
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
-		t.Fatalf("客户端超时应计失败并打开熔断，state=%d", state)
+		t.Fatalf("超时应打开熔断，state=%d", state)
 	}
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
-		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
+}
+
+// TestInvoke_AttemptTimeoutNoRetryInHalfOpen 验证半开探测超时也只尝试一次
+func TestInvoke_AttemptTimeoutNoRetryInHalfOpen(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBackoff(time.Millisecond, time.Millisecond),
+		WithBreaker(BreakerOptions{
+			WindowSize: 1, MinRequests: 1, FailureRate: 1, SlowRate: 1,
+			SlowThreshold: time.Minute, OpenDuration: 10 * time.Millisecond,
+		}),
+	)
+	var env testEnvelope
+	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
+	if state, _ := breakerSnapshot(client); state != breakerOpen {
+		t.Fatalf("首次 500 应打开熔断，state=%d", state)
+	}
+	time.Sleep(30 * time.Millisecond)
+
+	before := hits.Load()
+	err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint:    "/x",
+		RespBody:    &env,
+		BizHook:     checkTestEnvelope,
+		Timeout:     20 * time.Millisecond,
+		MaxAttempts: 3,
+	})
+	if err == nil {
+		t.Fatal("半开探测超时应返回错误")
+	}
+	if got := hits.Load() - before; got != 1 {
+		t.Fatalf("半开探测只应发一次，实际 %d", got)
+	}
+	if state, _ := breakerSnapshot(client); state != breakerOpen {
+		t.Fatalf("探测超时应重新打开熔断，state=%d", state)
 	}
 }
 
@@ -129,7 +186,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 	}))
 	defer slow.Close()
 
-	client.httpClient = &http.Client{Timeout: time.Second}
+	client.httpClient = &http.Client{}
 	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) { return slow.URL, nil })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -141,7 +198,7 @@ func TestInvoke_MidAttemptCancelIsNeutral(t *testing.T) {
 		t.Fatalf("请求进行中取消不应写入熔断窗口，长度=%d", size)
 	}
 
-	client.httpClient = &http.Client{Timeout: time.Second}
+	client.httpClient = &http.Client{}
 	client.resolver = resolverFunc(func(context.Context, string, string) (string, error) { return bad.URL, nil })
 	_ = invokeTestWith(client, context.Background(), "/x", nil, &env, checkTestEnvelope, 1)
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
@@ -159,7 +216,6 @@ func TestInvoke_SlowCallOpensBreaker(t *testing.T) {
 	defer server.Close()
 
 	client := newTestRPCClient(server.URL,
-		WithHTTPTimeout(time.Second),
 		WithBreaker(BreakerOptions{
 			WindowSize: 2, MinRequests: 2, FailureRate: 1, SlowRate: 1,
 			SlowThreshold: 10 * time.Millisecond, OpenDuration: time.Minute,

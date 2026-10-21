@@ -7,14 +7,13 @@ import (
 	"time"
 )
 
-// 默认参数：请求超时、重试退避、响应上限、连接池与熔断
+// 默认参数：单次尝试超时、重试退避、响应上限、连接池与熔断
 const (
-	defaultRequestTimeout = 3 * time.Second // 单次调用默认超时
+	defaultRequestTimeout = 3 * time.Second // 单次尝试默认超时
 
-	defaultMaxAttempts      = 3                      // 默认最大尝试次数
+	defaultMaxAttempts      = 1                      // 默认最大尝试次数
 	defaultBaseBackoff      = 50 * time.Millisecond  // 首次重试退避
 	defaultMaxBackoff       = 200 * time.Millisecond // 退避上限
-	defaultHTTPTimeout      = 30 * time.Second       // 单次 HTTP 尝试的后备超时
 	defaultMaxResponseBytes = 4 << 20                // 响应体上限（4 MiB）
 
 	defaultMaxIdleConns        = 200 // 空闲连接总数
@@ -36,14 +35,13 @@ type BreakerOptions struct {
 	MinRequests   int           // MinRequests 是窗口内样本数达到该值后评估（按尝试计），默认 20
 	FailureRate   float64       // FailureRate 是失败率阈值，默认 0.5
 	SlowRate      float64       // SlowRate 是慢调用率阈值，默认 0.5
-	SlowThreshold time.Duration // SlowThreshold 是慢调用耗时阈值，默认 2s
+	SlowThreshold time.Duration // SlowThreshold 是慢调用耗时阈值，默认 2s；应小于单次尝试 Timeout
 	OpenDuration  time.Duration // OpenDuration 是熔断打开时长，默认 5s
 }
 
 // httpClientOptions HTTP RPC 客户端内部参数
-// 保存客户端级配置；单次调用的超时、次数、响应上限由 InvokeRequest 控制
+// 保存客户端级配置；单次尝试的超时、次数、响应上限由 InvokeRequest 控制
 type httpClientOptions struct {
-	HTTPTimeout   time.Duration                                      // 单次 HTTP 尝试的后备超时，默认 30s
 	BaseBackoff   time.Duration                                      // 首次重试退避，默认 50ms
 	MaxBackoff    time.Duration                                      // 退避上限，默认 200ms
 	Transport     http.RoundTripper                                  // 自定义传输；nil 时使用默认共享传输
@@ -54,15 +52,6 @@ type httpClientOptions struct {
 
 // ClientOption 修改 HTTP RPC 客户端参数
 type ClientOption func(*httpClientOptions)
-
-// WithHTTPTimeout 设置单次 HTTP 尝试的后备超时
-func WithHTTPTimeout(d time.Duration) ClientOption {
-	return func(o *httpClientOptions) {
-		if d > 0 {
-			o.HTTPTimeout = d
-		}
-	}
-}
 
 // WithBackoff 设置重试退避基数与上限
 func WithBackoff(base, max time.Duration) ClientOption {
@@ -77,7 +66,7 @@ func WithBackoff(base, max time.Duration) ClientOption {
 }
 
 // WithTransport 设置自定义传输，用于 mTLS、私有 CA、代理、连接池等场景
-// 传 nil 时保持默认共享传输
+// 传 nil 时保持默认共享传输；自定义传输必须尊重请求 ctx，client 不设 client 级超时
 func WithTransport(transport http.RoundTripper) ClientOption {
 	return func(o *httpClientOptions) {
 		if transport != nil {
@@ -137,7 +126,6 @@ func newDefaultTransport() http.RoundTripper {
 // defaultHTTPClientOptions 返回 HTTP RPC 客户端默认参数
 func defaultHTTPClientOptions() httpClientOptions {
 	return httpClientOptions{
-		HTTPTimeout:   defaultHTTPTimeout,
 		BaseBackoff:   defaultBaseBackoff,
 		MaxBackoff:    defaultMaxBackoff,
 		Transport:     defaultTransport,
@@ -171,9 +159,6 @@ func applyHTTPClientOptions(opts []ClientOption) httpClientOptions {
 
 // normalizeHTTPClientOptions 填充非法或缺失的客户端参数
 func normalizeHTTPClientOptions(cfg httpClientOptions) httpClientOptions {
-	if cfg.HTTPTimeout <= 0 {
-		cfg.HTTPTimeout = defaultHTTPTimeout
-	}
 	if cfg.BaseBackoff <= 0 {
 		cfg.BaseBackoff = defaultBaseBackoff
 	}

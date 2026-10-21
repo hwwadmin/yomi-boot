@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -36,6 +37,39 @@ func TestIsRetryable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isRetryable(tc.err); got != tc.want {
 				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestShouldRetry_DeadlineClassification 验证调用方还活着时单次超时可重试
+func TestShouldRetry_DeadlineClassification(t *testing.T) {
+	live := context.Background()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cases := []struct {
+		name        string
+		ctx         context.Context
+		err         error
+		maxAttempts int
+		want        bool
+	}{
+		{"attempt timeout", live, context.DeadlineExceeded, 3, true},
+		{"url attempt timeout", live, &url.Error{Op: "Post", URL: "http://example.test", Err: context.DeadlineExceeded}, 3, true},
+		{"retryable attempt timeout", live, wrapRetryable(context.DeadlineExceeded), 3, true},
+		{"discovery timeout", live, &discoveryError{err: context.DeadlineExceeded}, 3, true},
+		{"protocol deadline", live, &ProtocolError{Reason: "bad body", Err: context.DeadlineExceeded}, 3, false},
+		{"local request deadline", live, &requestError{err: context.DeadlineExceeded}, 3, false},
+		{"caller deadline", canceled, context.DeadlineExceeded, 3, false},
+		{"attempts exhausted", live, context.DeadlineExceeded, 1, false},
+		{"503", live, &HTTPStatusError{Code: http.StatusServiceUnavailable}, 3, true},
+		{"500", live, &HTTPStatusError{Code: http.StatusInternalServerError}, 3, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldRetry(tc.ctx, tc.err, 1, tc.maxAttempts); got != tc.want {
+				t.Fatalf("shouldRetry() = %v, want %v", got, tc.want)
 			}
 		})
 	}

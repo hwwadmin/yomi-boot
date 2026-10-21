@@ -10,6 +10,7 @@ import (
 // EndpointResolver 把服务名和逻辑端点解析成完整 URL
 // Consul 场景使用 consul.NewConsulRPCResolver(client)
 // 本地/测试场景使用 MemoryEndpointResolver
+// 实现必须尊重 ctx；发现阶段超时由实现自行控制，InvokeRequest.Timeout 只约束 HTTP 请求
 type EndpointResolver interface {
 	ResolveHTTPBase(ctx context.Context, serviceName, pathSuffix string) (string, error)
 }
@@ -20,8 +21,8 @@ type InvokeRequest struct {
 	ReqBody          any           // 请求对象，只读，可能含敏感信息
 	RespBody         any           // 响应对象；nil 时不读取响应体
 	BizHook          BizHookFunc   // 业务成功判定，必填
-	Timeout          time.Duration // 整次调用超时，<=0 时默认 3s
-	MaxAttempts      int           // 最大尝试次数，<=0 时默认 3
+	Timeout          time.Duration // 单次尝试超时，<=0 时默认 3s；不是整个 Invoke 的总时长，总时长由调用方 ctx 控制
+	MaxAttempts      int           // 最大尝试次数，<=0 时默认 1
 	MaxResponseBytes int64         // 响应体上限，<=0 时默认 4 MiB
 }
 
@@ -49,6 +50,8 @@ func NoopBizHook(context.Context, BizHookContext) (bool, error) {
 // 负责发送请求、反序列化响应、重试和熔断；业务成功由 req.BizHook 判定
 type RpcService interface {
 	// Invoke 调用远程端点，把响应体反序列化到 req.RespBody
+	// 每次尝试使用 req.Timeout；普通调用按 MaxAttempts 重试；半开探测只尝试一次
+	// 整个 Invoke 的总时长由调用方 ctx 控制，req.Timeout 不是总预算
 	// BizHook 必填；纯传输使用 NoopBizHook
 	Invoke(ctx context.Context, req InvokeRequest) error
 }

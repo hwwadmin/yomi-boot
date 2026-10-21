@@ -33,6 +33,7 @@ var _ RpcService = (*HttpRpcClient)(nil)
 // NewHttpRpcClient 创建绑定服务名的 HTTP RPC 客户端
 // resolver 负责端点解析；Consul 场景用 consul.NewConsulRPCResolver(client)
 // 默认共享传输、不跟随重定向；WithTransport、WithCheckRedirect、WithLogBodies 可按需调整
+// 不设置 client 级超时；单次 HTTP 尝试超时由 InvokeRequest.Timeout 控制
 // resolver 为空或服务名为空时 panic，适合启动阶段装配
 // 每个 client 独立熔断；同一服务建议复用一个 client
 func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
@@ -48,7 +49,6 @@ func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...Cli
 		serviceName: serviceName,
 		resolver:    resolver,
 		httpClient: &http.Client{
-			Timeout:       cfg.HTTPTimeout,
 			Transport:     cfg.Transport,
 			CheckRedirect: cfg.CheckRedirect,
 		},
@@ -59,7 +59,8 @@ func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...Cli
 
 // Invoke 实现 RpcService.Invoke
 // 传输成功指 HTTP 200 且响应反序列化成功；业务成功由 req.BizHook 判定
-// 半开状态下探测只尝试一次
+// 每次尝试使用 req.Timeout；普通调用按 MaxAttempts 重试；半开探测只尝试一次
+// 整个 Invoke 的总时长由调用方 ctx 控制，req.Timeout 不是总预算
 func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if c == nil || c.httpClient == nil {
 		return errors.New("HttpRpcClient 未初始化")
@@ -80,8 +81,6 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if timeout <= 0 {
 		timeout = defaultRequestTimeout
 	}
-	callCtx, cancel := context.WithTimeout(callerCtx, timeout)
-	defer cancel()
 
 	// 熔断通过后再序列化；序列化失败时释放探测位
 	ticket, err := c.breaker.allow()
@@ -111,7 +110,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := callCtx.Err(); err != nil {
+		if err := callerCtx.Err(); err != nil {
 			c.breaker.onNeutral(ticket)
 			return err
 		}
@@ -133,7 +132,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			c.logBreakerProbe(ctx, req.Endpoint, attempt)
 		}
 
-		url, err := c.resolveEndpoint(callCtx, req.Endpoint)
+		url, err := c.resolveEndpoint(callerCtx, req.Endpoint)
 		if err != nil {
 			lastErr = err
 			if callerCtx.Err() != nil {
@@ -141,18 +140,18 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				return err
 			}
 			// 探测遇到发现错误时释放探测位，下一次调用重新探测
-			if probeOnly || !shouldRetry(callCtx, err, attempt, maxAttempts) {
+			if probeOnly || !shouldRetry(callerCtx, err, attempt, maxAttempts) {
 				c.breaker.onNeutral(ticket)
 				return err
 			}
 			delay := backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)
-			if !canWait(callCtx, delay) {
+			if !canWait(callerCtx, delay) {
 				c.breaker.onNeutral(ticket)
 				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 				return err
 			}
 			c.logRetry(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
-			if sleepErr := sleepBackoff(callCtx, delay); sleepErr != nil {
+			if sleepErr := sleepBackoff(callerCtx, delay); sleepErr != nil {
 				c.breaker.onNeutral(ticket)
 				if callerCtx.Err() != nil {
 					return sleepErr
@@ -166,7 +165,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		}
 
 		start := time.Now()
-		body, err := c.doRequest(callCtx, url, payload, req.RespBody != nil, maxBytes)
+		body, err := c.doRequestWithTimeout(callerCtx, timeout, url, payload, req.RespBody != nil, maxBytes)
 		elapsed := time.Since(start)
 		if c.opts.LogBodies {
 			if err != nil {
@@ -194,7 +193,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			if probeOnly {
 				return err
 			}
-			if !shouldRetry(callCtx, err, attempt, maxAttempts) {
+			if !shouldRetry(callerCtx, err, attempt, maxAttempts) {
 				return err
 			}
 			delay := backoffDuration(attempt, c.opts.BaseBackoff, c.opts.MaxBackoff)
@@ -203,12 +202,12 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				delay = statusErr.RetryAfter
 			}
 			// 剩余预算不够等待时直接返回下游错误
-			if !canWait(callCtx, delay) {
+			if !canWait(callerCtx, delay) {
 				c.logBudgetExhausted(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
 				return err
 			}
 			c.logRetry(ctx, req.Endpoint, attempt, maxAttempts, delay, err)
-			if sleepErr := sleepBackoff(callCtx, delay); sleepErr != nil {
+			if sleepErr := sleepBackoff(callerCtx, delay); sleepErr != nil {
 				if callerCtx.Err() != nil {
 					return sleepErr
 				}
@@ -246,7 +245,7 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 			}
 			c.logBreakerOpen(ctx, req.Endpoint, attempt, reason, nil)
 		}
-		ok, hookErr := req.BizHook(callCtx, BizHookContext{
+		ok, hookErr := req.BizHook(callerCtx, BizHookContext{
 			Endpoint: req.Endpoint,
 			ReqBody:  req.ReqBody,
 			RespBody: req.RespBody,
@@ -262,7 +261,17 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 		}
 		return nil
 	}
+	if lastErr != nil {
+		return lastErr
+	}
 	return errors.New("rpc: 未产生有效尝试")
+}
+
+// doRequestWithTimeout 为单次 HTTP 尝试派生独立超时上下文
+func (c *HttpRpcClient) doRequestWithTimeout(ctx context.Context, timeout time.Duration, url string, payload []byte, needBody bool, maxBytes int64) ([]byte, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return c.doRequest(attemptCtx, url, payload, needBody, maxBytes)
 }
 
 // resolveEndpoint 通过 EndpointResolver 将 endpoint 解析为完整 HTTP URL
