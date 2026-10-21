@@ -7,7 +7,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 )
 
-// MemoryEndpointResolver 必须满足 EndpointResolver
+// 编译期验证 RPC 端点解析接口实现
 var _ EndpointResolver = (*MemoryEndpointResolver)(nil)
 
 // TestMemoryEndpointResolverResolve 验证基 URL 拼接

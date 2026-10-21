@@ -8,7 +8,7 @@ import (
 )
 
 // EndpointResolver 将服务名与逻辑端点解析为完整 URL
-// Consul 场景可使用 consul.NewRPCResolver(client) 适配
+// Consul 场景可使用 consul.NewConsulRPCResolver(client) 适配
 // 本地/测试场景可使用 MemoryEndpointResolver
 type EndpointResolver interface {
 	ResolveHTTPBase(ctx context.Context, serviceName, pathSuffix string) (string, error)

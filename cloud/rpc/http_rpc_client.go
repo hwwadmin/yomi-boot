@@ -31,7 +31,7 @@ type HttpRpcClient struct {
 var _ RpcService = (*HttpRpcClient)(nil)
 
 // NewHttpRpcClient 创建绑定到指定服务名的 HTTP RPC 客户端
-// resolver 负责端点解析；Consul 场景传 consul.NewRPCResolver(client)
+// resolver 负责端点解析；Consul 场景传 consul.NewConsulRPCResolver(client)
 // serviceName 为目标服务的注册名
 // 熔断器按 serviceName 进程内共享；同一服务第一个 client 的 BreakerOptions 生效
 func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...ClientOption) *HttpRpcClient {
