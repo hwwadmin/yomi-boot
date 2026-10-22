@@ -11,14 +11,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TestAuthMiddleware_DisabledPassesThrough 验证中间件关闭时直接放行
-func TestAuthMiddleware_DisabledPassesThrough(t *testing.T) {
+// TestMiddleware_DisabledPassesThrough 验证中间件关闭时直接放行
+func TestMiddleware_DisabledPassesThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	cfg := token.Config{MiddlewareEnabled: false}
 
 	router := gin.New()
-	router.Use(token.AuthMiddleware(nil, cfg))
+	router.Use(token.Middleware(nil, cfg))
 	router.GET("/ping", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
@@ -32,8 +32,8 @@ func TestAuthMiddleware_DisabledPassesThrough(t *testing.T) {
 	}
 }
 
-// TestAuthMiddleware_RequiresToken 验证启用时无 Token 拒绝请求
-func TestAuthMiddleware_RequiresToken(t *testing.T) {
+// TestMiddleware_RequiresToken 验证启用时无 Token 拒绝请求
+func TestMiddleware_RequiresToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	response.RegisterDefaultForTest(t)
 
@@ -44,7 +44,7 @@ func TestAuthMiddleware_RequiresToken(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(token.AuthMiddleware(nil, cfg))
+	router.Use(token.Middleware(nil, cfg))
 	router.GET("/ping", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})

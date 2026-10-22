@@ -132,8 +132,8 @@ func TestFileSplit_ELKFieldsAndStaticFields(t *testing.T) {
 	assertFileNotContains(t, infoPath, "empty_skip")
 }
 
-// TestAccessMiddleware_InboundOutboundPair 验证 access 中间件成对写入入站/出站日志
-func TestAccessMiddleware_InboundOutboundPair(t *testing.T) {
+// TestMiddleware_InboundOutboundPair 验证 access 中间件成对写入入站/出站日志
+func TestMiddleware_InboundOutboundPair(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
@@ -162,7 +162,7 @@ func TestAccessMiddleware_InboundOutboundPair(t *testing.T) {
 		}))
 		c.Next()
 	})
-	r.Use(AccessMiddleware(cfg.Access))
+	r.Use(Middleware(cfg.Access))
 	r.POST("/api/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "password": "secret"})
 	})
@@ -224,8 +224,8 @@ func TestAccessMiddleware_InboundOutboundPair(t *testing.T) {
 	assertFileNotContains(t, filepath.Join(dir, "info", "info.log"), "http outbound")
 }
 
-// TestAccessMiddleware_ErrorAlwaysLogged 验证错误响应不受采样率影响
-func TestAccessMiddleware_ErrorAlwaysLogged(t *testing.T) {
+// TestMiddleware_ErrorAlwaysLogged 验证错误响应不受采样率影响
+func TestMiddleware_ErrorAlwaysLogged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
@@ -249,7 +249,7 @@ func TestAccessMiddleware_ErrorAlwaysLogged(t *testing.T) {
 	defer func() { accessRandFloat64 = prev }()
 
 	r := gin.New()
-	r.Use(AccessMiddleware(cfg.Access))
+	r.Use(Middleware(cfg.Access))
 	r.GET("/fail", func(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"err": "boom"})
 	})
@@ -273,8 +273,8 @@ func TestAccessMiddleware_ErrorAlwaysLogged(t *testing.T) {
 	}
 }
 
-// TestAccessMiddleware_SampleDropsOK 验证成功请求可被采样丢弃
-func TestAccessMiddleware_SampleDropsOK(t *testing.T) {
+// TestMiddleware_SampleDropsOK 验证成功请求可被采样丢弃
+func TestMiddleware_SampleDropsOK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
@@ -298,7 +298,7 @@ func TestAccessMiddleware_SampleDropsOK(t *testing.T) {
 	defer func() { accessRandFloat64 = prev }()
 
 	r := gin.New()
-	r.Use(AccessMiddleware(cfg.Access))
+	r.Use(Middleware(cfg.Access))
 	r.GET("/ok", func(c *gin.Context) {
 		c.String(http.StatusOK, "ok")
 	})
@@ -315,8 +315,8 @@ func TestAccessMiddleware_SampleDropsOK(t *testing.T) {
 	}
 }
 
-// TestAccessMiddleware_BodyOmittedBinary 验证二进制 body 被省略
-func TestAccessMiddleware_BodyOmittedBinary(t *testing.T) {
+// TestMiddleware_BodyOmittedBinary 验证二进制 body 被省略
+func TestMiddleware_BodyOmittedBinary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
@@ -336,7 +336,7 @@ func TestAccessMiddleware_BodyOmittedBinary(t *testing.T) {
 	defer func() { _ = closeFn() }()
 
 	r := gin.New()
-	r.Use(AccessMiddleware(cfg.Access))
+	r.Use(Middleware(cfg.Access))
 	r.POST("/api/upload", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})

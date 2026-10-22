@@ -25,8 +25,8 @@ import (
 // accessRandFloat64 采样用随机源，单测可替换
 var accessRandFloat64 = rand.Float64
 
-// AccessMiddleware 返回成对写入 access 文件的 Gin 中间件（入站 / 出站各一条）
-func AccessMiddleware(cfg AccessConfig) gin.HandlerFunc {
+// Middleware 返回成对写入 access 文件的 Gin 中间件（入站 / 出站各一条）
+func Middleware(cfg AccessConfig) gin.HandlerFunc {
 	if cfg.MaxBodyBytes <= 0 {
 		cfg.MaxBodyBytes = 8192
 	}

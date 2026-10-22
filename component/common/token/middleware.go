@@ -20,22 +20,14 @@ var (
 	ErrTokenValidateFailed = errors.NewNoStack("TOKEN_VALIDATE_FAILED")
 )
 
-// Middleware 表示令牌鉴权中间件实例
-type Middleware struct {
+// TokenMiddleware 表示令牌鉴权中间件实例
+type TokenMiddleware struct {
 	tokenService TokenService
 	authConfig   Config
 }
 
-// NewAuthMiddleware 创建基于 AuthConfig 注入的令牌鉴权中间件
-func NewAuthMiddleware(tokenService TokenService, authConfig Config) *Middleware {
-	return &Middleware{
-		tokenService: tokenService,
-		authConfig:   authConfig,
-	}
-}
-
 // Handler 返回当前中间件实例对应的 gin 中间件处理器
-func (m *Middleware) Handler() gin.HandlerFunc {
+func (m *TokenMiddleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !m.authConfig.MiddlewareEnabled || m.shouldSkipValidate(c.Request.URL.Path) {
 			c.Next()
@@ -63,13 +55,16 @@ func (m *Middleware) Handler() gin.HandlerFunc {
 	}
 }
 
-// AuthMiddleware 返回基于 AuthConfig 注入的令牌鉴权中间件（gin.HandlerFunc）
-func AuthMiddleware(tokenService TokenService, authConfig Config) gin.HandlerFunc {
-	return NewAuthMiddleware(tokenService, authConfig).Handler()
+// Middleware 返回基于 AuthConfig 注入的令牌鉴权中间件（gin.HandlerFunc）
+func Middleware(tokenService TokenService, authConfig Config) gin.HandlerFunc {
+	return (&TokenMiddleware{
+		tokenService: tokenService,
+		authConfig:   authConfig,
+	}).Handler()
 }
 
 // shouldSkipValidate 判断请求路径是否需要跳过令牌校验
-func (m *Middleware) shouldSkipValidate(requestPath string) bool {
+func (m *TokenMiddleware) shouldSkipValidate(requestPath string) bool {
 	currentPath := path.Clean(strings.TrimSpace(requestPath))
 	if currentPath == "." || currentPath == "/" {
 		currentPath = "/"

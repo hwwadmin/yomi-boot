@@ -34,11 +34,11 @@ func DefaultMiddlewares(infra *Infra) []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		cors.Middleware(*corsCfg),
 		traceid.Middleware(),
-		httprecord.MiddlewareHandler(infra.HttpRecordService, httpRecordCfg, infra.AppCtx),
-		logger.AccessMiddleware(logCfg.Access),
+		httprecord.Middleware(infra.HttpRecordService, httpRecordCfg, infra.AppCtx),
+		logger.Middleware(logCfg.Access),
 		httpguard.Middleware(*httpCfg),
 		gin.Recovery(),
-		token.AuthMiddleware(infra.TokenService, authCfg),
+		token.Middleware(infra.TokenService, authCfg),
 	}
 }
 

@@ -46,29 +46,16 @@ var sensitiveBodyKeys = map[string]struct{}{
 	"refresh_token": {},
 }
 
-// Middleware 表示 HTTP 访问记录采集中间件实例
-type Middleware struct {
+// HttpRecordMiddleware 表示 HTTP 访问记录采集中间件实例
+type HttpRecordMiddleware struct {
 	svc HttpRecordService
 	cfg Config
 	app appctx.AppCtx
 }
 
-// NewMiddleware 创建 HTTP 访问记录中间件
-// svc 为可选依赖（为 nil 时跳过记录处理），app 为必填依赖缺失时启动期 fail-fast
-func NewMiddleware(svc HttpRecordService, cfg Config, app appctx.AppCtx) *Middleware {
-	if app == nil {
-		panic("httprecord: NewMiddleware app 不能为 nil")
-	}
-	return &Middleware{
-		svc: svc,
-		cfg: cfg,
-		app: app,
-	}
-}
-
 // Handler 返回当前中间件实例对应的 gin 中间件处理器
 // 在请求前后采集访问信息，并在请求结束后调用 HttpRecordService 处理
-func (m *Middleware) Handler() gin.HandlerFunc {
+func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !m.cfg.MiddlewareEnabled || m.shouldSkip(c.Request.URL.Path) {
 			c.Next()
@@ -97,7 +84,7 @@ func (m *Middleware) Handler() gin.HandlerFunc {
 }
 
 // shouldSkip 判断当前请求路径是否命中跳过采集配置
-func (m *Middleware) shouldSkip(requestPath string) bool {
+func (m *HttpRecordMiddleware) shouldSkip(requestPath string) bool {
 	currentPath := normalizePath(requestPath)
 	for _, skipPath := range m.cfg.SkipPaths {
 		if normalizePath(skipPath) == currentPath {
@@ -108,7 +95,7 @@ func (m *Middleware) shouldSkip(requestPath string) bool {
 }
 
 // safeInvoke 安全调用 HttpRecordService，捕获 panic 防止影响 HTTP 主链路
-func (m *Middleware) safeInvoke(ctx context.Context, record *HttpRecord) {
+func (m *HttpRecordMiddleware) safeInvoke(ctx context.Context, record *HttpRecord) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Warn(ctx, "HTTP 访问记录处理 panic", "panic", r)
@@ -123,7 +110,7 @@ func (m *Middleware) safeInvoke(ctx context.Context, record *HttpRecord) {
 }
 
 // buildRecord 根据 Gin 上下文与采集结果组装访问记录快照
-func (m *Middleware) buildRecord(
+func (m *HttpRecordMiddleware) buildRecord(
 	c *gin.Context,
 	requestAt time.Time,
 	duration time.Duration,
@@ -184,12 +171,12 @@ func (m *Middleware) buildRecord(
 }
 
 // serviceType 返回当前服务类型
-func (m *Middleware) serviceType() string {
+func (m *HttpRecordMiddleware) serviceType() string {
 	return m.app.Name()
 }
 
 // serviceVersion 返回当前服务版本号
-func (m *Middleware) serviceVersion() string {
+func (m *HttpRecordMiddleware) serviceVersion() string {
 	return m.app.Version()
 }
 
@@ -417,7 +404,15 @@ func parseBizResponse(body string) (code, msg string) {
 	return parsed.Code, parsed.Msg
 }
 
-// MiddlewareHandler 返回基于 HttpRecordService 与配置注入的 gin 中间件（gin.HandlerFunc）
-func MiddlewareHandler(svc HttpRecordService, cfg Config, app appctx.AppCtx) gin.HandlerFunc {
-	return NewMiddleware(svc, cfg, app).Handler()
+// Middleware 返回基于 HttpRecordService 与配置注入的 gin 中间件（gin.HandlerFunc）
+// svc 为可选依赖（为 nil 时跳过记录处理），app 为必填依赖缺失时启动期 fail-fast
+func Middleware(svc HttpRecordService, cfg Config, app appctx.AppCtx) gin.HandlerFunc {
+	if app == nil {
+		panic("httprecord: Middleware app 不能为 nil")
+	}
+	return (&HttpRecordMiddleware{
+		svc: svc,
+		cfg: cfg,
+		app: app,
+	}).Handler()
 }
