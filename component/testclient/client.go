@@ -1,6 +1,3 @@
-// Package testclient 提供接口集成测试用的 HTTP 请求封装
-//
-// @author zwei
 package testclient
 
 import (

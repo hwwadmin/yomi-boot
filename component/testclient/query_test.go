@@ -1,6 +1,3 @@
-// Package testclient 单元测试
-//
-// @author zwei
 package testclient
 
 import (

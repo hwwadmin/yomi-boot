@@ -36,7 +36,7 @@
 
 - **Step 1**：确认 `audit.md` 无未闭合严重项（尤其事务）；读 spec 全章。
 - **Step 2**：拆解 tasks.md（原子任务、依赖、输入输出，按阶段分组）。
-- **Step 3**：按任务 TDD：一个功能点对应一组测试方法，先补测试再补实现；`go build ./...` / `go test ./...` 验证；HTTP 集成测试按《Go集成测试规范》与 `gitee.com/hq_project/yomi-boot/boot/testclient`，参考业务仓 `test/` 平铺目录。
+- **Step 3**：按任务 TDD：一个功能点对应一组测试方法，先补测试再补实现；`go build ./...` / `go test ./...` 验证；HTTP 集成测试按《Go集成测试规范》与 `gitee.com/hq_project/yomi-boot/component/testclient`，参考业务仓 `test/` 平铺目录。
 - **Step 4**：每完成一个任务回写 tasks.md 状态与证据。
 - **Step 5**：最小范围验证，不扩大改动面。
 

@@ -97,7 +97,7 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按四层组织：`ai/`（可选 AI 能力簇）、`boot/`（项目基础件）、`component/`（单一中间件/外部服务的通用组件）、`cloud/`（跨服务/多实例分布式组件）。
-- `boot/` 提供 config、plugin（资源生命周期框架）、lifecycle（进程生命周期编排）、logger、router、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、testclient、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、idempotency、event、distlock、roundrobin、cronjob 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
+- `boot/` 提供 config、plugin（资源生命周期框架）、lifecycle（进程生命周期编排）、logger、router、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、idempotency、event、distlock、roundrobin、cronjob、testclient 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
 - 各组件 `plugin` 子包跟随组件目录：`boot/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
@@ -173,8 +173,8 @@ services/{domain}/
 | 目录 | 包 |
 | ---- | -- |
 | `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
-| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`lifecycle`、`config`、`appctx`、`logger`、`router`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
-| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
+| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`lifecycle`、`config`、`appctx`、`logger`、`router`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`banner` |
+| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
 
 依赖方向：`ai → boot`，`component → boot`，`cloud → boot + component`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`。
