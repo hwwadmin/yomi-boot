@@ -360,7 +360,7 @@ type myConsumerPlugin struct {
 | 12 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
 | 13 | idempotency | `idempotency.stale_cleaner_enabled=true` |
 | 14 | token | `auth.enabled=true` |
-| 15 | httprecord | `http_record.enabled=true` 时按 provider 装配，否则 Nop |
+| 15 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
 | 16 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
 | 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 

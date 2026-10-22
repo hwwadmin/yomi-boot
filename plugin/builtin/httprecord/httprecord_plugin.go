@@ -22,12 +22,10 @@ func NewHttpRecord() plugin.Plugin {
 	return &httpRecordPlugin{PluginState: plugin.NewPluginState(httpRecordName)}
 }
 
-// Init 装配 HttpRecordService：默认 Nop；enabled 时按 provider 分发 kafka / memory / redis_stream
+// Init 装配 HttpRecordService：未启用时不创建服务（中间件短路）；启用时按 provider 分发 kafka / memory / redis_stream
 func (p *httpRecordPlugin) Init(host *plugin.Host) {
 	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
-		host.HttpRecordService = httprecord.NewNopService()
-		p.SetStarted()
 		return
 	}
 	cfg := bootCfg.ToConfig()

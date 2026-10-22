@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
-	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
@@ -174,10 +173,9 @@ func TestInfra_CleanupNilReceiver(t *testing.T) {
 func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 	docEnabled := loadMiddlewareTestDoc(t, true)
 	infraEnabled := &Infra{
-		Doc:               docEnabled,
-		TokenService:      &mockTokenService{},
-		HttpRecordService: httprecord.NewNopService(),
-		AppCtx:            appctx.NewAppCtx("test", "test", "v1"),
+		Doc:          docEnabled,
+		TokenService: &mockTokenService{},
+		AppCtx:       appctx.NewAppCtx("test", "test", "v1"),
 	}
 	middlewaresEnabled := DefaultMiddlewares(infraEnabled)
 	if len(middlewaresEnabled) == 0 {
@@ -186,9 +184,8 @@ func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 
 	docDisabled := loadMiddlewareTestDoc(t, false)
 	infraDisabled := &Infra{
-		Doc:               docDisabled,
-		HttpRecordService: httprecord.NewNopService(),
-		AppCtx:            appctx.NewAppCtx("test", "test", "v1"),
+		Doc:    docDisabled,
+		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
 	}
 	middlewaresDisabled := DefaultMiddlewares(infraDisabled)
 	if len(middlewaresEnabled) != len(middlewaresDisabled) {
