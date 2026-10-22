@@ -1,12 +1,15 @@
-// Package oss 提供对象存储启动配置（YAML mapstructure）
+// Package ossplugin 对象存储插件：YAML 绑定（SectionKey、BootConfig、ConfigSection、ToConfig）与生命周期实现。
+//
+// oss.enabled=true 时由 NewOSS 构造 Storage 并写入 Host.OSS，业务从 Services.OSS 读取。
 //
 // @author zwei
-package oss
+package ossplugin
 
 import (
 	"strings"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/component/common/oss"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
@@ -128,43 +131,43 @@ func (c BootAliOSSConfig) validate() error {
 	return nil
 }
 
+// ToConfig 将启动配置转换为运行时构造配置；调用方须先保证 Validate 通过。
+func (c BootConfig) ToConfig() oss.Config {
+	provider := oss.Provider(strings.ToLower(strings.TrimSpace(c.Provider)))
+	out := oss.Config{
+		Provider:      provider,
+		PublicBaseURL: strings.TrimSpace(c.PublicBaseURL),
+		RustFS: oss.RustFSConfig{
+			Endpoint:        c.RustFS.Endpoint,
+			AccessKeyID:     c.RustFS.AccessKeyID,
+			SecretAccessKey: c.RustFS.SecretAccessKey,
+			UseSSL:          c.RustFS.UseSSL,
+			Region:          c.RustFS.Region,
+		},
+		S3: oss.S3Config{
+			Region:          c.S3.Region,
+			AccessKeyID:     c.S3.AccessKeyID,
+			SecretAccessKey: c.S3.SecretAccessKey,
+			Endpoint:        c.S3.Endpoint,
+			UsePathStyle:    c.S3.UsePathStyle,
+		},
+		AliOSS: oss.AliOSSConfig{
+			Region:          c.AliOSS.Region,
+			AccessKeyID:     c.AliOSS.AccessKeyID,
+			SecretAccessKey: c.AliOSS.SecretAccessKey,
+			Endpoint:        c.AliOSS.Endpoint,
+			UsePathStyle:    c.AliOSS.UsePathStyle,
+		},
+	}
+	if c.MaxPresignExpirySeconds > 0 {
+		out.MaxPresignExpiry = time.Duration(c.MaxPresignExpirySeconds) * time.Second
+	}
+	return out
+}
+
 // ConfigSection 返回 oss 配置段
 func ConfigSection() config.Section {
 	return config.NewSection(SectionKey, &BootConfig{}, func(c *BootConfig, _ *config.Document) error {
 		return c.Validate()
 	})
-}
-
-// ConfigFrom 将启动配置转换为包内构造配置；调用方须先保证 cfg 已通过 Validate。
-func ConfigFrom(cfg BootConfig) Config {
-	provider := Provider(strings.ToLower(strings.TrimSpace(cfg.Provider)))
-	out := Config{
-		Provider:      provider,
-		PublicBaseURL: strings.TrimSpace(cfg.PublicBaseURL),
-		RustFS: RustFSConfig{
-			Endpoint:        cfg.RustFS.Endpoint,
-			AccessKeyID:     cfg.RustFS.AccessKeyID,
-			SecretAccessKey: cfg.RustFS.SecretAccessKey,
-			UseSSL:          cfg.RustFS.UseSSL,
-			Region:          cfg.RustFS.Region,
-		},
-		S3: S3Config{
-			Region:          cfg.S3.Region,
-			AccessKeyID:     cfg.S3.AccessKeyID,
-			SecretAccessKey: cfg.S3.SecretAccessKey,
-			Endpoint:        cfg.S3.Endpoint,
-			UsePathStyle:    cfg.S3.UsePathStyle,
-		},
-		AliOSS: AliOSSConfig{
-			Region:          cfg.AliOSS.Region,
-			AccessKeyID:     cfg.AliOSS.AccessKeyID,
-			SecretAccessKey: cfg.AliOSS.SecretAccessKey,
-			Endpoint:        cfg.AliOSS.Endpoint,
-			UsePathStyle:    cfg.AliOSS.UsePathStyle,
-		},
-	}
-	if cfg.MaxPresignExpirySeconds > 0 {
-		out.MaxPresignExpiry = time.Duration(cfg.MaxPresignExpirySeconds) * time.Second
-	}
-	return out
 }

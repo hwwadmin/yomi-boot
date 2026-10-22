@@ -11,6 +11,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/event"
 	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
 	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	"gitee.com/hq_project/yomi-boot/component/common/oss"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/common/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
@@ -41,6 +42,7 @@ type Services struct {
 	TokenService         token.TokenService           // 令牌服务（auth.enabled=true 时可用）
 	HttpRecordService    httprecord.HttpRecordService // HTTP 访问记录服务
 	TxExecutor           db.TxExecutor                // 事务执行器
+	OSS                  oss.Storage                  // 对象存储（oss.enabled=true 时可用）
 	ConsulClient         *consul.Client               // Consul 客户端
 	DtmClient            *dtm.Client                  // DTM 客户端
 	EventComponents      *event.Components            // 可靠领域事件组件（Outbox/Inbox）

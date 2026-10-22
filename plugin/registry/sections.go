@@ -3,7 +3,6 @@
 package registry
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/oss"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 	consulplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/consul"
@@ -15,6 +14,7 @@ import (
 	idempotencyplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/idempotency"
 	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	ossplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/oss"
 	pprofplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/pprof"
 	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
 	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
@@ -25,7 +25,6 @@ import (
 )
 
 // DefaultConfigRegistry 按注册顺序返回全部内置配置段的注册表。
-// oss 是规范允许的例外：业务直接装配，BootConfig 留在组件包。
 func DefaultConfigRegistry() *config.Registry {
 	return config.NewRegistry().Register(
 		appctxplugin.ConfigSection(),
@@ -44,7 +43,7 @@ func DefaultConfigRegistry() *config.Registry {
 		snowflakeplugin.ConfigSection(),
 		idempotencyplugin.ConfigSection(),
 		redisratelimitplugin.ConfigSection(),
-		oss.ConfigSection(),
+		ossplugin.ConfigSection(),
 		pprofplugin.ConfigSection(),
 	)
 }

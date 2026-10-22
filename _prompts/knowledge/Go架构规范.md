@@ -99,7 +99,7 @@
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动流程编排：bootstrap 初始化、server HTTP 装配、lifecycle、banner）。
 - `component/core/` 提供 bc、config、cors、errors、shared、traceid、utils，是无状态内核；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`Services`、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/registry`（`Plugins()`、`DefaultConfigRegistry()`）。`boot/` 提供启动入口 `boot`、bootstrap（初始化）、server（HTTP 装配）、lifecycle、banner。
-- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单只能放 `plugin/registry`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。例外：`oss`（业务直接装配）允许在组件包内定义 `SectionKey` / `BootConfig` / `ConfigSection`。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）。
+- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单只能放 `plugin/registry`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时写入 `Services.OSS`）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -119,7 +119,7 @@ gitee.com/hq_project/yomi-boot/                               # module: gitee.co
 │   └── ai/                      # AI 能力组件（不进 bootstrap）
 └── plugin/                      # 插件契约、内置插件、插件清单与部署 YAML 绑定
     ├── registry/                # 内置插件启动顺序、默认配置段注册表
-    └── builtin/                 # 内置插件与 YAML 绑定（appctx、logger、db、redis、kafka、event、cors、router 等）
+    └── builtin/                 # 内置插件与 YAML 绑定（appctx、logger、db、redis、kafka、event、cors、router、oss 等）
 
 # 业务工程仓库（示例）
 {business-repo}/
@@ -251,7 +251,7 @@ services/{domain}/
 | `component/ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进 bootstrap、不读 YAML、不做限流 |
 | `component/ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `component/ai/embedding` + `component/ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进 bootstrap、不读 YAML、不做限流 |
 | `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
-| `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
+| `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 写入 `Services.OSS` |
 
 **平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/`）：
 
@@ -359,20 +359,21 @@ type myConsumerPlugin struct {
 | 7 | kafka | `kafka.enabled=true` |
 | 8 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
 | 9 | snowflake | 始终 |
-| 10 | tx | `host.DB` 存在 |
-| 11 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`；Ready 阶段注册、Drain 阶段注销） |
-| 12 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
-| 13 | idempotency | `idempotency.stale_cleaner_enabled=true` |
-| 14 | token | `auth.enabled=true` |
-| 15 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
-| 16 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 17 | custom | `InitOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
+| 10 | oss | `oss.enabled=true`（写入 `Host.OSS`） |
+| 11 | tx | `host.DB` 存在 |
+| 12 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`；Ready 阶段注册、Drain 阶段注销） |
+| 13 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
+| 14 | idempotency | `idempotency.stale_cleaner_enabled=true` |
+| 15 | token | `auth.enabled=true` |
+| 16 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
+| 17 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
+| 18 | custom | `InitOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 
 | 需优雅 Close | noop / 尽力 |
 | ------------ | ----------- |
-| event、kafka、redisstream、logger、consul、idempotency stale cleaner | db、redis、snowflake、tx、token、httprecord（发布端）、dtm、pprof |
+| event、kafka、redisstream、logger、consul、idempotency stale cleaner | db、redis、snowflake、oss、tx、token、httprecord（发布端）、dtm、pprof |
 | 服务自定义插件（如 Stop 消息消费者） | — |
 
 **消息消费者自定义插件约定**：

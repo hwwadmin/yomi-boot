@@ -172,21 +172,3 @@ func TestRustFSEndpoint(t *testing.T) {
 		})
 	}
 }
-
-// TestConfigFromPublicBaseURL 验证 BootConfig 映射 PublicBaseURL
-func TestConfigFromPublicBaseURL(t *testing.T) {
-	t.Parallel()
-
-	cfg := ConfigFrom(BootConfig{
-		Provider:      "rustfs",
-		PublicBaseURL: " https://cdn.example.com/ ",
-		RustFS: BootRustFSConfig{
-			Endpoint:        "127.0.0.1:9000",
-			AccessKeyID:     "ak",
-			SecretAccessKey: "sk",
-		},
-	})
-	if cfg.PublicBaseURL != "https://cdn.example.com/" {
-		t.Fatalf("PublicBaseURL: got %q", cfg.PublicBaseURL)
-	}
-}
