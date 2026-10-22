@@ -6,8 +6,8 @@ package boot
 import (
 	"gitee.com/hq_project/yomi-boot/boot/bootstrap"
 	"gitee.com/hq_project/yomi-boot/boot/config"
+	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
 	"gitee.com/hq_project/yomi-boot/boot/router"
-	"gitee.com/hq_project/yomi-boot/boot/runner"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,9 +30,8 @@ type WireFunc func(infra *Infra) []Registrar
 // MiddlewareFactory 基于已初始化基础设施构建中间件链；Options.Middlewares 为空时使用 DefaultMiddlewares。
 type MiddlewareFactory func(infra *Infra) []Middleware
 
-// Options 启动选项。
+// Options 启动选项
 type Options struct {
-	Name        string            // 服务名，用于日志标识；必填
 	EnvPrefix   string            // 环境变量前缀，可为空
 	ConfigPath  string            // 配置文件路径，为空时使用 config.ResolvePath()
 	Infra       InfraOptions      // 基础设施扩展选项
@@ -40,15 +39,12 @@ type Options struct {
 }
 
 // Run 使用默认配置路径和默认中间件链启动 HTTP 服务，并阻塞运行至进程退出。
-func Run(name, envPrefix string, wire WireFunc) {
-	RunWithOptions(Options{Name: name, EnvPrefix: envPrefix}, wire)
+func Run(envPrefix string, wire WireFunc) {
+	RunWithOptions(Options{EnvPrefix: envPrefix}, wire)
 }
 
 // RunWithOptions 初始化基础设施、构建 HTTP 服务并阻塞运行至进程退出。
 func RunWithOptions(opts Options, wire WireFunc) {
-	if opts.Name == "" {
-		panic("boot: Name 不能为空")
-	}
 	if wire == nil {
 		panic("boot: WireFunc 不能为空")
 	}
@@ -58,7 +54,7 @@ func RunWithOptions(opts Options, wire WireFunc) {
 		configPath = config.ResolvePath()
 	}
 
-	runner.RunServer(opts.Name, func() *runner.ServerBundle {
+	lifecycle.Run(func() *lifecycle.App {
 		infra := bootstrap.MustInitInfra(configPath, opts.EnvPrefix, opts.Infra)
 		registrars := wire(infra)
 
@@ -68,7 +64,7 @@ func RunWithOptions(opts Options, wire WireFunc) {
 		} else {
 			middlewares = DefaultMiddlewares(infra)
 		}
-		return bootstrap.MustBuildServer(infra, registrars, middlewares)
+		return bootstrap.MustBuildApp(infra, registrars, middlewares)
 	})
 }
 

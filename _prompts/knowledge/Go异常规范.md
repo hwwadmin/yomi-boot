@@ -213,7 +213,7 @@ BindAndHandle / Handle / ...
 
 | 阶段 | 策略 | 典型场景 |
 | ---- | ---- | -------- |
-| 启动 | log + **panic** | 配置、插件 Init、`MustRegister` 缺失（`MustReady`）、`MustBuildServer`；插件 Init 失败**不**回滚已启动插件 |
+| 启动 | log + **panic** | 配置、插件 Init、`MustRegister` 缺失（`MustReady`）、`MustBuildApp`；插件 Init 失败**不**回滚已启动插件 |
 | 运行 | `error` 传播 + Handler → Encoder | usecase/service/repository、HTTP 请求；Recovery 捕获 handler panic |
 | 关闭 | 尽力释放，失败静默跳过 | 插件 Close、Cleanup |
 

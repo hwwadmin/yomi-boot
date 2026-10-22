@@ -27,7 +27,7 @@ func MustRegister(enc Encoder) {
 }
 
 // MustReady 断言 Encoder 已完成注册。
-// 建议在 MustBuildServer 等启动路径调用，使未注册在启动期失败而非首个请求时 panic。
+// 建议在 MustBuildApp 等启动路径调用，使未注册在启动期失败而非首个请求时 panic。
 func MustReady() {
 	registerMu.RLock()
 	defer registerMu.RUnlock()

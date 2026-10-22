@@ -10,7 +10,6 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/runner"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
 	"gitee.com/hq_project/yomi-boot/component/roundrobin"
 )
@@ -77,26 +76,6 @@ func StartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleanerDep
 		return nil
 	}
 	return cleaner
-}
-
-// AttachStaleCleanerCleanup 将 Processing 超时清理器挂入服务 Cleanup 链；通常通过 SetupStaleCleanerOnBundle 调用
-func AttachStaleCleanerCleanup(bundle *runner.ServerBundle, cleaner *StaleCleaner) {
-	if bundle == nil || cleaner == nil {
-		return
-	}
-	original := bundle.Cleanup
-	bundle.Cleanup = func() {
-		_ = cleaner.Close()
-		if original != nil {
-			original()
-		}
-	}
-}
-
-// SetupStaleCleanerOnBundle 在 ServerBundle 就绪后启动 Processing 超时清理，并挂入 Cleanup 链
-func SetupStaleCleanerOnBundle(bundle *runner.ServerBundle, parentCtx context.Context, deps StaleCleanerDeps) {
-	cleaner := StartStaleCleanerFromConfig(parentCtx, deps)
-	AttachStaleCleanerCleanup(bundle, cleaner)
 }
 
 // Start 启动 Processing 超时清理轮询；启动失败时返回错误

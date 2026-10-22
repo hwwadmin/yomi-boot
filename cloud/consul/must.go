@@ -16,13 +16,3 @@ func MustNewClient(cfg Config) *Client {
 	}
 	return client
 }
-
-// MustRegisterService 注册服务到 Consul，失败时 log + panic
-func MustRegisterService(client *Client, cfg Config, appName string) string {
-	serviceID, err := client.RegisterService(cfg, appName)
-	if err != nil {
-		logger.ErrorWithoutCtx("consul 服务注册失败", "error", err)
-		panic(err)
-	}
-	return serviceID
-}

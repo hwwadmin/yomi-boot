@@ -87,7 +87,7 @@
 | Redis Stream 消息 | `redisstream/` + `go-redis` | 同 Redis 运维面的轻量 Stream 队列，按需启用；不耦合 `RedisService` | 业务直写 XADD/XREADGROUP 散落各处 |
 | 可靠领域事件 | `event/`（Outbox/Inbox） | DB 侧可靠投递；当前传输侧接 Kafka，按需启用 | 用消息中间件替代本地事务边界 |
 | 分布式锁 | `github.com/go-redsync/redsync/v4`（经 `gitee.com/hq_project/yomi-boot/component/distlock` 封装） | 基于 Redis 的分布式锁，支持看门狗、超时、可选 Key 命名空间 | 其他分布式锁实现 |
-| 业务日历定时任务 | `github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/component/cronjob` 封装） | cron 表达式触发 + distlock 集群互斥；与 runner/`ctx` 同生命周期 | 业务模块直接依赖 `robfig/cron`；用 `roundrobin` 冒充日历任务 |
+| 业务日历定时任务 | `github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/component/cronjob` 封装） | cron 表达式触发 + distlock 集群互斥；与 lifecycle/`ctx` 同生命周期 | 业务模块直接依赖 `robfig/cron`；用 `roundrobin` 冒充日历任务 |
 | HTTP RPC | `gitee.com/hq_project/yomi-boot/cloud/rpc`（`gitee.com/hq_project/yomi-boot/cloud/rpc` 包） | 轻量 HTTP RPC 读传输：EndpointResolver 端点解析（Consul 场景用适配器）、POST JSON、反序列化、传输层短退避重试与按 HTTP 状态码/耗时熔断；业务信封由领域 client 自行解析；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
 | 并发控制 | `context` + `sync` + `golang.org/x/sync/errgroup` | 生命周期和错误传播清晰，接近原生模型 | 自定义协程框架 |
 | 日志 | `go.uber.org/zap` | 结构化日志，控制台 + JSON 文件双路输出 | `log/slog`、`logrus` 作为默认入口 |
@@ -180,7 +180,7 @@
 #### 3.3.9 业务日历定时任务
 
 - 默认选型：`github.com/robfig/cron/v3`（经 `gitee.com/hq_project/yomi-boot/component/cronjob` 封装）。
-- 选型理由：日历表达式触发成熟；集群互斥复用 `gitee.com/hq_project/yomi-boot/component/distlock`；生命周期仅认 `ctx`，与 runner / plugin 拼装一致。
+- 选型理由：日历表达式触发成熟；集群互斥复用 `gitee.com/hq_project/yomi-boot/component/distlock`；生命周期仅认 `ctx`，与 lifecycle / plugin 拼装一致。
 - 配套约束：业务模块禁止直接依赖 `robfig/cron`；内部固定间隔轮询（Outbox 等）继续使用 `gitee.com/hq_project/yomi-boot/component/roundrobin`，不得用本能力冒充。
 - 不作为默认：各服务自行引入 cron 库、中心化调度框架、用 `roundrobin` 表达日历任务。
 

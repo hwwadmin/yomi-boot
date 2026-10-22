@@ -146,14 +146,15 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 
 | 文件 | 位置 | 说明 |
 | ---- | ---- | ---- |
-| `server.go` | 业务工程 `services/{unit}/internal/bootstrap/`（惯例示例） | 启动装配入口；`NewServer` 返回 `*runner.ServerBundle` |
+| `server.go` | 业务工程 `services/{unit}/internal/bootstrap/`（惯例示例） | 启动装配入口；`NewApp` 返回 `*lifecycle.App` |
 | `*_consumer_plugin.go` | 同上（按需） | Kafka 消费者自定义插件 |
 | `boot.go` | `gitee.com/hq_project/yomi-boot/boot/` | 启动快捷入口：`Run` / `RunWithOptions` / `Options` |
 | `infra.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustInitInfra`、`Infra`、`Cleanup` |
 | `infra_options.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `InfraOptions`、`AddCustomPlugin` |
 | `infra_plugins.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | 内置插件编排顺序 |
-| `server.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustBuildServer`、`DefaultMiddlewares` |
-| `plugin.go` / `host.go` | `gitee.com/hq_project/yomi-boot/boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host` |
+| `server.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustBuildApp`、`DefaultMiddlewares` |
+| `lifecycle.go` / `run.go` | `gitee.com/hq_project/yomi-boot/boot/lifecycle/` | `App`、`Hook`、`Run` / `RunContext`、阶段编排与停机 |
+| `plugin.go` / `host.go` | `gitee.com/hq_project/yomi-boot/boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook` |
 | `{组件}_plugin.go` | 各组件目录下的 `plugin/`，如 `gitee.com/hq_project/yomi-boot/component/db/plugin/`、`gitee.com/hq_project/yomi-boot/cloud/consul/plugin/` | 各组件生命周期插件实现（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`） |
 
 ### 3.8 gitee.com/hq_project/yomi-boot handler

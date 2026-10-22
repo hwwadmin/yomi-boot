@@ -48,7 +48,6 @@ type Host struct {
 	HttpRecordService     httprecord.HttpRecordService
 	TxExecutor            db.TxExecutor
 	ConsulClient          *consul.Client
-	ConsulServiceID       string
 	DtmClient             *dtm.Client
 	EventComponents       *event.Components
 }

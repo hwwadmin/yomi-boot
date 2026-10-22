@@ -97,7 +97,7 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按四层组织：`ai/`（可选 AI 能力簇）、`boot/`（项目基础件）、`component/`（单一中间件/外部服务的通用组件）、`cloud/`（跨服务/多实例分布式组件）。
-- `boot/` 提供 config、plugin（生命周期框架）、logger、router、runner、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、testclient、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、idempotency、event、distlock、roundrobin、cronjob 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
+- `boot/` 提供 config、plugin（资源生命周期框架）、lifecycle（进程生命周期编排）、logger、router、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、testclient、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、idempotency、event、distlock、roundrobin、cronjob 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
 - 各组件 `plugin` 子包跟随组件目录：`boot/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
@@ -173,7 +173,7 @@ services/{domain}/
 | 目录 | 包 |
 | ---- | -- |
 | `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
-| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`config`、`appctx`、`logger`、`router`、`runner`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
+| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`lifecycle`、`config`、`appctx`、`logger`、`router`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`testclient`、`banner` |
 | `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws` |
 | `cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
 
@@ -181,8 +181,8 @@ services/{domain}/
 
 | 包 | 职责 |
 | -- | ---- |
-| `bootstrap` | `MustInitInfra`、`MustBuildServer`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
-| `plugin` | 生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`（与 `config` 同层） |
+| `bootstrap` | `MustInitInfra`、`MustBuildApp`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
+| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约（与 `config` 同层） |
 | `{lib}/plugin` | 各组件的内置生命周期插件实现，跟随组件目录：`component/db/plugin`、`component/redis/plugin`、`cloud/consul/plugin` 等；`tx` 挂在 `component/db/plugin`；包名 `{lib}plugin` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
@@ -227,7 +227,7 @@ services/{domain}/
 | `snowflake` | 雪花 ID 生成器 |
 | `appctx` | 应用上下文（名称、环境、版本） |
 | `banner` | 启动横幅打印 |
-| `runner` | 服务启动/关闭生命周期管理（`Run` / `RunServer`） |
+| `lifecycle` | HTTP 服务进程生命周期编排：`App`、`Run` / `RunContext`、`RunWithConfigPath`；只负责阶段顺序、信号与优雅停机，不感知具体组件 |
 | `cors` | 跨域中间件 |
 | `logger` | 日志初始化与配置；`MustInit` Fail Fast |
 | `config` | 配置加载抽象（Section/Registry/Document）、严格根 key、环境变量展开；`MustLoad` / `MustLoadDocument` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
@@ -264,29 +264,31 @@ services/{domain}/
 
 ```text
 cmd/main.go
-  └─ runner.Run(name, bootstrap.NewServer)
+  └─ lifecycle.RunWithConfigPath(bootstrap.NewApp)
        └─ services/*/internal/bootstrap/server.go
             ├─ InfraOptions（按需 AddConfigSection / AddCustomPlugin）
             ├─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustInitInfra(configPath, envPrefix, opts)
             │     ├─ DefaultConfigRegistry + MustLoadDocument
             │     └─ plugin.Run(host, buildInfraPlugins(opts))   # 按序 Init；是否启动看各段 enabled
             ├─ wireHandlers(infra) → []router.Registrar         # 手写 wiring，在 server.go 内
-            └─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustBuildServer(infra, registrars, middlewares)
+            └─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustBuildApp(infra, registrars, middlewares) → *lifecycle.App
 ```
 
 业务入口也可直接使用根包 `boot` 的快捷入口：
 
-- `boot.Run(name, envPrefix, wire)`：默认配置路径与默认中间件链。
+- `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`。
 - `boot.RunWithOptions(opts, wire)`：自定义 `ConfigPath`、`InfraOptions` 或中间件工厂。
 
-两者内部完成 `MustInitInfra → wireHandlers → MustBuildServer → runner.RunServer`，低层 API 仍然可用。
+两者内部完成 `MustInitInfra → wireHandlers → MustBuildApp → lifecycle.Run`，低层 API 仍然可用。
+
+`lifecycle` 的阶段为 `Start → Ready → Serve → Drain → Stop → Release`：先 `net.Listen`，再执行 `Ready` 钩子（如 Consul 注册），收到退出请求后先逆序执行 `Drain` 钩子（如 Consul 注销），再 `HTTP Shutdown`，最后 `Release` 逆序关闭插件。
 
 #### 3.4.3 bootstrap 约定
 
 - 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要消息消费者时另增 `*_consumer_plugin.go`。
-- `server.go` 内的 `NewServer(configPath string) *runner.ServerBundle` 手写组合根，通过 `wireHandlers(infra)` 显式 `NewXxx` 构造依赖链。
-- `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `runner.Run`）；`internal/bootstrap/server.go` 只组装与 wiring。
-- `MustBuildServer` 返回的 `runner.ServerBundle.Cleanup` 绑定 `infra.Cleanup()`，停机时先 HTTP `Shutdown`，再逆序执行插件 `Close`。
+- `server.go` 内的 `NewApp(configPath string) *lifecycle.App` 手写组合根，通过 `wireHandlers(infra)` 显式 `NewXxx` 构造依赖链。
+- `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.RunWithConfigPath`）；`internal/bootstrap/server.go` 只组装与 wiring。
+- `MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `infra.Cleanup()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
 
 #### 3.4.4 插件生命周期
 
@@ -300,6 +302,24 @@ type Plugin interface {
     Close(host *Host)  // 无返回值；尽力释放，失败静默
 }
 ```
+
+需要参与进程阶段（注册发现、缓存预热/落盘等）的插件按需实现两个可选接口：
+
+```go
+type ReadyHook interface {
+    OnReady(ctx context.Context) error
+}
+
+type DrainHook interface {
+    OnDraining(ctx context.Context) error
+}
+```
+
+- 只有 `Started() == true` 的插件会被收集；禁用组件不会误注册。
+- `MustBuildApp` 将 `Runtime.ReadyHooks()` / `DrainHooks()` 搬运到 `lifecycle.App`；`lifecycle` 只按阶段调用函数，不认识任何具体组件。
+- `Ready` 按 Init 顺序执行，失败会导致启动失败；`Drain` 按 Init 逆序执行，失败只记录日志。
+- `Drain` 可能在 `Ready` 未完整执行时被调用（启动失败回滚），因此必须幂等。
+- 组件示例：Consul 插件在 `Init` 只创建 client，`OnReady` 注册服务，`OnDraining` 注销服务；业务 custom 插件可用同一契约做缓存预热/落盘。
 
 服务自定义插件 embed 导出的 `PluginState`，与内置插件写法一致：
 
@@ -324,13 +344,13 @@ type myConsumerPlugin struct {
 | 8 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
 | 9 | snowflake | 始终 |
 | 10 | tx | `host.DB` 存在 |
-| 11 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`） |
+| 11 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`；Ready 阶段注册、Drain 阶段注销） |
 | 12 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
 | 13 | idempotency | `idempotency.stale_cleaner_enabled=true` |
 | 14 | token | `auth.enabled=true` |
 | 15 | httprecord | `http_record.enabled=true` 时按 provider 装配，否则 Nop |
 | 16 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；Close 时先于 event 停止） |
+| 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 
@@ -514,7 +534,7 @@ kafka: ...
 
 | 你需要… | 优先看 |
 | -------- | ------ |
-| 进程启动、插件装配、中间件链 | `bootstrap`、`plugin`、`config`、`runner` |
+| 进程启动、插件装配、中间件链 | `bootstrap`、`plugin`、`lifecycle`、`config` |
 | HTTP 绑定/响应/路由 | `handler`、`response`、`router` |
 | DB / 本地事务 / Repository 基类 | `db` |
 | 业务幂等 | `idempotency` |
@@ -547,7 +567,7 @@ kafka: ...
 - [ ] 业务可部署单元经标准 `require gitee.com/hq_project/yomi-boot`（本地可用 `go.work` / `replace`）引用本库；`import` 为 `gitee.com/hq_project/yomi-boot/...`
 - [ ] `gitee.com/hq_project/yomi-boot` 不依赖任何业务可部署单元代码
 - [ ] 每个可部署单元 `internal/bootstrap/` 以 `server.go` 为装配入口；消息消费者插件单独文件
-- [ ] 启动链路使用 `MustInitInfra` / `MustBuildServer` / `runner.Run`；启动失败 Fail Fast（panic）
+- [ ] 启动链路使用 `MustInitInfra` / `MustBuildApp` / `lifecycle.Run`；启动失败 Fail Fast（panic）
 - [ ] 未使用的基础设施能力已在 YAML 中关闭对应 `enabled`
 - [ ] 消息/平台消费的业务逻辑在可部署单元自定义插件中实现；gitee.com/hq_project/yomi-boot 仅提供消费端点
 - [ ] 分布式形态：领域进程无跨域 HTTP、无 token 中间件

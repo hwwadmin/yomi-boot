@@ -44,7 +44,7 @@ import (
 //
 // 10. tx           — host.DB 存在时启动
 //
-// 11. consul       — consul.enabled=true 时启动（写入 Host.ConsulClient）
+// 11. consul       — consul.enabled=true 时启动（写入 Host.ConsulClient；Ready 注册 / Drain 注销）
 // 12. dtm          — 构造 Host.DtmClient（注入 Host.ConsulClient）；enabled 时探活
 // 13. idempotency  — stale_cleaner_enabled=true 时启动
 // 14. token        — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
@@ -56,6 +56,7 @@ import (
 //
 //   - DefaultConfigRegistry + MustLoadDocument（含自定义 AddConfigSection）
 //
+// Ready 按 Init 顺序执行，Drain 按 Init 逆序执行；仅 Started 插件参与（见 plugin.ReadyHook / DrainHook）。
 // Close 按 Init 逆序：先停 custom 插件，再关 event，避免 Receiver 先于消费退出。
 func buildInfraPlugins(opts InfraOptions) []plugin.Plugin {
 	plugins := []plugin.Plugin{

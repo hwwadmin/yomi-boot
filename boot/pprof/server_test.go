@@ -1,46 +1,53 @@
 package pprof
 
 import (
+	"context"
 	"io"
-	"net"
 	"net/http"
 	"testing"
 	"time"
 )
 
-// TestMustStartDisabled 验证 enabled=false 时 MustStart 不启动服务
+// TestMustStartDisabled 验证 enabled=false 时 MustStart 返回 nil
 func TestMustStartDisabled(t *testing.T) {
 	t.Parallel()
-	MustStart(Config{Enabled: boolPtr(false)})
+	if srv := MustStart(Config{Enabled: boolPtr(false)}); srv != nil {
+		t.Fatal("enabled=false 时 MustStart 应返回 nil")
+	}
 }
 
-// TestMustStartDefaultDisabled 验证未配置 enabled 时 MustStart 不启动服务
+// TestMustStartDefaultDisabled 验证未配置 enabled 时 MustStart 返回 nil
 func TestMustStartDefaultDisabled(t *testing.T) {
 	t.Parallel()
-	MustStart(Config{})
+	if srv := MustStart(Config{}); srv != nil {
+		t.Fatal("未配置 enabled 时 MustStart 应返回 nil")
+	}
 }
 
 // TestPprofIndex 验证 /debug/pprof/ 路由可访问并返回内容
 func TestPprofIndex(t *testing.T) {
 	t.Parallel()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("监听失败: %v", err)
+	srv := MustStart(Config{Enabled: boolPtr(true), Addr: "127.0.0.1:0"})
+	if srv == nil {
+		t.Fatal("MustStart 返回 nil")
 	}
-	defer func() { _ = listener.Close() }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = srv.Stop(ctx)
+	})
 
-	mux := http.NewServeMux()
-	registerRoutes(mux)
-	server := &http.Server{Handler: mux}
-	go func() {
-		_ = server.Serve(listener)
-	}()
+	addr := srv.Addr()
+	if addr == nil {
+		t.Fatal("Addr 返回 nil")
+	}
 
 	deadline := time.Now().Add(3 * time.Second)
 	var resp *http.Response
+	var err error
 	for time.Now().Before(deadline) {
-		resp, err = http.Get("http://" + listener.Addr().String() + "/debug/pprof/")
+		resp, err = http.Get("http://" + addr.String() + "/debug/pprof/")
 		if err == nil {
 			break
 		}

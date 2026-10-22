@@ -4,18 +4,28 @@
 package pprof
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/logger"
 )
 
-// MustStart 启动 pprof 服务，失败时 log + panic；进程退出时随进程自然关闭，无需显式释放
-func MustStart(cfg Config) {
+const readHeaderTimeout = 5 * time.Second
+
+// Server 是 pprof 调试服务句柄
+type Server struct {
+	server   *http.Server
+	listener net.Listener
+}
+
+// MustStart 启动 pprof 服务并返回句柄；未启用时返回 nil，启动失败时 log + panic
+func MustStart(cfg Config) *Server {
 	if !cfg.EnabledOrDefault() {
-		return
+		return nil
 	}
 
 	addr := cfg.ListenAddr()
@@ -28,14 +38,39 @@ func MustStart(cfg Config) {
 		panic(err)
 	}
 
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
 	go func() {
-		serveErr := http.Serve(listener, mux)
+		serveErr := server.Serve(listener)
 		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			logger.ErrorWithoutCtx("pprof 服务运行失败", "addr", addr, "error", serveErr)
+			logger.ErrorWithoutCtx("pprof 服务运行失败", "addr", listener.Addr().String(), "error", serveErr)
 		}
 	}()
 
-	logger.InfoWithoutCtx("pprof 服务启动完成", "addr", addr)
+	logger.InfoWithoutCtx("pprof 服务启动完成", "addr", listener.Addr().String())
+	return &Server{server: server, listener: listener}
+}
+
+// Addr 返回实际监听地址；未启动时返回 nil
+func (s *Server) Addr() net.Addr {
+	if s == nil || s.listener == nil {
+		return nil
+	}
+	return s.listener.Addr()
+}
+
+// Stop 优雅停止 pprof 服务，超时后强制关闭
+func (s *Server) Stop(ctx context.Context) error {
+	if s == nil || s.server == nil {
+		return nil
+	}
+	if err := s.server.Shutdown(ctx); err != nil {
+		_ = s.server.Close()
+		return err
+	}
+	return nil
 }
 
 // registerRoutes 注册 pprof 调试路由
