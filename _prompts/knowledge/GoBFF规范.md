@@ -121,7 +121,7 @@ resource, err := b.resourceClient.GetProfile(ctx, claims.SubjectID)
 
 #### 3.3.1 gitee.com/hq_project/yomi-boot/component/token 统一提供
 
-`gitee.com/hq_project/yomi-boot/component/token` 提供完整的令牌能力，包括 Store（Redis）、Claims、鉴权中间件、`TokenService`（签发/校验/撤销）。BFF 在 `NewApp` 中通过 `infra.TokenService` 直接注入，**无需**在 BFF 内部独立实现。
+`gitee.com/hq_project/yomi-boot/component/token` 提供完整的令牌能力，包括 Store（Redis）、Claims、鉴权中间件、`TokenService`（签发/校验/撤销）。BFF 在 `Wire` 中通过 `infra.TokenService` 直接注入，**无需**在 BFF 内部独立实现。
 
 | 层级 | 内容 |
 | ---- | ---- |

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/banner"
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/logger"
 )
 
@@ -42,11 +41,4 @@ func Run(factory func() *App) {
 		logger.ErrorWithoutCtx("服务运行失败", "error", err)
 		panic(err)
 	}
-}
-
-// RunWithConfigPath 使用 config.ResolvePath() 解析配置路径后启动服务
-func RunWithConfigPath(factory func(configPath string) *App) {
-	Run(func() *App {
-		return factory(config.ResolvePath())
-	})
 }

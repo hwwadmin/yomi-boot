@@ -32,7 +32,7 @@ func main() {
 }
 ```
 
-服务名统一来自配置 `app.name`。需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `bootstrap.MustInitInfra`、`bootstrap.MustBuildApp`、`lifecycle.Run` / `lifecycle.RunWithConfigPath` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
+服务名统一来自配置 `app.name`。需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `bootstrap.MustInitInfra`、`bootstrap.MustBuildApp`、`lifecycle.Run` / `lifecycle.RunContext` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
 
 ## 中间件推荐适配版本
 

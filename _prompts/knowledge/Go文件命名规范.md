@@ -146,7 +146,7 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 
 | 文件 | 位置 | 说明 |
 | ---- | ---- | ---- |
-| `server.go` | 业务工程 `services/{unit}/internal/bootstrap/`（惯例示例） | 启动装配入口；`NewApp` 返回 `*lifecycle.App` |
+| `server.go` | 业务工程 `services/{unit}/internal/bootstrap/`（惯例示例） | 启动装配入口；导出 `Wire(infra) []boot.Registrar` 供 `boot.Run` 使用；低层入口可另提供 `NewApp(configPath) *lifecycle.App` |
 | `*_consumer_plugin.go` | 同上（按需） | Kafka 消费者自定义插件 |
 | `boot.go` | `gitee.com/hq_project/yomi-boot/boot/` | 启动快捷入口：`Run` / `RunWithOptions` / `Options` |
 | `infra.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustInitInfra`、`Infra`、`Cleanup` |

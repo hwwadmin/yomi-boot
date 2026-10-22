@@ -227,7 +227,7 @@ services/{domain}/
 | `snowflake` | 雪花 ID 生成器 |
 | `appctx` | 应用上下文（名称、环境、版本） |
 | `banner` | 启动横幅打印 |
-| `lifecycle` | HTTP 服务进程生命周期编排：`App`、`Run` / `RunContext`、`RunWithConfigPath`；只负责阶段顺序、信号与优雅停机，不感知具体组件 |
+| `lifecycle` | HTTP 服务进程生命周期编排：`App`、`Run` / `RunContext`；只负责阶段顺序、信号与优雅停机，不感知具体组件 |
 | `cors` | 跨域中间件 |
 | `logger` | 日志初始化与配置；`MustInit` Fail Fast |
 | `config` | 配置加载抽象（Section/Registry/Document）、严格根 key、环境变量展开；`MustLoad` / `MustLoadDocument` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
@@ -264,30 +264,33 @@ services/{domain}/
 
 ```text
 cmd/main.go
-  └─ lifecycle.RunWithConfigPath(bootstrap.NewApp)
-       └─ services/*/internal/bootstrap/server.go
-            ├─ InfraOptions（按需 AddConfigSection / AddCustomPlugin）
-            ├─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustInitInfra(configPath, envPrefix, opts)
-            │     ├─ DefaultConfigRegistry + MustLoadDocument
-            │     └─ plugin.Run(host, buildInfraPlugins(opts))   # 按序 Init；是否启动看各段 enabled
-            ├─ wireHandlers(infra) → []router.Registrar         # 手写 wiring，在 server.go 内
-            └─ gitee.com/hq_project/yomi-boot/boot/bootstrap.MustBuildApp(infra, registrars, middlewares) → *lifecycle.App
+  └─ boot.Run(envPrefix, bootstrap.Wire)                  # 推荐入口：默认配置路径 + 默认中间件链
+       └─ boot.RunWithOptions(opts, wire)
+            └─ lifecycle.Run(factory)
+                 ├─ bootstrap.MustInitInfra(configPath, envPrefix, opts)
+                 │     ├─ DefaultConfigRegistry + MustLoadDocument
+                 │     └─ plugin.Run(host, buildInfraPlugins(opts))   # 按序 Init；是否启动看各段 enabled
+                 ├─ wire(infra) → []router.Registrar                  # 手写 wiring，在 internal/bootstrap
+                 └─ bootstrap.MustBuildApp(infra, registrars, middlewares) → *lifecycle.App
 ```
 
-业务入口也可直接使用根包 `boot` 的快捷入口：
+标准入口是根包 `boot`：
 
-- `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`。
+- `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`；`wire` 通常是业务 `internal/bootstrap.Wire`。
 - `boot.RunWithOptions(opts, wire)`：自定义 `ConfigPath`、`InfraOptions` 或中间件工厂。
 
-两者内部完成 `MustInitInfra → wireHandlers → MustBuildApp → lifecycle.Run`，低层 API 仍然可用。
+两者内部完成 `MustInitInfra → wire → MustBuildApp → lifecycle.Run`。
+
+需要完全自控启动时使用低层入口：`internal/bootstrap.NewApp(configPath) *lifecycle.App` + `lifecycle.Run(...)`。`lifecycle` 只负责 `Start → Ready → Serve → Drain → Stop → Release`，测试或嵌入式场景可用 `lifecycle.RunContext` 返回 error 而不是 panic。两种入口共用同一套 `wire`。
 
 `lifecycle` 的阶段为 `Start → Ready → Serve → Drain → Stop → Release`：先 `net.Listen`，再执行 `Ready` 钩子（如 Consul 注册），收到退出请求后先逆序执行 `Drain` 钩子（如 Consul 注销），再 `HTTP Shutdown`，最后 `Release` 逆序关闭插件。
 
 #### 3.4.3 bootstrap 约定
 
 - 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要消息消费者时另增 `*_consumer_plugin.go`。
-- `server.go` 内的 `NewApp(configPath string) *lifecycle.App` 手写组合根，通过 `wireHandlers(infra)` 显式 `NewXxx` 构造依赖链。
-- `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.RunWithConfigPath`）；`internal/bootstrap/server.go` 只组装与 wiring。
+- `server.go` 导出 `Wire(infra *boot.Infra) []boot.Registrar` 作为手写组合根，通过显式 `NewXxx` 构造依赖链；`boot.Run(envPrefix, bootstrap.Wire)` 直接使用。
+- 需要自定义配置路径或完全自控启动时，可另提供 `NewApp(configPath string) *lifecycle.App` 并调用 `lifecycle.Run`；两种入口共用同一套 wire。
+- `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.Run`）；`internal/bootstrap/server.go` 只组装与 wiring。
 - `MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `infra.Cleanup()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
 
 #### 3.4.4 插件生命周期
@@ -567,7 +570,7 @@ kafka: ...
 - [ ] 业务可部署单元经标准 `require gitee.com/hq_project/yomi-boot`（本地可用 `go.work` / `replace`）引用本库；`import` 为 `gitee.com/hq_project/yomi-boot/...`
 - [ ] `gitee.com/hq_project/yomi-boot` 不依赖任何业务可部署单元代码
 - [ ] 每个可部署单元 `internal/bootstrap/` 以 `server.go` 为装配入口；消息消费者插件单独文件
-- [ ] 启动链路使用 `MustInitInfra` / `MustBuildApp` / `lifecycle.Run`；启动失败 Fail Fast（panic）
+- [ ] 启动链路使用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.Run`）；启动失败 Fail Fast（panic）
 - [ ] 未使用的基础设施能力已在 YAML 中关闭对应 `enabled`
 - [ ] 消息/平台消费的业务逻辑在可部署单元自定义插件中实现；gitee.com/hq_project/yomi-boot 仅提供消费端点
 - [ ] 分布式形态：领域进程无跨域 HTTP、无 token 中间件
