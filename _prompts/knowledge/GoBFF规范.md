@@ -81,7 +81,7 @@ saga/        写操作（含单域），按 usecase 平铺，提交 DTM Saga
 | 层级 | 职责摘要 |
 | ---- | -------- |
 | `saga/` | **所有写唯一入口**：提交 DTM Saga；按微服务规范生成并写入信封 |
-| 领域 client | **读**：POST 封装；**写**：经 `dtm.AddSagaStep` 追加分支，禁止直调 Action URL |
+| 领域 client | **读**：POST 封装；**写**：经注入的 `dtmClient.AddSagaStep` 追加分支，禁止直调 Action URL |
 | 链路 | Header `X-Trace-ID`（不在 Body） |
 
 - **禁止**领域 client 封装绕过 DTM 的领域写直调方法。
@@ -188,7 +188,7 @@ payload := createResourcePayload{
     CompensateBizSubID: compensateSubID,
     Username: input.Username, Password: input.Password,
 }
-saga, err := dtm.NewSaga(ctx, s.dtmServer)
+saga, err := s.dtmClient.NewSaga(ctx)
 if err != nil {
     return nil, err
 }
@@ -206,7 +206,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 **领域 client** 为业务工程独立契约模块（非 gitee.com/hq_project/yomi-boot；业务 Workspace 下通常为 `client/`），**按领域分子包**（`{client}/{domain}/`）。参考实现中的包名随业务域变化，不构成本规范硬性清单。
 
 - **读**：`client.go` 中提供查询/验密等方法，封装 URL、Request/Response DTO、POST 调用。
-- **写**：提供 `CreateXxx(ctx, saga, payload)` 等方法，内部经 `dtm.AddSagaStep` 向 Saga 追加 Action/Compensate 分支；**不**直接 POST 领域写 URL。
+- **写**：提供 `CreateXxx(ctx, saga, payload)` 等方法，内部经注入的 `dtmClient.AddSagaStep` 向 Saga 追加 Action/Compensate 分支；**不**直接 POST 领域写 URL。
 - **路径共享**：`url.go` 中的路径常量同时被领域 `handler/` 与领域 client 使用，确保路由一致。
 - 经 Consul 发现；全部 POST + JSON Body；链路 ID 经 Header `X-Trace-ID` 传播。
 
@@ -243,7 +243,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 - [ ] 登录/登出/token 撤销经 `infra.TokenService`，不经角色域
 - [ ] 只读聚合在 `bff/`，所有写在 `saga/`
 - [ ] 所有写操作经 DTM；无 Facade/Direct 回退
-- [ ] client 写侧经 `dtm.AddSagaStep` 追加 Saga 分支，无绕过 DTM 的写直调方法
+- [ ] client 写侧经注入的 `dtmClient.AddSagaStep` 追加 Saga 分支，无绕过 DTM 的写直调方法
 - [ ] Saga 不实现领域补偿，只编排 URL 与 payload
 - [ ] 多入口使用独立 `store_prefix`
 ---

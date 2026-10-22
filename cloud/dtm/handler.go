@@ -14,12 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ErrNotConfigured 表示 DTM 服务器地址未配置
-var ErrNotConfigured = errors.NewNoStack("dtm server 未配置")
-
-// ErrGenGidFailed 表示向 DTM 请求全局事务 ID 失败
-var ErrGenGidFailed = errors.NewNoStack("dtm 生成全局事务 ID 失败")
-
 // WriteSuccess 写入 DTM 分支成功响应
 func WriteSuccess(c *gin.Context, data any) {
 	if data == nil {

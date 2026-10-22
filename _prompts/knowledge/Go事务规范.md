@@ -125,7 +125,7 @@ POST /internal/v1/{resource}/update-status/compensate → dtm.BindAndHandleCompe
 
 ```go
 // BFF 负责：前置校验、payload（bizId、bizSubId）、提交 Saga（示例）
-saga, err := dtm.NewSaga(ctx, dtmServer)
+saga, err := dtmClient.NewSaga(ctx)
 if err != nil {
     return err
 }

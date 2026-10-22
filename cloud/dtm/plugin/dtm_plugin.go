@@ -16,19 +16,24 @@ type dtmPlugin struct {
 
 const dtmName = "dtm"
 
-// NewDtm 创建 DTM 生命周期插件（写入 Host.DtmServer；enabled 时探活）
+// NewDtm 创建 DTM 生命周期插件（构造 Host.DtmClient；enabled 时探活）
 func NewDtm() plugin.Plugin {
 	return &dtmPlugin{PluginState: plugin.NewPluginState(dtmName)}
 }
 
-// Init 初始化 DTM 服务并挂到 Host
+// Init 初始化 DTM 客户端并挂到 Host
 func (p *dtmPlugin) Init(host *plugin.Host) {
 	cfg := config.MustSection[dtm.Config](host.Doc, dtm.SectionKey)
-	host.DtmServer = cfg.ResolveServer()
-	if !cfg.EnabledOrDefault() {
+	enabled := cfg.EnabledOrDefault()
+	server := ""
+	if enabled {
+		server = cfg.ResolveServer()
+	}
+	host.DtmClient = dtm.NewClient(host.ConsulClient, server, dtm.WithTimeout(cfg.TimeoutOrDefault()))
+	if !enabled {
 		return
 	}
-	dtm.ProbeServer(host.DtmServer)
+	dtm.ProbeServer(server)
 	p.SetStarted()
 }
 

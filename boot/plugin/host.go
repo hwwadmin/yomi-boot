@@ -9,6 +9,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
 	"gitee.com/hq_project/yomi-boot/boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/cloud/consul"
+	"gitee.com/hq_project/yomi-boot/cloud/dtm"
 	"gitee.com/hq_project/yomi-boot/component/db"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
 	"gitee.com/hq_project/yomi-boot/component/event"
@@ -48,6 +49,6 @@ type Host struct {
 	TxExecutor            db.TxExecutor
 	ConsulClient          *consul.Client
 	ConsulServiceID       string
-	DtmServer             string
+	DtmClient             *dtm.Client
 	EventComponents       *event.Components
 }

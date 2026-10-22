@@ -324,11 +324,11 @@ type myConsumerPlugin struct {
 | 8 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
 | 9 | snowflake | 始终 |
 | 10 | tx | `host.DB` 存在 |
-| 11 | dtm | 写入 DtmServer；`dtm.enabled=true` 时探活 |
-| 12 | idempotency | `idempotency.stale_cleaner_enabled=true` |
-| 13 | token | `auth.enabled=true` |
-| 14 | httprecord | `http_record.enabled=true` 时按 provider 装配，否则 Nop |
-| 15 | consul | `consul.enabled=true` |
+| 11 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`） |
+| 12 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
+| 13 | idempotency | `idempotency.stale_cleaner_enabled=true` |
+| 14 | token | `auth.enabled=true` |
+| 15 | httprecord | `http_record.enabled=true` 时按 provider 装配，否则 Nop |
 | 16 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
 | 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；Close 时先于 event 停止） |
 

@@ -44,11 +44,11 @@ import (
 //
 // 10. tx           — host.DB 存在时启动
 //
-// 11. dtm          — 写入 DtmServer；enabled 时探活
-// 12. idempotency  — stale_cleaner_enabled=true 时启动
-// 13. token        — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
-// 14. httprecord   — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务，否则 Nop（默认关；文件 access 由 logger.AccessMiddleware 负责）
-// 15. consul       — consul.enabled=true 时启动
+// 11. consul       — consul.enabled=true 时启动（写入 Host.ConsulClient）
+// 12. dtm          — 构造 Host.DtmClient（注入 Host.ConsulClient）；enabled 时探活
+// 13. idempotency  — stale_cleaner_enabled=true 时启动
+// 14. token        — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
+// 15. httprecord   — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务，否则 Nop（默认关；文件 access 由 logger.AccessMiddleware 负责）
 // 16. event        — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
 // 17. custom       — InfraOptions.AddCustomPlugin 注册的服务自定义插件
 //
@@ -69,11 +69,11 @@ func buildInfraPlugins(opts InfraOptions) []plugin.Plugin {
 		redisstreamplugin.NewRedisStream(),
 		snowflakeplugin.NewSnowflake(),
 		dbplugin.NewTx(),
+		consulplugin.NewConsul(),
 		dtmplugin.NewDtm(),
 		idempotencyplugin.NewIdempotencyStaleCleaner(),
 		tokenplugin.NewToken(),
 		httprecordplugin.NewHttpRecord(),
-		consulplugin.NewConsul(),
 		eventplugin.NewEvent(),
 	}
 	plugins = append(plugins, opts.customPlugins...)

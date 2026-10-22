@@ -6,86 +6,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/shared"
 	"gitee.com/hq_project/yomi-boot/boot/traceid"
-	"gitee.com/hq_project/yomi-boot/cloud/consul"
 
 	"github.com/dtm-labs/client/dtmcli"
 )
 
-// DefaultRequestTimeout 是 DTM 控制面请求（newGid/submit/abort/query）的默认超时
-// 该值同时作为 DTM 服务端回调各分支的请求超时，分支可能超过 3 秒时用 NewSagaWithTimeout 调大
-const DefaultRequestTimeout = 3 * time.Second
-
 // maxErrorBodyRunes 是错误信息中保留的响应体最大字符数
 const maxErrorBodyRunes = 256
 
-// AddSagaStep 通过 Consul 解析目标服务端点地址，向 Saga 追加 Action/Compensate 步骤
-// consulClient 用于服务发现，serviceName 为目标微服务的 Consul 注册名
-// saga 与 consulClient 不能为 nil；解析出的地址必须是 http/https 绝对地址
-func AddSagaStep(ctx context.Context, saga *dtmcli.Saga, consulClient *consul.Client,
-	serviceName, actionEndpoint, compensateEndpoint string, payload any,
-) error {
-	if saga == nil {
-		return errors.New("dtm: saga 不能为 nil")
+// NewSaga 创建已注入 traceID 的 DTM Saga 实例，控制面请求使用 Client 的超时
+func (c *Client) NewSaga(ctx context.Context) (*dtmcli.Saga, error) {
+	if !c.Enabled() {
+		return nil, errors.Sentinel(ErrNotConfigured)
 	}
-	if consulClient == nil {
-		return errors.New("dtm: consul 客户端未初始化")
-	}
-	actionURL, err := consulClient.ResolveHTTPBase(ctx, serviceName, actionEndpoint)
-	if err != nil {
-		return err
-	}
-	if err := validateBranchURL("action", actionURL); err != nil {
-		return err
-	}
-	compensateURL, err := consulClient.ResolveHTTPBase(ctx, serviceName, compensateEndpoint)
-	if err != nil {
-		return err
-	}
-	if err := validateBranchURL("compensate", compensateURL); err != nil {
-		return err
-	}
-	saga.Add(actionURL, compensateURL, payload)
-	return nil
-}
-
-// validateBranchURL 校验服务发现返回的分支地址可用于 DTM 回调
-func validateBranchURL(kind, raw string) error {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return errors.Wrap(err, "dtm: %s 分支地址不合法", kind)
-	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return errors.Newf("dtm: %s 分支地址不合法: %s", kind, raw)
-	}
-	return nil
-}
-
-// NewSaga 创建已注入 traceID 的 DTM Saga 实例，控制面请求使用 DefaultRequestTimeout
-func NewSaga(ctx context.Context, dtmServer string) (*dtmcli.Saga, error) {
-	return NewSagaWithTimeout(ctx, dtmServer, DefaultRequestTimeout)
-}
-
-// NewSagaWithTimeout 创建已注入 traceID 的 DTM Saga 实例
-// timeout 同时约束 newGid 与 submit/abort/query 等控制面请求，并作为 DTM 服务端回调各分支的请求超时
-// timeout <= 0 时使用 DefaultRequestTimeout
-func NewSagaWithTimeout(ctx context.Context, dtmServer string, timeout time.Duration) (*dtmcli.Saga, error) {
-	if timeout <= 0 {
-		timeout = DefaultRequestTimeout
-	}
-	gid, err := genGid(ctx, dtmServer, timeout)
+	gid, err := c.genGid(ctx)
 	if err != nil {
 		return nil, err
 	}
-	saga := dtmcli.NewSaga(dtmServer, gid)
+	saga := dtmcli.NewSaga(c.server, gid)
 	// dtmcli 的控制面超时单位是秒，不足 1 秒按 1 秒处理，避免 0 被当成不超时
-	timeoutSeconds := int64(timeout / time.Second)
+	timeoutSeconds := int64(c.effectiveTimeout() / time.Second)
 	if timeoutSeconds < 1 {
 		timeoutSeconds = 1
 	}
@@ -94,13 +39,45 @@ func NewSagaWithTimeout(ctx context.Context, dtmServer string, timeout time.Dura
 	return saga, nil
 }
 
+// AddSagaStep 通过 Consul 解析目标服务端点地址，向 Saga 追加 Action/Compensate 步骤
+// serviceName 为目标微服务的 Consul 注册名；saga 不能为 nil；解析出的地址必须是 http/https 绝对地址
+func (c *Client) AddSagaStep(ctx context.Context, saga *dtmcli.Saga,
+	serviceName, actionEndpoint, compensateEndpoint string, payload any,
+) error {
+	if !c.Enabled() {
+		return errors.Sentinel(ErrNotConfigured)
+	}
+	if saga == nil {
+		return errors.New("dtm: saga 不能为 nil")
+	}
+	if c.consul == nil {
+		return errors.New("dtm: consul 客户端未初始化")
+	}
+	actionURL, err := c.consul.ResolveHTTPBase(ctx, serviceName, actionEndpoint)
+	if err != nil {
+		return err
+	}
+	if err := validateHTTPURL("action", actionURL); err != nil {
+		return err
+	}
+	compensateURL, err := c.consul.ResolveHTTPBase(ctx, serviceName, compensateEndpoint)
+	if err != nil {
+		return err
+	}
+	if err := validateHTTPURL("compensate", compensateURL); err != nil {
+		return err
+	}
+	saga.Add(actionURL, compensateURL, payload)
+	return nil
+}
+
 // genGid 从 DTM 服务端申请全局事务 ID
-func genGid(ctx context.Context, server string, timeout time.Duration) (string, error) {
+func (c *Client) genGid(ctx context.Context) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	url := strings.TrimRight(server, "/") + "/newGid"
-	resp, err := dtmcli.GetRestyClient2(timeout).R().SetContext(ctx).Get(url)
+	url := strings.TrimRight(c.server, "/") + "/newGid"
+	resp, err := dtmcli.GetRestyClient2(c.effectiveTimeout()).R().SetContext(ctx).Get(url)
 	if err != nil {
 		return "", errors.Sentinel(fmt.Errorf("%w: %v", ErrGenGidFailed, err))
 	}

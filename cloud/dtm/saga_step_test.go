@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/boot/errors"
+
 	"github.com/dtm-labs/client/dtmcli"
 )
 
@@ -33,11 +35,12 @@ func TestNewSagaHonorsContext(t *testing.T) {
 	srv := newBlockingGidServer(t)
 	defer srv.Close()
 
+	client := NewClient(nil, srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
-	saga, err := NewSaga(ctx, srv.URL)
+	saga, err := client.NewSaga(ctx)
 	elapsed := time.Since(start)
 	if err == nil || saga != nil {
 		t.Fatalf("ctx 超时后应返回错误，saga=%v err=%v", saga, err)
@@ -52,8 +55,10 @@ func TestNewSagaClientTimeout(t *testing.T) {
 	srv := newBlockingGidServer(t)
 	defer srv.Close()
 
+	client := NewClient(nil, srv.URL, WithTimeout(50*time.Millisecond))
+
 	start := time.Now()
-	saga, err := NewSagaWithTimeout(context.Background(), srv.URL, 50*time.Millisecond)
+	saga, err := client.NewSaga(context.Background())
 	elapsed := time.Since(start)
 	if err == nil || saga != nil {
 		t.Fatalf("客户端超时后应返回错误，saga=%v err=%v", saga, err)
@@ -68,7 +73,7 @@ func TestNewSagaSetsTransRequestTimeout(t *testing.T) {
 	srv := newJSONGidServer(t, http.StatusOK, `{"gid":"g-1"}`)
 	defer srv.Close()
 
-	saga, err := NewSagaWithTimeout(context.Background(), srv.URL, 7*time.Second)
+	saga, err := NewClient(nil, srv.URL, WithTimeout(7*time.Second)).NewSaga(context.Background())
 	if err != nil {
 		t.Fatalf("创建 Saga 失败: %v", err)
 	}
@@ -77,16 +82,16 @@ func TestNewSagaSetsTransRequestTimeout(t *testing.T) {
 	}
 }
 
-// TestNewSagaDefaultRequestTimeout 验证默认超时会落到 Saga 上
-func TestNewSagaDefaultRequestTimeout(t *testing.T) {
+// TestNewSagaDefaultTimeout 验证默认超时会落到 Saga 上
+func TestNewSagaDefaultTimeout(t *testing.T) {
 	srv := newJSONGidServer(t, http.StatusOK, `{"gid":"g-1"}`)
 	defer srv.Close()
 
-	saga, err := NewSaga(context.Background(), srv.URL)
+	saga, err := NewClient(nil, srv.URL).NewSaga(context.Background())
 	if err != nil {
 		t.Fatalf("创建 Saga 失败: %v", err)
 	}
-	want := int64(DefaultRequestTimeout / time.Second)
+	want := int64(DefaultTimeout / time.Second)
 	if saga.RequestTimeout != want {
 		t.Fatalf("RequestTimeout 期望 %d，实际 %d", want, saga.RequestTimeout)
 	}
@@ -97,7 +102,7 @@ func TestNewSagaRoundsSubSecondTimeoutUp(t *testing.T) {
 	srv := newJSONGidServer(t, http.StatusOK, `{"gid":"g-1"}`)
 	defer srv.Close()
 
-	saga, err := NewSagaWithTimeout(context.Background(), srv.URL, 500*time.Millisecond)
+	saga, err := NewClient(nil, srv.URL, WithTimeout(500*time.Millisecond)).NewSaga(context.Background())
 	if err != nil {
 		t.Fatalf("创建 Saga 失败: %v", err)
 	}
@@ -111,7 +116,7 @@ func TestNewSagaRejectsNon200(t *testing.T) {
 	srv := newJSONGidServer(t, http.StatusInternalServerError, `{"gid":"g-1"}`)
 	defer srv.Close()
 
-	saga, err := NewSaga(context.Background(), srv.URL)
+	saga, err := NewClient(nil, srv.URL).NewSaga(context.Background())
 	if err == nil || saga != nil {
 		t.Fatalf("非 200 响应应返回错误，saga=%v err=%v", saga, err)
 	}
@@ -122,7 +127,8 @@ func TestNewSagaRejectsNon200(t *testing.T) {
 
 // TestAddSagaStepRejectsNilSaga 验证 saga 为空时返回错误而非 panic
 func TestAddSagaStepRejectsNilSaga(t *testing.T) {
-	err := AddSagaStep(context.Background(), nil, nil, "svc", "/action", "/compensate", nil)
+	client := NewClient(nil, "http://127.0.0.1:36789")
+	err := client.AddSagaStep(context.Background(), nil, "svc", "/action", "/compensate", nil)
 	if err == nil || !strings.Contains(err.Error(), "saga") {
 		t.Fatalf("saga 为 nil 应返回可读错误，实际: %v", err)
 	}
@@ -130,15 +136,26 @@ func TestAddSagaStepRejectsNilSaga(t *testing.T) {
 
 // TestAddSagaStepRejectsNilConsul 验证 consul 客户端为空时返回错误而非 panic
 func TestAddSagaStepRejectsNilConsul(t *testing.T) {
+	client := NewClient(nil, "http://127.0.0.1:36789")
 	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
-	err := AddSagaStep(context.Background(), saga, nil, "svc", "/action", "/compensate", nil)
+	err := client.AddSagaStep(context.Background(), saga, "svc", "/action", "/compensate", nil)
 	if err == nil || !strings.Contains(err.Error(), "consul") {
 		t.Fatalf("consul 为 nil 应返回可读错误，实际: %v", err)
 	}
 }
 
-// TestValidateBranchURL 验证分支地址只接受带 http/https 与 host 的绝对地址
-func TestValidateBranchURL(t *testing.T) {
+// TestAddSagaStepDisabled 验证未配置 DTM 时返回 ErrNotConfigured
+func TestAddSagaStepDisabled(t *testing.T) {
+	client := NewClient(nil, "")
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := client.AddSagaStep(context.Background(), saga, "svc", "/action", "/compensate", nil)
+	if !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("未启用时应返回 ErrNotConfigured，实际: %v", err)
+	}
+}
+
+// TestValidateHTTPURL 验证地址只接受带 http/https 与 host 的绝对地址
+func TestValidateHTTPURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		raw     string
@@ -153,7 +170,7 @@ func TestValidateBranchURL(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateBranchURL("action", tc.raw)
+			err := validateHTTPURL("action", tc.raw)
 			if tc.wantErr && err == nil {
 				t.Fatalf("期望拒绝 %q，实际通过", tc.raw)
 			}

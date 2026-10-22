@@ -10,6 +10,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
 	"gitee.com/hq_project/yomi-boot/boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/cloud/consul"
+	"gitee.com/hq_project/yomi-boot/cloud/dtm"
 	"gitee.com/hq_project/yomi-boot/component/db"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
 	"gitee.com/hq_project/yomi-boot/component/event"
@@ -42,7 +43,7 @@ type Infra struct {
 	TxExecutor           db.TxExecutor                // 事务执行器
 	AppCtx               appctx.AppCtx                // 应用上下文（名称、环境、版本）
 	ConsulClient         *consul.Client               // Consul 客户端
-	DtmServer            string                       // DTM 服务端地址
+	DtmClient            *dtm.Client                  // DTM 客户端
 	EventComponents      *event.Components            // 可靠领域事件组件（Outbox/Inbox）
 
 	runtime *plugin.Runtime // 插件运行时，供 Cleanup 逆序释放资源
@@ -91,7 +92,7 @@ func newInfra(doc *config.Document, rt *plugin.Runtime) *Infra {
 		TxExecutor:           host.TxExecutor,
 		AppCtx:               host.AppCtx,
 		ConsulClient:         host.ConsulClient,
-		DtmServer:            host.DtmServer,
+		DtmClient:            host.DtmClient,
 		EventComponents:      host.EventComponents,
 		runtime:              rt,
 	}
