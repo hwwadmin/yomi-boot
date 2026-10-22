@@ -9,18 +9,37 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/core/appctx"
 	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/router"
-	"gitee.com/hq_project/yomi-boot/core/snowflake"
+)
+
+// testAppConfig 测试用 app 配置段
+type testAppConfig struct {
+	Name string `mapstructure:"name"`
+}
+
+// testHTTPConfig 测试用 http 配置段
+type testHTTPConfig struct {
+	Port         int    `mapstructure:"port"`
+	RouterPrefix string `mapstructure:"router_prefix"`
+}
+
+// testSnowflakeConfig 测试用 snowflake 配置段
+type testSnowflakeConfig struct {
+	WorkerID *int `mapstructure:"worker_id"`
+}
+
+const (
+	testAppSectionKey       = "app"
+	testHTTPSectionKey      = "http"
+	testSnowflakeSectionKey = "snowflake"
 )
 
 // testInfraRegistry 返回配置加载单测用注册表
 func testInfraRegistry() *config.Registry {
 	return config.NewRegistry().Register(
-		appctx.ConfigSection(),
-		router.ConfigSection(),
-		snowflake.ConfigSection(),
+		config.NewSection(testAppSectionKey, &testAppConfig{}, nil),
+		config.NewSection(testHTTPSectionKey, &testHTTPConfig{}, nil),
+		config.NewSection(testSnowflakeSectionKey, &testSnowflakeConfig{}, nil),
 	)
 }
 
@@ -60,11 +79,11 @@ snowflake:
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
-	app := config.MustSection[appctx.Config](doc, appctx.SectionKey)
+	app := config.MustSection[testAppConfig](doc, testAppSectionKey)
 	if app.Name != "demo" {
 		t.Fatalf("app.name=%q", app.Name)
 	}
-	httpCfg := config.MustSection[router.Config](doc, router.SectionKey)
+	httpCfg := config.MustSection[testHTTPConfig](doc, testHTTPSectionKey)
 	if httpCfg.Port != 8080 {
 		t.Fatalf("http.port=%d", httpCfg.Port)
 	}
@@ -105,7 +124,7 @@ func TestRegistry_DuplicateKeyPanics(t *testing.T) {
 			t.Fatal("期望重复 key panic")
 		}
 	}()
-	testInfraRegistry().Register(config.NewSection(appctx.SectionKey, &appctx.Config{}, nil))
+	testInfraRegistry().Register(config.NewSection(testAppSectionKey, &testAppConfig{}, nil))
 }
 
 // writeTempYAML 写入临时 YAML 配置文件并返回路径

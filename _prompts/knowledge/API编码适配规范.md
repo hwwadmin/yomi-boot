@@ -22,7 +22,7 @@
 
 ### 2.1 适用范围
 
-- 适用于经 `gitee.com/hq_project/yomi-boot/core/handler` 写出的 HTTP 业务接口。
+- 适用于经 `gitee.com/hq_project/yomi-boot/component/common/handler` 写出的 HTTP 业务接口。
 - 适用于业务服务启动时对 `response.Encoder` 的显式注册。
 - **不**适用于 DTM Action/Compensate 回调、health 探活等明确走独立出口的路径。
 

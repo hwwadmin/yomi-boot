@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/appctx"
 	"gitee.com/hq_project/yomi-boot/core/shared"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +26,7 @@ type SpanContext struct {
 
 // ContextWithSpanContext 将完整链路元数据写入上下文
 func ContextWithSpanContext(ctx context.Context, sc SpanContext) context.Context {
-	ctx = appctx.OrBackground(ctx)
+	ctx = orBackground(ctx)
 	sc.TraceID = strings.TrimSpace(sc.TraceID)
 	sc.SpanID = strings.TrimSpace(sc.SpanID)
 	sc.ParentSpanID = strings.TrimSpace(sc.ParentSpanID)
@@ -129,4 +128,12 @@ func parseTraceparent(raw string) (traceID, parentSpanID string) {
 // newTraceID 生成 32 hex 链路 ID（UUID 去横线）
 func newTraceID() string {
 	return strings.ReplaceAll(uuid.New().String(), "-", "")
+}
+
+// orBackground 将 nil context 归一化为 Background，避免派生 context 时 panic
+func orBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
 }

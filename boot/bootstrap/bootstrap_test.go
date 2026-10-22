@@ -9,16 +9,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/httprecord"
-	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
-	"gitee.com/hq_project/yomi-boot/component/token"
-	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/component/common/appctx"
+	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
+	"gitee.com/hq_project/yomi-boot/component/common/logger"
+	"gitee.com/hq_project/yomi-boot/component/common/redisratelimit"
+	"gitee.com/hq_project/yomi-boot/component/common/router"
+	"gitee.com/hq_project/yomi-boot/component/common/token"
 	"gitee.com/hq_project/yomi-boot/core/config"
 	"gitee.com/hq_project/yomi-boot/core/cors"
-	"gitee.com/hq_project/yomi-boot/core/logger"
-	"gitee.com/hq_project/yomi-boot/core/router"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
+	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
 )
 
 // ======================== mock 实现 ========================

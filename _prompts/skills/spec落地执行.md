@@ -36,7 +36,7 @@
 
 - **Step 1**：确认 `audit.md` 无未闭合严重项（尤其事务）；读 spec 全章。
 - **Step 2**：拆解 tasks.md（原子任务、依赖、输入输出，按阶段分组）。
-- **Step 3**：按任务 TDD：一个功能点对应一组测试方法，先补测试再补实现；`go build ./...` / `go test ./...` 验证；HTTP 集成测试按《Go集成测试规范》与 `gitee.com/hq_project/yomi-boot/component/testclient`，参考业务仓 `test/` 平铺目录。
+- **Step 3**：按任务 TDD：一个功能点对应一组测试方法，先补测试再补实现；`go build ./...` / `go test ./...` 验证；HTTP 集成测试按《Go集成测试规范》与 `gitee.com/hq_project/yomi-boot/component/common/testclient`，参考业务仓 `test/` 平铺目录。
 - **Step 4**：每完成一个任务回写 tasks.md 状态与证据。
 - **Step 5**：最小范围验证，不扩大改动面。
 
@@ -46,7 +46,7 @@
 
 - 不得绕过 spec 中的事务与 API 契约（事务落点见 spec 第十一章；HTTP 出口以本服务已注册 Encoder 为准）。
 - 不得在业务仓重复实现已有基础库能力（对照《Go架构规范》§3.3 模块职责）。
-- 装配惯例：`internal/bootstrap/` 手写装配（`server.go`；Kafka 消费者按需 `*_consumer_plugin.go` + `AddCustomPlugin`）；Handler 经 `gitee.com/hq_project/yomi-boot/core/handler` 协议适配、以 `Routes(router)` 注册相对路径。
+- 装配惯例：`internal/bootstrap/` 手写装配（`server.go`；Kafka 消费者按需 `*_consumer_plugin.go` + `AddCustomPlugin`）；Handler 经 `gitee.com/hq_project/yomi-boot/component/common/handler` 协议适配、以 `Routes(router)` 注册相对路径。
 - 仅修改当前任务相关文件；文件命名遵循《Go文件命名规范》。
 
 ---

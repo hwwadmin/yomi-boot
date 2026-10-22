@@ -19,7 +19,7 @@
 
 ## 2. 设计目标
 
-1. **配置与能力同包**：core/component/cloud 各能力配置在对应能力目录（如 `db.Config`、`token.Config`）。
+1. **配置与能力同包**：component/common、component/cloud、component/ai 及 core 各能力配置在对应能力目录（如 `db.Config`、`token.Config`）。
 2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
 3. **主动注册**：`bootstrap.DefaultConfigRegistry()` 注册全部内置配置段；业务服务 `AddConfigSection` 追加。
 4. **Fail Fast**：加载与校验失败即 `Must*` panic。

@@ -28,7 +28,7 @@
 - **BFF 与领域服务**：测试用例与 `cfg_test.go` **平铺**在 `test/` 目录，不再按 handler 模块分子目录。
 - 每个测试函数**只调用一个 HTTP 接口**。
 - 不直接调用 handler、usecase 或 repository。
-- HTTP 请求统一使用 `gitee.com/hq_project/yomi-boot/component/testclient` 封装。
+- HTTP 请求统一使用 `gitee.com/hq_project/yomi-boot/component/common/testclient` 封装。
 - 请求体**复用接口定义的请求对象**，禁止使用 `map[string]any` 等松散结构。
 
 ### 2.2 关联文档
@@ -103,7 +103,7 @@ body, ok := testclient.Post(LoginURL(), "", bff.AdminLoginInput{
 
 ### 3.5 响应处理
 
-- 使用 `gitee.com/hq_project/yomi-boot/component/testclient` 发起请求，读取 `(body, ok)` 返回值。
+- 使用 `gitee.com/hq_project/yomi-boot/component/common/testclient` 发起请求，读取 `(body, ok)` 返回值。
 - `ok` 为 true 表示 HTTP 状态码 200；失败时 `body` 含响应体或错误信息。
 - 需要解包业务载荷时，直接用 `response.Enc().Parse` / `IsSuccess`（与 httprecord 同口径）；测试进程须已 `MustRegister`（或 `RegisterDefaultForTest`）。
 - 默认**不断言**业务 `code` 字符串（如 `"OK"` / `"USER_NOT_FOUND"`）（由与被测源码同包的单元测试覆盖）。
@@ -124,7 +124,7 @@ body, ok := testclient.Post(LoginURL(), "", bff.AdminLoginInput{
 - [ ] 请求体复用接口定义的 struct，未使用 map
 - [ ] BFF 测试路径与 `router_prefix` 一致
 - [ ] 领域测试不依赖 token（身份通过 Body 传参）
-- [ ] HTTP 请求使用 `gitee.com/hq_project/yomi-boot/component/testclient`
+- [ ] HTTP 请求使用 `gitee.com/hq_project/yomi-boot/component/common/testclient`
 
 ---
 

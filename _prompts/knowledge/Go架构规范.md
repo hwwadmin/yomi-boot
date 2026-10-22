@@ -96,12 +96,12 @@
 
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
-- 仓库按五层组织：`core/`（系统核心组件，无生命周期依赖的运行时基础件）、`boot/`（启动流程编排）、`component/`（可独立启停的通用能力组件）、`cloud/`（跨服务/多实例分布式组件）、`ai/`（可选 AI 能力簇）。
-- `core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、snowflake、traceid、utils；`boot/` 提供启动入口 `boot`、bootstrap、lifecycle、plugin、banner；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 属于强制启动项。`ai/*` / `ws` 不进默认插件链。
-- 各能力 `plugin` 子包跟随能力目录：`core/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。`core/{lib}/plugin` 是启动适配边界，仅允许依赖 `boot/plugin`；core 纯包不得依赖 boot。
+- 仓库按三层组织：`core/`（无状态核心库：无全局可变状态、无外部资源、无生命周期）、`boot/`（启动流程编排）、`component/`（组件库，下分 `common`/`cloud`/`ai`）。
+- `core/` 提供 bc、config、cors、errors、shared、traceid、utils；`boot/` 提供启动入口 `boot`、bootstrap、lifecycle、plugin、banner；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
+- 各能力 `plugin` 子包跟随能力目录：`component/common/{lib}/plugin`、`component/cloud/{lib}/plugin`；`core` 不含 `plugin` 子包。`core` 不得依赖 `boot`/`component`。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
-- `gitee.com/hq_project/yomi-boot/component/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
-- `gitee.com/hq_project/yomi-boot/component/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
+- `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
+- `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
 
 ### 3.2 标准目录结构（模式）
 
@@ -110,11 +110,12 @@
 ```text
 # gitee.com/hq_project/yomi-boot 仓库（本库）
 gitee.com/hq_project/yomi-boot/                               # module: gitee.com/hq_project/yomi-boot
-├── core/                        # 系统核心组件（运行时基础件，无生命周期编排）
+├── core/                        # 无状态核心库（bc、config、cors、errors、shared、traceid、utils）
 ├── boot/                        # 启动流程编排（入口、bootstrap、lifecycle、plugin、banner）
-├── component/                   # 可独立启停的通用能力组件（含 pprof、ws、worker）
-├── cloud/                       # 分布式组件
-└── ai/                          # 可选 AI 能力簇（不进 bootstrap）
+└── component/                   # 组件库
+    ├── common/                  # 通用组件（含 HTTP 内核、日志、appctx、snowflake、pprof、ws、worker）
+    ├── cloud/                   # 分布式组件（consul、dtm、rpc）
+    └── ai/                      # AI 能力组件（不进 bootstrap）
 
 # 业务工程仓库（示例）
 {business-repo}/
@@ -173,23 +174,23 @@ services/{domain}/
 
 | 目录 | 包 |
 | ---- | -- |
-| `core/` | `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`snowflake`、`traceid`、`utils` |
+| `core/` | `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`lifecycle`、`banner` |
-| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
-| `cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
-| `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
+| `component/common/` | `appctx`、`handler`、`httpguard`、`logger`、`response`、`router`、`snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
+| `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
+| `component/ai/` | `llm`、`embedding`、`jev`、`rag`、`vectordb` |
 
-依赖方向：`core` 不依赖 `boot`/`component`/`cloud`/`ai`（`core/{lib}/plugin` 仅允许依赖 `boot/plugin`）；`component`/`cloud`/`ai` 依赖 `core`，其 `plugin` 适配子包可依赖 `boot/plugin`；`boot` 依赖 `core`，仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。
+依赖方向：`core` 不依赖 `boot`/`component`；`component/common` 依赖 `core`；`component/cloud`、`component/ai` 依赖 `core` + `component/common`；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`boot` 依赖 `core` + `component/common`，仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component/cloud`；`component/common/{lib}/plugin` 与 `component/cloud/{lib}/plugin` 允许依赖 `boot/plugin`，`component/ai` 不依赖 `boot`。
 
 | 包 | 职责 |
 | -- | ---- |
 | `bootstrap` | `MustInitInfra`、`MustBuildApp`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
 | `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约 |
-| `{lib}/plugin` | 各能力的内置生命周期插件实现，跟随能力目录：`core/logger/plugin`、`component/db/plugin`、`cloud/consul/plugin` 等；`core/{lib}/plugin` 是启动适配边界，仅允许依赖 `boot/plugin`；`tx` 挂在 `component/db/plugin`；包名 `{lib}plugin` |
+| `{lib}/plugin` | 各能力的内置生命周期插件实现，跟随能力目录：`component/common/logger/plugin`、`component/common/db/plugin`、`component/cloud/consul/plugin` 等；`tx` 挂在 `component/common/db/plugin`；包名 `{lib}plugin`；`core` 不含 `plugin` 子包 |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
-| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `component/pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
+| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `component/common/pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
@@ -235,11 +236,11 @@ services/{domain}/
 | `config` | 配置加载抽象（Section/Registry/Document）、严格根 key、环境变量展开；`MustLoad` / `MustLoadDocument` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
-| `ai/llm` | 统一大模型对话门面：Chat / 流式（OpenAI / Anthropic）；`New`/`MustNew`；一实例一模型；独立哨兵 `AI_LLM_*`；不进 bootstrap、不读 YAML、不做限流 |
-| `ai/embedding` | 统一文本向量化门面：OpenAI Embeddings；`New`/`MustNew`；APIKey 可空；独立哨兵 `AI_EMBEDDING_*`；与 llm / jev 零依赖；不进 bootstrap、不读 YAML、不做限流 |
-| `ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进 bootstrap、不读 YAML、不做限流 |
-| `ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `ai/embedding` + `ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进 bootstrap、不读 YAML、不做限流 |
-| `ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
+| `component/ai/llm` | 统一大模型对话门面：Chat / 流式（OpenAI / Anthropic）；`New`/`MustNew`；一实例一模型；独立哨兵 `AI_LLM_*`；不进 bootstrap、不读 YAML、不做限流 |
+| `component/ai/embedding` | 统一文本向量化门面：OpenAI Embeddings；`New`/`MustNew`；APIKey 可空；独立哨兵 `AI_EMBEDDING_*`；与 llm / jev 零依赖；不进 bootstrap、不读 YAML、不做限流 |
+| `component/ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进 bootstrap、不读 YAML、不做限流 |
+| `component/ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `component/ai/embedding` + `component/ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进 bootstrap、不读 YAML、不做限流 |
+| `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进 bootstrap、不读 YAML |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件 |
 
 **平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/`）：
@@ -297,7 +298,7 @@ cmd/main.go
 
 #### 3.4.4 插件生命周期
 
-**接口**（`gitee.com/hq_project/yomi-boot/boot/plugin`；内置实现见各能力的 `plugin` 子包，如 `core/logger/plugin`、`component/db/plugin`、`cloud/consul/plugin`）：
+**接口**（`gitee.com/hq_project/yomi-boot/boot/plugin`；内置实现见各能力的 `plugin` 子包，如 `component/common/logger/plugin`、`component/common/db/plugin`、`component/cloud/consul/plugin`）：
 
 ```go
 type Plugin interface {
@@ -431,16 +432,16 @@ CORS → traceid → httprecord → AccessMiddleware → httpguard → Recovery 
 
 - **顺序约束**：`httprecord` 与文件 `AccessMiddleware` 必须位于 `httpguard` **外侧**。`httpguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
 - `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时直接放行。
-- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/cloud/rpc` 自动回填 Header。
+- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/component/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)。
 - 领域**读**（微服务间）：对内信封与 HTTP 状态见 [微服务调用规范](./微服务调用规范.md) §3.3.1。
-- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`gitee.com/hq_project/yomi-boot/cloud/dtm`）。
+- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`gitee.com/hq_project/yomi-boot/component/cloud/dtm`）。
 
 ### 3.8 pprof 排障
 
 - 配置项：`pprof.enabled`（默认 `false`）、`pprof.addr`（独立 debug 端口，由各可部署单元自行配置，避免端口冲突）。
-- 由 `component/pprof/plugin` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
+- 由 `component/common/pprof/plugin` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
 - 常用命令：
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/profile?seconds=30`
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/heap`
@@ -552,11 +553,11 @@ kafka: ...
 | 鉴权令牌 | `token` |
 | 加解密 / 哈希 / 密码 | `bc/*` |
 | 对象存储 | `oss`（大文件上传/下载；勿用 `ws` 整包） |
-| 调用大模型 Chat / 流式 | `ai/llm`（`New`/`MustNew`；OpenAI / Anthropic；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
-| 文本向量化 Embedding | `ai/embedding`（`New`/`MustNew`；OpenAI Embeddings；APIKey 可空；勿直引官方 SDK；不做限流） |
-| Jev 结构化决策 | `ai/jev`（`New`/`MustNew`；System One；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
-| RAG 切块 / 入库 / 检索 / 删除 | `ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；内置 recursive / fixed / sentence / markdown，可注入自定义 `Splitter`；基于 `ai/embedding` + `ai/vectordb`；不含问答；不读 YAML） |
-| 向量写入 / ANN 检索 / 动态索引 | `ai/vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
+| 调用大模型 Chat / 流式 | `component/ai/llm`（`New`/`MustNew`；OpenAI / Anthropic；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
+| 文本向量化 Embedding | `component/ai/embedding`（`New`/`MustNew`；OpenAI Embeddings；APIKey 可空；勿直引官方 SDK；不做限流） |
+| Jev 结构化决策 | `component/ai/jev`（`New`/`MustNew`；System One；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
+| RAG 切块 / 入库 / 检索 / 删除 | `component/ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；内置 recursive / fixed / sentence / markdown，可注入自定义 `Splitter`；基于 `component/ai/embedding` + `component/ai/vectordb`；不含问答；不读 YAML） |
+| 向量写入 / ANN 检索 / 动态索引 | `component/ai/vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
 | 雪花 ID | `snowflake` |
 | 错误码 / 信封 DTO | `errors`、`shared/error`、`shared/dto` |
 | 集成测试 HTTP 调用 | `testclient` |
@@ -588,7 +589,7 @@ kafka: ...
 
 - 业务以独立工程 + 可部署单元组织；禁止在业务工程根目录放置业务 `internal/biz` 或业务装配入口（应落在各可部署单元内）。基于 gitee.com/hq_project/yomi-boot 的单进程部署仍属合法形态（见 §3.1.0）。
 - 禁止领域进程之间 HTTP 互调（分布式形态；单体进程内模块调用不受此限）。
-- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/component/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `auth` 段）。
+- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/component/common/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `auth` 段）。
 - 禁止服务间默认使用 gRPC 等其他 RPC 协议替代 HTTP（分布式形态）。
 - 禁止在 JSON Body 中传递 `traceId`（统一使用 Header `X-Trace-ID`）。
 - 禁止在领域 handler/usecase 中读取 token 或 `SessionFromContext`（分布式形态下的领域服务类型）。

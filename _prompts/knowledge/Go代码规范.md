@@ -151,15 +151,15 @@ func (h *ResourceHandler) handleUpdateStatusAction(c *gin.Context) {
 
 #### 3.2.1 Redis 访问收口
 
-- **BFF**：Redis 用于令牌 Store（session 持久化），经 `gitee.com/hq_project/yomi-boot/component/token` + `gitee.com/hq_project/yomi-boot/component/redis.RedisService` 访问。
-- **领域服务**：`MustInitInfra` 启用 Redis 供 `gitee.com/hq_project/yomi-boot/component/idempotency` 三层幂等使用；**禁止** usecase/service/handler 直接访问 Redis。
-- 禁止业务层直接使用 `*redis.Client`；读写经 `gitee.com/hq_project/yomi-boot/component/redis.RedisService`（仅 gitee.com/hq_project/yomi-boot 内部组件允许）。
+- **BFF**：Redis 用于令牌 Store（session 持久化），经 `gitee.com/hq_project/yomi-boot/component/common/token` + `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService` 访问。
+- **领域服务**：`MustInitInfra` 启用 Redis 供 `gitee.com/hq_project/yomi-boot/component/common/idempotency` 三层幂等使用；**禁止** usecase/service/handler 直接访问 Redis。
+- 禁止业务层直接使用 `*redis.Client`；读写经 `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService`（仅 gitee.com/hq_project/yomi-boot 内部组件允许）。
 
 | 场景 | 允许方式 | 禁止方式 |
 | ---- | -------- | -------- |
-| BFF token Store | `gitee.com/hq_project/yomi-boot/component/token` + `gitee.com/hq_project/yomi-boot/component/redis.RedisService` | 领域业务层访问 Redis |
-| 领域 idempotency | `gitee.com/hq_project/yomi-boot/component/idempotency.Guard`（bootstrap 注入） | usecase 直接调 Redis |
-| gitee.com/hq_project/yomi-boot/component/redis 实现 | `RedisHelper` 内部持有 `*redis.Client` | 业务层 import go-redis |
+| BFF token Store | `gitee.com/hq_project/yomi-boot/component/common/token` + `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService` | 领域业务层访问 Redis |
+| 领域 idempotency | `gitee.com/hq_project/yomi-boot/component/common/idempotency.Guard`（bootstrap 注入） | usecase 直接调 Redis |
+| gitee.com/hq_project/yomi-boot/component/common/redis 实现 | `RedisHelper` 内部持有 `*redis.Client` | 业务层 import go-redis |
 
 Key 命名、TTL 见 [Redis设计规范](./Redis设计规范.md)。
 
@@ -183,7 +183,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 
 ### 3.3.1 handler 协议适配辅助
 
-业务 handler 的 JSON 绑定、用例执行、分页响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/core/handler` 完成。
+业务 handler 的 JSON 绑定、用例执行、分页响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/component/common/handler` 完成。
 
 ##### 3.3.1.1 领域 handler
 
@@ -195,7 +195,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 | DTM Compensate | `dtm.BindAndHandleCompensate(c, uc.Compensate)` |
 
 - 领域 handler **禁止**从 token Context 取 userId；身份字段由 BFF 按接口 DTO 传入。
-- import 时可用别名：`platformhandler "gitee.com/hq_project/yomi-boot/core/handler"` 或 `handler "gitee.com/hq_project/yomi-boot/core/handler"`。
+- import 时可用别名：`platformhandler "gitee.com/hq_project/yomi-boot/component/common/handler"` 或 `handler "gitee.com/hq_project/yomi-boot/component/common/handler"`。
 
 ##### 3.3.1.2 BFF handler
 
@@ -204,7 +204,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 | 对外 API | `platformhandler.BindAndHandle(c, bffFn)` |
 | 登录等需 Request | `platformhandler.BindAndHandleWithRequest(c, fn)` |
 
-- BFF 经 `gitee.com/hq_project/yomi-boot/component/token` 解析 Claims 后，按下游接口 DTO **按需**写入业务字段。
+- BFF 经 `gitee.com/hq_project/yomi-boot/component/common/token` 解析 Claims 后，按下游接口 DTO **按需**写入业务字段。
 - 登出等无 Body 场景：`platformhandler.HandleVoid(c, revokeFn)`。
 
 分页 usecase 入参嵌入 `dto.PageInput`，出参直接返回 `*dto.PageOutput[TItem]`；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页辅助方法见 [Go数据库规范](./Go数据库规范.md) §3.2.2。
@@ -212,7 +212,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（可选用预制实现，但须显式 `MustRegister`）。
 
 ```go
-// 正确：通过 gitee.com/hq_project/yomi-boot/core/handler 收口重复逻辑（示例）
+// 正确：通过 gitee.com/hq_project/yomi-boot/component/common/handler 收口重复逻辑（示例）
 func (h *ResourceHandler) handleGetProfile(c *gin.Context) {
     platformhandler.BindAndHandle(c, h.GetProfile.Execute)
 }
@@ -668,7 +668,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - 禁止 repository 层做模型字段非空、ID 有效性等业务校验。
 - 禁止各层方法在运行期对注入依赖做防御式判空，以此替代启动阶段的装配验证。
 - 禁止显式实现接口的 struct 缺少 `var _ Interface = (*Impl)(nil)` 编译期断言，导致接口方法不完整时无法被编译器拦截。
-- 禁止在 `gitee.com/hq_project/yomi-boot/component/redis/` 与 BFF 令牌装配之外，业务层直接使用 `*redis.Client`。
+- 禁止在 `gitee.com/hq_project/yomi-boot/component/common/redis/` 与 BFF 令牌装配之外，业务层直接使用 `*redis.Client`。
 - 禁止在 `Infra` 上暴露公开 `*redis.Client` 字段；连接由 redis 插件在 `MustInitInfra` 内创建，经 `RedisService` 对外暴露，并在 `Cleanup` 中关闭。
 - 禁止 Routes 方法内对 `router` 做 `== nil` 判空。
 - 禁止业务接口使用 GET + query 参数作为主要输入形式，除非是 health 探针或明确的 CDN/SEO 包装层。

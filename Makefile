@@ -57,39 +57,63 @@ test:
 	$(GO) test ./...
 
 # layers
-# 作用: 校验分层依赖方向（core 不反向依赖；仅 bootstrap/plugin 可依赖 component/cloud）
+# 作用: 校验分层依赖方向（core 无状态；component 三分组；仅 bootstrap/plugin 可依赖 cloud）
 # 用法: make layers
 .PHONY: layers
 layers:
 	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./core/... | \
-	  awk '$$1 ~ /\/plugin$$/ { \
+	  awk '{ \
 	         for (i = 2; i <= NF; i++) \
-	           if ($$i ~ /yomi-boot\/boot\// && $$i != "gitee.com/hq_project/yomi-boot/boot/plugin") { \
-	             print "core 适配器只允许依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	         next \
-	       } \
-	       { \
-	         for (i = 2; i <= NF; i++) \
-	           if ($$i ~ /yomi-boot\/(boot|component|cloud|ai)\//) { \
-	             print "core 纯包禁止跨层依赖: " $$1 " -> " $$i; bad = 1 \
+	           if ($$i ~ /yomi-boot\/(boot|component)\//) { \
+	             print "core 禁止依赖 boot/component: " $$1 " -> " $$i; bad = 1 \
 	           } \
 	       } \
 	       END { exit bad }'
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/... ./cloud/... ./ai/... | \
+	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/common/... | \
 	  awk '{ \
-	         for (i = 2; i <= NF; i++) \
-	           if ($$i ~ /yomi-boot\/boot\// && $$i != "gitee.com/hq_project/yomi-boot/boot/plugin") { \
-	             print "component/cloud/ai 只允许依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
+	         for (i = 2; i <= NF; i++) { \
+	           if ($$i ~ /yomi-boot\/component\/(cloud|ai)\//) { \
+	             print "component/common 禁止依赖 component/cloud|ai: " $$1 " -> " $$i; bad = 1 \
 	           } \
+	           if ($$i ~ /yomi-boot\/boot\// && ($$1 !~ /\/plugin$$/ || $$i != "gitee.com/hq_project/yomi-boot/boot/plugin")) { \
+	             print "component/common 仅 */plugin 可依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	         } \
+	       } \
+	       END { exit bad }'
+	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/cloud/... | \
+	  awk '{ \
+	         for (i = 2; i <= NF; i++) { \
+	           if ($$i ~ /yomi-boot\/component\/ai\//) { \
+	             print "component/cloud 禁止依赖 component/ai: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	           if ($$i ~ /yomi-boot\/boot\// && ($$1 !~ /\/plugin$$/ || $$i != "gitee.com/hq_project/yomi-boot/boot/plugin")) { \
+	             print "component/cloud 仅 */plugin 可依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	         } \
+	       } \
+	       END { exit bad }'
+	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/ai/... | \
+	  awk '{ \
+	         for (i = 2; i <= NF; i++) { \
+	           if ($$i ~ /yomi-boot\/component\/cloud\//) { \
+	             print "component/ai 禁止依赖 component/cloud: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	           if ($$i ~ /yomi-boot\/boot\//) { \
+	             print "component/ai 禁止依赖 boot: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	         } \
 	       } \
 	       END { exit bad }'
 	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./boot/... | \
-	  awk '$$1 == "gitee.com/hq_project/yomi-boot/boot/bootstrap" || $$1 == "gitee.com/hq_project/yomi-boot/boot/plugin" { next } \
-	       { \
-	         for (i = 2; i <= NF; i++) \
-	           if ($$i ~ /yomi-boot\/(component|cloud)\//) { \
+	  awk '{ \
+	         for (i = 2; i <= NF; i++) { \
+	           if ($$i ~ /yomi-boot\/component\/ai\//) { \
+	             print "boot 禁止依赖 component/ai: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	           if ($$i ~ /yomi-boot\/component\/cloud\// && $$1 != "gitee.com/hq_project/yomi-boot/boot/bootstrap" && $$1 != "gitee.com/hq_project/yomi-boot/boot/plugin") { \
 	             print "仅 bootstrap/plugin 允许依赖 component/cloud: " $$1 " -> " $$i; bad = 1 \
 	           } \
+	         } \
 	       } \
 	       END { exit bad }'

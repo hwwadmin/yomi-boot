@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/component/common/appctx"
+	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/core/errors"
-	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 const defaultStopTimeout = 10 * time.Second

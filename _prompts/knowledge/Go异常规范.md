@@ -25,7 +25,7 @@
 - 适用于 `gitee.com/hq_project/yomi-boot/core/errors` 系统级错误包（`errors.New`、`errors.Wrap`、`errors.Stack` 等）。
 - 适用于 `gitee.com/hq_project/yomi-boot/core/errors.BizError`（可选，用于域错误携带 Code/Message）。
 - 适用于 `gitee.com/hq_project/yomi-boot/core/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
-- 适用于 `gitee.com/hq_project/yomi-boot/core/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
+- 适用于 `gitee.com/hq_project/yomi-boot/component/common/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
 - 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/boot/bootstrap` 中间件链 Recovery）。
 
 ### 2.2 关联文档
@@ -193,7 +193,7 @@ BindAndHandle / Handle / ...
 | 层级 | 示例 | 定义位置 |
 | ---- | ---- | -------- |
 | 系统通用 | `INTERNAL_ERROR`、`INVALID_BODY`、`INVALID_INPUT`、`REQUEST_TIMEOUT`、`REQUEST_BODY_TOO_LARGE` | `gitee.com/hq_project/yomi-boot/core/shared/error` |
-| 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `gitee.com/hq_project/yomi-boot/component/token` 就近 |
+| 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `gitee.com/hq_project/yomi-boot/component/common/token` 就近 |
 | 限流 / 下游 | `RATE_LIMITED`、`DOWNSTREAM_ERROR` | 对应库就近 |
 | 业务域 | `USER_NOT_FOUND` 等 | 各服务 `bizerr` |
 | 权限域 | `PERMISSION_DENIED` 等 | **仅业务仓**，gitee.com/hq_project/yomi-boot 不定义 |

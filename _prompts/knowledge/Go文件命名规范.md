@@ -57,7 +57,7 @@
 {module}_handler.go
 ```
 
-- 健康检查统一使用 `gitee.com/hq_project/yomi-boot/core/handler.NewHealthHandler(consulPath, opsPath, appCtx)`，分别注册 Consul 探针与运维探针，在 bootstrap 注册。
+- 健康检查统一使用 `gitee.com/hq_project/yomi-boot/component/common/handler.NewHealthHandler(consulPath, opsPath, appCtx)`，分别注册 Consul 探针与运维探针，在 bootstrap 注册。
 - 结构体：`{Module}Handler`（**示例**：`ResourceHandler`）。
 - 一个模块一个 handler 文件，包含该模块对外全部接口方法。
 
@@ -155,15 +155,15 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | `server.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustBuildApp`、`DefaultMiddlewares` |
 | `lifecycle.go` / `run.go` | `gitee.com/hq_project/yomi-boot/boot/lifecycle/` | `App`、`Hook`、`Run` / `RunContext`、阶段编排与停机 |
 | `plugin.go` / `host.go` | `gitee.com/hq_project/yomi-boot/boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook` |
-| `{组件}_plugin.go` | 各组件目录下的 `plugin/`，如 `gitee.com/hq_project/yomi-boot/component/db/plugin/`、`gitee.com/hq_project/yomi-boot/cloud/consul/plugin/` | 各组件生命周期插件实现（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`） |
+| `{组件}_plugin.go` | 各组件目录下的 `plugin/`，如 `gitee.com/hq_project/yomi-boot/component/common/db/plugin/`、`gitee.com/hq_project/yomi-boot/component/cloud/consul/plugin/` | 各组件生命周期插件实现（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`） |
 
 ### 3.8 gitee.com/hq_project/yomi-boot handler
 
 ```text
-gitee.com/hq_project/yomi-boot/core/handler/base_handler.go
+gitee.com/hq_project/yomi-boot/component/common/handler/base_handler.go
 ```
 
-- 业务 handler 通过 alias 引用：`platformhandler "gitee.com/hq_project/yomi-boot/core/handler"`（模块路径以实际 `go.mod` 为准）。
+- 业务 handler 通过 alias 引用：`platformhandler "gitee.com/hq_project/yomi-boot/component/common/handler"`（模块路径以实际 `go.mod` 为准）。
 
 ### 3.9 命名对照总表
 

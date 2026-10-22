@@ -65,12 +65,12 @@ handler/                         biz/handler/
                                   biz/repo/
 ```
 
-> BFF 不含 `token/` 和 `client/` 内部目录：令牌能力由 `gitee.com/hq_project/yomi-boot/component/token` 统一提供，下游调用经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 gitee.com/hq_project/yomi-boot）。
+> BFF 不含 `token/` 和 `client/` 内部目录：令牌能力由 `gitee.com/hq_project/yomi-boot/component/common/token` 统一提供，下游调用经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 gitee.com/hq_project/yomi-boot）。
 
 | 能力 | BFF | 领域 |
 | ---- | --- | ---- |
 | 跨域 HTTP | ✓ 领域 client | ✗ |
-| 读 token / 鉴权 | ✓ gitee.com/hq_project/yomi-boot/component/token | ✗ |
+| 读 token / 鉴权 | ✓ gitee.com/hq_project/yomi-boot/component/common/token | ✗ |
 | 只读聚合 | ✓ bff | ✗ |
 | DTM Saga 提交 | ✓ saga | ✗ |
 | 本地 DB 事务 | ✗ | ✓ usecase |
@@ -87,7 +87,7 @@ handler/                         biz/handler/
 | `bff/` | 多服务只读聚合 |
 | `saga/` | 跨域写 Saga 编排 |
 
-> 令牌能力经 `gitee.com/hq_project/yomi-boot/component/token` 注入；下游调用经领域 client。
+> 令牌能力经 `gitee.com/hq_project/yomi-boot/component/common/token` 注入；下游调用经领域 client。
 
 ### 3.4 领域各层职责
 
@@ -177,9 +177,9 @@ Client → BFF handler → saga → DTM → 单分支 Action/Compensate handler 
 
 ```text
 handler → usecase → domain/contract
-usecase → domain/contract, gitee.com/hq_project/yomi-boot/component/db, gitee.com/hq_project/yomi-boot/cloud/dtm（barrier）, gitee.com/hq_project/yomi-boot/component/idempotency（写幂等）
+usecase → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db, gitee.com/hq_project/yomi-boot/component/cloud/dtm（barrier）, gitee.com/hq_project/yomi-boot/component/common/idempotency（写幂等）
 service → domain/contract, repo/contract
-repo/db → domain/contract, gitee.com/hq_project/yomi-boot/component/db
+repo/db → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db
 ```
 
 禁止：

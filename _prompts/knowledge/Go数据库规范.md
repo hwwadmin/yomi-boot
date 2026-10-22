@@ -135,7 +135,7 @@ query.Where("id IN ?", ids)
 query.Where("age BETWEEN ? AND ?", min, max)
 ```
 
-辅助方法位于 `gitee.com/hq_project/yomi-boot/component/db/`：`db_help.go` 提供 LIKE 模式（`LikeLeft`/`LikeRight`/`LikeFull`）与分页（`ApplyPage`）；`tx_manager.go` 提供事务感知执行器（`Exec`）。
+辅助方法位于 `gitee.com/hq_project/yomi-boot/component/common/db/`：`db_help.go` 提供 LIKE 模式（`LikeLeft`/`LikeRight`/`LikeFull`）与分页（`ApplyPage`）；`tx_manager.go` 提供事务感知执行器（`Exec`）。
 
 #### 3.2.3 原生 SQL 回退
 
@@ -193,7 +193,7 @@ Go Model 与数据库表一一对应，使用 GORM tag 映射列名：
 package repo
 
 import (
-    "gitee.com/hq_project/yomi-boot/component/db"
+    "gitee.com/hq_project/yomi-boot/component/common/db"
     "{client}/{domain}/enums"
 )
 
@@ -234,7 +234,7 @@ Model 映射规则：
 package repo
 
 import (
-    "gitee.com/hq_project/yomi-boot/component/db"
+    "gitee.com/hq_project/yomi-boot/component/common/db"
     "gitee.com/hq_project/yomi-boot/core/utils/ptrutil"
 
     domainuser "{domain-service}/internal/biz/domain/contract/user" // 示例：业务工程 module 路径
@@ -264,7 +264,7 @@ Mapper 规则：
 
 #### 3.3.4 基础 Model（BaseModel）
 
-项目使用自定义 `BaseModel` 替代 `gorm.Model`，以支持业务审计字段。`BaseModel` 定义在 `gitee.com/hq_project/yomi-boot/component/db/base_model.go` 中：
+项目使用自定义 `BaseModel` 替代 `gorm.Model`，以支持业务审计字段。`BaseModel` 定义在 `gitee.com/hq_project/yomi-boot/component/common/db/base_model.go` 中：
 
 ```go
 type BaseModel struct {
@@ -293,7 +293,7 @@ type userModel struct {
 
 规则：
 
-- `BaseModel` 放置在 `gitee.com/hq_project/yomi-boot/component/db/` 中，作为平台基础设施。
+- `BaseModel` 放置在 `gitee.com/hq_project/yomi-boot/component/common/db/` 中，作为平台基础设施。
 - 业务 Model 通过内嵌 `db.BaseModel` 自动获得 ID、审计字段和软删除能力。
 - Entity 中的时间字段为 `int64` 毫秒时间戳，Model 中为 `time.Time`，由 mapper 转换。
 
@@ -330,7 +330,7 @@ import (
     "gorm.io/gorm"
     domainuser "{domain-service}/internal/biz/domain/contract/user" // 示例：业务工程 module 路径
     userrepocontract "{domain-service}/internal/biz/repo/contract/user" // 示例
-    "gitee.com/hq_project/yomi-boot/component/db"
+    "gitee.com/hq_project/yomi-boot/component/common/db"
 )
 
 type Repository struct {
