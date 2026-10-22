@@ -93,7 +93,7 @@ func buildPublishWorkerConfig(cfg PublishWorkerConfig) worker.WorkConfig {
 }
 
 // Close 释放 Kafka 发布者与消费者资源
-// Consumer 与 Publisher 为可选依赖（按 InitOptions 启用），故保留 nil 判空
+// Consumer 与 Publisher 为可选依赖（按配置启用），故保留 nil 判空
 func (c *Components) Close() error {
 	var joined error
 	if c.Consumer != nil {

@@ -22,10 +22,10 @@ type MiddlewareFactory func(services *plugin.Services) []gin.HandlerFunc
 
 // Options 启动选项
 type Options struct {
-	EnvPrefix   string                // 环境变量前缀，可为空
-	ConfigPath  string                // 配置文件路径，为空时使用 config.ResolvePath()
-	Init        bootstrap.InitOptions // 基础设施初始化扩展选项
-	Middlewares MiddlewareFactory     // 中间件工厂，为空时使用 server.DefaultMiddlewares
+	EnvPrefix   string               // 环境变量前缀，可为空
+	ConfigPath  string               // 配置文件路径，为空时使用 config.ResolvePath()
+	Plugin      plugin.PluginOptions // 插件扩展选项（自定义插件 / 自定义配置段）
+	Middlewares MiddlewareFactory    // 中间件工厂，为空时使用 server.DefaultMiddlewares
 }
 
 // Run 使用默认配置路径和默认中间件链启动 HTTP 服务，并阻塞运行至进程退出。
@@ -45,7 +45,7 @@ func RunWithOptions(opts Options, wire WireFunc) {
 	}
 
 	lifecycle.Run(func() *lifecycle.App {
-		services, rt := bootstrap.MustInit(configPath, opts.EnvPrefix, opts.Init)
+		services, rt := bootstrap.MustInit(configPath, opts.EnvPrefix, opts.Plugin)
 		registrars := wire(services)
 
 		var middlewares []gin.HandlerFunc

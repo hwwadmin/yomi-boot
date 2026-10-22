@@ -98,7 +98,7 @@
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动流程编排：bootstrap 初始化、server HTTP 装配、lifecycle、banner）。
 - `component/core/` 提供 bc、config、cors、errors、shared、traceid、utils，是无状态内核；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
-- `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`Services`、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/registry`（`Plugins()`、`DefaultConfigRegistry()`）。`boot/` 提供启动入口 `boot`、bootstrap（初始化）、server（HTTP 装配）、lifecycle、banner。
+- `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`Services`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/registry`（`Plugins()`、`DefaultConfigRegistry()`）。`boot/` 提供启动入口 `boot`、bootstrap（初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单只能放 `plugin/registry`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时写入 `Services.OSS`）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
@@ -180,7 +180,7 @@ services/{domain}/
 | ---- | -- |
 | `component/core/` | `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `boot/` | `boot`（启动快捷入口）、`bootstrap`（初始化）、`server`（HTTP 装配）、`lifecycle`、`banner` |
-| `plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`Services`、`ReadyHook` / `DrainHook` |
+| `plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`Services`、`PluginOptions`、`ReadyHook` / `DrainHook` |
 | `plugin/registry/` | 内置插件启动顺序 `Plugins()`、默认配置段注册表 `DefaultConfigRegistry()` |
 | `plugin/builtin/` | 内置插件与各能力 YAML 绑定（`appctx`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `appctx`、`handler`、`httpguard`、`logger`、`response`、`router`、`snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
@@ -191,9 +191,9 @@ services/{domain}/
 
 | 包 | 职责 |
 | -- | ---- |
-| `bootstrap` | `MustInit`、`InitOptions`；`MustInit` 返回 `*plugin.Services` + `*plugin.Runtime`，配置经 `Services.Doc` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；`InitOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`）；不引入 gin / `net/http` |
+| `bootstrap` | `MustInit`；`MustInit` 返回 `*plugin.Services` + `*plugin.Runtime`，配置经 `Services.Doc` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；不引入 gin / `net/http` |
 | `server` | `MustBuildApp`、`DefaultMiddlewares`；只处理 HTTP 侧（gin 引擎、中间件链、`http.Server`、`lifecycle.App`），不感知具体组件 |
-| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`（初始化上下文）、`Services`（业务可见能力集合）、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约 |
+| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`（初始化上下文）、`Services`（业务可见能力集合）、`Runtime`、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
 | `plugin/registry` | 内置插件启动顺序（`Plugins()`）与默认配置段注册表（`DefaultConfigRegistry()`）；`plugin` 根包不得 import 本包所依赖的 `plugin/builtin/**` |
 | `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 无状态内核；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
@@ -278,11 +278,11 @@ services/{domain}/
 ```text
 cmd/main.go
   └─ boot.Run(envPrefix, bootstrap.Wire)                  # 推荐入口：默认配置路径 + 默认中间件链
-       └─ boot.RunWithOptions(opts, wire)
+       └─ boot.RunWithOptions(bootOpts, wire)
             └─ lifecycle.Run(factory)
-                 ├─ bootstrap.MustInit(configPath, envPrefix, opts)
-                 │     ├─ registry.DefaultConfigRegistry + MustLoadDocument
-                 │     └─ plugin.Run(host, append(registry.Plugins(), opts.customPlugins...))  # 按序 Init；是否启动看各段 enabled
+                 ├─ bootstrap.MustInit(configPath, envPrefix, bootOpts.Plugin)
+                 │     ├─ registry.DefaultConfigRegistry + MustLoadDocument（含 bootOpts.Plugin.CustomConfigs()）
+                 │     └─ plugin.Run(host, append(registry.Plugins(), bootOpts.Plugin.CustomPlugins()...))  # 按序 Init；是否启动看各段 enabled
                  ├─ wire(services) → []router.Registrar               # 手写 wiring，在 internal/bootstrap
                  └─ server.MustBuildApp(services, rt, registrars, middlewares) → *lifecycle.App
 ```
@@ -290,7 +290,7 @@ cmd/main.go
 标准入口是根包 `boot`：
 
 - `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`；`wire` 通常是业务 `internal/bootstrap.Wire`。
-- `boot.RunWithOptions(opts, wire)`：自定义 `ConfigPath`、`InitOptions` 或中间件工厂。
+- `boot.RunWithOptions(bootOpts, wire)`：自定义 `ConfigPath`、`PluginOptions` 或中间件工厂。
 
 两者内部完成 `bootstrap.MustInit → wire → server.MustBuildApp → lifecycle.Run`。
 
@@ -367,7 +367,7 @@ type myConsumerPlugin struct {
 | 15 | token | `auth.enabled=true` |
 | 16 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
 | 17 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 18 | custom | `InitOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
+| 18 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 
@@ -380,14 +380,14 @@ type myConsumerPlugin struct {
 
 - gitee.com/hq_project/yomi-boot 消费端点（如 `httprecord.StartKafkaRecordConsumer`）只负责参数校验、反序列化、委托业务 `Handler`。
 - 业务 handler、是否启用、消费者标识 / 组名等由**可部署单元内**自定义插件实现（可使用 `KafkaConsumer` 或 `RedisStreamConsumer`）。
-- 通过 `opts.AddCustomPlugin(...)` 插入启动流程，**禁止**在 `wireHandlers` 或 gitee.com/hq_project/yomi-boot 内置插件中硬编码业务消费逻辑。
+- 通过 `pluginOpts.AddCustomPlugin(...)` 插入启动流程，**禁止**在 `wireHandlers` 或 gitee.com/hq_project/yomi-boot 内置插件中硬编码业务消费逻辑。
 
 #### 3.4.5 能力按需启用
 
 | 服务类型 | 典型做法 | 说明 |
 | -------- | -------- | ---- |
-| 入口编排（BFF） | `InitOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
-| 领域 | `InitOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
+| 入口编排（BFF） | `PluginOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
+| 领域 | `PluginOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
 | 带消息消费的领域 | 上栏 + `AddCustomPlugin(消费者插件)` | 消费启停由自定义插件与配置控制 |
 
 各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`auth.enabled`、`event.outbox_enabled` / `event.inbox_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。

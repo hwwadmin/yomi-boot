@@ -47,11 +47,11 @@ import (
 //  15. token      — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
 //  16. httprecord — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务；未启用时不创建服务（中间件短路）；默认关，文件 access 由 logger.Middleware 负责
 //  17. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
-//  18. custom     — InitOptions.AddCustomPlugin 注册的服务自定义插件
+//  18. custom     — PluginOptions.AddCustomPlugin 注册的服务自定义插件
 //
 // # 非插件（由 bootstrap.MustInit 直接处理，不在此列表）
 //
-//   - registry.DefaultConfigRegistry + MustLoadDocument（含自定义 AddConfigSection）
+//   - registry.DefaultConfigRegistry + MustLoadDocument（含 PluginOptions 注册的自定义配置段）
 //
 // Ready 按 Init 顺序执行，Drain 按 Init 逆序执行；仅 Started 插件参与（见 plugin.ReadyHook / DrainHook）。
 // Close 按 Init 逆序：先停 custom 插件，再关 event，避免 Receiver 先于消费退出。
