@@ -55,22 +55,22 @@ func LoadConfig(configPath, envPrefix string, reg *Registry) (*Config, error) {
 		}
 	}
 
-	doc := &Config{
+	cfg := &Config{
 		sections: make(map[string]Section, len(reg.sections)),
 		order:    make([]string, 0, len(reg.sections)),
 	}
 	for _, s := range reg.sections {
-		doc.sections[s.Key()] = s
-		doc.order = append(doc.order, s.Key())
+		cfg.sections[s.Key()] = s
+		cfg.order = append(cfg.order, s.Key())
 	}
 
 	for _, s := range reg.sections {
-		if err := s.Validate(doc); err != nil {
+		if err := s.Validate(cfg); err != nil {
 			return nil, err
 		}
 	}
 
-	return doc, nil
+	return cfg, nil
 }
 
 // yamlRootKeys 从已展开 YAML 文本提取根层 key

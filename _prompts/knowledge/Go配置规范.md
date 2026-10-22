@@ -47,7 +47,7 @@
 
 | 类型/API | 职责 |
 |----------|------|
-| `Section` | `Key` / `Target` / `Validate(doc)` |
+| `Section` | `Key` / `Target` / `Validate(cfg)` |
 | `SectionKey` | `plugin/builtin/{lib}` 导出的 YAML 根 key 常量；`NewSection` / `MustSection` 禁止魔法字符串 |
 | `Registry` | `Register` / `Has` / `Keys` |
 | `Config` | 已绑定段；`MustSection[T]` |
@@ -64,7 +64,7 @@
 读文件 → ExpandEnv → viper + AutomaticEnv
 → 解析 YAML 根 key，与注册表做差集（非空则失败）
 → 按注册顺序 UnmarshalKey
-→ Section.Validate(doc)
+→ Section.Validate(cfg)
 → 返回 Config；Host{Services{Config}} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 `boot/server` 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Services
 ```
 

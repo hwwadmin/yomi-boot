@@ -75,15 +75,15 @@ http:
 snowflake:
   worker_id: 1
 `)
-	doc, err := config.LoadConfig(path, "YOMI_TEST", testRegistry())
+	cfg, err := config.LoadConfig(path, "YOMI_TEST", testRegistry())
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
-	app := config.MustSection[testAppConfig](doc, testAppSectionKey)
+	app := config.MustSection[testAppConfig](cfg, testAppSectionKey)
 	if app.Name != "demo" {
 		t.Fatalf("app.name=%q", app.Name)
 	}
-	httpCfg := config.MustSection[testHTTPConfig](doc, testHTTPSectionKey)
+	httpCfg := config.MustSection[testHTTPConfig](cfg, testHTTPSectionKey)
 	if httpCfg.Port != 8080 {
 		t.Fatalf("http.port=%d", httpCfg.Port)
 	}
@@ -107,11 +107,11 @@ biz:
 	const bizSectionKey = "biz"
 	biz := &bizConfig{}
 	reg := testRegistry().Register(config.NewSection(bizSectionKey, biz, nil))
-	doc, err := config.LoadConfig(path, "YOMI_TEST", reg)
+	cfg, err := config.LoadConfig(path, "YOMI_TEST", reg)
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
-	got := config.MustSection[bizConfig](doc, bizSectionKey)
+	got := config.MustSection[bizConfig](cfg, bizSectionKey)
 	if !got.Flag {
 		t.Fatal("期望 biz.flag=true")
 	}

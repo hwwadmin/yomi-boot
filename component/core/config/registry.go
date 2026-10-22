@@ -14,7 +14,7 @@ import (
 type Section interface {
 	Key() string                // Key 返回 YAML 根 key，须全局唯一
 	Target() any                // Target 返回供 UnmarshalKey 写入的指针
-	Validate(doc *Config) error // Validate 校验本段语义
+	Validate(cfg *Config) error // Validate 校验本段语义
 }
 
 // Registry 配置段注册表
@@ -86,31 +86,31 @@ type Config struct {
 }
 
 // Has 判断配置是否包含指定根 key
-func (d *Config) Has(key string) bool {
-	if d == nil || d.sections == nil {
+func (c *Config) Has(key string) bool {
+	if c == nil || c.sections == nil {
 		return false
 	}
-	_, ok := d.sections[strings.TrimSpace(key)]
+	_, ok := c.sections[strings.TrimSpace(key)]
 	return ok
 }
 
 // Keys 返回已绑定的根 key（注册顺序）
-func (d *Config) Keys() []string {
-	if d == nil {
+func (c *Config) Keys() []string {
+	if c == nil {
 		return nil
 	}
-	out := make([]string, len(d.order))
-	copy(out, d.order)
+	out := make([]string, len(c.order))
+	copy(out, c.order)
 	return out
 }
 
 // MustSection 按 key 取出已绑定的强类型配置指针；缺失或类型不匹配时 panic
-func MustSection[T any](d *Config, key string) *T {
-	if d == nil || d.sections == nil {
+func MustSection[T any](c *Config, key string) *T {
+	if c == nil || c.sections == nil {
 		panic(errors.New("配置不能为空"))
 	}
 	normalized := strings.TrimSpace(key)
-	s, ok := d.sections[normalized]
+	s, ok := c.sections[normalized]
 	if !ok {
 		panic(errors.Newf("配置段不存在: %s", normalized))
 	}
@@ -151,11 +151,11 @@ func (s *typedSection[T]) Target() any {
 }
 
 // Validate 校验本段语义
-func (s *typedSection[T]) Validate(doc *Config) error {
+func (s *typedSection[T]) Validate(cfg *Config) error {
 	if s.validate == nil {
 		return nil
 	}
-	return s.validate(s.target, doc)
+	return s.validate(s.target, cfg)
 }
 
 // formatUnknownRootKeys 格式化未注册根 key 错误信息
