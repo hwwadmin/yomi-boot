@@ -1,6 +1,6 @@
 // Package lifecycle 编排 HTTP 服务进程生命周期
 //
-// Load → Init → Build 由 boot/bootstrap 完成；本包负责 Start → Ready → Serve → Drain → Stop → Release，
+// Load → Init → Build 由 boot 完成；本包负责 Start → Ready → Serve → Drain → Stop → Release，
 // 只处理阶段顺序、信号与优雅停机，不感知具体组件或业务。
 //
 // @author zwei

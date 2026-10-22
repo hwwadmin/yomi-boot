@@ -49,7 +49,7 @@ import (
 //  17. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
 //  18. custom     — PluginOptions.AddCustomPlugin 注册的服务自定义插件
 //
-// # 非插件（由 bootstrap.MustInit 直接处理，不在此列表）
+// # 非插件（由 boot.MustInit 直接处理，不在此列表）
 //
 //   - registry.DefaultConfigRegistry + MustLoadDocument（含 PluginOptions 注册的自定义配置段）
 //

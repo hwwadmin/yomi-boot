@@ -2,7 +2,7 @@
 //
 // 本包与 ai/llm、ai/embedding 相互独立，配置与协议类型互不混用。
 // 首版仅 ProtocolSystemOne。Endpoint 为完整 POST 地址（非 Chat 的 BaseURL 惯例）。
-// 模型由 Config.Model 锁定。无流式。不进 bootstrap、不读 YAML、不做限流。
+// 模型由 Config.Model 锁定。无流式。不进插件链、不读 YAML、不做限流。
 //
 // 千问决策模型示例：`https://maas.qianwenaiapi.com/compatible-mode/v1/systemone`，
 // 模型 `decision-model-preview`。

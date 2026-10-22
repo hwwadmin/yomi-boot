@@ -148,8 +148,7 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | ---- | ---- | ---- |
 | `server.go` | 业务工程 `services/{unit}/internal/bootstrap/`（惯例示例） | 启动装配入口；导出 `Wire(services *plugin.Services) []router.Registrar` 供 `boot.Run` 使用；低层入口可另提供 `NewApp(configPath) *lifecycle.App` |
 | `*_consumer_plugin.go` | 同上（按需） | Kafka 消费者自定义插件 |
-| `boot.go` | `gitee.com/hq_project/yomi-boot/boot/` | 启动快捷入口：`Run` / `RunWithOptions` / `Options` |
-| `init.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustInit`：注册配置段、加载文档、启动插件链 |
+| `boot.go` | `gitee.com/hq_project/yomi-boot/boot/` | 启动快捷入口与初始化：`Run` / `RunWithOptions` / `Options` / `MustInit` |
 | `options.go` | `gitee.com/hq_project/yomi-boot/plugin/` | `PluginOptions`、`AddCustomPlugin`、`AddConfigSection` |
 | `plugins.go` / `configs.go` | `gitee.com/hq_project/yomi-boot/plugin/registry/` | 内置插件编排顺序、默认配置段注册表 |
 | `server.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `MustBuildApp`、`serviceName` |

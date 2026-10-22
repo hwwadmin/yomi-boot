@@ -107,7 +107,7 @@ func (r *Repository) Create(ctx context.Context, input *domainuser.CreatePersist
 
 ### 3.2 各层方法不自判注入
 
-usecase、service、handler、transaction、router 各层方法内**不对注入的依赖做 nil 判空**。依赖装配的正确性由 `bootstrap` 启动阶段保证，不在运行期每层兜底。
+usecase、service、handler、transaction、router 各层方法内**不对注入的依赖做 nil 判空**。依赖装配的正确性由 `boot` 启动阶段保证，不在运行期每层兜底。
 
 ```go
 // 正确：不检查 s == nil 或 s.repo == nil

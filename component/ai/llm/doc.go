@@ -1,7 +1,7 @@
 // Package llm 提供协议无关的大模型对话门面，支持 OpenAI Chat Completions 与 Anthropic Messages。
 //
 // 本包不对内泄漏官方客户端类型；业务只依赖 New / MustNew / Client 与本包哨兵。
-// 不进 bootstrap、不读 YAML、不做配额限流；除 max token 字段适配外不做失败重试。配置来源由调用方自行组装。
+// 不进插件链、不读 YAML、不做配额限流；除 max token 字段适配外不做失败重试。配置来源由调用方自行组装。
 //
 // # 基本用法
 //

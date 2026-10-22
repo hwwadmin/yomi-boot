@@ -13,7 +13,7 @@
 
 - **用途**：约束配置所有权、注册加载流程与扩展方式，避免业务配置污染 `gitee.com/hq_project/yomi-boot`；说明能力按需裁剪的配置入口。
 - **边界**：架构总览与部署形态见 [Go架构规范](./Go架构规范.md)；本文件是配置专题权威说明。
-- **适用对象**：`gitee.com/hq_project/yomi-boot/component/core/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`、`gitee.com/hq_project/yomi-boot/boot/server`、`gitee.com/hq_project/yomi-boot/plugin`、`gitee.com/hq_project/yomi-boot/plugin/builtin`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
+- **适用对象**：`gitee.com/hq_project/yomi-boot/component/core/config`、`gitee.com/hq_project/yomi-boot/boot`、`gitee.com/hq_project/yomi-boot/boot/server`、`gitee.com/hq_project/yomi-boot/plugin`、`gitee.com/hq_project/yomi-boot/plugin/builtin`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
 
 ---
 
@@ -33,7 +33,7 @@
 | # | 原则 |
 |---|------|
 | P1 | 谁实现能力，谁拥有运行时配置语义与 Validate；YAML 绑定与 `SectionKey` 归 `plugin/builtin/{lib}` |
-| P2 | `gitee.com/hq_project/yomi-boot/component/core/config` 机制层；组装根在 `bootstrap` |
+| P2 | `gitee.com/hq_project/yomi-boot/component/core/config` 机制层；组装根在 `boot` |
 | P3 | `gitee.com/hq_project/yomi-boot` 禁止承载无对应能力包的产品/领域配置 |
 | P4 | 业务配置由服务经 `plugin.PluginOptions.AddConfigSection` 注册，推荐根 key 为 `biz` |
 | P5 | 注册显式、可测；禁止 `init()` 副作用注册 |
@@ -82,7 +82,7 @@
 // services/{bff}/internal/bootstrap/server.go
 var pluginOpts plugin.PluginOptions
 pluginOpts.AddConfigSection(svcconfig.BizSection()) // key: biz
-services, rt := bootstrap.MustInit(path, "YOMI_{BFF}", pluginOpts)
+services, rt := boot.MustInit(path, "YOMI_{BFF}", pluginOpts)
 defer rt.Close()
 biz := config.MustSection[svcconfig.BizConfig](services.Doc, svcconfig.SectionKey)
 ```
@@ -139,4 +139,4 @@ biz:
 | 能力裁剪 | 各插件读本段 `enabled`（及同类开关）；形态切换以配置为准 |
 | 历史无开关的可裁剪能力 | 新增 `BootConfig.Enabled *bool`，nil 默认 true；禁用时跳过本段校验，中间件内短路 |
 | 强制启动项 | `app`/`http`/`log`/`snowflake` 不提供 `enabled`；`plugin/builtin/router` 的 `BootConfig` 只做映射 |
-| 中间件启停 | 中间件始终挂载，由运行时 `MiddlewareEnabled` 短路；不在 `bootstrap` 动态增删 |
+| 中间件启停 | 中间件始终挂载，由运行时 `MiddlewareEnabled` 短路；不在 `boot` 动态增删 |
