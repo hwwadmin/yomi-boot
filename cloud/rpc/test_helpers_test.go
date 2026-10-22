@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // testServiceSeq 为每个测试客户端生成唯一服务名，便于日志区分不同测试的 client

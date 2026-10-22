@@ -4,7 +4,7 @@
 package event
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 // MustNewAndStart 创建并启动事件组件，失败时 log + panic

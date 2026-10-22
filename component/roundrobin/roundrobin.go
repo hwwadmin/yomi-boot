@@ -9,10 +9,10 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 const (

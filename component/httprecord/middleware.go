@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/response"
-	"gitee.com/hq_project/yomi-boot/boot/traceid"
-	"gitee.com/hq_project/yomi-boot/boot/utils/ginutil"
-	"gitee.com/hq_project/yomi-boot/boot/utils/httputil"
-	"gitee.com/hq_project/yomi-boot/boot/utils/utf8util"
 	"gitee.com/hq_project/yomi-boot/component/token"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/logger"
+	"gitee.com/hq_project/yomi-boot/core/response"
+	"gitee.com/hq_project/yomi-boot/core/traceid"
+	"gitee.com/hq_project/yomi-boot/core/utils/ginutil"
+	"gitee.com/hq_project/yomi-boot/core/utils/httputil"
+	"gitee.com/hq_project/yomi-boot/core/utils/utf8util"
 
 	"github.com/gin-gonic/gin"
 )

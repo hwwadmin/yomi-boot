@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 const testWait = 2 * time.Second

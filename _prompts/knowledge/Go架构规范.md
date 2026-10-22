@@ -62,7 +62,7 @@
 #### 3.1.0 gitee.com/hq_project/yomi-boot 部署形态无关（配置裁剪）
 
 - gitee.com/hq_project/yomi-boot 是**能力库 + 插件生命周期**，不是「必须微服务」的运行时。
-- 插件在 `boot/bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `boot/bootstrap/infra_plugins.go` 与各组件 `plugin/` 子包）。
+- 插件在 `boot/bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `boot/bootstrap/infra_plugins.go` 与各能力 `plugin/` 子包）。
 - 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见 [Go配置规范](./Go配置规范.md)「能力按需裁剪」与本文 §3.4.5。
 - 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 gitee.com/hq_project/yomi-boot 的唯一用法。
 - 单体形态下：可无 Consul/DTM/Kafka/Redis Stream；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
@@ -96,9 +96,9 @@
 
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
-- 仓库按四层组织：`ai/`（可选 AI 能力簇）、`boot/`（项目基础件）、`component/`（单一中间件/外部服务的通用组件）、`cloud/`（跨服务/多实例分布式组件）。
-- `boot/` 提供 config、plugin（资源生命周期框架）、lifecycle（进程生命周期编排）、logger、router、errors、traceid、response、handler、bc、ws、worker、snowflake、pprof、appctx、banner 等基础件；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、idempotency、event、distlock、roundrobin、cronjob、testclient 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动。`ai/*` / `ws` 不进默认插件链。
-- 各组件 `plugin` 子包跟随组件目录：`boot/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。
+- 仓库按五层组织：`core/`（系统核心组件，无生命周期依赖的运行时基础件）、`boot/`（启动流程编排）、`component/`（可独立启停的通用能力组件）、`cloud/`（跨服务/多实例分布式组件）、`ai/`（可选 AI 能力簇）。
+- `core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、snowflake、traceid、utils；`boot/` 提供启动入口 `boot`、bootstrap、lifecycle、plugin、banner；`component/` 提供 db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`cloud/` 提供 consul、dtm、rpc；`ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 属于强制启动项。`ai/*` / `ws` 不进默认插件链。
+- 各能力 `plugin` 子包跟随能力目录：`core/{lib}/plugin`、`component/{lib}/plugin`、`cloud/{lib}/plugin`。`core/{lib}/plugin` 是启动适配边界，仅允许依赖 `boot/plugin`；core 纯包不得依赖 boot。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -110,10 +110,11 @@
 ```text
 # gitee.com/hq_project/yomi-boot 仓库（本库）
 gitee.com/hq_project/yomi-boot/                               # module: gitee.com/hq_project/yomi-boot
-├── ai/                          # 可选 AI 能力簇（不进 bootstrap）
-├── boot/                        # 项目基础件
-├── component/                   # 通用组件
-└── cloud/                       # 分布式组件
+├── core/                        # 系统核心组件（运行时基础件，无生命周期编排）
+├── boot/                        # 启动流程编排（入口、bootstrap、lifecycle、plugin、banner）
+├── component/                   # 可独立启停的通用能力组件（含 pprof、ws、worker）
+├── cloud/                       # 分布式组件
+└── ai/                          # 可选 AI 能力簇（不进 bootstrap）
 
 # 业务工程仓库（示例）
 {business-repo}/
@@ -172,22 +173,23 @@ services/{domain}/
 
 | 目录 | 包 |
 | ---- | -- |
-| `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
-| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`lifecycle`、`config`、`appctx`、`logger`、`router`、`errors`、`traceid`、`response`、`handler`、`cors`、`httpguard`、`shared`、`utils`、`bc`、`snowflake`、`pprof`、`banner` |
-| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
+| `core/` | `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`snowflake`、`traceid`、`utils` |
+| `boot/` | `boot`（启动快捷入口）、`bootstrap`、`plugin`、`lifecycle`、`banner` |
+| `component/` | `db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
+| `ai/` | `ai/llm`、`ai/embedding`、`ai/jev`、`ai/rag`、`ai/vectordb` |
 
-依赖方向：`ai → boot`，`component → boot`，`cloud → boot + component`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`。
+依赖方向：`core` 不依赖 `boot`/`component`/`cloud`/`ai`（`core/{lib}/plugin` 仅允许依赖 `boot/plugin`）；`component`/`cloud`/`ai` 依赖 `core`，其 `plugin` 适配子包可依赖 `boot/plugin`；`boot` 依赖 `core`，仅 `boot/bootstrap` 与 `boot/plugin` 允许引用 `component`/`cloud`；`component` 不依赖 `cloud`/`ai`，`cloud` 不依赖 `ai`。
 
 | 包 | 职责 |
 | -- | ---- |
 | `bootstrap` | `MustInitInfra`、`MustBuildApp`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
-| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约（与 `config` 同层） |
-| `{lib}/plugin` | 各组件的内置生命周期插件实现，跟随组件目录：`component/db/plugin`、`component/redis/plugin`、`cloud/consul/plugin` 等；`tx` 挂在 `component/db/plugin`；包名 `{lib}plugin` |
+| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约 |
+| `{lib}/plugin` | 各能力的内置生命周期插件实现，跟随能力目录：`core/logger/plugin`、`component/db/plugin`、`cloud/consul/plugin` 等；`core/{lib}/plugin` 是启动适配边界，仅允许依赖 `boot/plugin`；`tx` 挂在 `component/db/plugin`；包名 `{lib}plugin` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
-| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `boot/pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
+| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `component/pprof/plugin` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
@@ -295,7 +297,7 @@ cmd/main.go
 
 #### 3.4.4 插件生命周期
 
-**接口**（`gitee.com/hq_project/yomi-boot/boot/plugin`；内置实现见各组件的 `plugin` 子包，如 `component/db/plugin`、`cloud/consul/plugin`）：
+**接口**（`gitee.com/hq_project/yomi-boot/boot/plugin`；内置实现见各能力的 `plugin` 子包，如 `core/logger/plugin`、`component/db/plugin`、`cloud/consul/plugin`）：
 
 ```go
 type Plugin interface {
@@ -414,7 +416,7 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 - 入口编排 handler 注册**相对路径**，完整 URL = `http.router_prefix` + 相对路径。
 - **入口编排对外主输入**：默认推荐 **POST + JSON Body**；允许 GET（CDN/SEO）。若 GET 仅用 Query 承载主输入，须在该接口契约中**显式约定**（非默认）。
 - 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。详见 [微服务调用规范](./微服务调用规范.md) §3.1.1。
-- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`gitee.com/hq_project/yomi-boot/boot/traceid`），**不在** JSON Body 信封中传递。
+- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`gitee.com/hq_project/yomi-boot/core/traceid`），**不在** JSON Body 信封中传递。
 - 微服务间请求/响应契约见 [微服务调用规范](./微服务调用规范.md) §3（权威）。
 - 对外出口编码适配见 [API编码适配规范](./API编码适配规范.md)（**不**规定 HTTP 方法；方法以本节约定为准）。
 - 路径中资源段使用**单数名词**，禁止无意义复数。
@@ -438,7 +440,7 @@ CORS → traceid → httprecord → AccessMiddleware → httpguard → Recovery 
 ### 3.8 pprof 排障
 
 - 配置项：`pprof.enabled`（默认 `false`）、`pprof.addr`（独立 debug 端口，由各可部署单元自行配置，避免端口冲突）。
-- 由 `boot/pprof/plugin` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
+- 由 `component/pprof/plugin` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
 - 常用命令：
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/profile?seconds=30`
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/heap`
@@ -446,9 +448,9 @@ CORS → traceid → httprecord → AccessMiddleware → httpguard → Recovery 
 
 ### 3.9 配置约定
 
-环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`gitee.com/hq_project/yomi-boot/boot/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
+环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`gitee.com/hq_project/yomi-boot/core/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
 
-`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/boot/config.Load` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
+`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/core/config.LoadDocument` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
 
 ```yaml
 # 入口编排 config/local.yml 示意

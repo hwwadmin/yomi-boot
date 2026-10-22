@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // TestInvoke_AttemptTimeoutCountsAsFailure 验证单次尝试超时计入熔断失败；默认只尝试一次

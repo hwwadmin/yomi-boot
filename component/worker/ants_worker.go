@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 
 	"github.com/panjf2000/ants/v2"
 )

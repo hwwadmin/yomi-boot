@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
+	"gitee.com/hq_project/yomi-boot/core/shared/enums"
 
 	"github.com/go-sql-driver/mysql"
 )

@@ -4,10 +4,10 @@
 package redisplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/redis"
+	"gitee.com/hq_project/yomi-boot/core/config"
 )
 
 // redisPlugin Redis 插件

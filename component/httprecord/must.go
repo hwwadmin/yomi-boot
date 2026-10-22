@@ -6,8 +6,8 @@ package httprecord
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/boot/logger"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
 )

@@ -6,8 +6,8 @@ package redisratelimit
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/config"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 const (

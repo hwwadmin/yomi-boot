@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // TestWrapSentinelKeepsCleanCode 验证包装后 Error() 仍是干净哨兵码，原因保留在错误链

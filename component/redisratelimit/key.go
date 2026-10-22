@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 const maxRedisKeyLen = 256

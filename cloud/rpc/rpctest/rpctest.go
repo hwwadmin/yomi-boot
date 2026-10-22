@@ -5,8 +5,8 @@ package rpctest
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/cloud/rpc"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // TestRpcService 可配置的 RpcService 测试桩

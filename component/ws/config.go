@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 const (

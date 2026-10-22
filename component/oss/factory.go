@@ -3,7 +3,7 @@
 // @author zwei
 package oss
 
-import "gitee.com/hq_project/yomi-boot/boot/errors"
+import "gitee.com/hq_project/yomi-boot/core/errors"
 
 // New 根据配置创建 Storage
 func New(cfg Config) (Storage, error) {

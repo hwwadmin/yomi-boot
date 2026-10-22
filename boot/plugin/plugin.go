@@ -1,6 +1,6 @@
 // Package plugin 资源生命周期管理（Init/Close）与进程阶段 hook 契约
 //
-// boot 内置插件与服务自定义插件均实现 Plugin 接口；需要参与进程阶段的插件按需实现
+// 内置插件与服务自定义插件均实现 Plugin 接口；需要参与进程阶段的插件按需实现
 // ReadyHook / DrainHook，由 lifecycle 在对应阶段统一调用。
 //
 // @author zwei
@@ -8,7 +8,7 @@ package plugin
 
 import "context"
 
-// Plugin 资源生命周期接口；应用层使用 bootstrap.Infra 中的各 boot 库具体类型
+// Plugin 资源生命周期接口；应用层使用 bootstrap.Infra 中的各能力库具体类型
 type Plugin interface {
 	Name() string
 	Started() bool

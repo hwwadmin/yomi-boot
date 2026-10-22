@@ -4,7 +4,7 @@
 
 package cronjob
 
-import "gitee.com/hq_project/yomi-boot/boot/errors"
+import "gitee.com/hq_project/yomi-boot/core/errors"
 
 // ErrDuplicateJobName 同一进程内重复启动同名 Job
 var ErrDuplicateJobName = errors.NewNoStack("cronjob: 同名 Job 已在运行")

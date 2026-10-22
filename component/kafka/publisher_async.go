@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/component/worker"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 var _ PublisherService = (*asyncPublisher)(nil)

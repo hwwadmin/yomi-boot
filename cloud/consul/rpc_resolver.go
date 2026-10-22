@@ -5,7 +5,7 @@ package consul
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // ConsulRPCResolver 将 Consul 服务发现适配为 RPC 端点解析器

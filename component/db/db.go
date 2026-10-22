@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/logger"
+	"gitee.com/hq_project/yomi-boot/core/shared/enums"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"

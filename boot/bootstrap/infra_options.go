@@ -4,8 +4,8 @@
 package bootstrap
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
+	"gitee.com/hq_project/yomi-boot/core/config"
 )
 
 // InfraOptions 基础设施扩展选项；各组件是否启动由插件根据配置自行判断
@@ -22,7 +22,7 @@ func (o *InfraOptions) AddCustomPlugin(p plugin.Plugin) *InfraOptions {
 	return o
 }
 
-// AddConfigSection 注册自定义配置段（须在默认 boot 段之后追加）
+// AddConfigSection 注册自定义配置段（须在默认内置配置段之后追加）
 func (o *InfraOptions) AddConfigSection(s config.Section) *InfraOptions {
 	o.configSections = append(o.configSections, s)
 	return o

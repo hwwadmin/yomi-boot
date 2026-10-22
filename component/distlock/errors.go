@@ -3,7 +3,7 @@
 // @author zwei
 package distlock
 
-import "gitee.com/hq_project/yomi-boot/boot/errors"
+import "gitee.com/hq_project/yomi-boot/core/errors"
 
 var (
 	// ErrLockNotHeld 当前实例从未持有锁或已释放时调用 Unlock

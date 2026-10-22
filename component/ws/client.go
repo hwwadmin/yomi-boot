@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // Client 是出站客户端：一实例至多一条连接

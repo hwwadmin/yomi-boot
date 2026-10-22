@@ -6,7 +6,7 @@ package oss
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // JoinURI 将 bucket 与 key 拼为可入库的逻辑 URI（格式：bucket/key）。

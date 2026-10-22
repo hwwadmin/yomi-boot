@@ -6,16 +6,16 @@ package bootstrap
 import (
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/boot/config"
-	"gitee.com/hq_project/yomi-boot/boot/cors"
-	"gitee.com/hq_project/yomi-boot/boot/httpguard"
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/response"
-	"gitee.com/hq_project/yomi-boot/boot/router"
-	"gitee.com/hq_project/yomi-boot/boot/traceid"
 	"gitee.com/hq_project/yomi-boot/component/httprecord"
 	"gitee.com/hq_project/yomi-boot/component/token"
+	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/core/cors"
+	"gitee.com/hq_project/yomi-boot/core/httpguard"
+	"gitee.com/hq_project/yomi-boot/core/logger"
+	"gitee.com/hq_project/yomi-boot/core/response"
+	"gitee.com/hq_project/yomi-boot/core/router"
+	"gitee.com/hq_project/yomi-boot/core/traceid"
 
 	"github.com/gin-gonic/gin"
 )

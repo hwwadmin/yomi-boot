@@ -7,9 +7,9 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/component/db"
 	"gitee.com/hq_project/yomi-boot/component/event/model"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 
 	"gorm.io/gorm"
 )

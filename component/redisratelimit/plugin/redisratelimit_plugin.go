@@ -4,9 +4,9 @@
 package redisratelimitplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
+	"gitee.com/hq_project/yomi-boot/core/config"
 )
 
 // redisRateLimitPlugin 限流插件

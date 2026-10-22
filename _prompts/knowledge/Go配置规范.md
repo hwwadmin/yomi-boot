@@ -13,15 +13,15 @@
 
 - **用途**：约束配置所有权、注册加载流程与扩展方式，避免业务配置污染 `gitee.com/hq_project/yomi-boot`；说明能力按需裁剪的配置入口。
 - **边界**：架构总览与部署形态见 [Go架构规范](./Go架构规范.md)；本文件是配置专题权威说明。
-- **适用对象**：`gitee.com/hq_project/yomi-boot/boot/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
+- **适用对象**：`gitee.com/hq_project/yomi-boot/core/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
 
 ---
 
 ## 2. 设计目标
 
-1. **配置与能力同包**：boot 各子系统配置在对应能力目录（如 `db.Config`、`token.Config`）。
-2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/boot/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
-3. **主动注册**：`bootstrap.DefaultConfigRegistry()` 注册全部 boot 段；业务服务 `AddConfigSection` 追加。
+1. **配置与能力同包**：core/component/cloud 各能力配置在对应能力目录（如 `db.Config`、`token.Config`）。
+2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
+3. **主动注册**：`bootstrap.DefaultConfigRegistry()` 注册全部内置配置段；业务服务 `AddConfigSection` 追加。
 4. **Fail Fast**：加载与校验失败即 `Must*` panic。
 5. **未知根 key 严格失败**：YAML 根层未注册 key 一律拒绝。
 6. **按需裁剪**：各能力插件是否真正启动由配置段开关控制，不强制引入未用中间件。
@@ -33,7 +33,7 @@
 | # | 原则 |
 |---|------|
 | P1 | 谁实现能力，谁拥有配置类型与 Validate |
-| P2 | `gitee.com/hq_project/yomi-boot/boot/config` 机制层；组装根在 `bootstrap` |
+| P2 | `gitee.com/hq_project/yomi-boot/core/config` 机制层；组装根在 `bootstrap` |
 | P3 | `gitee.com/hq_project/yomi-boot` 禁止承载无对应能力包的产品/领域配置 |
 | P4 | 业务配置由服务 `AddConfigSection`，推荐根 key 为 `biz` |
 | P5 | 注册显式、可测；禁止 `init()` 副作用注册 |
@@ -54,7 +54,7 @@
 | `NewSection` | 指向已有 target 的段工厂 |
 | `LoadDocument` / `MustLoadDocument` | 严格根 key → Bind → Validate |
 | `DefaultConfigRegistry` | bootstrap：注册全部能力包 `ConfigSection()` |
-| `InfraOptions.AddConfigSection` | 业务在默认 boot 段后追加 |
+| `InfraOptions.AddConfigSection` | 业务在默认内置配置段后追加 |
 | `Infra` | 运行时依赖聚合；配置统一经 `Doc` + `MustSection` 读取 |
 | `Infra.Doc` | 启动后可取 boot 段与自定义段 |
 

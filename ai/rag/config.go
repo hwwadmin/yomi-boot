@@ -7,7 +7,7 @@ package rag
 import (
 	"gitee.com/hq_project/yomi-boot/ai/embedding"
 	"gitee.com/hq_project/yomi-boot/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 const (

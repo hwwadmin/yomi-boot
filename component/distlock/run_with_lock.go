@@ -7,8 +7,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // RunWithLock 获取锁后执行 fn，结束时自动 Unlock。

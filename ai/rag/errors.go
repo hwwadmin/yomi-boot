@@ -4,7 +4,7 @@
 
 package rag
 
-import "gitee.com/hq_project/yomi-boot/boot/errors"
+import "gitee.com/hq_project/yomi-boot/core/errors"
 
 var (
 	// ErrInvalidArgument 配置或请求未通过本包校验

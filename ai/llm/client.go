@@ -7,7 +7,7 @@ package llm
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // Role 对话角色；首版仅 system / user / assistant

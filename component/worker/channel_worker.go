@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 var _ WorkerService = (*channelWorker)(nil)

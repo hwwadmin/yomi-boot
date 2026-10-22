@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 
 	openai "github.com/openai/openai-go/v3"
 )

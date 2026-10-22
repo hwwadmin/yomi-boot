@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // QuestionType Jev 问题类型

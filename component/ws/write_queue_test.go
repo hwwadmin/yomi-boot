@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // TestSendQueueBoundedBlocksUntilSlot 有界队列满时 Send 阻塞，消费后恢复

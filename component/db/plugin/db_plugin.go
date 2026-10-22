@@ -4,9 +4,9 @@
 package dbplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	"gitee.com/hq_project/yomi-boot/component/db"
+	"gitee.com/hq_project/yomi-boot/core/config"
 )
 
 // dbPlugin 数据库插件

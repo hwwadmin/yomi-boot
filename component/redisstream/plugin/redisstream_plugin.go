@@ -4,9 +4,9 @@
 package redisstreamplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
+	"gitee.com/hq_project/yomi-boot/core/config"
 )
 
 // redisStreamPlugin Redis Stream 生命周期插件

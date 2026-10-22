@@ -4,9 +4,9 @@
 package kafkaplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
+	"gitee.com/hq_project/yomi-boot/core/config"
 )
 
 // kafkaPlugin Kafka 插件

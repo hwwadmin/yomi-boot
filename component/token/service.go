@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	sharederr "gitee.com/hq_project/yomi-boot/boot/shared/error"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	sharederr "gitee.com/hq_project/yomi-boot/core/shared/error"
 )
 
 // ErrTokenInvalid 令牌无效或已过期

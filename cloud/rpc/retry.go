@@ -7,8 +7,8 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // shouldRetry 判断是否继续重试：未超次数、调用方上下文未取消且错误可重试

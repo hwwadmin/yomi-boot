@@ -46,7 +46,7 @@
 
 - 不得绕过 spec 中的事务与 API 契约（事务落点见 spec 第十一章；HTTP 出口以本服务已注册 Encoder 为准）。
 - 不得在业务仓重复实现已有基础库能力（对照《Go架构规范》§3.3 模块职责）。
-- 装配惯例：`internal/bootstrap/` 手写装配（`server.go`；Kafka 消费者按需 `*_consumer_plugin.go` + `AddCustomPlugin`）；Handler 经 `gitee.com/hq_project/yomi-boot/boot/handler` 协议适配、以 `Routes(router)` 注册相对路径。
+- 装配惯例：`internal/bootstrap/` 手写装配（`server.go`；Kafka 消费者按需 `*_consumer_plugin.go` + `AddCustomPlugin`）；Handler 经 `gitee.com/hq_project/yomi-boot/core/handler` 协议适配、以 `Routes(router)` 注册相对路径。
 - 仅修改当前任务相关文件；文件命名遵循《Go文件命名规范》。
 
 ---

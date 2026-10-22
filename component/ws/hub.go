@@ -6,7 +6,7 @@ package ws
 import (
 	"sync"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // hub 是进程内连接注册表；每 Server 实例一个

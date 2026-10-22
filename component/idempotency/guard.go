@@ -13,13 +13,13 @@ import (
 	"encoding/json"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
-	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
-	"gitee.com/hq_project/yomi-boot/boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/component/db"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/redis"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/logger"
+	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/core/snowflake"
 
 	"github.com/google/uuid"
 )

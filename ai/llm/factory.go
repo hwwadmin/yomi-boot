@@ -7,7 +7,7 @@ package llm
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // New 校验配置并按协议构造 Client；失败不发起网络

@@ -6,10 +6,10 @@ package consulplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/boot/config"
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	"gitee.com/hq_project/yomi-boot/cloud/consul"
+	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // consulPlugin Consul 插件：Init 只创建客户端，注册/注销由进程阶段钩子完成
@@ -23,8 +23,10 @@ type consulPlugin struct {
 
 const consulName = "consul"
 
-var _ plugin.ReadyHook = (*consulPlugin)(nil)
-var _ plugin.DrainHook = (*consulPlugin)(nil)
+var (
+	_ plugin.ReadyHook = (*consulPlugin)(nil)
+	_ plugin.DrainHook = (*consulPlugin)(nil)
+)
 
 // NewConsul 创建 Consul 生命周期插件
 func NewConsul() plugin.Plugin {

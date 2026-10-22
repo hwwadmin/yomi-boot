@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 
 	"github.com/robfig/cron/v3"
 )

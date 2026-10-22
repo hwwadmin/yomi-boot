@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

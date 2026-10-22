@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/cloud/consul"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // DefaultTimeout 是 DTM 控制面请求（newGid/submit/abort/query）的默认超时

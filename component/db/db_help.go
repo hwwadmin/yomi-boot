@@ -6,9 +6,9 @@ package db
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/shared"
-	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/shared"
+	"gitee.com/hq_project/yomi-boot/core/shared/enums"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"

@@ -5,9 +5,9 @@ package boot
 
 import (
 	"gitee.com/hq_project/yomi-boot/boot/bootstrap"
-	"gitee.com/hq_project/yomi-boot/boot/config"
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
-	"gitee.com/hq_project/yomi-boot/boot/router"
+	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/core/router"
 
 	"github.com/gin-gonic/gin"
 )

@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
 )

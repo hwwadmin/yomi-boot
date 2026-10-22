@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/boot/response"
 	"gitee.com/hq_project/yomi-boot/component/token"
+	"gitee.com/hq_project/yomi-boot/core/response"
 
 	"github.com/gin-gonic/gin"
 )

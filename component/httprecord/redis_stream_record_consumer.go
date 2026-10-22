@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/logger"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 // RedisStreamConsumerID 是 HTTP 访问记录 Redis Stream 消费者在 ConsumerManager 中的标识

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/component/db"
 	"gitee.com/hq_project/yomi-boot/component/db/dbtest"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
@@ -18,6 +17,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/event/model"
 	"gitee.com/hq_project/yomi-boot/component/event/repo"
 	"gitee.com/hq_project/yomi-boot/component/redis/redistest"
+	"gitee.com/hq_project/yomi-boot/core/snowflake"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/kafka"
 )

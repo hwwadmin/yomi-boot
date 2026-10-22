@@ -4,10 +4,6 @@
 package plugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/appctx"
-	"gitee.com/hq_project/yomi-boot/boot/config"
-	"gitee.com/hq_project/yomi-boot/boot/shared/enums"
-	"gitee.com/hq_project/yomi-boot/boot/snowflake"
 	"gitee.com/hq_project/yomi-boot/cloud/consul"
 	"gitee.com/hq_project/yomi-boot/cloud/dtm"
 	"gitee.com/hq_project/yomi-boot/component/db"
@@ -19,6 +15,10 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/token"
+	"gitee.com/hq_project/yomi-boot/core/appctx"
+	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/core/snowflake"
 
 	redisv9 "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"

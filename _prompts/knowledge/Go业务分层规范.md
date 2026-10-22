@@ -129,8 +129,8 @@ handler/                         biz/handler/
 #### 3.4.6 internal/bizerr/
 
 - 本服务领域专属业务异常哨兵（如 `bizerr.ErrUserNotFound`），使用 `errors.NewBiz` / `errors.NewNoStack` 定义；返回时经 `errors.Sentinel` 拍真实调用点栈。
-- 跨库通用哨兵收口在 `gitee.com/hq_project/yomi-boot/boot/shared/error`（`NewNoStack`）；库私有哨兵在对应库就近定义；**无** `response/code.go`。
-- 跨服务通用 dto/utils 使用 `gitee.com/hq_project/yomi-boot/boot/shared`；跨服务枚举使用 `{client}/{domain}/enums`。
+- 跨库通用哨兵收口在 `gitee.com/hq_project/yomi-boot/core/shared/error`（`NewNoStack`）；库私有哨兵在对应库就近定义；**无** `response/code.go`。
+- 跨服务通用 dto/utils 使用 `gitee.com/hq_project/yomi-boot/core/shared`；跨服务枚举使用 `{client}/{domain}/enums`。
 
 ### 3.5 跨域协作规则
 

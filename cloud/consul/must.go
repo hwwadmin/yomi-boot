@@ -4,7 +4,7 @@
 package consul
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 // MustNewClient 创建 Consul 客户端，失败时 log + panic

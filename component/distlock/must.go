@@ -4,7 +4,7 @@
 package distlock
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )

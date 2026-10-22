@@ -8,7 +8,7 @@ import (
 	"context"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // Client 协议无关的同步向量化门面；同一实例可并发调用

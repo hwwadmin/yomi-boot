@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 
 	"github.com/go-redsync/redsync/v4"
 	"github.com/hashicorp/go-multierror"

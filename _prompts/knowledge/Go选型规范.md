@@ -91,7 +91,7 @@
 | HTTP RPC | `gitee.com/hq_project/yomi-boot/cloud/rpc`（`gitee.com/hq_project/yomi-boot/cloud/rpc` 包） | 轻量 HTTP RPC 读传输：EndpointResolver 端点解析（Consul 场景用适配器）、POST JSON、反序列化、传输层短退避重试与按 HTTP 状态码/耗时熔断；业务信封由领域 client 自行解析；跨域写重试由 DTM 承担 | 直接使用 `net/http` 作为默认 RPC 入口；读写混用一套复杂韧性框架 |
 | 并发控制 | `context` + `sync` + `golang.org/x/sync/errgroup` | 生命周期和错误传播清晰，接近原生模型 | 自定义协程框架 |
 | 日志 | `go.uber.org/zap` | 结构化日志，控制台 + JSON 文件双路输出 | `log/slog`、`logrus` 作为默认入口 |
-| 性能剖析 | `net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/boot/pprof` 封装） | 独立 debug 端口，CPU/内存/goroutine 排障 | OpenTelemetry、`prometheus/client_golang`、黑盒观测 SDK |
+| 性能剖析 | `net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/component/pprof` 封装） | 独立 debug 端口，CPU/内存/goroutine 排障 | OpenTelemetry、`prometheus/client_golang`、黑盒观测 SDK |
 | 测试 | `testing` + `httptest` + `github.com/google/go-cmp/cmp` + `testcontainers-go` | 标准库优先，最小辅助库补齐对比和集成测试 | 大量 mock 框架作为默认测试方案 |
 | DI | 手写 Wiring，各服务 `internal/bootstrap/server.go` 组合根 | 依赖关系显式、调试简单、与 Go 风格一致 | `fx`、`dig`、`github.com/google/wire` 等 DI 框架 |
 | 服务注册发现 | Consul | 微服务注册、健康检查、HTTP 服务发现 | Eureka、Nacos 作为默认方案 |
@@ -121,14 +121,14 @@
 #### 3.3.3 日志与性能剖析
 
 - 日志默认选型：`go.uber.org/zap`。
-- 性能剖析默认选型：`net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/boot/pprof` 提供独立 debug 端口）。
+- 性能剖析默认选型：`net/http/pprof`（经 `gitee.com/hq_project/yomi-boot/component/pprof` 提供独立 debug 端口）。
 - 选型理由：
   - `zap` 性能高、结构化能力强，适合控制台与 JSON 文件双路输出场景。
   - `pprof` 为标准库能力，零额外依赖，适合 CPU、堆内存、goroutine 泄漏等排障场景。
 - 配套约束：
-  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `boot/pprof/plugin` 在 `MustInitInfra` 阶段启动。
+  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `component/pprof/plugin` 在 `MustInitInfra` 阶段启动。
   - pprof 端口仅供内网排障，不注册 Consul、不挂业务网关。
-  - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/boot/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
+  - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/core/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
 - 不作为默认：`log/slog`、`logrus`；OpenTelemetry、`prometheus/client_golang`、Grafana/Jaeger 等观测平台（当前阶段不建设）。
 
 #### 3.3.4 数据库与缓存
@@ -214,7 +214,7 @@
 - [ ] 数据库引擎与 SQL 访问方案已分开描述，默认口径为 MySQL + `gorm`
 - [ ] 本地事务使用 `gorm.DB.Transaction`，未引入额外事务框架
 - [ ] 配置使用 `viper`，未并存第二套配置库；所有配置项已在 yml 中显化
-- [ ] 日志使用 `go.uber.org/zap`，统一通过 `gitee.com/hq_project/yomi-boot/boot/logger` 输出，未并存 `log/slog`、`logrus` 等第二套日志入口
+- [ ] 日志使用 `go.uber.org/zap`，统一通过 `gitee.com/hq_project/yomi-boot/core/logger` 输出，未并存 `log/slog`、`logrus` 等第二套日志入口
 - [ ] 服务间通信默认 HTTP/HTTPS，未将 gRPC 作为服务间默认协议
 - [ ] 服务注册发现使用 Consul；跨域写使用 DTM Saga
 - [ ] DI 通过各服务 `internal/bootstrap/server.go` 手写 Wiring，未引入 Google `wire` / `fx` / `dig` 等 DI 框架

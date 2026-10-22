@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/component/distlock"
 	"gitee.com/hq_project/yomi-boot/component/redis/redistest"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 
 	yomiredis "gitee.com/hq_project/yomi-boot/component/redis"
 

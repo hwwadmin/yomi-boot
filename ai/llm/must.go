@@ -4,7 +4,7 @@
 
 package llm
 
-import "gitee.com/hq_project/yomi-boot/boot/logger"
+import "gitee.com/hq_project/yomi-boot/core/logger"
 
 // MustNew 创建 Client，失败时记录错误日志并立即崩溃；日志不得包含完整密钥
 func MustNew(cfg Config) Client {

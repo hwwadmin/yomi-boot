@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // 编译期验证 RPC 端点解析接口实现

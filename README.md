@@ -11,10 +11,11 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 | 目录 | 职责 |
 | ---- | ---- |
-| `ai/` | 可选 AI 能力簇（LLM、Embedding、Jev、RAG、VectorDB）；不进 bootstrap、不读 YAML、不参与插件生命周期 |
-| `boot/` | 项目基础件：启动快捷入口、配置、日志、HTTP 内核、上下文、生命周期、加密、错误与共享工具 |
-| `component/` | 通用组件：DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket、集成测试客户端等 |
+| `core/` | 系统核心组件：应用上下文、配置、日志、错误、HTTP 内核、路由、加密、共享工具、雪花 ID、链路追踪等 |
+| `boot/` | 启动流程编排：入口 `boot`、bootstrap、生命周期、插件契约、启动 Banner |
+| `component/` | 通用能力组件：DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket、pprof、集成测试客户端等 |
 | `cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
+| `ai/` | 可选 AI 能力簇（LLM、Embedding、Jev、RAG、VectorDB）；不进 bootstrap、不读 YAML、不参与插件生命周期 |
 
 ## 快速启动
 

@@ -3,7 +3,7 @@
 // @author zwei
 package oss
 
-import "gitee.com/hq_project/yomi-boot/boot/logger"
+import "gitee.com/hq_project/yomi-boot/core/logger"
 
 // MustNew 创建 Storage，失败时 log + panic
 func MustNew(cfg Config) Storage {

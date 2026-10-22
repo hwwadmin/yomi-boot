@@ -5,8 +5,8 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
 	"gitee.com/hq_project/yomi-boot/component/db/dbtest"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // TestTxManager_Execute_CommitAndRollback 验证事务提交与回滚行为

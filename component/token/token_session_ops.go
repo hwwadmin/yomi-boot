@@ -7,7 +7,7 @@ import (
 	"context"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // contextKey 是令牌会话在上下文中的键

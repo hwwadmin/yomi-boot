@@ -4,7 +4,7 @@
 package kafka
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 )
 
 // MustNewComponents 校验配置并创建 Kafka 组件，失败时 log + panic

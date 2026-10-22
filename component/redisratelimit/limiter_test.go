@@ -10,7 +10,7 @@ import (
 	yomiredis "gitee.com/hq_project/yomi-boot/component/redis"
 	"gitee.com/hq_project/yomi-boot/component/redis/redistest"
 
-	booterrors "gitee.com/hq_project/yomi-boot/boot/errors"
+	booterrors "gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // stubRedis 仅实现 OpsRateLimit4Allow，用于策略单测

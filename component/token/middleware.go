@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
-	"gitee.com/hq_project/yomi-boot/boot/handler"
+	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/core/handler"
 
 	"github.com/gin-gonic/gin"
 )

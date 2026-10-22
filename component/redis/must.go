@@ -4,7 +4,7 @@
 package redis
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/logger"
+	"gitee.com/hq_project/yomi-boot/core/logger"
 
 	"github.com/redis/go-redis/v9"
 )

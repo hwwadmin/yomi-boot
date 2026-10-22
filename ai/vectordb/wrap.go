@@ -8,7 +8,7 @@ import (
 	"context"
 	stderrors "errors"
 
-	"gitee.com/hq_project/yomi-boot/boot/errors"
+	"gitee.com/hq_project/yomi-boot/core/errors"
 )
 
 // wrapSentinel 将本包哨兵与原因同时放入错误链
