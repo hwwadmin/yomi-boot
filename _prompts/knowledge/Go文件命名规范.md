@@ -151,7 +151,7 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | `boot.go` | `gitee.com/hq_project/yomi-boot/boot/` | 启动快捷入口：`Run` / `RunWithOptions` / `Options` |
 | `init.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustInit`：注册配置段、加载文档、启动插件链 |
 | `options.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `InitOptions`、`AddCustomPlugin`、`AddConfigSection` |
-| `plugins.go` / `sections.go` | `gitee.com/hq_project/yomi-boot/plugin/registry/` | 内置插件编排顺序、默认配置段注册表 |
+| `plugins.go` / `configs.go` | `gitee.com/hq_project/yomi-boot/plugin/registry/` | 内置插件编排顺序、默认配置段注册表 |
 | `server.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `MustBuildApp`、`serviceName` |
 | `middleware.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `DefaultMiddlewares` |
 | `lifecycle.go` / `run.go` | `gitee.com/hq_project/yomi-boot/boot/lifecycle/` | `App`、`Hook`、`Run` / `RunContext`、阶段编排与停机 |
