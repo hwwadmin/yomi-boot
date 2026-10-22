@@ -1,14 +1,10 @@
-// Package plugin 资源生命周期管理（Init/Close）与进程阶段 hook 契约
-//
-// 内置插件与服务自定义插件均实现 Plugin 接口；需要参与进程阶段的插件按需实现
-// ReadyHook / DrainHook，由 lifecycle 在对应阶段统一调用。
-//
-// @author zwei
+// 插件生命周期接口与运行时状态。
+
 package plugin
 
 import "context"
 
-// Plugin 资源生命周期接口；应用层使用 bootstrap.Infra 中的各能力库具体类型
+// Plugin 资源生命周期接口；应用层从 *Services 读取各能力库具体类型
 type Plugin interface {
 	Name() string
 	Started() bool
@@ -52,15 +48,15 @@ func (s *PluginState) SetStarted() {
 	s.started = true
 }
 
-// Runtime 记录已启动插件，供成功后的 Cleanup 逆序释放资源
+// Runtime 记录已 Init 的插件，供进程退出时逆序释放资源
 type Runtime struct {
-	Host    *Host
+	host    *Host
 	started []Plugin
 }
 
 // Run 按顺序 Init 插件；任一 Init panic 则进程直接退出
 func Run(host *Host, plugins []Plugin) *Runtime {
-	rt := &Runtime{Host: host}
+	rt := &Runtime{host: host}
 	for _, p := range plugins {
 		p.Init(host)
 		rt.started = append(rt.started, p)
@@ -122,7 +118,7 @@ func (rt *Runtime) Close() {
 		return
 	}
 	for i := len(rt.started) - 1; i >= 0; i-- {
-		rt.started[i].Close(rt.Host)
+		rt.started[i].Close(rt.host)
 	}
 	rt.started = nil
 }

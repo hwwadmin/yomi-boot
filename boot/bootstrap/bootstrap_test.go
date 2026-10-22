@@ -1,6 +1,5 @@
-// Package bootstrap 单元测试
-//
-// @author zwei
+// 中间件与初始化单测。
+
 package bootstrap
 
 import (
@@ -12,6 +11,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/plugin"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 	corsplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/cors"
 	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
@@ -182,31 +182,31 @@ func boolPtr(v bool) *bool {
 
 // ======================== 测试用例 ========================
 
-// TestInfra_CleanupNilReceiver 测试 nil Infra 调用 Cleanup 不崩溃
-func TestInfra_CleanupNilReceiver(t *testing.T) {
-	var infra *Infra
-	infra.Cleanup()
+// TestRuntime_CloseNilReceiver 测试 nil Runtime 调用 Close 不崩溃
+func TestRuntime_CloseNilReceiver(t *testing.T) {
+	var rt *plugin.Runtime
+	rt.Close()
 }
 
 // TestDefaultMiddlewares_AlwaysIncludesAuth 测试中间件链始终包含令牌鉴权位（是否生效由 auth.enabled 映射到组件内开关）
 func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 	docEnabled := loadMiddlewareTestDoc(t, middlewareTestDocOptions{authEnabled: true})
-	infraEnabled := &Infra{
+	enabled := &plugin.Services{
 		Doc:          docEnabled,
 		TokenService: &mockTokenService{},
 		AppCtx:       appctx.NewAppCtx("test", "test", "v1"),
 	}
-	middlewaresEnabled := DefaultMiddlewares(infraEnabled)
+	middlewaresEnabled := DefaultMiddlewares(enabled)
 	if len(middlewaresEnabled) == 0 {
 		t.Error("中间件链不应为空")
 	}
 
 	docDisabled := loadMiddlewareTestDoc(t, middlewareTestDocOptions{})
-	infraDisabled := &Infra{
+	disabled := &plugin.Services{
 		Doc:    docDisabled,
 		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
 	}
-	middlewaresDisabled := DefaultMiddlewares(infraDisabled)
+	middlewaresDisabled := DefaultMiddlewares(disabled)
 	if len(middlewaresEnabled) != len(middlewaresDisabled) {
 		t.Errorf("auth.enabled 不应改变中间件链长度: enabled=%d disabled=%d", len(middlewaresEnabled), len(middlewaresDisabled))
 	}
@@ -214,15 +214,15 @@ func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 
 // TestDefaultMiddlewares_AlwaysIncludesCORS 测试中间件链始终包含 CORS 位（是否生效由 cors.enabled 映射到组件内开关）
 func TestDefaultMiddlewares_AlwaysIncludesCORS(t *testing.T) {
-	infraEnabled := &Infra{
+	enabled := &plugin.Services{
 		Doc:    loadMiddlewareTestDoc(t, middlewareTestDocOptions{corsEnabled: boolPtr(true)}),
 		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
 	}
-	infraDisabled := &Infra{
+	disabled := &plugin.Services{
 		Doc:    loadMiddlewareTestDoc(t, middlewareTestDocOptions{corsEnabled: boolPtr(false)}),
 		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
 	}
-	if len(DefaultMiddlewares(infraEnabled)) != len(DefaultMiddlewares(infraDisabled)) {
+	if len(DefaultMiddlewares(enabled)) != len(DefaultMiddlewares(disabled)) {
 		t.Error("cors.enabled 不应改变中间件链长度")
 	}
 }

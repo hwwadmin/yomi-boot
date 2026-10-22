@@ -28,13 +28,13 @@ package main
 import "gitee.com/hq_project/yomi-boot/boot"
 
 func main() {
-	boot.Run("YOMI_NOTE", func(infra *boot.Infra) []boot.Registrar {
-		return wireHandlers(infra) // wireHandlers 为业务装配函数
+	boot.Run("YOMI_NOTE", func(services *boot.Services) []boot.Registrar {
+		return wireHandlers(services) // wireHandlers 为业务装配函数
 	})
 }
 ```
 
-服务名统一来自配置 `app.name`。需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `bootstrap.MustInitInfra`、`bootstrap.MustBuildApp`、`lifecycle.Run` / `lifecycle.RunContext` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
+服务名统一来自配置 `app.name`。需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `bootstrap.MustInit`、`bootstrap.MustBuildApp`、`lifecycle.Run` / `lifecycle.RunContext` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
 
 ## 中间件推荐适配版本
 

@@ -126,10 +126,10 @@ resource, err := b.resourceClient.GetProfile(ctx, claims.SubjectID)
 | 层级 | 内容 |
 | ---- | ---- |
 | `gitee.com/hq_project/yomi-boot/component/common/token` | Store 接口、Redis 实现、Claims、`TokenService`、中间件 `Middleware`、Context 读写 |
-| BFF `handler/` | 通过 `infra.TokenService` 使用签发/校验/撤销能力 |
+| BFF `handler/` | 通过 `services.TokenService` 使用签发/校验/撤销能力 |
 
 - 多入口时在 `config/*.yml` 的 **`auth`** 段按端配置不同 `store_prefix`；键模式见 [Redis设计规范](./Redis设计规范.md) §3.2.3。
-- `auth.enabled=true` 时由 token 插件在 `MustInitInfra` 阶段初始化（依赖 Redis）。
+- `auth.enabled=true` 时由 token 插件在 `MustInit` 阶段初始化（依赖 Redis）。
 
 #### 3.3.2 登录 / 登出
 

@@ -1,6 +1,5 @@
-// Package bootstrap 基础设施选项
-//
-// @author zwei
+// 基础设施初始化扩展选项。
+
 package bootstrap
 
 import (
@@ -8,8 +7,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
-// InfraOptions 基础设施扩展选项；各组件是否启动由插件根据配置自行判断
-type InfraOptions struct {
+// InitOptions 初始化扩展选项；各能力是否启动由插件根据配置自行判断
+type InitOptions struct {
 	// customPlugins 服务自定义插件
 	customPlugins []plugin.Plugin
 	// configSections 业务等自定义配置段，在默认基础设施段之后注册
@@ -17,13 +16,13 @@ type InfraOptions struct {
 }
 
 // AddCustomPlugin 注册服务自定义插件（Init 挂在内置插件链末尾，晚于 event；可依赖 KafkaConsumer / Event.Receiver 等）
-func (o *InfraOptions) AddCustomPlugin(p plugin.Plugin) *InfraOptions {
+func (o *InitOptions) AddCustomPlugin(p plugin.Plugin) *InitOptions {
 	o.customPlugins = append(o.customPlugins, p)
 	return o
 }
 
 // AddConfigSection 注册自定义配置段（须在默认内置配置段之后追加）
-func (o *InfraOptions) AddConfigSection(s config.Section) *InfraOptions {
+func (o *InitOptions) AddConfigSection(s config.Section) *InitOptions {
 	o.configSections = append(o.configSections, s)
 	return o
 }

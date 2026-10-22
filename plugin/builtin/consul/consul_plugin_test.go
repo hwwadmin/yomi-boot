@@ -56,8 +56,10 @@ consul:
   check_address: http://127.0.0.1:8080/health
 `)
 	host := &plugin.Host{
-		Doc:    doc,
-		AppCtx: appctx.NewAppCtx("test", "dev", "v1"),
+		Services: plugin.Services{
+			Doc:    doc,
+			AppCtx: appctx.NewAppCtx("test", "dev", "v1"),
+		},
 	}
 	p := NewConsul().(*consulPlugin)
 	p.Init(host)
@@ -94,7 +96,7 @@ consul:
   enabled: false
 `)
 	p := NewConsul().(*consulPlugin)
-	p.Init(&plugin.Host{Doc: doc})
+	p.Init(&plugin.Host{Services: plugin.Services{Doc: doc}})
 	if p.Started() {
 		t.Fatal("consul 未启用时不应标记 Started")
 	}

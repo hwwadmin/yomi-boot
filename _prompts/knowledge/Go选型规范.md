@@ -126,7 +126,7 @@
   - `zap` 性能高、结构化能力强，适合控制台与 JSON 文件双路输出场景。
   - `pprof` 为标准库能力，零额外依赖，适合 CPU、堆内存、goroutine 泄漏等排障场景。
 - 配套约束：
-  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `plugin/builtin/pprof` 在 `MustInitInfra` 阶段启动。
+  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动。
   - pprof 端口仅供内网排障，不注册 Consul、不挂业务网关。
   - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/component/core/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
 - 不作为默认：`log/slog`、`logrus`；OpenTelemetry、`prometheus/client_golang`、Grafana/Jaeger 等观测平台（当前阶段不建设）。
@@ -165,7 +165,7 @@
 
 #### 3.3.7 依赖注入与参数校验
 
-- DI：手写 Wiring，各微服务 `internal/bootstrap/server.go` 为组合根；共享基础设施由 `gitee.com/hq_project/yomi-boot/boot/bootstrap.MustInitInfra` 经插件链初始化（Fail Fast），通过显式 `NewXxx` 构造函数链完成业务依赖装配。
+- DI：手写 Wiring，各微服务 `internal/bootstrap/server.go` 为组合根；共享基础设施由 `gitee.com/hq_project/yomi-boot/boot/bootstrap.MustInit` 经插件链初始化（Fail Fast），通过显式 `NewXxx` 构造函数链完成业务依赖装配。
 - 共享基础设施收口在 `gitee.com/hq_project/yomi-boot` module，各业务服务 `go.mod`：标准 `require gitee.com/hq_project/yomi-boot`（本地可用 `go.work` / 相对路径 `replace`）。
 - 参数校验：显式代码校验，必要时局部补充轻量校验库。
 - 不作为默认：反射式/代码生成 DI 框架（如 `fx`、`dig`、`github.com/google/wire`）；大范围 tag 反射校验框架。

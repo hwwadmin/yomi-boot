@@ -1,7 +1,6 @@
-// Package bootstrap 配置注册表集成测试
-//
-// @author zwei
-package bootstrap
+// 默认配置段注册表单测。
+
+package registry
 
 import (
 	"os"

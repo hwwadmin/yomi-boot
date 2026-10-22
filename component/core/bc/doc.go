@@ -21,7 +21,7 @@
 //   - 密码只用 passwd；勿用 hash/sm3/hmacsha 存密码。
 //   - 新加密优先 aes.GCM；国密优先 sm4.GCM + sm2；ECB 仅对接遗留系统。
 //   - 大数据勿直接 RSA/SM2 加密（应 AES/SM4 内容密钥 + RSA/SM2 封密钥）。
-//   - 无 DES；不挂载到 Infra 插件链。
+//   - 无 DES；不挂载到 plugin 插件链。
 //
 // @author zwei
 package bc

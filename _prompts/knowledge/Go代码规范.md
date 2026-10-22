@@ -147,12 +147,12 @@ func (h *ResourceHandler) handleUpdateStatusAction(c *gin.Context) {
 }
 ```
 
-**前提**：各服务 `internal/bootstrap/server.go` 必须保证依赖在启动阶段完成注入；`MustInitInfra` / 插件 `Init` 失败时 Fail Fast（log + panic），未初始化的依赖不应拖到运行期才暴露。
+**前提**：各服务 `internal/bootstrap/server.go` 必须保证依赖在启动阶段完成注入；`MustInit` / 插件 `Init` 失败时 Fail Fast（log + panic），未初始化的依赖不应拖到运行期才暴露。
 
 #### 3.2.1 Redis 访问收口
 
 - **BFF**：Redis 用于令牌 Store（session 持久化），经 `gitee.com/hq_project/yomi-boot/component/common/token` + `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService` 访问。
-- **领域服务**：`MustInitInfra` 启用 Redis 供 `gitee.com/hq_project/yomi-boot/component/common/idempotency` 三层幂等使用；**禁止** usecase/service/handler 直接访问 Redis。
+- **领域服务**：`MustInit` 启用 Redis 供 `gitee.com/hq_project/yomi-boot/component/common/idempotency` 三层幂等使用；**禁止** usecase/service/handler 直接访问 Redis。
 - 禁止业务层直接使用 `*redis.Client`；读写经 `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService`（仅 gitee.com/hq_project/yomi-boot 内部组件允许）。
 
 | 场景 | 允许方式 | 禁止方式 |
@@ -643,7 +643,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - [ ] usecase 只做应用编排（Validate → idempotency/TxRunner → service），跨域编排只在 BFF
 - [ ] 各层方法未对注入依赖做 `== nil` 判空
 - [ ] 显式实现接口的 struct（Service、Repository、platform 能力等）已添加 `var _ Interface = (*Impl)(nil)` 编译期断言
-- [ ] Redis 读写通过 `redis.RedisService` 完成，业务与 platform 消费方未直接使用 `*redis.Client`；`Infra` 未对外暴露 `*redis.Client` 字段
+- [ ] Redis 读写通过 `redis.RedisService` 完成，业务与 platform 消费方未直接使用 `*redis.Client`；`plugin.Services` 未对外暴露 `*redis.Client` 字段
 - [ ] 业务接口统一使用 POST + JSON body，health 探针使用 GET
 - [ ] DTO 中时间字段使用 `int64` 时间戳或 `string` 日期，JSON 字段名使用 camelCase（如 `createTime`），不直接使用 `time.Time`
 - [ ] 各领域模块的枚举独立定义，不复用其他模块的枚举类型
@@ -669,7 +669,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - 禁止各层方法在运行期对注入依赖做防御式判空，以此替代启动阶段的装配验证。
 - 禁止显式实现接口的 struct 缺少 `var _ Interface = (*Impl)(nil)` 编译期断言，导致接口方法不完整时无法被编译器拦截。
 - 禁止在 `gitee.com/hq_project/yomi-boot/component/common/redis/` 与 BFF 令牌装配之外，业务层直接使用 `*redis.Client`。
-- 禁止在 `Infra` 上暴露公开 `*redis.Client` 字段；连接由 redis 插件在 `MustInitInfra` 内创建，经 `RedisService` 对外暴露，并在 `Cleanup` 中关闭。
+- 禁止在 `plugin.Services` 上暴露公开 `*redis.Client` 字段；连接由 redis 插件在 `MustInit` 内创建，经 `RedisService` 对外暴露，并在 `Runtime.Close` 中关闭。
 - 禁止 Routes 方法内对 `router` 做 `== nil` 判空。
 - 禁止业务接口使用 GET + query 参数作为主要输入形式，除非是 health 探针或明确的 CDN/SEO 包装层。
 - 禁止 DTO 中直接使用 `time.Time` 类型作为字段类型与前端交互。

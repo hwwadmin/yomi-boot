@@ -1,7 +1,6 @@
-// Package bootstrap 默认配置段注册表
-//
-// @author zwei
-package bootstrap
+// 默认配置段注册表。
+
+package registry
 
 import (
 	"gitee.com/hq_project/yomi-boot/component/common/oss"
@@ -25,27 +24,32 @@ import (
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
 
-// DefaultConfigRegistry 返回默认基础设施配置注册表
+// Sections 按注册顺序返回全部内置配置段。
+// oss 是规范允许的例外：业务直接装配，BootConfig 留在组件包。
+func Sections() []config.Section {
+	return []config.Section{
+		appctxplugin.ConfigSection(),
+		routerplugin.ConfigSection(),
+		loggerplugin.ConfigSection(),
+		dbplugin.ConfigSection(),
+		redisplugin.ConfigSection(),
+		kafkaplugin.ConfigSection(),
+		redisstreamplugin.ConfigSection(),
+		tokenplugin.ConfigSection(),
+		corsplugin.ConfigSection(),
+		httprecordplugin.ConfigSection(),
+		consulplugin.ConfigSection(),
+		dtmplugin.ConfigSection(),
+		eventplugin.ConfigSection(),
+		snowflakeplugin.ConfigSection(),
+		idempotencyplugin.ConfigSection(),
+		redisratelimitplugin.ConfigSection(),
+		oss.ConfigSection(),
+		pprofplugin.ConfigSection(),
+	}
+}
+
+// DefaultConfigRegistry 返回注册全部内置配置段的注册表。
 func DefaultConfigRegistry() *config.Registry {
-	return config.NewRegistry().
-		Register(
-			appctxplugin.ConfigSection(),
-			routerplugin.ConfigSection(),
-			loggerplugin.ConfigSection(),
-			dbplugin.ConfigSection(),
-			redisplugin.ConfigSection(),
-			kafkaplugin.ConfigSection(),
-			redisstreamplugin.ConfigSection(),
-			tokenplugin.ConfigSection(),
-			corsplugin.ConfigSection(),
-			httprecordplugin.ConfigSection(),
-			consulplugin.ConfigSection(),
-			dtmplugin.ConfigSection(),
-			eventplugin.ConfigSection(),
-			snowflakeplugin.ConfigSection(),
-			idempotencyplugin.ConfigSection(),
-			redisratelimitplugin.ConfigSection(),
-			oss.ConfigSection(),
-			pprofplugin.ConfigSection(),
-		)
+	return config.NewRegistry().Register(Sections()...)
 }

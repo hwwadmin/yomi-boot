@@ -15,7 +15,7 @@
 // ReplaceCollection 用完整快照覆盖；过程允许脏读；milvus 先写新点再删旧点，失败时旧数据仍在（可能夹杂已写入的新点）；空切片保留空集合。
 // Search 的 Hit.Score 越大越相似（L2 已映射）；不同 Metric 的 Score 不可横比。
 // ListIDs 按元数据等值 AND 列出主键，只返回 ID；用于按业务键枚举/清理，不读向量。
-// Close 由业务在进程退出时调用，Infra.Cleanup 不会自动关闭。
+// Close 由业务在进程退出时调用，plugin.Runtime 不会自动关闭。
 //
 // @author zwei
 package vectordb

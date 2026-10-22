@@ -62,7 +62,7 @@
 #### 3.1.0 gitee.com/hq_project/yomi-boot 部署形态无关（配置裁剪）
 
 - gitee.com/hq_project/yomi-boot 是**能力库 + 插件生命周期**，不是「必须微服务」的运行时。
-- 插件在 `boot/bootstrap` 中按固定顺序注册；**Init 是否真正启动由各自配置决定**（见 `boot/bootstrap/infra_plugins.go` 与 `plugin/builtin/{lib}`）。
+- 插件在 `plugin/registry` 中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `plugin/registry/plugins.go` 与 `plugin/builtin/{lib}`）。
 - 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见 [Go配置规范](./Go配置规范.md)「能力按需裁剪」与本文 §3.4.5。
 - 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 gitee.com/hq_project/yomi-boot 的唯一用法。
 - 单体形态下：可无 Consul/DTM/Kafka/Redis Stream；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
@@ -96,10 +96,10 @@
 
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
-- 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件与部署 YAML 绑定）、`boot/`（启动流程编排）。
+- 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动流程编排与 HTTP 装配）。
 - `component/core/` 提供 bc、config、cors、errors、shared、traceid、utils，是无状态内核；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
-- `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）。`boot/` 提供启动入口 `boot`、bootstrap、lifecycle、banner。
-- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。例外：`oss`（业务直接装配）允许在组件包内定义 `SectionKey` / `BootConfig` / `ConfigSection`。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）。
+- `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`Services`、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/registry`（`Plugins()`、`Sections()`、`DefaultConfigRegistry()`）。`boot/` 提供启动入口 `boot`、bootstrap、lifecycle、banner。
+- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单只能放 `plugin/registry`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。例外：`oss`（业务直接装配）允许在组件包内定义 `SectionKey` / `BootConfig` / `ConfigSection`。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -117,7 +117,8 @@ gitee.com/hq_project/yomi-boot/                               # module: gitee.co
 │   ├── common/                  # 通用组件（appctx、HTTP、日志、db、redis、kafka、event 等）
 │   ├── cloud/                   # 分布式组件（consul、dtm、rpc）
 │   └── ai/                      # AI 能力组件（不进 bootstrap）
-└── plugin/                      # 插件契约、内置插件与部署 YAML 绑定
+└── plugin/                      # 插件契约、内置插件、插件清单与部署 YAML 绑定
+    ├── registry/                # 内置插件启动顺序、默认配置段注册表
     └── builtin/                 # 内置插件与 YAML 绑定（appctx、logger、db、redis、kafka、event、cors、router 等）
 
 # 业务工程仓库（示例）
@@ -179,24 +180,26 @@ services/{domain}/
 | ---- | -- |
 | `component/core/` | `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `boot/` | `boot`（启动快捷入口）、`bootstrap`、`lifecycle`、`banner` |
-| `plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook` |
+| `plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`Services`、`ReadyHook` / `DrainHook` |
+| `plugin/registry/` | 内置插件启动顺序 `Plugins()`、默认配置段 `Sections()` / `DefaultConfigRegistry()` |
 | `plugin/builtin/` | 内置插件与各能力 YAML 绑定（`appctx`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `appctx`、`handler`、`httpguard`、`logger`、`response`、`router`、`snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
 | `component/ai/` | `llm`、`embedding`、`jev`、`rag`、`vectordb` |
 
-依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`boot` 依赖 `component/core` + `component/common` + `plugin`，仅 `boot/bootstrap` 允许引用 `component/cloud` 与 `plugin/builtin`。
+依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`，`plugin/registry` 可 import 全部 `plugin/builtin/**`；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/registry`，仅 `boot/bootstrap` 额外引用 `component/cloud` 与 `plugin/builtin` 的配置段。
 
 | 包 | 职责 |
 | -- | ---- |
-| `bootstrap` | `MustInitInfra`、`MustBuildApp`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
-| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约 |
+| `bootstrap` | `MustInit`、`MustBuildApp`、`DefaultMiddlewares`；`MustInit` 返回 `*plugin.Services` + `*plugin.Runtime`，配置经 `Services.Doc` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；`InitOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
+| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`（初始化上下文）、`Services`（业务可见能力集合）、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约 |
+| `plugin/registry` | 内置插件启动顺序（`Plugins()` / `WithCustom()`）与默认配置段注册表（`Sections()` / `DefaultConfigRegistry()`）；`plugin` 根包不得 import 本包所依赖的 `plugin/builtin/**` |
 | `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 无状态内核；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
-| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInitInfra` 阶段启动；进程退出时自然关闭；默认关闭 |
+| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `db` | GORM 打开、`TxExecutor`、`BaseRepository`、`BaseModel` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
@@ -207,7 +210,7 @@ services/{domain}/
 | `utils` | 通用辅助函数收口（`ginutil`、`ptrutil`、`timeutil`、`validateutil` 等子包） |
 | `redis` | `RedisService` 接口与 `RedisHelper` 实现（含 `OpsRateLimit4Allow` 滑动窗口限流原语） |
 | `redisratelimit` | 调用式限流门面 `LimitService`（`Allow`/`AllowN`）；依赖 `RedisService`，不进默认中间件链 |
-| `bc` | 密码学基础设施能力簇（Bootstrap Crypto）；无状态按需 import，不挂 Infra |
+| `bc` | 密码学基础设施能力簇（Bootstrap Crypto）；无状态按需 import，不挂 plugin 插件链 |
 | `bc/passwd` | 密码单向哈希/校验（bcrypt，≤72 字节） |
 | `bc/random` | 密码学安全随机（Bytes/Hex/URLSafe） |
 | `bc/hash` | MD5 / SHA-1（遗留兼容）/ SHA-256 / SHA-512 摘要（禁止用于密码） |
@@ -276,19 +279,19 @@ cmd/main.go
   └─ boot.Run(envPrefix, bootstrap.Wire)                  # 推荐入口：默认配置路径 + 默认中间件链
        └─ boot.RunWithOptions(opts, wire)
             └─ lifecycle.Run(factory)
-                 ├─ bootstrap.MustInitInfra(configPath, envPrefix, opts)
-                 │     ├─ DefaultConfigRegistry + MustLoadDocument
-                 │     └─ plugin.Run(host, buildInfraPlugins(opts))   # 按序 Init；是否启动看各段 enabled
-                 ├─ wire(infra) → []router.Registrar                  # 手写 wiring，在 internal/bootstrap
-                 └─ bootstrap.MustBuildApp(infra, registrars, middlewares) → *lifecycle.App
+                 ├─ bootstrap.MustInit(configPath, envPrefix, opts)
+                 │     ├─ registry.DefaultConfigRegistry + MustLoadDocument
+                 │     └─ plugin.Run(host, registry.WithCustom(opts.customPlugins))  # 按序 Init；是否启动看各段 enabled
+                 ├─ wire(services) → []router.Registrar               # 手写 wiring，在 internal/bootstrap
+                 └─ bootstrap.MustBuildApp(services, rt, registrars, middlewares) → *lifecycle.App
 ```
 
 标准入口是根包 `boot`：
 
 - `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`；`wire` 通常是业务 `internal/bootstrap.Wire`。
-- `boot.RunWithOptions(opts, wire)`：自定义 `ConfigPath`、`InfraOptions` 或中间件工厂。
+- `boot.RunWithOptions(opts, wire)`：自定义 `ConfigPath`、`InitOptions` 或中间件工厂。
 
-两者内部完成 `MustInitInfra → wire → MustBuildApp → lifecycle.Run`。
+两者内部完成 `MustInit → wire → MustBuildApp → lifecycle.Run`。
 
 需要完全自控启动时使用低层入口：`internal/bootstrap.NewApp(configPath) *lifecycle.App` + `lifecycle.Run(...)`。`lifecycle` 只负责 `Start → Ready → Serve → Drain → Stop → Release`，测试或嵌入式场景可用 `lifecycle.RunContext` 返回 error 而不是 panic。两种入口共用同一套 `wire`。
 
@@ -297,10 +300,10 @@ cmd/main.go
 #### 3.4.3 bootstrap 约定
 
 - 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要消息消费者时另增 `*_consumer_plugin.go`。
-- `server.go` 导出 `Wire(infra *boot.Infra) []boot.Registrar` 作为手写组合根，通过显式 `NewXxx` 构造依赖链；`boot.Run(envPrefix, bootstrap.Wire)` 直接使用。
+- `server.go` 导出 `Wire(services *boot.Services) []boot.Registrar` 作为手写组合根，通过显式 `NewXxx` 构造依赖链；`boot.Run(envPrefix, bootstrap.Wire)` 直接使用。
 - 需要自定义配置路径或完全自控启动时，可另提供 `NewApp(configPath string) *lifecycle.App` 并调用 `lifecycle.Run`；两种入口共用同一套 wire。
 - `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.Run`）；`internal/bootstrap/server.go` 只组装与 wiring。
-- `MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `infra.Cleanup()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
+- `MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `plugin.Runtime.Close()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
 
 #### 3.4.4 插件生命周期
 
@@ -362,7 +365,7 @@ type myConsumerPlugin struct {
 | 14 | token | `auth.enabled=true` |
 | 15 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
 | 16 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 17 | custom | `InfraOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
+| 17 | custom | `InitOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 
@@ -377,12 +380,12 @@ type myConsumerPlugin struct {
 - 业务 handler、是否启用、消费者标识 / 组名等由**可部署单元内**自定义插件实现（可使用 `KafkaConsumer` 或 `RedisStreamConsumer`）。
 - 通过 `opts.AddCustomPlugin(...)` 插入启动流程，**禁止**在 `wireHandlers` 或 gitee.com/hq_project/yomi-boot 内置插件中硬编码业务消费逻辑。
 
-#### 3.4.5 Infra 组件按需启用
+#### 3.4.5 能力按需启用
 
 | 服务类型 | 典型做法 | 说明 |
 | -------- | -------- | ---- |
-| 入口编排（BFF） | `InfraOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
-| 领域 | `InfraOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
+| 入口编排（BFF） | `InitOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
+| 领域 | `InitOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
 | 带消息消费的领域 | 上栏 + `AddCustomPlugin(消费者插件)` | 消费启停由自定义插件与配置控制 |
 
 各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`auth.enabled`、`event.outbox_enabled` / `event.inbox_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
@@ -449,7 +452,7 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard �
 ### 3.8 pprof 排障
 
 - 配置项：`pprof.enabled`（默认 `false`）、`pprof.addr`（独立 debug 端口，由各可部署单元自行配置，避免端口冲突）。
-- 由 `plugin/builtin/pprof` 在 `MustInitInfra` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
+- 由 `plugin/builtin/pprof` 在 `MustInit` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
 - 常用命令：
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/profile?seconds=30`
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/heap`

@@ -37,7 +37,7 @@ func TestAppCtxPlugin_LocksTimezone(t *testing.T) {
 				t.Fatalf("加载临时配置失败: %v", err)
 			}
 
-			host := &plugin.Host{Doc: doc}
+			host := &plugin.Host{Services: plugin.Services{Doc: doc}}
 			NewAppCtx().Init(host)
 
 			if host.AppCtx == nil || host.AppCtx.Name() != "test" {

@@ -34,8 +34,8 @@ const (
 	testSnowflakeSectionKey = "snowflake"
 )
 
-// testInfraRegistry 返回配置加载单测用注册表
-func testInfraRegistry() *config.Registry {
+// testRegistry 返回配置加载单测用注册表
+func testRegistry() *config.Registry {
 	return config.NewRegistry().Register(
 		config.NewSection(testAppSectionKey, &testAppConfig{}, nil),
 		config.NewSection(testHTTPSectionKey, &testHTTPConfig{}, nil),
@@ -55,7 +55,7 @@ snowflake:
 unknown_biz:
   foo: 1
 `)
-	_, err := config.LoadDocument(path, "YOMI_TEST", testInfraRegistry())
+	_, err := config.LoadDocument(path, "YOMI_TEST", testRegistry())
 	if err == nil {
 		t.Fatal("期望未注册根 key 失败")
 	}
@@ -75,7 +75,7 @@ http:
 snowflake:
   worker_id: 1
 `)
-	doc, err := config.LoadDocument(path, "YOMI_TEST", testInfraRegistry())
+	doc, err := config.LoadDocument(path, "YOMI_TEST", testRegistry())
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
@@ -106,7 +106,7 @@ biz:
 	}
 	const bizSectionKey = "biz"
 	biz := &bizConfig{}
-	reg := testInfraRegistry().Register(config.NewSection(bizSectionKey, biz, nil))
+	reg := testRegistry().Register(config.NewSection(bizSectionKey, biz, nil))
 	doc, err := config.LoadDocument(path, "YOMI_TEST", reg)
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
@@ -124,7 +124,7 @@ func TestRegistry_DuplicateKeyPanics(t *testing.T) {
 			t.Fatal("期望重复 key panic")
 		}
 	}()
-	testInfraRegistry().Register(config.NewSection(testAppSectionKey, &testAppConfig{}, nil))
+	testRegistry().Register(config.NewSection(testAppSectionKey, &testAppConfig{}, nil))
 }
 
 // writeTempYAML 写入临时 YAML 配置文件并返回路径
