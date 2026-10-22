@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"github.com/dtm-labs/client/dtmcli"
 )

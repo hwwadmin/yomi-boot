@@ -4,48 +4,48 @@
 package bootstrap
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/cloud/consul"
-	"gitee.com/hq_project/yomi-boot/component/cloud/dtm"
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
-	"gitee.com/hq_project/yomi-boot/component/common/db"
-	"gitee.com/hq_project/yomi-boot/component/common/event"
-	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
-	"gitee.com/hq_project/yomi-boot/component/common/idempotency"
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/oss"
-	componentpprof "gitee.com/hq_project/yomi-boot/component/common/pprof"
-	"gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/common/redisratelimit"
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/cors"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/cors"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	consulplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/consul"
+	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
+	dtmplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/dtm"
+	eventplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/event"
+	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
+	idempotencyplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/idempotency"
+	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
+	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	pprofplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/pprof"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
+	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
+	redisstreamplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisstream"
+	snowflakeplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/snowflake"
+	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
 
 // DefaultConfigRegistry 返回默认基础设施配置注册表
 func DefaultConfigRegistry() *config.Registry {
 	return config.NewRegistry().
 		Register(
-			appctx.ConfigSection(),
+			appctxplugin.ConfigSection(),
 			router.ConfigSection(),
-			logger.ConfigSection(),
-			db.ConfigSection(),
-			redis.ConfigSection(),
-			yomikafka.ConfigSection(),
-			redisstream.ConfigSection(),
-			token.ConfigSection(),
+			loggerplugin.ConfigSection(),
+			dbplugin.ConfigSection(),
+			redisplugin.ConfigSection(),
+			kafkaplugin.ConfigSection(),
+			redisstreamplugin.ConfigSection(),
+			tokenplugin.ConfigSection(),
 			cors.ConfigSection(),
-			httprecord.ConfigSection(),
-			consul.ConfigSection(),
-			dtm.ConfigSection(),
-			event.ConfigSection(),
-			snowflake.ConfigSection(),
-			idempotency.ConfigSection(),
-			redisratelimit.ConfigSection(),
+			httprecordplugin.ConfigSection(),
+			consulplugin.ConfigSection(),
+			dtmplugin.ConfigSection(),
+			eventplugin.ConfigSection(),
+			snowflakeplugin.ConfigSection(),
+			idempotencyplugin.ConfigSection(),
+			redisratelimitplugin.ConfigSection(),
 			oss.ConfigSection(),
-			componentpprof.ConfigSection(),
+			pprofplugin.ConfigSection(),
 		)
 }

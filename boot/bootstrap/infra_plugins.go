@@ -4,22 +4,22 @@
 package bootstrap
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/plugin"
-	consulplugin "gitee.com/hq_project/yomi-boot/component/cloud/consul/plugin"
-	dtmplugin "gitee.com/hq_project/yomi-boot/component/cloud/dtm/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/component/common/appctx/plugin"
-	dbplugin "gitee.com/hq_project/yomi-boot/component/common/db/plugin"
-	eventplugin "gitee.com/hq_project/yomi-boot/component/common/event/plugin"
-	httprecordplugin "gitee.com/hq_project/yomi-boot/component/common/httprecord/plugin"
-	idempotencyplugin "gitee.com/hq_project/yomi-boot/component/common/idempotency/plugin"
-	kafkaplugin "gitee.com/hq_project/yomi-boot/component/common/kafka/plugin"
-	loggerplugin "gitee.com/hq_project/yomi-boot/component/common/logger/plugin"
-	pprofplugin "gitee.com/hq_project/yomi-boot/component/common/pprof/plugin"
-	redisplugin "gitee.com/hq_project/yomi-boot/component/common/redis/plugin"
-	redisratelimitplugin "gitee.com/hq_project/yomi-boot/component/common/redisratelimit/plugin"
-	redisstreamplugin "gitee.com/hq_project/yomi-boot/component/common/redisstream/plugin"
-	snowflakeplugin "gitee.com/hq_project/yomi-boot/component/common/snowflake/plugin"
-	tokenplugin "gitee.com/hq_project/yomi-boot/component/common/token/plugin"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	consulplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/consul"
+	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
+	dtmplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/dtm"
+	eventplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/event"
+	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
+	idempotencyplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/idempotency"
+	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
+	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	pprofplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/pprof"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
+	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
+	redisstreamplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisstream"
+	snowflakeplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/snowflake"
+	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
 
 // buildInfraPlugins 按严格顺序返回全部基础设施插件

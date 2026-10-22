@@ -11,7 +11,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // ErrRateLimited 请求触发限流
@@ -35,11 +35,8 @@ type limiter struct {
 // noopLimiter 未启用时的空实现，Allow/AllowN 恒成功
 type noopLimiter struct{}
 
-// New 创建限流服务；未启用时返回 Noop（Allow 恒成功）
+// New 创建限流服务
 func New(redisService yomiredis.RedisService, cfg Config) LimitService {
-	if !cfg.EnabledOrDefault() {
-		return noopLimiter{}
-	}
 	if redisService == nil {
 		panic("redisratelimit: RedisService 不能为 nil")
 	}
@@ -48,6 +45,11 @@ func New(redisService yomiredis.RedisService, cfg Config) LimitService {
 		prefix:   cfg.KeyPrefixOrDefault(),
 		failOpen: cfg.RedisErrorPolicyOrDefault() == RedisErrorPolicyFailOpen,
 	}
+}
+
+// NewNoop 创建空限流服务，Allow/AllowN 恒成功
+func NewNoop() LimitService {
+	return noopLimiter{}
 }
 
 // Allow 实现 LimitService.Allow

@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gitee.com/hq_project/yomi-boot/core/utils/utf8util"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/utf8util"
 )
 
 func newTestBodyWriter(maxSize int) *bodyRecordWriter {

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
-	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 )
 
 // TestLoad_RealServiceYAML 验证加载真实 user-service local.yml（可选）
@@ -22,7 +22,7 @@ func TestLoad_RealServiceYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("加载真实 YAML 失败: %v", err)
 	}
-	app := config.MustSection[appctx.Config](doc, appctx.SectionKey)
+	app := config.MustSection[appctxplugin.BootConfig](doc, appctxplugin.SectionKey).ToConfig()
 	if app.Name != "user-service" {
 		t.Fatalf("app.name=%q", app.Name)
 	}

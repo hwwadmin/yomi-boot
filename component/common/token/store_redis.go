@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/bc/hash"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/bc/hash"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 )

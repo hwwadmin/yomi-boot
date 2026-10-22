@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"

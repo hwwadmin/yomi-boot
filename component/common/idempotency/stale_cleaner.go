@@ -11,14 +11,13 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/roundrobin"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const staleCleanerRoundRobinPrefix = "idempotencyStaleProcessing"
 
 // StaleCleanerConfig Processing 超时清理运行时配置
 type StaleCleanerConfig struct {
-	Enabled      bool
 	ScanInterval time.Duration
 	StaleTimeout time.Duration
 	BatchSize    int
@@ -46,10 +45,9 @@ func NewStaleCleaner(repo *Repository, cfg StaleCleanerConfig) *StaleCleaner {
 	return &StaleCleaner{repo: repo, cfg: cfg}
 }
 
-// StaleCleanerConfigFrom 从应用配置解析 Processing 超时清理运行时配置
+// StaleCleanerConfigFrom 从运行时配置解析 Processing 超时清理配置
 func StaleCleanerConfigFrom(cfg Config, appName string) StaleCleanerConfig {
 	return StaleCleanerConfig{
-		Enabled:      cfg.StaleCleanerEnabledOrDefault(),
 		ScanInterval: cfg.ScanIntervalOrDefault(),
 		StaleTimeout: cfg.StaleTimeoutOrDefault(),
 		BatchSize:    cfg.BatchSizeOrDefault(),
@@ -57,16 +55,12 @@ func StaleCleanerConfigFrom(cfg Config, appName string) StaleCleanerConfig {
 	}
 }
 
-// StartStaleCleanerFromConfig 从应用配置创建并启动 Processing 超时清理；未启用、依赖缺失或启动失败时返回 nil
+// StartStaleCleanerFromConfig 从运行时配置创建并启动 Processing 超时清理；依赖缺失或启动失败时返回 nil
 func StartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleanerDeps) *StaleCleaner {
 	if deps.Repo == nil {
 		return nil
 	}
 	runtimeCfg := StaleCleanerConfigFrom(deps.Config, deps.AppName)
-	if !runtimeCfg.Enabled {
-		logger.InfoWithoutCtx("[幂等]Processing 超时清理未启用")
-		return nil
-	}
 	if deps.DistLockFactory == nil {
 		logger.ErrorWithoutCtx("[幂等]Processing 超时清理启动失败", "error", errors.New("分布式锁工厂未初始化"))
 		return nil
@@ -80,7 +74,7 @@ func StartStaleCleanerFromConfig(parentCtx context.Context, deps StaleCleanerDep
 
 // Start 启动 Processing 超时清理轮询；启动失败时返回错误
 func (c *StaleCleaner) Start(parentCtx context.Context, factory distlock.DistLockFactory) error {
-	if c == nil || c.repo == nil || !c.cfg.Enabled {
+	if c == nil || c.repo == nil {
 		return nil
 	}
 	if c.started {

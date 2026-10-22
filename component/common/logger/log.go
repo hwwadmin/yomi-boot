@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/shared"
-	"gitee.com/hq_project/yomi-boot/core/traceid"
+	"gitee.com/hq_project/yomi-boot/component/core/shared"
+	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

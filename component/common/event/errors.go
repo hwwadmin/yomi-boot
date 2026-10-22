@@ -3,7 +3,7 @@
 // @author zwei
 package event
 
-import "gitee.com/hq_project/yomi-boot/core/errors"
+import "gitee.com/hq_project/yomi-boot/component/core/errors"
 
 // ErrDuplicatePublish 表示同一 service 下 eventId 重复发布
 var ErrDuplicatePublish = errors.NewNoStack("event: 消息队列事件重复发布")

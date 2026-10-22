@@ -12,8 +12,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/core/errors"
-	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 )
 
 // Publisher 发件箱事件发布器

@@ -1,0 +1,33 @@
+// Package snowflakeplugin 雪花 ID 插件
+//
+// @author zwei
+package snowflakeplugin
+
+import (
+	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/plugin"
+)
+
+// snowflakePlugin 雪花 ID 插件
+type snowflakePlugin struct {
+	plugin.PluginState
+}
+
+const snowflakeName = "snowflake"
+
+// NewSnowflake 创建雪花 ID 生命周期插件
+func NewSnowflake() plugin.Plugin {
+	return &snowflakePlugin{PluginState: plugin.NewPluginState(snowflakeName)}
+}
+
+// Init 初始化 ID 生成器并挂到 Host
+func (p *snowflakePlugin) Init(host *plugin.Host) {
+	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	cfg := bootCfg.ToConfig()
+	host.IDGenerator = snowflake.MustNewGenerator(int64(cfg.WorkerID))
+	p.SetStarted()
+}
+
+// Close 关闭雪花 ID 资源
+func (p *snowflakePlugin) Close(_ *plugin.Host) {}

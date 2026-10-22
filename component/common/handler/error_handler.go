@@ -9,9 +9,9 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/response"
-	"gitee.com/hq_project/yomi-boot/core/errors"
-	sharederr "gitee.com/hq_project/yomi-boot/core/shared/error"
-	"gitee.com/hq_project/yomi-boot/core/utils/ginutil"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

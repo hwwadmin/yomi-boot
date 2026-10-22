@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const readHeaderTimeout = 5 * time.Second
@@ -22,12 +22,8 @@ type Server struct {
 	listener net.Listener
 }
 
-// MustStart 启动 pprof 服务并返回句柄；未启用时返回 nil，启动失败时 log + panic
+// MustStart 启动 pprof 服务并返回句柄；启动失败时 log + panic
 func MustStart(cfg Config) *Server {
-	if !cfg.EnabledOrDefault() {
-		return nil
-	}
-
 	addr := cfg.ListenAddr()
 	mux := http.NewServeMux()
 	registerRoutes(mux)

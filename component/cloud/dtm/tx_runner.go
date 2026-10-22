@@ -11,8 +11,8 @@ import (
 	"net/url"
 
 	"gitee.com/hq_project/yomi-boot/component/common/db"
-	"gitee.com/hq_project/yomi-boot/core/errors"
-	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/gin-gonic/gin"

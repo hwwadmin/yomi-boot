@@ -18,10 +18,10 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/core/traceid"
-	"gitee.com/hq_project/yomi-boot/core/utils/ginutil"
-	"gitee.com/hq_project/yomi-boot/core/utils/httputil"
-	"gitee.com/hq_project/yomi-boot/core/utils/utf8util"
+	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/httputil"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/utf8util"
 
 	"github.com/gin-gonic/gin"
 )
@@ -70,7 +70,7 @@ func NewMiddleware(svc HttpRecordService, cfg Config, app appctx.AppCtx) *Middle
 // 在请求前后采集访问信息，并在请求结束后调用 HttpRecordService 处理
 func (m *Middleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !m.cfg.EnabledOrDefault() || m.shouldSkip(c.Request.URL.Path) {
+		if !m.cfg.Enabled || m.shouldSkip(c.Request.URL.Path) {
 			c.Next()
 			return
 		}

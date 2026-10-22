@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // MemoryRecordConsumerConfig 表示 HTTP 访问记录内存消费者参数

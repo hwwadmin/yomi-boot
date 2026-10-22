@@ -10,8 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const (
@@ -23,66 +22,54 @@ const (
 	defaultDeregisterAfterSeconds = 30 * 60
 )
 
-// SectionKey YAML 根 key
-const SectionKey = "consul"
-
 // Config 保存 Consul 注册与发现配置
 type Config struct {
-	Enabled               *bool  `mapstructure:"enabled"`                 // Enabled 是否启用 Consul 注册发现，未配置默认 false
-	Addr                  string `mapstructure:"addr"`                    // Addr 是 Consul 服务地址
-	ServiceName           string `mapstructure:"service_name"`            // ServiceName 是注册到 Consul 的服务名称
-	ServiceID             string `mapstructure:"service_id"`              // ServiceID 是注册到 Consul 的服务实例 ID
-	ServiceAddress        string `mapstructure:"service_address"`         // ServiceAddress 是注册到 Consul 的服务地址（host:port）
-	CheckAddress          string `mapstructure:"check_address"`           // CheckAddress 是健康检查地址
-	DiscoveryCacheSeconds int    `mapstructure:"discovery_cache_seconds"` // DiscoveryCacheSeconds 是服务发现缓存秒数
-	DiscoveryURLScheme    string `mapstructure:"discovery_url_scheme"`    // DiscoveryURLScheme 服务发现 URL 协议前缀，如 http:// / https://，留空则不拼接
-	HTTPTimeoutSeconds    int    `mapstructure:"http_timeout_seconds"`    // HTTPTimeoutSeconds 是访问 Consul Agent 的 HTTP 超时秒数，未配置默认 10
+	Addr                  string // Addr 是 Consul 服务地址
+	ServiceName           string // ServiceName 是注册到 Consul 的服务名称
+	ServiceID             string // ServiceID 是注册到 Consul 的服务实例 ID
+	ServiceAddress        string // ServiceAddress 是注册到 Consul 的服务地址（host:port）
+	CheckAddress          string // CheckAddress 是健康检查地址
+	DiscoveryCacheSeconds int    // DiscoveryCacheSeconds 是服务发现缓存秒数
+	DiscoveryURLScheme    string // DiscoveryURLScheme 服务发现 URL 协议前缀，如 http:// / https://，留空则不拼接
+	HTTPTimeoutSeconds    int    // HTTPTimeoutSeconds 是访问 Consul Agent 的 HTTP 超时秒数，未配置默认 10
 	// DeregisterEnabled 是否在健康检查连续失败后自动注销，未配置默认 true
-	DeregisterEnabled *bool `mapstructure:"deregister_enabled"`
+	DeregisterEnabled *bool
 	// DeregisterAfterSeconds 是健康检查连续失败后的注销秒数，未配置默认 1800（30 分钟），最小 60
-	DeregisterAfterSeconds int `mapstructure:"deregister_after_seconds"`
+	DeregisterAfterSeconds int
 }
 
-// Validate 在 Consul 启用时校验本段配置
+// Validate 校验 Consul 配置
 func (c Config) Validate() error {
-	if !c.EnabledOrDefault() {
-		return nil
-	}
 	if strings.TrimSpace(c.Addr) == "" {
-		return errors.New("consul.addr 不能为空")
+		return errors.New("addr 不能为空")
 	}
 	if strings.TrimSpace(c.ServiceID) == "" {
-		return errors.New("consul.service_id 不能为空")
+		return errors.New("service_id 不能为空")
 	}
 	if c.DiscoveryCacheSeconds < 0 {
-		return errors.New("consul.discovery_cache_seconds 不能为负数")
+		return errors.New("discovery_cache_seconds 不能为负数")
 	}
 	if c.HTTPTimeoutSeconds < 0 {
-		return errors.New("consul.http_timeout_seconds 不能为负数")
+		return errors.New("http_timeout_seconds 不能为负数")
 	}
 	if c.DeregisterEnabledOrDefault() {
 		if c.DeregisterAfterSeconds < 0 {
-			return errors.New("consul.deregister_after_seconds 不能为负数")
+			return errors.New("deregister_after_seconds 不能为负数")
 		}
 		if c.DeregisterAfterSeconds > 0 && c.DeregisterAfterSeconds < 60 {
-			return errors.New("consul.deregister_after_seconds 不能小于 60 秒（Consul 最小 1 分钟）")
+			return errors.New("deregister_after_seconds 不能小于 60 秒（Consul 最小 1 分钟）")
 		}
 	}
-	if err := validateConsulHostPort(c.ServiceAddress, "consul.service_address"); err != nil {
+	if err := validateConsulHostPort(c.ServiceAddress, "service_address"); err != nil {
 		return err
 	}
-	if err := validateConsulCheckURL(c.CheckAddress, "consul.check_address"); err != nil {
+	if err := validateConsulCheckURL(c.CheckAddress, "check_address"); err != nil {
 		return err
 	}
-	if err := validateDiscoveryURLScheme(c.DiscoveryURLScheme, "consul.discovery_url_scheme"); err != nil {
+	if err := validateDiscoveryURLScheme(c.DiscoveryURLScheme, "discovery_url_scheme"); err != nil {
 		return err
 	}
 	return nil
-}
-
-// EnabledOrDefault 返回是否启用 Consul，未配置默认 false
-func (c Config) EnabledOrDefault() bool {
-	return config.BoolOrDefault(c.Enabled)
 }
 
 // DiscoveryCacheDuration 返回服务发现缓存 TTL，未配置时默认 30 秒
@@ -214,11 +201,4 @@ func parseConsulCheckURL(value string) (string, error) {
 		return "", errors.New("URL host 不能为空")
 	}
 	return value, nil
-}
-
-// ConfigSection 返回 consul 配置段
-func ConfigSection() config.Section {
-	return config.NewSection(SectionKey, &Config{}, func(c *Config, _ *config.Document) error {
-		return c.Validate()
-	})
 }

@@ -10,8 +10,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
 	"gitee.com/hq_project/yomi-boot/component/common/handler"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
-	"gitee.com/hq_project/yomi-boot/core/errors"
-	sharederr "gitee.com/hq_project/yomi-boot/core/shared/error"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
 
 	"github.com/gin-gonic/gin"
 )

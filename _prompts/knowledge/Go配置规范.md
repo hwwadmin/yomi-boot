@@ -13,14 +13,14 @@
 
 - **用途**：约束配置所有权、注册加载流程与扩展方式，避免业务配置污染 `gitee.com/hq_project/yomi-boot`；说明能力按需裁剪的配置入口。
 - **边界**：架构总览与部署形态见 [Go架构规范](./Go架构规范.md)；本文件是配置专题权威说明。
-- **适用对象**：`gitee.com/hq_project/yomi-boot/core/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
+- **适用对象**：`gitee.com/hq_project/yomi-boot/component/core/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`、`gitee.com/hq_project/yomi-boot/plugin/builtin`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
 
 ---
 
 ## 2. 设计目标
 
-1. **配置与能力同包**：component/common、component/cloud、component/ai 及 core 各能力配置在对应能力目录（如 `db.Config`、`token.Config`）。
-2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
+1. **配置分层**：组件库保留运行时 `Config`（如 `db.Config`、`token.Config`）；参与启动生命周期的部署 YAML 绑定（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）统一放在 `plugin/builtin/{lib}`。例外：`oss`（业务直接装配）、`router` / `cors`（bootstrap HTTP 装配）。
+2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/component/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
 3. **主动注册**：`bootstrap.DefaultConfigRegistry()` 注册全部内置配置段；业务服务 `AddConfigSection` 追加。
 4. **Fail Fast**：加载与校验失败即 `Must*` panic。
 5. **未知根 key 严格失败**：YAML 根层未注册 key 一律拒绝。
@@ -32,8 +32,8 @@
 
 | # | 原则 |
 |---|------|
-| P1 | 谁实现能力，谁拥有配置类型与 Validate |
-| P2 | `gitee.com/hq_project/yomi-boot/core/config` 机制层；组装根在 `bootstrap` |
+| P1 | 谁实现能力，谁拥有运行时配置语义与 Validate；YAML 绑定与 `SectionKey` 归 `plugin/builtin/{lib}`（例外：oss/router/cors） |
+| P2 | `gitee.com/hq_project/yomi-boot/component/core/config` 机制层；组装根在 `bootstrap` |
 | P3 | `gitee.com/hq_project/yomi-boot` 禁止承载无对应能力包的产品/领域配置 |
 | P4 | 业务配置由服务 `AddConfigSection`，推荐根 key 为 `biz` |
 | P5 | 注册显式、可测；禁止 `init()` 副作用注册 |
@@ -48,12 +48,12 @@
 | 类型/API | 职责 |
 |----------|------|
 | `Section` | `Key` / `Target` / `Validate(doc)` |
-| `SectionKey` | 各能力包导出的 YAML 根 key 常量；`NewSection` / `MustSection` 禁止魔法字符串 |
+| `SectionKey` | `plugin/builtin/{lib}` 导出的 YAML 根 key 常量（例外：oss/router/cors）；`NewSection` / `MustSection` 禁止魔法字符串 |
 | `Registry` | `Register` / `Has` / `Keys` |
 | `Document` | 已绑定段；`MustSection[T]` |
 | `NewSection` | 指向已有 target 的段工厂 |
 | `LoadDocument` / `MustLoadDocument` | 严格根 key → Bind → Validate |
-| `DefaultConfigRegistry` | bootstrap：注册全部能力包 `ConfigSection()` |
+| `DefaultConfigRegistry` | bootstrap：注册 `plugin/builtin/{lib}` 与例外（oss/router/cors）的 `ConfigSection()` |
 | `InfraOptions.AddConfigSection` | 业务在默认内置配置段后追加 |
 | `Infra` | 运行时依赖聚合；配置统一经 `Doc` + `MustSection` 读取 |
 | `Infra.Doc` | 启动后可取 boot 段与自定义段 |
@@ -65,7 +65,7 @@
 → 解析 YAML 根 key，与注册表做差集（非空则失败）
 → 按注册顺序 UnmarshalKey
 → Section.Validate(doc)
-→ 返回 Document；Host{Doc} → app 插件写 AppCtx → 各插件自取本段配置、跨库依赖取 Host 运行态 → Infra
+→ 返回 Document；Host{Doc} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态 → Infra
 ```
 
 ### 4.2 未知根 key
@@ -128,7 +128,8 @@ biz:
 |------|------|
 | 扩展方式 | 主动注册（默认 boot + 服务追加） |
 | 业务根 key | 推荐 `biz` |
-| 校验 | 各段只校验本段规则；禁止 ConfigSection 闭包读取其他库配置 |
+| YAML 绑定归属 | `plugin/builtin/{lib}`；组件库只保留运行时 `Config`（例外：oss/router/cors） |
+| 校验 | BootConfig 校验 YAML 形状并委托运行时 `Config.Validate`；组件库只校验运行时不变量；禁止 ConfigSection 闭包读取其他库配置 |
 | 未知根 key | **严格失败** |
 | 权限配置 | BFF `internal/config` 的 `biz.perm`，不进 gitee.com/hq_project/yomi-boot |
 | 能力裁剪 | 各插件读本段 `enabled`（及同类开关）；形态切换以配置为准 |

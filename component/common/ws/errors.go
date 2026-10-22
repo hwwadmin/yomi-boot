@@ -3,7 +3,7 @@
 // @author zwei
 package ws
 
-import "gitee.com/hq_project/yomi-boot/core/errors"
+import "gitee.com/hq_project/yomi-boot/component/core/errors"
 
 var (
 	// ErrInvalidArgument 参数无效

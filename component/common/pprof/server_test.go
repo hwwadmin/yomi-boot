@@ -8,27 +8,11 @@ import (
 	"time"
 )
 
-// TestMustStartDisabled 验证 enabled=false 时 MustStart 返回 nil
-func TestMustStartDisabled(t *testing.T) {
-	t.Parallel()
-	if srv := MustStart(Config{Enabled: boolPtr(false)}); srv != nil {
-		t.Fatal("enabled=false 时 MustStart 应返回 nil")
-	}
-}
-
-// TestMustStartDefaultDisabled 验证未配置 enabled 时 MustStart 返回 nil
-func TestMustStartDefaultDisabled(t *testing.T) {
-	t.Parallel()
-	if srv := MustStart(Config{}); srv != nil {
-		t.Fatal("未配置 enabled 时 MustStart 应返回 nil")
-	}
-}
-
 // TestPprofIndex 验证 /debug/pprof/ 路由可访问并返回内容
 func TestPprofIndex(t *testing.T) {
 	t.Parallel()
 
-	srv := MustStart(Config{Enabled: boolPtr(true), Addr: "127.0.0.1:0"})
+	srv := MustStart(Config{Addr: "127.0.0.1:0"})
 	if srv == nil {
 		t.Fatal("MustStart 返回 nil")
 	}
@@ -67,9 +51,4 @@ func TestPprofIndex(t *testing.T) {
 	if len(body) == 0 {
 		t.Fatal("响应体不能为空")
 	}
-}
-
-// boolPtr 返回 bool 指针辅助函数
-func boolPtr(v bool) *bool {
-	return &v
 }

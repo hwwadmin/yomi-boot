@@ -4,7 +4,6 @@
 package bootstrap
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot/plugin"
 	"gitee.com/hq_project/yomi-boot/component/cloud/consul"
 	"gitee.com/hq_project/yomi-boot/component/cloud/dtm"
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
@@ -18,8 +17,9 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/plugin"
 
 	"gorm.io/gorm"
 )

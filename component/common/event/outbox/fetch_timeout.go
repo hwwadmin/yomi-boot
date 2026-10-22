@@ -15,7 +15,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/roundrobin"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const fetchTimeoutLogSampleSize = 10

@@ -5,20 +5,18 @@ package redisstream
 
 import "testing"
 
-func TestConfigValidate_DisabledSkips(t *testing.T) {
+func TestConfigValidate_ZeroConfig(t *testing.T) {
 	t.Parallel()
 	cfg := Config{}
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("disabled config should pass: %v", err)
+		t.Fatalf("zero config should pass: %v", err)
 	}
 }
 
 func TestConfigValidate_RejectsNegative(t *testing.T) {
 	t.Parallel()
 	neg := int64(-1)
-	enabled := true
 	cfg := Config{
-		Enabled:       &enabled,
 		DefaultMaxLen: &neg,
 	}
 	if err := cfg.Validate(); err == nil {
@@ -28,8 +26,7 @@ func TestConfigValidate_RejectsNegative(t *testing.T) {
 
 func TestConfigDefaults(t *testing.T) {
 	t.Parallel()
-	enabled := true
-	cfg := Config{Enabled: &enabled}
+	cfg := Config{}
 	if got := cfg.DefaultMaxLenOrDefault(); got != defaultMaxLen {
 		t.Fatalf("DefaultMaxLenOrDefault=%d want %d", got, defaultMaxLen)
 	}
@@ -45,9 +42,7 @@ func TestConfigDefaults(t *testing.T) {
 
 func TestPublishWorkerConfigValidate(t *testing.T) {
 	t.Parallel()
-	enabled := true
 	cfg := Config{
-		Enabled: &enabled,
 		PublishWorker: PublishWorkerConfig{
 			WorkNum: -1,
 		},

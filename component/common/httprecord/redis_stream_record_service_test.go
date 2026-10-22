@@ -17,8 +17,7 @@ func TestRedisStreamHttpRecordService_Handle(t *testing.T) {
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
 
-	enabled := true
-	components, err := redisstream.NewComponents(redisstream.Config{Enabled: &enabled}, client)
+	components, err := redisstream.NewComponents(redisstream.Config{}, client)
 	if err != nil {
 		t.Fatalf("NewComponents: %v", err)
 	}
@@ -66,8 +65,7 @@ func TestStartRedisStreamRecordConsumer(t *testing.T) {
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
 
-	enabled := true
-	components, err := redisstream.NewComponents(redisstream.Config{Enabled: &enabled}, client)
+	components, err := redisstream.NewComponents(redisstream.Config{}, client)
 	if err != nil {
 		t.Fatalf("NewComponents: %v", err)
 	}

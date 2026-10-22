@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 )
 
 func TestSlowThreshold(t *testing.T) {
@@ -34,12 +34,10 @@ func TestSlowThreshold(t *testing.T) {
 func TestValidateSlowThresholdMs(t *testing.T) {
 	t.Parallel()
 
-	enabled := true
 	neg := -1
 	ok := 500
 
 	base := Config{
-		Enabled:                &enabled,
 		Type:                   enums.MySQL,
 		Host:                   "127.0.0.1",
 		Port:                   3306,
@@ -80,9 +78,7 @@ func TestValidateSlowThresholdMs(t *testing.T) {
 func TestValidateMinIdleConns(t *testing.T) {
 	t.Parallel()
 
-	enabled := true
 	base := Config{
-		Enabled:                &enabled,
 		Type:                   enums.MySQL,
 		Host:                   "127.0.0.1",
 		Port:                   3306,

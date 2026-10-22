@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // preparedDocument 切分后的文档

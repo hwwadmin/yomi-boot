@@ -154,8 +154,8 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | `infra_plugins.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | 内置插件编排顺序 |
 | `server.go` | `gitee.com/hq_project/yomi-boot/boot/bootstrap/` | `MustBuildApp`、`DefaultMiddlewares` |
 | `lifecycle.go` / `run.go` | `gitee.com/hq_project/yomi-boot/boot/lifecycle/` | `App`、`Hook`、`Run` / `RunContext`、阶段编排与停机 |
-| `plugin.go` / `host.go` | `gitee.com/hq_project/yomi-boot/boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook` |
-| `{组件}_plugin.go` | 各组件目录下的 `plugin/`，如 `gitee.com/hq_project/yomi-boot/component/common/db/plugin/`、`gitee.com/hq_project/yomi-boot/component/cloud/consul/plugin/` | 各组件生命周期插件实现（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`） |
+| `plugin.go` / `host.go` | `gitee.com/hq_project/yomi-boot/plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook` |
+| `{组件}_plugin.go` | `gitee.com/hq_project/yomi-boot/plugin/builtin/{lib}/`，如 `plugin/builtin/db/`、`plugin/builtin/consul/` | 各组件生命周期插件实现与 YAML 绑定（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`、`config.go`） |
 
 ### 3.8 gitee.com/hq_project/yomi-boot handler
 

@@ -7,7 +7,7 @@ package vectordb
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // New 校验配置并构造 Store；memory 不联网，milvus 会建连

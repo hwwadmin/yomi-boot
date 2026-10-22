@@ -1,6 +1,0 @@
-package aes
-
-import "gitee.com/hq_project/yomi-boot/core/errors"
-
-// ErrOpen 表示解密失败（认证失败、密文过短或 padding 非法）
-var ErrOpen = errors.NewNoStack("aes: open failed")

@@ -49,9 +49,7 @@ func TestDeregisterEnabledOrDefault(t *testing.T) {
 func TestConfigValidateDeregisterCriticalServiceAfter(t *testing.T) {
 	t.Parallel()
 
-	enabled := true
 	cfg := Config{
-		Enabled:        &enabled,
 		Addr:           "127.0.0.1:8500",
 		ServiceID:      "svc-1",
 		ServiceAddress: "127.0.0.1:8080",
@@ -88,9 +86,7 @@ func TestConfigValidateDeregisterCriticalServiceAfter(t *testing.T) {
 func TestConfigValidateHTTPTimeout(t *testing.T) {
 	t.Parallel()
 
-	enabled := true
 	cfg := Config{
-		Enabled:        &enabled,
 		Addr:           "127.0.0.1:8500",
 		ServiceID:      "svc-1",
 		ServiceAddress: "127.0.0.1:8080",

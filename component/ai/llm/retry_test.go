@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // maxTokensFieldShim 第一次返回 400 拒绝 max_tokens，第二次接受 max_completion_tokens

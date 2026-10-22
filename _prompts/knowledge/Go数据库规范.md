@@ -182,7 +182,7 @@ Entity 规则：
 
 - 不含 GORM tag、不含 `json` tag（除非确有内部序列化需求）。
 - 时间字段使用 `int64` 毫秒时间戳，与 HTTP 接口口径一致。
-- 枚举字段使用 `{client}/{domain}/enums`（**领域 client**）中的枚举类型（平台级枚举如 `DbType` 在 `gitee.com/hq_project/yomi-boot/core/shared/enums`）。
+- 枚举字段使用 `{client}/{domain}/enums`（**领域 client**）中的枚举类型（平台级枚举如 `DbType` 在 `gitee.com/hq_project/yomi-boot/component/core/shared/enums`）。
 
 #### 3.3.2 Model 定义（repo/db 层）
 
@@ -235,7 +235,7 @@ package repo
 
 import (
     "gitee.com/hq_project/yomi-boot/component/common/db"
-    "gitee.com/hq_project/yomi-boot/core/utils/ptrutil"
+    "gitee.com/hq_project/yomi-boot/component/core/utils/ptrutil"
 
     domainuser "{domain-service}/internal/biz/domain/contract/user" // 示例：业务工程 module 路径
 )

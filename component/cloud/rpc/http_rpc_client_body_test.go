@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // countingBody 统计响应体读取次数和字节数

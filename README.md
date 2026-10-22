@@ -11,11 +11,12 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 | 目录 | 职责 |
 | ---- | ---- |
-| `core/` | 无状态核心库：bc、config、cors、errors、shared、traceid、utils；不持有全局可变状态，不管理外部资源 |
-| `boot/` | 启动流程编排：入口 `boot`、bootstrap、生命周期、插件契约、启动 Banner |
-| `component/common/` | 通用组件：appctx、handler、httpguard、logger、response、router、snowflake、DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket、pprof、集成测试客户端等 |
+| `boot/` | 启动流程编排：入口 `boot`、bootstrap、生命周期、启动 Banner |
+| `component/core/` | 无状态内核：bc、config、cors、errors、shared、traceid、utils；不持有全局可变状态、不管理外部资源，不依赖任何兄弟组件 |
+| `component/common/` | 通用能力组件（纯库）：appctx、handler、httpguard、logger、response、router、snowflake、DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket、pprof、集成测试客户端等；不定义 `SectionKey`/`ConfigSection`，不写 `mapstructure`（例外：oss/router/cors） |
 | `component/cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
 | `component/ai/` | AI 能力组件（LLM、Embedding、Jev、RAG、VectorDB）；不进 bootstrap、不读 YAML、不参与插件生命周期 |
+| `plugin/` | 插件契约与内置插件：`Plugin`/`PluginState`/`Runtime`/`Host`/`ReadyHook`/`DrainHook`；`plugin/builtin/{lib}` 承载 15 个内置插件实现与部署 YAML 绑定 |
 
 ## 快速启动
 

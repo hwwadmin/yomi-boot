@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/traceid"
+	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 
 	"github.com/gin-gonic/gin"
 )

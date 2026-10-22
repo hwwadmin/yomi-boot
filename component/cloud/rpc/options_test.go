@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // TestNewHttpRpcClient_DefaultTransport 验证默认传输和重定向策略

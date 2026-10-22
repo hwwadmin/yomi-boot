@@ -13,7 +13,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/roundrobin"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // RetentionCleaner 按配置清理发件箱/收件箱过期数据

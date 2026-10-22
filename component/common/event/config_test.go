@@ -41,9 +41,8 @@ func TestConfigCleanupDefaults(t *testing.T) {
 	assertCleanupRuntime(t, "outbox", runtime.OutboxCleanup, false, 30*24*time.Hour, time.Hour, 500, 20)
 	assertCleanupRuntime(t, "inbox", runtime.InboxCleanup, false, 30*24*time.Hour, time.Hour, 500, 20)
 
-	outboxEnabled := true
 	config := Config{
-		OutboxCleanupEnabled:     &outboxEnabled,
+		OutboxCleanupEnabled:     true,
 		OutboxRetentionDays:      10,
 		OutboxCleanupFrequencyMS: 60000,
 		OutboxCleanupBatchSize:   100,
@@ -85,7 +84,6 @@ func assertCleanupRuntime(
 
 // TestConfigValidateFrequencyMinimum 校验抓取与死信轮询频率不得低于 roundrobin 的最小间隔
 func TestConfigValidateFrequencyMinimum(t *testing.T) {
-	enabled := true
 	cases := []struct {
 		name    string
 		cfg     Config
@@ -97,26 +95,26 @@ func TestConfigValidateFrequencyMinimum(t *testing.T) {
 		},
 		{
 			name: "fetch default value",
-			cfg:  Config{OutboxEnabled: &enabled},
+			cfg:  Config{OutboxEnabled: true},
 		},
 		{
 			name:    "fetch below minimum",
-			cfg:     Config{OutboxEnabled: &enabled, FetchFrequencyMS: 1},
+			cfg:     Config{OutboxEnabled: true, FetchFrequencyMS: 1},
 			wantErr: true,
 		},
 		{
 			name:    "fetch at minimum",
-			cfg:     Config{OutboxEnabled: &enabled, FetchFrequencyMS: 50},
+			cfg:     Config{OutboxEnabled: true, FetchFrequencyMS: 50},
 			wantErr: false,
 		},
 		{
 			name:    "dlq below minimum",
-			cfg:     Config{OutboxEnabled: &enabled, OutboxDlqFrequencyMS: 49},
+			cfg:     Config{OutboxEnabled: true, OutboxDlqFrequencyMS: 49},
 			wantErr: true,
 		},
 		{
 			name:    "dlq at minimum",
-			cfg:     Config{OutboxEnabled: &enabled, OutboxDlqFrequencyMS: 50},
+			cfg:     Config{OutboxEnabled: true, OutboxDlqFrequencyMS: 50},
 			wantErr: false,
 		},
 	}

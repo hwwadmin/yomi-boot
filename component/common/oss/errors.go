@@ -3,7 +3,7 @@
 // @author zwei
 package oss
 
-import "gitee.com/hq_project/yomi-boot/core/errors"
+import "gitee.com/hq_project/yomi-boot/component/core/errors"
 
 var (
 	// ErrNotFound 对象不存在（GetObject / StatObject）

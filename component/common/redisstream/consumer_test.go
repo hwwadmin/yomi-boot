@@ -22,9 +22,7 @@ func TestConsumer_AckFlow(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
 	cfg := Config{
-		Enabled:         &enabled,
 		DefaultMaxLen:   &zero,
 		BlockMS:         200,
 		Count:           10,
@@ -96,9 +94,7 @@ func TestConsumer_RetryLeavesPELAndContinues(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
 	cfg := Config{
-		Enabled:         &enabled,
 		DefaultMaxLen:   &zero,
 		BlockMS:         100,
 		Count:           10,
@@ -176,9 +172,7 @@ func TestConsumer_Dead(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
 	cfg := Config{
-		Enabled:         &enabled,
 		DefaultMaxLen:   &zero,
 		BlockMS:         100,
 		Count:           10,
@@ -260,9 +254,7 @@ func TestConsumer_BatchAckClearsPending(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
 	cfg := Config{
-		Enabled:         &enabled,
 		DefaultMaxLen:   &zero,
 		BlockMS:         100,
 		Count:           10,
@@ -354,9 +346,7 @@ func TestConsumer_StopTimeoutWhenHandlerBlocks(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
 	components, err := NewComponents(Config{
-		Enabled:         &enabled,
 		DefaultMaxLen:   &zero,
 		BlockMS:         100,
 		ClaimIntervalMS: 60_000,
@@ -439,9 +429,7 @@ func TestConsumer_StartFailsAfterClose(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
 	components, err := NewComponents(Config{
-		Enabled:       &enabled,
 		DefaultMaxLen: &zero,
 		BlockMS:       100,
 	}, client)
@@ -475,9 +463,7 @@ func TestConsumer_StartFailsWhenRedisUnavailable(t *testing.T) {
 	cleanup() // 关闭底层连接，使后续命令失败
 
 	zero := int64(0)
-	enabled := true
 	components, err := NewComponents(Config{
-		Enabled:       &enabled,
 		DefaultMaxLen: &zero,
 	}, client)
 	if err != nil {
@@ -509,9 +495,7 @@ func TestConsumer_StartSucceedsWhenGroupExists(t *testing.T) {
 	}
 
 	zero := int64(0)
-	enabled := true
 	components, err := NewComponents(Config{
-		Enabled:       &enabled,
 		DefaultMaxLen: &zero,
 		BlockMS:       100,
 	}, client)
@@ -564,9 +548,7 @@ func TestConsumer_ClaimPending(t *testing.T) {
 	mr.FastForward(2 * time.Second)
 
 	zero := int64(0)
-	enabled := true
 	cfg := Config{
-		Enabled:         &enabled,
 		DefaultMaxLen:   &zero,
 		BlockMS:         100,
 		Count:           10,

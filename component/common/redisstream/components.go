@@ -9,7 +9,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/worker"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )

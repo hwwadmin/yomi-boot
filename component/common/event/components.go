@@ -15,8 +15,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/core/errors"
-	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
 
@@ -58,7 +58,7 @@ var _ io.Closer = (*Components)(nil)
 
 // NewComponents 创建消息队列事件组件（按 publisher/consumer 开关装配）
 func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
-	if !eventCfg.AnyEnabledOrDefault() {
+	if !eventCfg.AnyEnabled() {
 		return nil, errors.New("event: 发布侧与消费侧均未启用")
 	}
 	if deps.DB == nil {

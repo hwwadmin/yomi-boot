@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // TestConfigValidate 验证 Config 构造时 provider 与必填项校验

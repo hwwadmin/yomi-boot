@@ -7,7 +7,7 @@ package rag
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // prepareDocuments 规范化文档并校验请求内 ID 唯一

@@ -6,14 +6,10 @@ package redisratelimit
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const (
-	// SectionKey YAML 根 key
-	SectionKey = "ratelimit"
-
 	// RedisErrorPolicyFailOpen Redis 故障时放行
 	RedisErrorPolicyFailOpen = "fail_open"
 	// RedisErrorPolicyFailClosed Redis 故障时拒绝
@@ -26,14 +22,8 @@ const (
 
 // Config 表示调用式限流配置（不包含 Redis 连接；连接沿用 redis 段）
 type Config struct {
-	Enabled          *bool  `mapstructure:"enabled"`            // Enabled 是否启用限流组件，未配置默认 false
-	KeyPrefix        string `mapstructure:"key_prefix"`         // KeyPrefix 是 Redis 限流 Key 前缀
-	RedisErrorPolicy string `mapstructure:"redis_error_policy"` // RedisErrorPolicy 是 Redis 故障策略：fail_open / fail_closed
-}
-
-// EnabledOrDefault 返回是否启用限流，未配置默认 false
-func (c Config) EnabledOrDefault() bool {
-	return config.BoolOrDefault(c.Enabled)
+	KeyPrefix        string // KeyPrefix 是 Redis 限流 Key 前缀
+	RedisErrorPolicy string // RedisErrorPolicy 是 Redis 故障策略：fail_open / fail_closed
 }
 
 // KeyPrefixOrDefault 返回限流 Key 前缀
@@ -54,18 +44,15 @@ func (c Config) RedisErrorPolicyOrDefault() string {
 	return policy
 }
 
-// Validate 校验限流配置语义（仅 enabled=true 时校验）
+// Validate 校验限流配置语义
 func (c Config) Validate() error {
-	if !c.EnabledOrDefault() {
-		return nil
-	}
 	prefix := c.KeyPrefixOrDefault()
 	if err := validateRateLimitKeyPrefix(prefix); err != nil {
 		return err
 	}
 	policy := c.RedisErrorPolicyOrDefault()
 	if policy != RedisErrorPolicyFailOpen && policy != RedisErrorPolicyFailClosed {
-		return errors.New("ratelimit.redis_error_policy 仅支持 fail_open 或 fail_closed")
+		return errors.New("redis_error_policy 仅支持 fail_open 或 fail_closed")
 	}
 	return nil
 }
@@ -73,23 +60,16 @@ func (c Config) Validate() error {
 // validateRateLimitKeyPrefix 校验限流 Key 前缀格式
 func validateRateLimitKeyPrefix(prefix string) error {
 	if prefix == "" {
-		return errors.New("ratelimit.key_prefix 不能为空")
+		return errors.New("key_prefix 不能为空")
 	}
 	if len(prefix) > maxRateLimitKeyPrefixLen {
-		return errors.Newf("ratelimit.key_prefix 长度不能超过 %d", maxRateLimitKeyPrefixLen)
+		return errors.Newf("key_prefix 长度不能超过 %d", maxRateLimitKeyPrefixLen)
 	}
 	for _, r := range prefix {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ':' || r == '_' {
 			continue
 		}
-		return errors.New("ratelimit.key_prefix 仅允许小写字母、数字、冒号和下划线")
+		return errors.New("key_prefix 仅允许小写字母、数字、冒号和下划线")
 	}
 	return nil
-}
-
-// ConfigSection 返回 ratelimit 配置段
-func ConfigSection() config.Section {
-	return config.NewSection(SectionKey, &Config{}, func(c *Config, _ *config.Document) error {
-		return c.Validate()
-	})
 }

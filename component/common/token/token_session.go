@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/shared/dto"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/dto"
 )
 
 // TokenSession 表示令牌对应的会话快照

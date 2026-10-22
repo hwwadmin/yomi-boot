@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/common/handler"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,7 +37,7 @@ func NewAuthMiddleware(tokenService TokenService, authConfig Config) *Middleware
 // Handler 返回当前中间件实例对应的 gin 中间件处理器
 func (m *Middleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !m.authConfig.EnabledOrDefault() || m.shouldSkipValidate(c.Request.URL.Path) {
+		if !m.authConfig.Enabled || m.shouldSkipValidate(c.Request.URL.Path) {
 			c.Next()
 			return
 		}

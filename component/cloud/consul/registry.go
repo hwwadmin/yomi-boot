@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"github.com/hashicorp/consul/api"
 )

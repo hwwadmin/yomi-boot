@@ -7,7 +7,7 @@ package llm
 import (
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // TestResolveMaxTokensField 验证自动模式按模型族选择字段，显式配置优先

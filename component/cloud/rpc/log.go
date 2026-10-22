@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // defaultMaxLogBodyBytes 请求/响应体日志的截断上限

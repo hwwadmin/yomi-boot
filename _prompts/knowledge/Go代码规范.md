@@ -86,7 +86,7 @@ func (s *Service) Create(ctx context.Context, input *domainuser.CreateInput) (*d
     if input.Nickname == "" {
         input.Nickname = input.Username
     }
-    hashed, err := passwd.Hash(input.Password) // gitee.com/hq_project/yomi-boot/core/bc/passwd
+    hashed, err := passwd.Hash(input.Password) // gitee.com/hq_project/yomi-boot/component/core/bc/passwd
     if err != nil {
         return nil, bizerr.ErrUserPasswordEncryptFailed
     }
@@ -235,7 +235,7 @@ func (h *ResourceHandler) handleGetProfile(c *gin.Context) {
 
 ### 3.3.2 分页出入参（dto.PageInput / dto.PageOutput）
 
-分页 usecase 统一使用 `gitee.com/hq_project/yomi-boot/core/shared/dto/page.go` 中的结构体，避免在各模块重复定义 `page` / `pageSize` / `total` 字段。
+分页 usecase 统一使用 `gitee.com/hq_project/yomi-boot/component/core/shared/dto/page.go` 中的结构体，避免在各模块重复定义 `page` / `pageSize` / `total` 字段。
 
 | 类型 | 用法 | 说明 |
 | ---- | ---- | ---- |
@@ -406,7 +406,7 @@ func (s *ResourceStatus) UnmarshalJSON(data []byte) error {
 }
 
 // 正确：特殊情况无需实现，必须显式说明理由
-// BizError 为 struct 类型（`gitee.com/hq_project/yomi-boot/core/errors.BizError`），哨兵变量定义在各服务 `bizerr/errors.go`，无需 IsValid/UnmarshalJSON。
+// BizError 为 struct 类型（`gitee.com/hq_project/yomi-boot/component/core/errors.BizError`），哨兵变量定义在各服务 `bizerr/errors.go`，无需 IsValid/UnmarshalJSON。
 ```
 
 ### 3.6 金额字段默认使用 Decimal 类型
@@ -494,11 +494,11 @@ CREATE TABLE t_product (
 
 ### 3.7 通用工具函数统一管理
 
-跨模块复用的通用辅助函数统一收口到 `gitee.com/hq_project/yomi-boot/core/utils/` 对应文件中，消除各处私有重复定义。
+跨模块复用的通用辅助函数统一收口到 `gitee.com/hq_project/yomi-boot/component/core/utils/` 对应文件中，消除各处私有重复定义。
 
 ```go
-// 正确：通用函数统一收口到 gitee.com/hq_project/yomi-boot/core/utils/ 子包
-// gitee.com/hq_project/yomi-boot/core/utils/ptrutil/ptr.go
+// 正确：通用函数统一收口到 gitee.com/hq_project/yomi-boot/component/core/utils/ 子包
+// gitee.com/hq_project/yomi-boot/component/core/utils/ptrutil/ptr.go
 func PtrFromString(value string) *string { /* ... */ }
 func StringFromPtr(value *string) string { /* ... */ }
 
@@ -519,8 +519,8 @@ func StringFromPtr(value *string) string { /* ... */ }
 
 | 类型 | 定义位置 | 用途 |
 |------|----------|------|
-| `dto.JSONInt64` | `gitee.com/hq_project/yomi-boot/core/shared/dto/json_int64.go` | 单个 ID：接受 JSON 字符串或数字反序列化，序列化时强制输出 JSON 字符串 |
-| `dto.JSONInt64Slice` | `gitee.com/hq_project/yomi-boot/core/shared/dto/json_int64_slice.go` | ID 列表：接受 JSON 字符串数组或数字数组反序列化，序列化时强制输出 JSON 字符串数组 |
+| `dto.JSONInt64` | `gitee.com/hq_project/yomi-boot/component/core/shared/dto/json_int64.go` | 单个 ID：接受 JSON 字符串或数字反序列化，序列化时强制输出 JSON 字符串 |
+| `dto.JSONInt64Slice` | `gitee.com/hq_project/yomi-boot/component/core/shared/dto/json_int64_slice.go` | ID 列表：接受 JSON 字符串数组或数字数组反序列化，序列化时强制输出 JSON 字符串数组 |
 | `dto.NewJSONInt64Slice([]int64)` | 同上 | 将 `[]int64` 转为 `JSONInt64Slice` 的构造函数 |
 
 #### 3.8.3 API 出入参规范
@@ -654,7 +654,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - [ ] 金额、价格、费率等精确数值字段使用 `decimal.Decimal`，未使用 `float32`/`float64`
 - [ ] 金额运算使用 `decimal.Decimal` 方法，未转换为浮点再运算
 - [ ] 数据库金额字段使用 `DECIMAL(precision, scale)` 类型
-- [ ] 通用工具函数统一收口在 `gitee.com/hq_project/yomi-boot/core/utils/` 对应文件中
+- [ ] 通用工具函数统一收口在 `gitee.com/hq_project/yomi-boot/component/core/utils/` 对应文件中
 - [ ] API 出入参中 id 语义字段（**示例** `id`、`{entity}Id`、`relId`）使用 `dto.JSONInt64`
 - [ ] API 出入参中 ids 语义字段（roleIds 等）使用 `dto.JSONInt64Slice`
 - [ ] 出参 ID 字段未使用 `int64` + `json:",string"` 混用模式

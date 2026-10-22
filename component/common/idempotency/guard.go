@@ -18,8 +18,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/core/errors"
-	"gitee.com/hq_project/yomi-boot/core/shared/enums"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 
 	"github.com/google/uuid"
 )

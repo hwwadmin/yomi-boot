@@ -11,12 +11,15 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
 	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/component/common/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/cors"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/cors"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
+	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
+	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
 )
@@ -108,13 +111,13 @@ var _ yomikafka.ConsumerService = (*mockKafkaConsumer)(nil)
 // middlewareTestRegistry 返回中间件单测用配置注册表
 func middlewareTestRegistry() *config.Registry {
 	return config.NewRegistry().Register(
-		appctx.ConfigSection(),
+		appctxplugin.ConfigSection(),
 		router.ConfigSection(),
-		logger.ConfigSection(),
+		loggerplugin.ConfigSection(),
 		cors.ConfigSection(),
-		token.ConfigSection(),
-		httprecord.ConfigSection(),
-		redisratelimit.ConfigSection(),
+		tokenplugin.ConfigSection(),
+		httprecordplugin.ConfigSection(),
+		redisratelimitplugin.ConfigSection(),
 	)
 }
 

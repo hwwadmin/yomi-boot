@@ -10,7 +10,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // RedisStreamConsumerID 是 HTTP 访问记录 Redis Stream 消费者在 ConsumerManager 中的标识

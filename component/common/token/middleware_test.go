@@ -14,8 +14,7 @@ import (
 // TestAuthMiddleware_DisabledPassesThrough 验证 auth.enabled=false 时中间件直接放行
 func TestAuthMiddleware_DisabledPassesThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	enabled := false
-	cfg := token.Config{Enabled: &enabled}
+	cfg := token.Config{Enabled: false}
 
 	router := gin.New()
 	router.Use(token.AuthMiddleware(nil, cfg))
@@ -37,9 +36,8 @@ func TestAuthMiddleware_EnabledRequiresToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	response.RegisterDefaultForTest(t)
 
-	enabled := true
 	cfg := token.Config{
-		Enabled:         &enabled,
+		Enabled:         true,
 		TokenTTLMinutes: 60,
 		StorePrefix:     "test",
 	}

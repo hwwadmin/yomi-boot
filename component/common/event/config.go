@@ -9,14 +9,10 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/roundrobin"
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const (
-	// SectionKey YAML 根 key
-	SectionKey = "event"
-
 	defaultEventServiceName          = "yomi-event"
 	defaultEventFetchFrequencyMS     = 1000
 	defaultEventFetchSize            = 5000
@@ -36,52 +32,42 @@ const (
 
 // Config 表示消息队列事件配置
 type Config struct {
-	OutboxEnabled       *bool  `mapstructure:"outbox_enabled"`        // OutboxEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递），未配置默认 false
-	InboxEnabled        *bool  `mapstructure:"inbox_enabled"`         // InboxEnabled 是否启用消费侧（Receiver/Inbox），未配置默认 false
-	ServiceName         string `mapstructure:"service_name"`          // ServiceName 是归属业务系统名称，未配置时使用 app.name
-	FetchFrequencyMS    int    `mapstructure:"fetch_frequency_ms"`    // FetchFrequencyMS 是发件箱抓取频率（毫秒）
-	FetchSize           int    `mapstructure:"fetch_size"`            // FetchSize 是单次抓取待发件箱事件数量
-	SentThreadCount     int    `mapstructure:"sent_thread_count"`     // SentThreadCount 是发件箱 Kafka 发送工作池并发数
-	FetchTimeoutMinutes int    `mapstructure:"fetch_timeout_minutes"` // FetchTimeoutMinutes 是发件箱事件停留在 FETCHED 状态的最长分钟数；超过后重置为 PENDING 重新投递，未配置或 <=0 时默认 5 分钟
+	OutboxEnabled       bool   // OutboxEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递）
+	InboxEnabled        bool   // InboxEnabled 是否启用消费侧（Receiver/Inbox）
+	ServiceName         string // ServiceName 是归属业务系统名称，未配置时使用 app.name
+	FetchFrequencyMS    int    // FetchFrequencyMS 是发件箱抓取频率（毫秒）
+	FetchSize           int    // FetchSize 是单次抓取待发件箱事件数量
+	SentThreadCount     int    // SentThreadCount 是发件箱 Kafka 发送工作池并发数
+	FetchTimeoutMinutes int    // FetchTimeoutMinutes 是发件箱事件停留在 FETCHED 状态的最长分钟数；超过后重置为 PENDING 重新投递，未配置或 <=0 时默认 5 分钟
 
 	// outbox DLQ
-	OutboxDlqFrequencyMS int  `mapstructure:"outbox_dlq_frequency_ms"` // OutboxDlqFrequencyMS 是发件箱死信队列重试轮询频率（毫秒）
-	OutboxDlqSize        int  `mapstructure:"outbox_dlq_size"`         // OutboxDlqSize 是单次抓取发件箱死信记录数量
-	OutboxDlqMaxRetry    *int `mapstructure:"outbox_dlq_max_retry"`    // OutboxDlqMaxRetry 是发件箱死信队列最大重试次数，nil 默认 30，0 表示不重试
+	OutboxDlqFrequencyMS int  // OutboxDlqFrequencyMS 是发件箱死信队列重试轮询频率（毫秒）
+	OutboxDlqSize        int  // OutboxDlqSize 是单次抓取发件箱死信记录数量
+	OutboxDlqMaxRetry    *int // OutboxDlqMaxRetry 是发件箱死信队列最大重试次数，nil 默认 30，0 表示不重试
 
 	// inbox DLQ
-	InboxDlqMaxRetry    *int `mapstructure:"inbox_dlq_max_retry"`    // InboxDlqMaxRetry 是消费失败最大重试次数（不含首次处理），nil 默认 20，0 不重试，-1 无限；Kafka MaxHandlerRetries 须为 -1 或不小于本值，否则 Kafka 会先丢弃消息
-	InboxDlqFrequencyMS int  `mapstructure:"inbox_dlq_frequency_ms"` // InboxDlqFrequencyMS 是收件箱死信后台重投频率（毫秒），未配置默认 30000
-	InboxDlqSize        int  `mapstructure:"inbox_dlq_size"`         // InboxDlqSize 是收件箱死信单次重投数量，未配置默认 100
+	InboxDlqMaxRetry    *int // InboxDlqMaxRetry 是消费失败最大重试次数（不含首次处理），nil 默认 20，0 不重试，-1 无限；Kafka MaxHandlerRetries 须为 -1 或不小于本值，否则 Kafka 会先丢弃消息
+	InboxDlqFrequencyMS int  // InboxDlqFrequencyMS 是收件箱死信后台重投频率（毫秒），未配置默认 30000
+	InboxDlqSize        int  // InboxDlqSize 是收件箱死信单次重投数量，未配置默认 100
 
 	// outbox cleanup
-	OutboxCleanupEnabled     *bool `mapstructure:"outbox_cleanup_enabled"`      // OutboxCleanupEnabled 是否启用发件箱过期数据清理，未配置默认 false
-	OutboxRetentionDays      int   `mapstructure:"outbox_retention_days"`       // OutboxRetentionDays 是发送成功记录的保留天数，未配置默认 30
-	OutboxCleanupFrequencyMS int   `mapstructure:"outbox_cleanup_frequency_ms"` // OutboxCleanupFrequencyMS 是发件箱清理频率（毫秒），未配置默认 3600000
-	OutboxCleanupBatchSize   int   `mapstructure:"outbox_cleanup_batch_size"`   // OutboxCleanupBatchSize 是发件箱单批清理数量，未配置默认 500
-	OutboxCleanupMaxBatches  int   `mapstructure:"outbox_cleanup_max_batches"`  // OutboxCleanupMaxBatches 是发件箱单轮最大清理批数，未配置默认 20
+	OutboxCleanupEnabled     bool // OutboxCleanupEnabled 是否启用发件箱过期数据清理
+	OutboxRetentionDays      int  // OutboxRetentionDays 是发送成功记录的保留天数，未配置默认 30
+	OutboxCleanupFrequencyMS int  // OutboxCleanupFrequencyMS 是发件箱清理频率（毫秒），未配置默认 3600000
+	OutboxCleanupBatchSize   int  // OutboxCleanupBatchSize 是发件箱单批清理数量，未配置默认 500
+	OutboxCleanupMaxBatches  int  // OutboxCleanupMaxBatches 是发件箱单轮最大清理批数，未配置默认 20
 
 	// inbox cleanup
-	InboxCleanupEnabled     *bool `mapstructure:"inbox_cleanup_enabled"`      // InboxCleanupEnabled 是否启用收件箱过期数据清理，未配置默认 false
-	InboxRetentionDays      int   `mapstructure:"inbox_retention_days"`       // InboxRetentionDays 是已消费记录的保留天数，未配置默认 30；必须大于 Kafka 保留期与最大消费滞后
-	InboxCleanupFrequencyMS int   `mapstructure:"inbox_cleanup_frequency_ms"` // InboxCleanupFrequencyMS 是收件箱清理频率（毫秒），未配置默认 3600000
-	InboxCleanupBatchSize   int   `mapstructure:"inbox_cleanup_batch_size"`   // InboxCleanupBatchSize 是收件箱单批清理数量，未配置默认 500
-	InboxCleanupMaxBatches  int   `mapstructure:"inbox_cleanup_max_batches"`  // InboxCleanupMaxBatches 是收件箱单轮最大清理批数，未配置默认 20
+	InboxCleanupEnabled     bool // InboxCleanupEnabled 是否启用收件箱过期数据清理
+	InboxRetentionDays      int  // InboxRetentionDays 是已消费记录的保留天数，未配置默认 30；必须大于 Kafka 保留期与最大消费滞后
+	InboxCleanupFrequencyMS int  // InboxCleanupFrequencyMS 是收件箱清理频率（毫秒），未配置默认 3600000
+	InboxCleanupBatchSize   int  // InboxCleanupBatchSize 是收件箱单批清理数量，未配置默认 500
+	InboxCleanupMaxBatches  int  // InboxCleanupMaxBatches 是收件箱单轮最大清理批数，未配置默认 20
 }
 
-// OutboxEnabledOrDefault 返回是否启用发布侧，未配置默认 false
-func (c Config) OutboxEnabledOrDefault() bool {
-	return config.BoolOrDefault(c.OutboxEnabled)
-}
-
-// InboxEnabledOrDefault 返回是否启用消费侧，未配置默认 false
-func (c Config) InboxEnabledOrDefault() bool {
-	return config.BoolOrDefault(c.InboxEnabled)
-}
-
-// AnyEnabledOrDefault 返回发布侧或消费侧是否任一启用
-func (c Config) AnyEnabledOrDefault() bool {
-	return c.OutboxEnabledOrDefault() || c.InboxEnabledOrDefault()
+// AnyEnabled 返回发布侧或消费侧是否任一启用
+func (c Config) AnyEnabled() bool {
+	return c.OutboxEnabled || c.InboxEnabled
 }
 
 // ServiceNameOrDefault 返回归属业务系统名称
@@ -176,7 +162,7 @@ func (c Config) InboxDlqSizeOrDefault() int {
 }
 
 // cleanupRuntime 将清理配置转换为运行时配置
-func cleanupRuntime(enabled *bool, retentionDays, frequencyMS, batchSize, maxBatches int) cfg.CleanupRuntime {
+func cleanupRuntime(enabled bool, retentionDays, frequencyMS, batchSize, maxBatches int) cfg.CleanupRuntime {
 	if retentionDays <= 0 {
 		retentionDays = defaultEventCleanupRetentionDays
 	}
@@ -190,7 +176,7 @@ func cleanupRuntime(enabled *bool, retentionDays, frequencyMS, batchSize, maxBat
 		maxBatches = defaultEventCleanupMaxBatches
 	}
 	return cfg.CleanupRuntime{
-		Enabled:    config.BoolOrDefault(enabled),
+		Enabled:    enabled,
 		Retention:  time.Duration(retentionDays) * 24 * time.Hour,
 		Frequency:  time.Duration(frequencyMS) * time.Millisecond,
 		BatchSize:  batchSize,
@@ -227,51 +213,51 @@ func validateCleanupConfig(
 
 // Validate 校验消息队列事件配置（发布侧或消费侧启用时校验）
 func (c Config) Validate() error {
-	if !c.AnyEnabledOrDefault() {
+	if !c.AnyEnabled() {
 		return nil
 	}
 	minFrequencyMS := int(roundrobin.MinInterval / time.Millisecond)
 	if c.FetchFrequencyMS < 0 {
-		return errors.New("event.fetch_frequency_ms 不能小于 0")
+		return errors.New("fetch_frequency_ms 不能小于 0")
 	}
 	if c.FetchFrequencyMS > 0 && c.FetchFrequencyMS < minFrequencyMS {
-		return errors.Newf("event.fetch_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
+		return errors.Newf("fetch_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
 	}
 	if c.FetchSize < 0 {
-		return errors.New("event.fetch_size 不能小于 0")
+		return errors.New("fetch_size 不能小于 0")
 	}
 	if c.SentThreadCount < 0 {
-		return errors.New("event.sent_thread_count 不能小于 0")
+		return errors.New("sent_thread_count 不能小于 0")
 	}
 	if c.OutboxDlqFrequencyMS < 0 {
-		return errors.New("event.outbox_dlq_frequency_ms 不能小于 0")
+		return errors.New("outbox_dlq_frequency_ms 不能小于 0")
 	}
 	if c.OutboxDlqFrequencyMS > 0 && c.OutboxDlqFrequencyMS < minFrequencyMS {
-		return errors.Newf("event.outbox_dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
+		return errors.Newf("outbox_dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
 	}
 	if c.OutboxDlqSize < 0 {
-		return errors.New("event.outbox_dlq_size 不能小于 0")
+		return errors.New("outbox_dlq_size 不能小于 0")
 	}
 	if c.OutboxDlqMaxRetry != nil && *c.OutboxDlqMaxRetry < 0 {
-		return errors.New("event.outbox_dlq_max_retry 不能小于 0")
+		return errors.New("outbox_dlq_max_retry 不能小于 0")
 	}
 	if c.FetchTimeoutMinutes < 0 {
-		return errors.New("event.fetch_timeout_minutes 不能小于 0")
+		return errors.New("fetch_timeout_minutes 不能小于 0")
 	}
 	if c.InboxDlqMaxRetry != nil && *c.InboxDlqMaxRetry < -1 {
-		return errors.New("event.inbox_dlq_max_retry 不能小于 -1")
+		return errors.New("inbox_dlq_max_retry 不能小于 -1")
 	}
 	if c.InboxDlqFrequencyMS < 0 {
-		return errors.New("event.inbox_dlq_frequency_ms 不能小于 0")
+		return errors.New("inbox_dlq_frequency_ms 不能小于 0")
 	}
 	if c.InboxDlqFrequencyMS > 0 && c.InboxDlqFrequencyMS < minFrequencyMS {
-		return errors.Newf("event.inbox_dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
+		return errors.Newf("inbox_dlq_frequency_ms 必须大于等于 %s", roundrobin.MinInterval.String())
 	}
 	if c.InboxDlqSize < 0 {
-		return errors.New("event.inbox_dlq_size 不能小于 0")
+		return errors.New("inbox_dlq_size 不能小于 0")
 	}
 	if err := validateCleanupConfig(
-		"event.outbox_cleanup",
+		"outbox_cleanup",
 		minFrequencyMS,
 		c.OutboxRetentionDays,
 		c.OutboxCleanupFrequencyMS,
@@ -281,7 +267,7 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := validateCleanupConfig(
-		"event.inbox_cleanup",
+		"inbox_cleanup",
 		minFrequencyMS,
 		c.InboxRetentionDays,
 		c.InboxCleanupFrequencyMS,
@@ -291,13 +277,6 @@ func (c Config) Validate() error {
 		return err
 	}
 	return nil
-}
-
-// ConfigSection 返回 event 配置段
-func ConfigSection() config.Section {
-	return config.NewSection(SectionKey, &Config{}, func(c *Config, _ *config.Document) error {
-		return c.Validate()
-	})
 }
 
 // runtimeFrom 从应用配置解析事件运行时配置
@@ -328,7 +307,7 @@ func runtimeFrom(eventCfg Config, appName string) cfg.Runtime {
 			eventCfg.InboxCleanupBatchSize,
 			eventCfg.InboxCleanupMaxBatches,
 		),
-		OutboxEnabled: eventCfg.OutboxEnabledOrDefault(),
-		InboxEnabled:  eventCfg.InboxEnabledOrDefault(),
+		OutboxEnabled: eventCfg.OutboxEnabled,
+		InboxEnabled:  eventCfg.InboxEnabled,
 	}
 }

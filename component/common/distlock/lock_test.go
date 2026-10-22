@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // newTestLock 创建测试用 Lock 实例，返回锁及 Redis 资源清理函数

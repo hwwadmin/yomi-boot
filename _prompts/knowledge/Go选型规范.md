@@ -126,9 +126,9 @@
   - `zap` 性能高、结构化能力强，适合控制台与 JSON 文件双路输出场景。
   - `pprof` 为标准库能力，零额外依赖，适合 CPU、堆内存、goroutine 泄漏等排障场景。
 - 配套约束：
-  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `component/common/pprof/plugin` 在 `MustInitInfra` 阶段启动。
+  - 各服务通过 `pprof.enabled` / `pprof.addr` 暴露独立 debug 端口；默认关闭；由 `plugin/builtin/pprof` 在 `MustInitInfra` 阶段启动。
   - pprof 端口仅供内网排障，不注册 Consul、不挂业务网关。
-  - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/core/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
+  - 跨服务请求关联依赖 Header `X-Trace-ID`（`gitee.com/hq_project/yomi-boot/component/core/traceid`）+ 结构化日志，不引入分布式 tracing 平台。
 - 不作为默认：`log/slog`、`logrus`；OpenTelemetry、`prometheus/client_golang`、Grafana/Jaeger 等观测平台（当前阶段不建设）。
 
 #### 3.3.4 数据库与缓存

@@ -4,7 +4,7 @@
 
 package rag
 
-import "gitee.com/hq_project/yomi-boot/core/errors"
+import "gitee.com/hq_project/yomi-boot/component/core/errors"
 
 // sentenceSeparators 句子策略的默认分隔符；只认段落、行与句末标点
 var sentenceSeparators = []string{

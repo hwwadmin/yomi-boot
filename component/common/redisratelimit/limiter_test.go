@@ -10,7 +10,7 @@ import (
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
 
-	booterrors "gitee.com/hq_project/yomi-boot/core/errors"
+	booterrors "gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // stubRedis 仅实现 OpsRateLimit4Allow，用于策略单测
@@ -27,19 +27,17 @@ func (s *stubRedis) OpsRateLimit4Allow(context.Context, string, int64, int64, ti
 	return s.allowed, s.err
 }
 
-// enabledCfg 构造启用限流的测试配置
+// enabledCfg 构造限流测试配置
 func enabledCfg(policy string) Config {
-	enabled := true
 	return Config{
-		Enabled:          &enabled,
 		KeyPrefix:        "yomi:rl",
 		RedisErrorPolicy: policy,
 	}
 }
 
-// TestNew_DisabledIsNoop 验证未启用时返回 Noop 限流器
-func TestNew_DisabledIsNoop(t *testing.T) {
-	lim := New(nil, Config{})
+// TestNewNoop 验证 Noop 限流器恒放行
+func TestNewNoop(t *testing.T) {
+	lim := NewNoop()
 	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", Rule{Limit: 1, Window: time.Minute}); err != nil {
 		t.Fatalf("Noop 应恒成功: %v", err)
 	}

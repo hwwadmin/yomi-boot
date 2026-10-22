@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/utils/httputil"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/httputil"
 
 	"github.com/gin-gonic/gin"
 )

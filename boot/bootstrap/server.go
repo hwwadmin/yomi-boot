@@ -13,9 +13,12 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/cors"
-	"gitee.com/hq_project/yomi-boot/core/traceid"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/cors"
+	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
+	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,18 +27,18 @@ import (
 func DefaultMiddlewares(infra *Infra) []gin.HandlerFunc {
 	corsCfg := config.MustSection[cors.Config](infra.Doc, cors.SectionKey)
 	httpCfg := config.MustSection[router.Config](infra.Doc, router.SectionKey)
-	httpRecordCfg := config.MustSection[httprecord.Config](infra.Doc, httprecord.SectionKey)
-	authCfg := config.MustSection[token.Config](infra.Doc, token.SectionKey)
-	logCfg := config.MustSection[logger.Config](infra.Doc, logger.SectionKey)
+	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](infra.Doc, httprecordplugin.SectionKey).ToConfig()
+	authCfg := config.MustSection[tokenplugin.BootConfig](infra.Doc, tokenplugin.SectionKey).ToConfig()
+	logCfg := config.MustSection[loggerplugin.BootConfig](infra.Doc, loggerplugin.SectionKey).ToConfig()
 
 	return []gin.HandlerFunc{
 		cors.Middleware(*corsCfg),
 		traceid.Middleware(),
-		httprecord.MiddlewareHandler(infra.HttpRecordService, *httpRecordCfg, infra.AppCtx),
+		httprecord.MiddlewareHandler(infra.HttpRecordService, httpRecordCfg, infra.AppCtx),
 		logger.AccessMiddleware(logCfg.Access),
 		httpguard.Middleware(*httpCfg),
 		gin.Recovery(),
-		token.AuthMiddleware(infra.TokenService, *authCfg),
+		token.AuthMiddleware(infra.TokenService, authCfg),
 	}
 }
 

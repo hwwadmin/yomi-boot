@@ -7,7 +7,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot/bootstrap"
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
-	"gitee.com/hq_project/yomi-boot/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/config"
 
 	"github.com/gin-gonic/gin"
 )

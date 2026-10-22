@@ -34,8 +34,7 @@ func TestConfigCommandTimeout_Override(t *testing.T) {
 func TestConfigValidate_RejectsNegativeCommandTimeout(t *testing.T) {
 	t.Parallel()
 
-	enabled := true
-	cfg := Config{Enabled: &enabled, Addr: "127.0.0.1:6379", CommandTimeoutMs: -1}
+	cfg := Config{Addr: "127.0.0.1:6379", CommandTimeoutMs: -1}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("期望 command_timeout_ms 为负数时校验失败")
 	}

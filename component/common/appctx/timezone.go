@@ -5,7 +5,7 @@ import (
 	"time"
 	_ "time/tzdata" // 内嵌 IANA 时区库，避免精简镜像缺少 tzdata 导致启动失败
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // LockTimezone 将进程时区锁定为 name 指定的 IANA 时区。

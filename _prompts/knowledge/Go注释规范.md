@@ -185,7 +185,7 @@ var (
 
 规则：
 
-- 跨库通用哨兵见 `gitee.com/hq_project/yomi-boot/core/shared/error`；库私有就近定义；域错误在服务 `bizerr`。
+- 跨库通用哨兵见 `gitee.com/hq_project/yomi-boot/component/core/shared/error`；库私有就近定义；域错误在服务 `bizerr`。
 - 错误码命名规则见 [Go异常规范](./Go异常规范.md) §3.4。
 
 ### 3.6 关键步骤注释

@@ -7,7 +7,7 @@ import (
 	"context"
 	"reflect"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

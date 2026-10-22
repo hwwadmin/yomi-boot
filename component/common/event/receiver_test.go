@@ -95,7 +95,6 @@ func TestTruncateInboxDlqError(t *testing.T) {
 
 // TestConfigValidateInboxDlqMaxRetry 验证消费最大重试配置的合法域
 func TestConfigValidateInboxDlqMaxRetry(t *testing.T) {
-	enabled := true
 	cases := []struct {
 		name    string
 		value   int
@@ -110,7 +109,7 @@ func TestConfigValidateInboxDlqMaxRetry(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			value := tc.value
-			config := Config{InboxEnabled: &enabled, InboxDlqMaxRetry: &value}
+			config := Config{InboxEnabled: true, InboxDlqMaxRetry: &value}
 			err := config.Validate()
 			if tc.wantErr && err == nil {
 				t.Fatal("期望配置校验失败")

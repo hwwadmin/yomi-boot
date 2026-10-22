@@ -17,8 +17,7 @@ func TestPublisher_AddBytesAndJSON(t *testing.T) {
 	defer cleanup()
 
 	zero := int64(0)
-	enabled := true
-	cfg := Config{Enabled: &enabled, DefaultMaxLen: &zero, KeyPrefix: "rs:"}
+	cfg := Config{DefaultMaxLen: &zero, KeyPrefix: "rs:"}
 	pub := NewPublisher(client, toRuntimeConfig(cfg))
 
 	ctx := context.Background()
@@ -63,8 +62,7 @@ func TestPublisher_RejectsEmpty(t *testing.T) {
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
 
-	enabled := true
-	pub := NewPublisher(client, toRuntimeConfig(Config{Enabled: &enabled}))
+	pub := NewPublisher(client, toRuntimeConfig(Config{}))
 	if _, err := pub.Add(context.Background(), "s", nil); err == nil {
 		t.Fatal("expected error for empty values")
 	}

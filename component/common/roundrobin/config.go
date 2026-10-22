@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const MinInterval = 50 * time.Millisecond // MinInterval 是轮询相关时间参数的最小合法值

@@ -6,12 +6,8 @@ package logger
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/core/config"
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
-
-// SectionKey YAML 根 key
-const SectionKey = "log"
 
 // LogType 文件日志类型
 const (
@@ -31,11 +27,11 @@ var reservedFieldKeys = map[string]struct{}{
 
 // RotationConfig 文件滚动与保留配置（须显式配置，无策略档）
 type RotationConfig struct {
-	MaxSizeMB     int   `mapstructure:"max_size_mb"`    // 单文件大小上限（MB）
-	RetentionDays int   `mapstructure:"retention_days"` // 历史保留天数
-	MaxBackups    int   `mapstructure:"max_backups"`    // 历史文件个数上限
-	MaxTotalMB    int   `mapstructure:"max_total_mb"`   // 单类型目录总容量上限（MB）
-	Compress      *bool `mapstructure:"compress"`       // 历史是否 gzip；nil 默认 true
+	MaxSizeMB     int   // 单文件大小上限（MB）
+	RetentionDays int   // 历史保留天数
+	MaxBackups    int   // 历史文件个数上限
+	MaxTotalMB    int   // 单类型目录总容量上限（MB）
+	Compress      *bool // 历史是否 gzip；nil 默认 true
 }
 
 // CompressOrDefault 历史文件是否 gzip，默认 true
@@ -48,13 +44,13 @@ func (r RotationConfig) CompressOrDefault() bool {
 
 // AccessConfig 文件 access 中间件配置（与 httprecord Kafka 审计无关）
 type AccessConfig struct {
-	Enabled       *bool    `mapstructure:"enabled"`         // nil 默认开启
-	SkipPaths     []string `mapstructure:"skip_paths"`      // 不记录的路径前缀/精确路径
-	MaxBodyBytes  int      `mapstructure:"max_body_bytes"`  // body 采集上限
-	MaxFieldBytes int      `mapstructure:"max_field_bytes"` // 单字段（如 header 值）上限
-	RecordBody    bool     `mapstructure:"record_body"`     // 是否采集 body
-	ToConsole     bool     `mapstructure:"to_console"`      // access 是否同时打控制台
-	SampleRate    float64  `mapstructure:"sample_rate"`     // 默认 1 全量；(0,1) 仅约束成功请求；>=400 必采
+	Enabled       *bool    // nil 默认开启
+	SkipPaths     []string // 不记录的路径前缀/精确路径
+	MaxBodyBytes  int      // body 采集上限
+	MaxFieldBytes int      // 单字段（如 header 值）上限
+	RecordBody    bool     // 是否采集 body
+	ToConsole     bool     // access 是否同时打控制台
+	SampleRate    float64  // 默认 1 全量；(0,1) 仅约束成功请求；>=400 必采
 }
 
 // EnabledOrDefault access 文件日志默认开启
@@ -77,20 +73,20 @@ func (c AccessConfig) SampleRateOrDefault() float64 {
 //
 // 日志时间统一使用进程时区（启动时由 app.timezone 锁定，默认 UTC）；原 log.timezone 已移除。
 type Config struct {
-	Dir            string            `mapstructure:"dir"`             // 日志根目录（其下 access/info/error/debug）
-	Level          string            `mapstructure:"level"`           // 文件最低级别
-	ConsoleLevel   string            `mapstructure:"console_level"`   // 控制台最低级别
-	Fields         map[string]string `mapstructure:"fields"`          // 静态标签，自动注入每条日志
-	SensitiveMatch string            `mapstructure:"sensitive_match"` // contains（默认）或 exact
-	SensitiveKeys  []string          `mapstructure:"sensitive_keys"`  // 敏感字段名；空=不脱敏
-	Rotation       RotationConfig    `mapstructure:"rotation"`        // 滚动与保留（必填）
-	Access         AccessConfig      `mapstructure:"access"`          // 文件 access 中间件
+	Dir            string            // 日志根目录（其下 access/info/error/debug）
+	Level          string            // 文件最低级别
+	ConsoleLevel   string            // 控制台最低级别
+	Fields         map[string]string // 静态标签，自动注入每条日志
+	SensitiveMatch string            // contains（默认）或 exact
+	SensitiveKeys  []string          // 敏感字段名；空=不脱敏
+	Rotation       RotationConfig    // 滚动与保留（必填）
+	Access         AccessConfig      // 文件 access 中间件
 }
 
 // Normalize 填充安全默认值并校验硬性约束
 func (c *Config) Normalize() error {
 	if c == nil {
-		return errors.New("log config 不能为 nil")
+		return errors.New("config 不能为 nil")
 	}
 	if strings.TrimSpace(c.Dir) == "" {
 		c.Dir = "logs"
@@ -103,10 +99,10 @@ func (c *Config) Normalize() error {
 	}
 
 	if c.Rotation.MaxSizeMB <= 0 || c.Rotation.RetentionDays <= 0 || c.Rotation.MaxBackups <= 0 {
-		return errors.New("log.rotation.max_size_mb/retention_days/max_backups 必须显式配置且 > 0")
+		return errors.New("rotation.max_size_mb/retention_days/max_backups 必须显式配置且 > 0")
 	}
 	if c.Rotation.MaxTotalMB <= 0 {
-		return errors.New("log.rotation.max_total_mb 必须显式配置且 > 0")
+		return errors.New("rotation.max_total_mb 必须显式配置且 > 0")
 	}
 
 	if err := validateFields(c.Fields); err != nil {
@@ -130,7 +126,7 @@ func (c *Config) Normalize() error {
 	}
 	c.SensitiveMatch = strings.ToLower(strings.TrimSpace(c.SensitiveMatch))
 	if c.SensitiveMatch != SensitiveMatchContains && c.SensitiveMatch != SensitiveMatchExact {
-		return errors.Newf("log.sensitive_match 仅支持 %s 或 %s", SensitiveMatchContains, SensitiveMatchExact)
+		return errors.Newf("sensitive_match 仅支持 %s 或 %s", SensitiveMatchContains, SensitiveMatchExact)
 	}
 	cleanedKeys := make([]string, 0, len(c.SensitiveKeys))
 	for _, k := range c.SensitiveKeys {
@@ -144,23 +140,16 @@ func (c *Config) Normalize() error {
 	return nil
 }
 
-// validateFields 校验 log.fields 不得覆盖系统保留键
+// validateFields 校验 fields 不得覆盖系统保留键
 func validateFields(fields map[string]string) error {
 	for k := range fields {
 		key := strings.TrimSpace(k)
 		if key == "" {
-			return errors.New("log.fields 键不能为空")
+			return errors.New("fields 键不能为空")
 		}
 		if _, banned := reservedFieldKeys[key]; banned {
-			return errors.Newf("log.fields 禁止覆盖保留键: %s", key)
+			return errors.Newf("fields 禁止覆盖保留键: %s", key)
 		}
 	}
 	return nil
-}
-
-// ConfigSection 返回 log 配置段
-func ConfigSection() config.Section {
-	return config.NewSection(SectionKey, &Config{}, func(c *Config, _ *config.Document) error {
-		return c.Normalize()
-	})
 }

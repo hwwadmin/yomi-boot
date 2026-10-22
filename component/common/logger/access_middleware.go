@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/shared"
-	"gitee.com/hq_project/yomi-boot/core/traceid"
-	"gitee.com/hq_project/yomi-boot/core/utils/ginutil"
+	"gitee.com/hq_project/yomi-boot/component/core/shared"
+	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

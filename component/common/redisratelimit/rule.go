@@ -6,7 +6,7 @@ package redisratelimit
 import (
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // Rule 描述一次限流判定的窗口规则（由调用方按场景传入）

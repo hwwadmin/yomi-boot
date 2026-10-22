@@ -34,9 +34,7 @@ func TestConfigRequiredAcksOrDefault(t *testing.T) {
 
 // TestConfigValidateRequiredAcks 验证 required_acks 的合法域
 func TestConfigValidateRequiredAcks(t *testing.T) {
-	enabled := true
 	base := Config{
-		Enabled:            &enabled,
 		Brokers:            []string{"127.0.0.1:9092"},
 		DialTimeoutSeconds: 1,
 	}
