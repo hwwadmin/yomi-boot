@@ -1,22 +1,25 @@
-// Package kafka Fail Fast 初始化
-//
-// @author zwei
 package kafka
 
 import (
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
 )
 
-// MustNewComponents 校验配置并创建 Kafka 组件，失败时 log + panic
-func MustNewComponents(cfg Config) *Components {
-	if err := cfg.Validate(); err != nil {
-		logger.ErrorWithoutCtx("kafka 配置校验失败", "error", err)
-		panic(err)
-	}
-	components, err := NewComponents(cfg)
+// MustNewPublisher 创建 Kafka 生产者，失败时 log + panic
+func MustNewPublisher(cfg PublisherConfig) PublisherService {
+	publisher, err := NewPublisher(cfg)
 	if err != nil {
-		logger.ErrorWithoutCtx("kafka 初始化失败", "error", err)
+		logger.ErrorWithoutCtx("kafka 生产者初始化失败", "error", err)
 		panic(err)
 	}
-	return components
+	return publisher
+}
+
+// MustNewConsumerManager 创建 Kafka 消费者管理器，失败时 log + panic
+func MustNewConsumerManager(cfg ConsumerManagerConfig) ConsumerService {
+	manager, err := NewConsumerManager(cfg)
+	if err != nil {
+		logger.ErrorWithoutCtx("kafka 消费者管理器初始化失败", "error", err)
+		panic(err)
+	}
+	return manager
 }

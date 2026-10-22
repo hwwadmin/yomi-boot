@@ -1,6 +1,3 @@
-// Package kafka 提供 Kafka 安全连接能力
-//
-// @author zwei
 package kafka
 
 import (
@@ -25,7 +22,7 @@ type securitySettings struct {
 }
 
 // buildSecuritySettings 根据配置构建 TLS 与 SASL 安全参数
-func buildSecuritySettings(cfg Config) (securitySettings, error) {
+func buildSecuritySettings(cfg ConnectionConfig) (securitySettings, error) {
 	protocol := NormalizeSecurityProtocol(cfg.SecurityProtocol)
 	settings := securitySettings{}
 
@@ -66,7 +63,7 @@ func buildSecuritySettings(cfg Config) (securitySettings, error) {
 }
 
 // buildTLSConfig 构建 Kafka TLS 连接配置
-func buildTLSConfig(cfg Config) (*tls.Config, error) {
+func buildTLSConfig(cfg ConnectionConfig) (*tls.Config, error) {
 	tlsCfg := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: cfg.TLSSkipVerify,
@@ -89,7 +86,7 @@ func buildTLSConfig(cfg Config) (*tls.Config, error) {
 }
 
 // buildSASLMechanism 根据配置构建 SASL 认证机制
-func buildSASLMechanism(cfg Config) (sasl.Mechanism, error) {
+func buildSASLMechanism(cfg ConnectionConfig) (sasl.Mechanism, error) {
 	mechanism := NormalizeSASLMechanism(cfg.SASLMechanism)
 	username := strings.TrimSpace(cfg.Username)
 	password := cfg.Password
@@ -110,7 +107,7 @@ func buildSASLMechanism(cfg Config) (sasl.Mechanism, error) {
 }
 
 // buildDialer 构建消费者使用的连接拨号器
-func buildDialer(cfg Config) (*kafkago.Dialer, error) {
+func buildDialer(cfg ConnectionConfig) (*kafkago.Dialer, error) {
 	security, err := buildSecuritySettings(cfg)
 	if err != nil {
 		return nil, err
@@ -130,7 +127,7 @@ func buildDialer(cfg Config) (*kafkago.Dialer, error) {
 }
 
 // buildWriterTransport 构建生产者使用的传输层，未启用 TLS/SASL 时返回 nil
-func buildWriterTransport(cfg Config) (*kafkago.Transport, error) {
+func buildWriterTransport(cfg ConnectionConfig) (*kafkago.Transport, error) {
 	security, err := buildSecuritySettings(cfg)
 	if err != nil {
 		return nil, err

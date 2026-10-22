@@ -1,6 +1,3 @@
-// Package kafkatest 提供 Kafka 内存测试 broker，底层基于 kfake 启动 wire-compatible 集群
-//
-// @author zwei
 package kafkatest
 
 import (
@@ -139,21 +136,35 @@ func (b *MockBroker) Publish(ctx context.Context, topic string, msgs ...kafkago.
 	return nil
 }
 
-// KafkaConfig 返回可用于 gitee.com/hq_project/yomi-boot kafka 组件的最小配置。
-func (b *MockBroker) KafkaConfig() kafka.Config {
+// ConnectionConfig 返回可用于 gitee.com/hq_project/yomi-boot kafka 组件的最小连接配置。
+func (b *MockBroker) ConnectionConfig() kafka.ConnectionConfig {
+	return kafka.ConnectionConfig{
+		Brokers:            b.Brokers(),
+		ClientID:           "yomi-kafka-test",
+		DialTimeoutSeconds: 5,
+		SecurityProtocol:   "PLAINTEXT",
+	}
+}
+
+// PublisherConfig 返回可用于 kafka.NewPublisher 的最小生产者配置。
+func (b *MockBroker) PublisherConfig() kafka.PublisherConfig {
 	requiredAcks := -1
-	return kafka.Config{
-		Brokers:             b.Brokers(),
-		ClientID:            "yomi-kafka-test",
-		DialTimeoutSeconds:  5,
+	return kafka.PublisherConfig{
+		Connection:          b.ConnectionConfig(),
 		RequiredAcks:        &requiredAcks,
 		BatchSize:           1,
 		BatchTimeoutSeconds: 1,
-		MinBytes:            1,
-		MaxBytes:            10e6,
-		MaxWaitSeconds:      1,
-		StartOffset:         "earliest",
-		SecurityProtocol:    "PLAINTEXT",
+	}
+}
+
+// ConsumerManagerConfig 返回可用于 kafka.NewConsumerManager 的最小消费者配置。
+func (b *MockBroker) ConsumerManagerConfig() kafka.ConsumerManagerConfig {
+	return kafka.ConsumerManagerConfig{
+		Connection:     b.ConnectionConfig(),
+		MinBytes:       1,
+		MaxBytes:       10e6,
+		MaxWaitSeconds: 1,
+		StartOffset:    "earliest",
 	}
 }
 
@@ -196,22 +207,38 @@ func (b *MockBroker) NewReader(cfg kafkago.ReaderConfig) *kafkago.Reader {
 	return kafkago.NewReader(cfg)
 }
 
-// NewComponents 创建 gitee.com/hq_project/yomi-boot kafka 组件并在测试结束时释放。
-func NewComponents(t testing.TB, topics ...string) (*kafka.Components, *MockBroker) {
+// NewPublisher 创建 kafka 生产者并在测试结束时释放。
+func NewPublisher(t testing.TB, broker *MockBroker) kafka.PublisherService {
 	t.Helper()
-
-	opts := []Option{NumBrokers(1)}
-	if len(topics) > 0 {
-		opts = append(opts, SeedTopics(defaultPartitions, topics...))
+	if broker == nil {
+		t.Fatal("broker 不能为空")
+		return nil
 	}
 
-	broker := NewMockBroker(t, opts...)
-	components, err := kafka.NewComponents(broker.KafkaConfig())
+	publisher, err := kafka.NewPublisher(broker.PublisherConfig())
 	if err != nil {
-		t.Fatalf("初始化 kafka 组件失败: %v", err)
+		t.Fatalf("初始化 kafka 生产者失败: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = components.Close()
+		_ = publisher.Close()
 	})
-	return components, broker
+	return publisher
+}
+
+// NewConsumerManager 创建 kafka 消费者管理器并在测试结束时释放。
+func NewConsumerManager(t testing.TB, broker *MockBroker) kafka.ConsumerService {
+	t.Helper()
+	if broker == nil {
+		t.Fatal("broker 不能为空")
+		return nil
+	}
+
+	consumer, err := kafka.NewConsumerManager(broker.ConsumerManagerConfig())
+	if err != nil {
+		t.Fatalf("初始化 kafka 消费者管理器失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = consumer.Close()
+	})
+	return consumer
 }

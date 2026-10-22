@@ -1,6 +1,3 @@
-// Package kafkatest 提供 Kafka 内存测试 broker 的集成测试
-//
-// @author zwei
 package kafkatest
 
 import (
@@ -51,15 +48,17 @@ func TestMockBroker_PublishAndConsume(t *testing.T) {
 	}
 }
 
-// TestMockBroker_NewComponents 验证 NewComponents 创建的发布者与消费者可正常收发消息
-func TestMockBroker_NewComponents(t *testing.T) {
+// TestMockBroker_PublisherAndConsumer 验证独立创建的生产者与消费者可正常收发消息
+func TestMockBroker_PublisherAndConsumer(t *testing.T) {
 	const topic = "events"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	publisher := NewPublisher(t, broker)
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
+	if err := publisher.Publish(ctx, kafka.PublishRequest{
 		Topic: topic,
 		Value: []byte("payload"),
 	}); err != nil {
@@ -67,7 +66,7 @@ func TestMockBroker_NewComponents(t *testing.T) {
 	}
 
 	handlerCalled := make(chan struct{}, 1)
-	err := components.Consumer.Start(ctx, "test-consumer", broker.ConsumerConfig([]string{topic}, "events-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "test-consumer", broker.ConsumerConfig([]string{topic}, "events-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		if string(msg.Value) != "payload" {
 			t.Errorf("unexpected value: %q", msg.Value)
 		}
@@ -87,7 +86,7 @@ func TestMockBroker_NewComponents(t *testing.T) {
 		t.Fatal("handler was not called before timeout")
 	}
 
-	if err := components.Consumer.Stop("test-consumer"); err != nil {
+	if err := consumer.Stop("test-consumer"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }
@@ -96,14 +95,12 @@ func TestMockBroker_NewComponents(t *testing.T) {
 func TestMockBroker_ConsumerRetriesSameMessage(t *testing.T) {
 	const topic = "retry-events"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("retry-me"),
-	}); err != nil {
+	if err := broker.Publish(ctx, topic, kafkago.Message{Value: []byte("retry-me")}); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 
@@ -111,7 +108,7 @@ func TestMockBroker_ConsumerRetriesSameMessage(t *testing.T) {
 	var doneOnce sync.Once
 	handlerDone := make(chan struct{})
 
-	err := components.Consumer.Start(ctx, "retry-consumer", broker.ConsumerConfig([]string{topic}, "retry-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "retry-consumer", broker.ConsumerConfig([]string{topic}, "retry-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		if string(msg.Value) != "retry-me" {
 			t.Errorf("unexpected value: %q", msg.Value)
 		}
@@ -135,7 +132,7 @@ func TestMockBroker_ConsumerRetriesSameMessage(t *testing.T) {
 		t.Fatalf("handler attempts = %d, want 3", got)
 	}
 
-	if err := components.Consumer.Stop("retry-consumer"); err != nil {
+	if err := consumer.Stop("retry-consumer"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }
@@ -144,19 +141,17 @@ func TestMockBroker_ConsumerRetriesSameMessage(t *testing.T) {
 func TestMockBroker_ConsumerAckDrop(t *testing.T) {
 	const topic = "drop-events"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("drop-me"),
-	}); err != nil {
+	if err := broker.Publish(ctx, topic, kafkago.Message{Value: []byte("drop-me")}); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 
 	handlerCalled := make(chan struct{}, 1)
-	err := components.Consumer.Start(ctx, "drop-consumer", broker.ConsumerConfig([]string{topic}, "drop-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "drop-consumer", broker.ConsumerConfig([]string{topic}, "drop-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		if string(msg.Value) != "drop-me" {
 			t.Errorf("unexpected value: %q", msg.Value)
 		}
@@ -176,7 +171,7 @@ func TestMockBroker_ConsumerAckDrop(t *testing.T) {
 		t.Fatal("handler was not called before timeout")
 	}
 
-	if err := components.Consumer.Stop("drop-consumer"); err != nil {
+	if err := consumer.Stop("drop-consumer"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }
@@ -190,14 +185,12 @@ func maxHandlerRetriesPtr(v int) *int {
 func TestMockBroker_ConsumerMaxRetriesZero(t *testing.T) {
 	const topic = "max-retries-zero"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("poison"),
-	}); err != nil {
+	if err := broker.Publish(ctx, topic, kafkago.Message{Value: []byte("poison")}); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 
@@ -206,7 +199,7 @@ func TestMockBroker_ConsumerMaxRetriesZero(t *testing.T) {
 	cfg := broker.ConsumerConfig([]string{topic}, "max-zero-group")
 	cfg.MaxHandlerRetries = maxHandlerRetriesPtr(0)
 
-	err := components.Consumer.Start(ctx, "max-zero-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "max-zero-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		attempts.Add(1)
 		select {
 		case handlerDone <- struct{}{}:
@@ -228,7 +221,7 @@ func TestMockBroker_ConsumerMaxRetriesZero(t *testing.T) {
 		t.Fatalf("handler attempts = %d, want 1", got)
 	}
 
-	if err := components.Consumer.Stop("max-zero-consumer"); err != nil {
+	if err := consumer.Stop("max-zero-consumer"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }
@@ -237,21 +230,16 @@ func TestMockBroker_ConsumerMaxRetriesZero(t *testing.T) {
 func TestMockBroker_ConsumerMaxRetriesExceeded(t *testing.T) {
 	const topic = "max-retries-exceeded"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("poison"),
-	}); err != nil {
-		t.Fatalf("Publish poison: %v", err)
-	}
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("healthy"),
-	}); err != nil {
-		t.Fatalf("Publish healthy: %v", err)
+	if err := broker.Publish(ctx, topic,
+		kafkago.Message{Value: []byte("poison")},
+		kafkago.Message{Value: []byte("healthy")},
+	); err != nil {
+		t.Fatalf("Publish: %v", err)
 	}
 
 	var poisonAttempts atomic.Int32
@@ -259,7 +247,7 @@ func TestMockBroker_ConsumerMaxRetriesExceeded(t *testing.T) {
 	cfg := broker.ConsumerConfig([]string{topic}, "max-exceeded-group")
 	cfg.MaxHandlerRetries = maxHandlerRetriesPtr(2)
 
-	err := components.Consumer.Start(ctx, "max-exceeded-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "max-exceeded-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		switch string(msg.Value) {
 		case "poison":
 			poisonAttempts.Add(1)
@@ -289,7 +277,7 @@ func TestMockBroker_ConsumerMaxRetriesExceeded(t *testing.T) {
 		t.Fatalf("poison handler attempts = %d, want 3", got)
 	}
 
-	if err := components.Consumer.Stop("max-exceeded-consumer"); err != nil {
+	if err := consumer.Stop("max-exceeded-consumer"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }
@@ -298,21 +286,16 @@ func TestMockBroker_ConsumerMaxRetriesExceeded(t *testing.T) {
 func TestMockBroker_ConsumerHandlerPanic(t *testing.T) {
 	const topic = "panic-events"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("poison"),
-	}); err != nil {
-		t.Fatalf("Publish poison: %v", err)
-	}
-	if err := components.Publisher.Publish(ctx, kafka.PublishRequest{
-		Topic: topic,
-		Value: []byte("healthy"),
-	}); err != nil {
-		t.Fatalf("Publish healthy: %v", err)
+	if err := broker.Publish(ctx, topic,
+		kafkago.Message{Value: []byte("poison")},
+		kafkago.Message{Value: []byte("healthy")},
+	); err != nil {
+		t.Fatalf("Publish: %v", err)
 	}
 
 	var poisonAttempts atomic.Int32
@@ -320,7 +303,7 @@ func TestMockBroker_ConsumerHandlerPanic(t *testing.T) {
 	cfg := broker.ConsumerConfig([]string{topic}, "panic-group")
 	cfg.MaxHandlerRetries = maxHandlerRetriesPtr(1)
 
-	err := components.Consumer.Start(ctx, "panic-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "panic-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		switch string(msg.Value) {
 		case "poison":
 			poisonAttempts.Add(1)
@@ -350,20 +333,21 @@ func TestMockBroker_ConsumerHandlerPanic(t *testing.T) {
 		t.Fatalf("poison handler attempts = %d, want 2", got)
 	}
 
-	if err := components.Consumer.Stop("panic-consumer"); err != nil {
+	if err := consumer.Stop("panic-consumer"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }
 
 // TestMockBroker_ConsumerInvalidMaxHandlerRetries 验证 MaxHandlerRetries 非法值时 Start 返回错误
 func TestMockBroker_ConsumerInvalidMaxHandlerRetries(t *testing.T) {
-	components, broker := NewComponents(t, "invalid-retries")
+	broker := NewMockBroker(t, SeedTopics(defaultPartitions, "invalid-retries"))
+	consumer := NewConsumerManager(t, broker)
 	ctx := context.Background()
 
 	cfg := broker.ConsumerConfig([]string{"invalid-retries"}, "invalid-group")
 	cfg.MaxHandlerRetries = maxHandlerRetriesPtr(-2)
 
-	err := components.Consumer.Start(ctx, "invalid-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "invalid-consumer", cfg, func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		return kafka.AckOK()
 	})
 	if err == nil {
@@ -375,10 +359,11 @@ func TestMockBroker_ConsumerInvalidMaxHandlerRetries(t *testing.T) {
 func TestMockBroker_ConsumerStopIdempotent(t *testing.T) {
 	const topic = "stop-idempotent"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	err := components.Consumer.Start(ctx, "idempotent-consumer", broker.ConsumerConfig([]string{topic}, "idempotent-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	err := consumer.Start(ctx, "idempotent-consumer", broker.ConsumerConfig([]string{topic}, "idempotent-group"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		return kafka.AckOK()
 	})
 	if err != nil {
@@ -386,10 +371,10 @@ func TestMockBroker_ConsumerStopIdempotent(t *testing.T) {
 	}
 
 	cancel()
-	if err := components.Consumer.Stop("idempotent-consumer"); err != nil {
+	if err := consumer.Stop("idempotent-consumer"); err != nil {
 		t.Fatalf("Stop after context cancel: %v", err)
 	}
-	if err := components.Consumer.Stop("idempotent-consumer"); err != nil {
+	if err := consumer.Stop("idempotent-consumer"); err != nil {
 		t.Fatalf("second Stop: %v", err)
 	}
 }
@@ -398,22 +383,23 @@ func TestMockBroker_ConsumerStopIdempotent(t *testing.T) {
 func TestMockBroker_ConsumerCloseAfterContextCancel(t *testing.T) {
 	const topic = "close-after-cancel"
 
-	components, broker := NewComponents(t, topic)
+	broker := NewMockBroker(t, SeedTopics(1, topic))
+	consumer := NewConsumerManager(t, broker)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	if err := components.Consumer.Start(ctx, "close-consumer-1", broker.ConsumerConfig([]string{topic}, "close-group-1"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	if err := consumer.Start(ctx, "close-consumer-1", broker.ConsumerConfig([]string{topic}, "close-group-1"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		return kafka.AckOK()
 	}); err != nil {
 		t.Fatalf("Start consumer-1: %v", err)
 	}
-	if err := components.Consumer.Start(ctx, "close-consumer-2", broker.ConsumerConfig([]string{topic}, "close-group-2"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
+	if err := consumer.Start(ctx, "close-consumer-2", broker.ConsumerConfig([]string{topic}, "close-group-2"), func(ctx context.Context, msg kafka.Message) kafka.ConsumeResult {
 		return kafka.AckOK()
 	}); err != nil {
 		t.Fatalf("Start consumer-2: %v", err)
 	}
 
 	cancel()
-	if err := components.Consumer.Close(); err != nil {
+	if err := consumer.Close(); err != nil {
 		t.Fatalf("Close after context cancel: %v", err)
 	}
 }

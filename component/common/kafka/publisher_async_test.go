@@ -1,6 +1,3 @@
-// Package kafka 提供 Kafka 异步发布者单元测试
-//
-// @author zwei
 package kafka
 
 import (
@@ -100,7 +97,7 @@ func TestShouldFallbackSync(t *testing.T) {
 // TestPublishAsync_FallbackToSyncWhenQueueFull 验证队列满时降级调用同步 Publish
 func TestPublishAsync_FallbackToSyncWhenQueueFull(t *testing.T) {
 	recorder := &recordingPublisher{}
-	asyncPub := NewAsyncPublisher(recorder, &queueFullWorker{}, time.Second)
+	asyncPub := newAsyncPublisher(recorder, &queueFullWorker{}, time.Second)
 
 	ctx := context.Background()
 	if err := asyncPub.PublishAsync(ctx, PublishRequest{

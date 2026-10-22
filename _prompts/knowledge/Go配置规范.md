@@ -104,7 +104,7 @@ biz:
 - 插件在 `plugin/registry` 中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `gitee.com/hq_project/yomi-boot/plugin/registry/plugins.go`）。
 - 典型开关（以各配置段字段名为准）：
   - `db.enabled`、`redis.enabled`、`auth.enabled`
-  - `consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`
+  - `consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`
   - `event.outbox_enabled`、`event.inbox_enabled`
   - `pprof.enabled`、`http_record.enabled`、`oss.enabled`
   - `cors.enabled`（默认 true；历史无开关即启用，现允许关闭；不需要 CORS 的新服务应显式设为 false）

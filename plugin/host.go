@@ -3,7 +3,6 @@
 package plugin
 
 import (
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
 
 	redisv9 "github.com/redis/go-redis/v9"
@@ -15,6 +14,5 @@ type Host struct {
 	Services
 
 	RedisClient           *redisv9.Client         // 仅内置 redis 插件写入、redisstream 插件读取
-	KafkaComponents       *yomikafka.Components   // 仅内置 kafka 插件写入与关闭
 	RedisStreamComponents *redisstream.Components // 仅内置 redisstream 插件写入与关闭
 }

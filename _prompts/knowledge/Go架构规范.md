@@ -226,7 +226,7 @@ services/{domain}/
 | `bc/ecdsap384` | ECDSA P-384 + SHA-384 签名验签与密钥 PEM；ASN.1 DER（JWT ES384） |
 | `bc/ed25519` | Ed25519 签名验签与密钥 PEM；64 字节原始签名（JWT EdDSA） |
 | `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
-| `kafka` | 生产者 `PublisherService`、消费者 `ConsumerService`、`kafkatest` 测试封装 |
+| `kafka` | 生产者 `NewPublisher` / `PublisherService`、消费者 `NewConsumerManager` / `ConsumerService`，两端独立构造、校验与关闭；`kafkatest` 提供独立测试入口 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
 | `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |
 | `rpc` | HTTP RPC 读传输（EndpointResolver 端点解析 + POST JSON + 反序列化）；轻量重试（退避）+ 按 HTTP 状态码/尝试耗时熔断；不解析业务信封，不区分分页；跨域写走 DTM，不在此叠加写重试 |
@@ -356,24 +356,25 @@ type myConsumerPlugin struct {
 | 4 | db | `db.enabled=true` |
 | 5 | redis | `redis.enabled=true` |
 | 6 | redisratelimit | 始终写入 RateLimiter（未启用时为 Noop） |
-| 7 | kafka | `kafka.enabled=true` |
-| 8 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
-| 9 | snowflake | 始终 |
-| 10 | oss | `oss.enabled=true`（写入 `Host.OSS`） |
-| 11 | tx | `host.DB` 存在 |
-| 12 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`；Ready 阶段注册、Drain 阶段注销） |
-| 13 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
-| 14 | idempotency | `idempotency.stale_cleaner_enabled=true` |
-| 15 | token | `auth.enabled=true` |
-| 16 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
-| 17 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 18 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
+| 7 | kafka-publisher | `kafka.publisher_enabled=true`（写入 `Host.KafkaPublisher`） |
+| 8 | kafka-consumer | `kafka.consumer_enabled=true`（写入 `Host.KafkaConsumer`） |
+| 9 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
+| 10 | snowflake | 始终 |
+| 11 | oss | `oss.enabled=true`（写入 `Host.OSS`） |
+| 12 | tx | `host.DB` 存在 |
+| 13 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`；Ready 阶段注册、Drain 阶段注销） |
+| 14 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
+| 15 | idempotency | `idempotency.stale_cleaner_enabled=true` |
+| 16 | token | `auth.enabled=true` |
+| 17 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
+| 18 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
+| 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 
 | 需优雅 Close | noop / 尽力 |
 | ------------ | ----------- |
-| event、kafka、redisstream、logger、consul、idempotency stale cleaner | db、redis、snowflake、oss、tx、token、httprecord（发布端）、dtm、pprof |
+| event、kafka-publisher、kafka-consumer、redisstream、logger、consul、idempotency stale cleaner | db、redis、snowflake、oss、tx、token、httprecord（发布端）、dtm、pprof |
 | 服务自定义插件（如 Stop 消息消费者） | — |
 
 **消息消费者自定义插件约定**：
@@ -400,7 +401,7 @@ type myConsumerPlugin struct {
 | 大单体 | 上栏 + 按需 `redis` 幂等/锁、`cronjob` | 无跨进程时不必开 `consul`/`dtm`；异步消息有需求再开 `kafka` 或 `redis_stream` |
 | 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `auth`；跨域写开 `dtm`；异步按需 `kafka`/`redis_stream`/`event` | 按服务类型裁剪（领域通常关 `auth`） |
 
-说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
+说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
 
 ### 3.5 业务工程依赖 gitee.com/hq_project/yomi-boot
 

@@ -1,6 +1,3 @@
-// Package kafka 提供 Kafka 消息发布能力
-//
-// @author zwei
 package kafka
 
 import (
@@ -22,8 +19,8 @@ type asyncPublisher struct {
 	sendTimeout time.Duration
 }
 
-// NewAsyncPublisher 创建带异步发送能力的 Kafka 生产者装饰器
-func NewAsyncPublisher(sync PublisherService, publishWorker worker.WorkerService, sendTimeout time.Duration) PublisherService {
+// newAsyncPublisher 创建带异步发送能力的 Kafka 生产者装饰器
+func newAsyncPublisher(sync PublisherService, publishWorker worker.WorkerService, sendTimeout time.Duration) PublisherService {
 	return &asyncPublisher{
 		sync:        sync,
 		worker:      publishWorker,

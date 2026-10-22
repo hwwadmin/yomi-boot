@@ -28,21 +28,21 @@ import (
 type Services struct {
 	Config *config.Config // 已绑定配置（含自定义段）
 
-	AppCtx               appctx.AppCtx                // 应用上下文（名称、环境、版本）
-	DbType               enums.DbType                 // 数据库类型（db 插件写入）
+	AppCtx               appctx.AppCtx                // 应用上下文
+	DbType               enums.DbType                 // 数据库类型
 	DB                   *gorm.DB                     // 业务数据库连接
 	RedisService         yomiredis.RedisService       // Redis 访问服务，业务层经此访问 Redis
 	DistLockFactory      distlock.DistLockFactory     // 分布式锁工厂，基于 Redis 实现
-	RateLimiter          redisratelimit.LimitService  // 调用式限流（未启用时为 Noop）
+	RateLimiter          redisratelimit.LimitService  // 调用式限流
 	KafkaPublisher       yomikafka.PublisherService   // Kafka 生产者
 	KafkaConsumer        yomikafka.ConsumerService    // Kafka 消费者
 	RedisStreamPublisher redisstream.PublisherService // Redis Stream 发布者
 	RedisStreamConsumer  redisstream.ConsumerService  // Redis Stream 消费者
 	IDGenerator          snowflake.Generator          // 雪花 ID 生成器
-	TokenService         token.TokenService           // 令牌服务（auth.enabled=true 时可用）
+	TokenService         token.TokenService           // 令牌服务
 	HttpRecordService    httprecord.HttpRecordService // HTTP 访问记录服务
 	TxExecutor           db.TxExecutor                // 事务执行器
-	OSS                  oss.Storage                  // 对象存储（oss.enabled=true 时可用）
+	OSS                  oss.Storage                  // 对象存储
 	ConsulClient         *consul.Client               // Consul 客户端
 	DtmClient            *dtm.Client                  // DTM 客户端
 	EventComponents      *event.Components            // 可靠领域事件组件（Outbox/Inbox）

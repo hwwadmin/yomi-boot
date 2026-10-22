@@ -1,6 +1,3 @@
-// Package kafka 提供 Kafka 消费者单元测试
-//
-// @author zwei
 package kafka
 
 import (
