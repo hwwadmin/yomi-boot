@@ -16,8 +16,10 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/cors"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	corsplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/cors"
 	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 
 	"github.com/gin-gonic/gin"
@@ -25,18 +27,18 @@ import (
 
 // DefaultMiddlewares 返回通用 HTTP 中间件链
 func DefaultMiddlewares(infra *Infra) []gin.HandlerFunc {
-	corsCfg := config.MustSection[cors.Config](infra.Doc, cors.SectionKey)
-	httpCfg := config.MustSection[router.Config](infra.Doc, router.SectionKey)
+	corsCfg := config.MustSection[corsplugin.BootConfig](infra.Doc, corsplugin.SectionKey).ToConfig()
+	httpCfg := config.MustSection[routerplugin.BootConfig](infra.Doc, routerplugin.SectionKey).ToConfig()
 	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](infra.Doc, httprecordplugin.SectionKey).ToConfig()
 	authCfg := config.MustSection[tokenplugin.BootConfig](infra.Doc, tokenplugin.SectionKey).ToConfig()
 	logCfg := config.MustSection[loggerplugin.BootConfig](infra.Doc, loggerplugin.SectionKey).ToConfig()
 
 	return []gin.HandlerFunc{
-		cors.Middleware(*corsCfg),
+		cors.Middleware(corsCfg),
 		traceid.Middleware(),
 		httprecord.Middleware(infra.HttpRecordService, httpRecordCfg, infra.AppCtx),
 		logger.Middleware(logCfg.Access),
-		httpguard.Middleware(*httpCfg),
+		httpguard.Middleware(httpCfg),
 		gin.Recovery(),
 		token.Middleware(infra.TokenService, authCfg),
 	}
@@ -48,7 +50,7 @@ func MustBuildApp(infra *Infra, registrars []router.Registrar, middlewares []gin
 		panic("bootstrap: Infra 不能为空")
 	}
 	response.MustReady()
-	httpCfg := config.MustSection[router.Config](infra.Doc, router.SectionKey)
+	httpCfg := config.MustSection[routerplugin.BootConfig](infra.Doc, routerplugin.SectionKey).ToConfig()
 
 	logger.SetupGin()
 	engine := router.MustNewRouter(

@@ -97,9 +97,9 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件与部署 YAML 绑定）、`boot/`（启动流程编排）。
-- `component/core/` 提供 bc、config、cors、errors、shared、traceid、utils，是无状态内核；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
+- `component/core/` 提供 bc、config、cors、errors、shared、traceid、utils，是无状态内核；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）。`boot/` 提供启动入口 `boot`、bootstrap、lifecycle、banner。
-- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不定义 `SectionKey` / `ConfigSection`、不写 `mapstructure` 标签。例外：`oss`（业务直接装配）、`router` / `cors`（bootstrap HTTP 装配）保留各自启动绑定。
+- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。例外：`oss`（业务直接装配）允许在组件包内定义 `SectionKey` / `BootConfig` / `ConfigSection`。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -118,7 +118,7 @@ gitee.com/hq_project/yomi-boot/                               # module: gitee.co
 │   ├── cloud/                   # 分布式组件（consul、dtm、rpc）
 │   └── ai/                      # AI 能力组件（不进 bootstrap）
 └── plugin/                      # 插件契约、内置插件与部署 YAML 绑定
-    └── builtin/                 # 15 个内置插件（appctx、logger、db、redis、kafka、event 等）
+    └── builtin/                 # 内置插件与 YAML 绑定（appctx、logger、db、redis、kafka、event、cors、router 等）
 
 # 业务工程仓库（示例）
 {business-repo}/
@@ -191,7 +191,7 @@ services/{domain}/
 | -- | ---- |
 | `bootstrap` | `MustInitInfra`、`MustBuildApp`、`DefaultMiddlewares`；`Infra` 仅聚合运行时依赖，配置经 `Infra.Doc` + `MustSection` 读取；经 `infra_plugins.go` 编排内置插件顺序；`InfraOptions` 扩展（`AddConfigSection` / `AddCustomPlugin`） |
 | `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`、`Runtime`；`ReadyHook` / `DrainHook` 可选阶段契约 |
-| `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
+| `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 无状态内核；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
@@ -430,13 +430,13 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 
 ### 3.7 中间件链
 
-`DefaultMiddlewares` 统一装配下列链；`token.Middleware` / `httprecord.Middleware` / `logger.Middleware` 均在中间件内按各自 `enabled` 决定是否生效。
+`DefaultMiddlewares` 统一装配下列链；`cors.Middleware` / `token.Middleware` / `httprecord.Middleware` / `logger.Middleware` 均在中间件内按各自 `enabled` 决定是否生效。
 
 ```text
 CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard → Recovery → token.Middleware → handler
 ```
 
-中间件始终挂载；`http_record.enabled` / `auth.enabled` 由插件映射为运行时 `MiddlewareEnabled`，关闭时由中间件在组件内短路放行，不在 `bootstrap` 层动态增删中间件。
+中间件始终挂载；`cors.enabled` 由 BootConfig 映射为 `cors.Config.MiddlewareEnabled`，`http_record.enabled` / `auth.enabled` 由插件映射为运行时 `MiddlewareEnabled`；关闭时由中间件在组件内短路放行，不在 `bootstrap` 层动态增删中间件。
 
 - **顺序约束**：`httprecord.Middleware` 与 `logger.Middleware` 必须位于 `httpguard` **外侧**。`httpguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
 - `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。

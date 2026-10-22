@@ -1,6 +1,3 @@
-// Package router 提供 Gin 路由引擎创建与路由注册能力
-//
-// @author zwei
 package router
 
 import (

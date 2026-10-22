@@ -1,6 +1,3 @@
-// Package router Fail Fast 初始化
-//
-// @author zwei
 package router
 
 import (

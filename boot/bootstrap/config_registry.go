@@ -5,11 +5,10 @@ package bootstrap
 
 import (
 	"gitee.com/hq_project/yomi-boot/component/common/oss"
-	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/cors"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 	consulplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/consul"
+	corsplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/cors"
 	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
 	dtmplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/dtm"
 	eventplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/event"
@@ -21,6 +20,7 @@ import (
 	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
 	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
 	redisstreamplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisstream"
+	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"
 	snowflakeplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/snowflake"
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
@@ -30,14 +30,14 @@ func DefaultConfigRegistry() *config.Registry {
 	return config.NewRegistry().
 		Register(
 			appctxplugin.ConfigSection(),
-			router.ConfigSection(),
+			routerplugin.ConfigSection(),
 			loggerplugin.ConfigSection(),
 			dbplugin.ConfigSection(),
 			redisplugin.ConfigSection(),
 			kafkaplugin.ConfigSection(),
 			redisstreamplugin.ConfigSection(),
 			tokenplugin.ConfigSection(),
-			cors.ConfigSection(),
+			corsplugin.ConfigSection(),
 			httprecordplugin.ConfigSection(),
 			consulplugin.ConfigSection(),
 			dtmplugin.ConfigSection(),

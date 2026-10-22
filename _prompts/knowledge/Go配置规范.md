@@ -19,8 +19,8 @@
 
 ## 2. 设计目标
 
-1. **配置分层**：组件库保留运行时 `Config`（如 `db.Config`、`token.Config`）；参与启动生命周期的部署 YAML 绑定（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）统一放在 `plugin/builtin/{lib}`。例外：`oss`（业务直接装配）、`router` / `cors`（bootstrap HTTP 装配）。
-2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/component/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOrDefault` 等）。
+1. **配置分层**：组件库保留运行时 `Config`（如 `db.Config`、`token.Config`），不写 `mapstructure`；所有部署 YAML 绑定统一为 `BootConfig`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`），放在 `plugin/builtin/{lib}`（`cors`、`router` 也各占一个绑定包，即使没有生命周期插件实现）。例外：`oss`（业务直接装配）的 `BootConfig` 留在组件包。
+2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/component/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOr` 等）。
 3. **主动注册**：`bootstrap.DefaultConfigRegistry()` 注册全部内置配置段；业务服务 `AddConfigSection` 追加。
 4. **Fail Fast**：加载与校验失败即 `Must*` panic。
 5. **未知根 key 严格失败**：YAML 根层未注册 key 一律拒绝。
@@ -32,7 +32,7 @@
 
 | # | 原则 |
 |---|------|
-| P1 | 谁实现能力，谁拥有运行时配置语义与 Validate；YAML 绑定与 `SectionKey` 归 `plugin/builtin/{lib}`（例外：oss/router/cors） |
+| P1 | 谁实现能力，谁拥有运行时配置语义与 Validate；YAML 绑定与 `SectionKey` 归 `plugin/builtin/{lib}`（例外：`oss` 的 `BootConfig` 留在组件包） |
 | P2 | `gitee.com/hq_project/yomi-boot/component/core/config` 机制层；组装根在 `bootstrap` |
 | P3 | `gitee.com/hq_project/yomi-boot` 禁止承载无对应能力包的产品/领域配置 |
 | P4 | 业务配置由服务 `AddConfigSection`，推荐根 key 为 `biz` |
@@ -48,12 +48,12 @@
 | 类型/API | 职责 |
 |----------|------|
 | `Section` | `Key` / `Target` / `Validate(doc)` |
-| `SectionKey` | `plugin/builtin/{lib}` 导出的 YAML 根 key 常量（例外：oss/router/cors）；`NewSection` / `MustSection` 禁止魔法字符串 |
+| `SectionKey` | `plugin/builtin/{lib}` 或例外 `oss` 导出的 YAML 根 key 常量；`NewSection` / `MustSection` 禁止魔法字符串 |
 | `Registry` | `Register` / `Has` / `Keys` |
 | `Document` | 已绑定段；`MustSection[T]` |
 | `NewSection` | 指向已有 target 的段工厂 |
 | `LoadDocument` / `MustLoadDocument` | 严格根 key → Bind → Validate |
-| `DefaultConfigRegistry` | bootstrap：注册 `plugin/builtin/{lib}` 与例外（oss/router/cors）的 `ConfigSection()` |
+| `DefaultConfigRegistry` | bootstrap：注册 `plugin/builtin/{lib}` 与例外 `oss` 的 `ConfigSection()` |
 | `InfraOptions.AddConfigSection` | 业务在默认内置配置段后追加 |
 | `Infra` | 运行时依赖聚合；配置统一经 `Doc` + `MustSection` 读取 |
 | `Infra.Doc` | 启动后可取 boot 段与自定义段 |
@@ -65,7 +65,7 @@
 → 解析 YAML 根 key，与注册表做差集（非空则失败）
 → 按注册顺序 UnmarshalKey
 → Section.Validate(doc)
-→ 返回 Document；Host{Doc} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态 → Infra
+→ 返回 Document；Host{Doc} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 bootstrap 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Infra
 ```
 
 ### 4.2 未知根 key
@@ -105,7 +105,9 @@ biz:
   - `consul.enabled`、`kafka.enabled`、`redis_stream.enabled`、`dtm.enabled`
   - `event.outbox_enabled`、`event.inbox_enabled`
   - `pprof.enabled`、`http_record.enabled`
+  - `cors.enabled`（默认 true；历史无开关即启用，现允许关闭；不需要 CORS 的新服务应显式设为 false）
   - `idempotency.stale_cleaner_enabled` 等同类开关
+- **默认值语义**：历史无开关的可裁剪能力新增 `enabled` 时，`*bool` 的 nil 必须解释为 true（如 `cors.enabled`）；已有 `enabled` 的能力保持原默认值（大多为 false）。强制启动项（`app`/`http`/`log`/`snowflake`）不提供 `enabled`。禁用某段时跳过本段语义校验；中间件类能力仍挂载在链上，由运行时 `MiddlewareEnabled` 短路。
 - 部署形态（轻量单体 / 大单体 / 分布式微服务）的推荐开关组合见 [Go架构规范](./Go架构规范.md) §3.1.0 与 §3.4.5。
 - **裁剪原则**：先关后开；业务未用到的中间件不要为了「对齐样板」而全部 `enabled: true`。切换形态优先改 YAML，不改 gitee.com/hq_project/yomi-boot 源码。
 
@@ -128,8 +130,11 @@ biz:
 |------|------|
 | 扩展方式 | 主动注册（默认 boot + 服务追加） |
 | 业务根 key | 推荐 `biz` |
-| YAML 绑定归属 | `plugin/builtin/{lib}`；组件库只保留运行时 `Config`（例外：oss/router/cors） |
+| YAML 绑定归属 | `plugin/builtin/{lib}`（`cors`/`router` 为绑定包）；例外：`oss` 的 `BootConfig` 留在组件包；组件库运行时 `Config` 不带 `mapstructure` |
 | 校验 | BootConfig 校验 YAML 形状并委托运行时 `Config.Validate`；组件库只校验运行时不变量；禁止 ConfigSection 闭包读取其他库配置 |
 | 未知根 key | **严格失败** |
 | 权限配置 | BFF `internal/config` 的 `biz.perm`，不进 gitee.com/hq_project/yomi-boot |
 | 能力裁剪 | 各插件读本段 `enabled`（及同类开关）；形态切换以配置为准 |
+| 历史无开关的可裁剪能力 | 新增 `BootConfig.Enabled *bool`，nil 默认 true；禁用时跳过本段校验，中间件内短路 |
+| 强制启动项 | `app`/`http`/`log`/`snowflake` 不提供 `enabled`；`plugin/builtin/router` 的 `BootConfig` 只做映射 |
+| 中间件启停 | 中间件始终挂载，由运行时 `MiddlewareEnabled` 短路；不在 `bootstrap` 动态增删 |

@@ -1,6 +1,3 @@
-// Package cors 提供跨域资源共享（CORS）中间件
-//
-// @author zwei
 package cors
 
 import (
@@ -13,13 +10,18 @@ import (
 
 const defaultMaxAgeSeconds = 86400
 
-// Middleware 返回基于配置的 CORS 中间件
+// Middleware 返回基于配置的 CORS 中间件；未启用时直接放行
 func Middleware(cfg Config) gin.HandlerFunc {
 	allowMethods := strings.Join(cfg.AllowMethods, ", ")
 	allowHeaders := strings.Join(cfg.AllowHeaders, ", ")
 	allowAllOrigins := len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == "*"
 
 	return func(c *gin.Context) {
+		if !cfg.MiddlewareEnabledOrDefault() {
+			c.Next()
+			return
+		}
+
 		origin := c.GetHeader("Origin")
 
 		// 携带凭证时不能使用 *，需回显具体 Origin

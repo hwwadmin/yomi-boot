@@ -96,7 +96,7 @@
 
 | 检查项 | 检查内容 | 判断口径 |
 | ------ | -------- | -------- |
-| 职责边界 | 该库的公开 API 是否与 Go架构规范中定义的模块职责一致 | 对照 [Go架构规范](./Go架构规范.md) §3.3 gitee.com/hq_project/yomi-boot 模块职责表；生命周期框架为 `plugin/`，内置实现与 YAML 绑定为 `plugin/builtin/{lib}`；`boot/bootstrap/` 负责编排顺序；组件库不得含 `plugin/` 子包、`SectionKey`/`ConfigSection`/`mapstructure`（例外：oss/router/cors） |
+| 职责边界 | 该库的公开 API 是否与 Go架构规范中定义的模块职责一致 | 对照 [Go架构规范](./Go架构规范.md) §3.3 gitee.com/hq_project/yomi-boot 模块职责表；生命周期框架为 `plugin/`，内置实现与 YAML 绑定为 `plugin/builtin/{lib}`；`boot/bootstrap/` 负责编排顺序；组件库不得含 `plugin/` 子包；运行时 `Config` 不得含 `mapstructure`；`SectionKey`/`BootConfig`/`ConfigSection` 仅允许在 `plugin/builtin/{lib}`，例外：`oss` |
 | 接口粒度 | 对外接口是否提供了恰当的抽象级别，是否暴露了实现细节 | 接口方法数量是否合理（通常 3–8 个方法）；接口参数类型是否为领域概念而非底层实现类型 |
 | 抽象层次 | 是否引入了不必要的间接层，或者缺少应有的抽象 | 是否存在仅转发调用、无任何逻辑增强的包装函数；是否需要接口来支持多种实现 |
 | 扩展性 | 新增功能是否需要修改当前库的代码 | 是否需要"开闭原则"判断：当前库是否允许通过新增实现（而非修改现有代码）来扩展能力 |

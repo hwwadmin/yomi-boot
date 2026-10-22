@@ -10,14 +10,14 @@ import (
 	"testing"
 
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
-	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/cors"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	corsplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/cors"
 	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
 	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
+	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 
 	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
@@ -111,26 +111,40 @@ var _ yomikafka.ConsumerService = (*mockKafkaConsumer)(nil)
 func middlewareTestRegistry() *config.Registry {
 	return config.NewRegistry().Register(
 		appctxplugin.ConfigSection(),
-		router.ConfigSection(),
+		routerplugin.ConfigSection(),
 		loggerplugin.ConfigSection(),
-		cors.ConfigSection(),
+		corsplugin.ConfigSection(),
 		tokenplugin.ConfigSection(),
 		httprecordplugin.ConfigSection(),
 		redisratelimitplugin.ConfigSection(),
 	)
 }
 
+// middlewareTestDocOptions 中间件测试配置选项
+type middlewareTestDocOptions struct {
+	authEnabled bool
+	corsEnabled *bool
+}
+
 // loadMiddlewareTestDoc 写入并加载中间件单测配置文档
-func loadMiddlewareTestDoc(t *testing.T, authEnabled bool) *config.Document {
+func loadMiddlewareTestDoc(t *testing.T, opts middlewareTestDocOptions) *config.Document {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yml")
 	authBlock := "auth: {}"
-	if authEnabled {
+	if opts.authEnabled {
 		authBlock = `auth:
   enabled: true
   token_ttl_minutes: 60
   store_prefix: test`
+	}
+	corsBlock := "cors: {}"
+	if opts.corsEnabled != nil {
+		if *opts.corsEnabled {
+			corsBlock = "cors:\n  enabled: true"
+		} else {
+			corsBlock = "cors:\n  enabled: false"
+		}
 	}
 	content := `
 app:
@@ -146,7 +160,7 @@ log:
     retention_days: 3
     max_backups: 30
     max_total_mb: 2048
-cors: {}
+` + corsBlock + `
 ` + authBlock + `
 http_record: {}
 ratelimit: {}
@@ -161,6 +175,11 @@ ratelimit: {}
 	return doc
 }
 
+// boolPtr 返回布尔指针
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 // ======================== 测试用例 ========================
 
 // TestInfra_CleanupNilReceiver 测试 nil Infra 调用 Cleanup 不崩溃
@@ -171,7 +190,7 @@ func TestInfra_CleanupNilReceiver(t *testing.T) {
 
 // TestDefaultMiddlewares_AlwaysIncludesAuth 测试中间件链始终包含令牌鉴权位（是否生效由 auth.enabled 映射到组件内开关）
 func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
-	docEnabled := loadMiddlewareTestDoc(t, true)
+	docEnabled := loadMiddlewareTestDoc(t, middlewareTestDocOptions{authEnabled: true})
 	infraEnabled := &Infra{
 		Doc:          docEnabled,
 		TokenService: &mockTokenService{},
@@ -182,7 +201,7 @@ func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 		t.Error("中间件链不应为空")
 	}
 
-	docDisabled := loadMiddlewareTestDoc(t, false)
+	docDisabled := loadMiddlewareTestDoc(t, middlewareTestDocOptions{})
 	infraDisabled := &Infra{
 		Doc:    docDisabled,
 		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
@@ -190,5 +209,20 @@ func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 	middlewaresDisabled := DefaultMiddlewares(infraDisabled)
 	if len(middlewaresEnabled) != len(middlewaresDisabled) {
 		t.Errorf("auth.enabled 不应改变中间件链长度: enabled=%d disabled=%d", len(middlewaresEnabled), len(middlewaresDisabled))
+	}
+}
+
+// TestDefaultMiddlewares_AlwaysIncludesCORS 测试中间件链始终包含 CORS 位（是否生效由 cors.enabled 映射到组件内开关）
+func TestDefaultMiddlewares_AlwaysIncludesCORS(t *testing.T) {
+	infraEnabled := &Infra{
+		Doc:    loadMiddlewareTestDoc(t, middlewareTestDocOptions{corsEnabled: boolPtr(true)}),
+		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
+	}
+	infraDisabled := &Infra{
+		Doc:    loadMiddlewareTestDoc(t, middlewareTestDocOptions{corsEnabled: boolPtr(false)}),
+		AppCtx: appctx.NewAppCtx("test", "test", "v1"),
+	}
+	if len(DefaultMiddlewares(infraEnabled)) != len(DefaultMiddlewares(infraDisabled)) {
+		t.Error("cors.enabled 不应改变中间件链长度")
 	}
 }
