@@ -24,10 +24,10 @@ import (
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
 
-// Sections 按注册顺序返回全部内置配置段。
+// DefaultConfigRegistry 按注册顺序返回全部内置配置段的注册表。
 // oss 是规范允许的例外：业务直接装配，BootConfig 留在组件包。
-func Sections() []config.Section {
-	return []config.Section{
+func DefaultConfigRegistry() *config.Registry {
+	return config.NewRegistry().Register(
 		appctxplugin.ConfigSection(),
 		routerplugin.ConfigSection(),
 		loggerplugin.ConfigSection(),
@@ -46,10 +46,5 @@ func Sections() []config.Section {
 		redisratelimitplugin.ConfigSection(),
 		oss.ConfigSection(),
 		pprofplugin.ConfigSection(),
-	}
-}
-
-// DefaultConfigRegistry 返回注册全部内置配置段的注册表。
-func DefaultConfigRegistry() *config.Registry {
-	return config.NewRegistry().Register(Sections()...)
+	)
 }

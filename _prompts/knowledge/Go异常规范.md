@@ -26,7 +26,7 @@
 - 适用于 `gitee.com/hq_project/yomi-boot/component/core/errors.BizError`（可选，用于域错误携带 Code/Message）。
 - 适用于 `gitee.com/hq_project/yomi-boot/component/core/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
 - 适用于 `gitee.com/hq_project/yomi-boot/component/common/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
-- 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/boot/bootstrap` 中间件链 Recovery）。
+- 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/boot/server` 中间件链 Recovery）。
 
 ### 2.2 关联文档
 
@@ -213,7 +213,7 @@ BindAndHandle / Handle / ...
 
 | 阶段 | 策略 | 典型场景 |
 | ---- | ---- | -------- |
-| 启动 | log + **panic** | 配置、插件 Init、`MustRegister` 缺失（`MustReady`）、`MustBuildApp`；插件 Init 失败**不**回滚已启动插件 |
+| 启动 | log + **panic** | 配置、插件 Init、`MustRegister` 缺失（`MustReady`）、`server.MustBuildApp`；插件 Init 失败**不**回滚已启动插件 |
 | 运行 | `error` 传播 + Handler → Encoder | usecase/service/repository、HTTP 请求；Recovery 捕获 handler panic |
 | 关闭 | 尽力释放，失败静默跳过 | 插件 Close、Cleanup |
 

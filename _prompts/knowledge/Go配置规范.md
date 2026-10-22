@@ -13,7 +13,7 @@
 
 - **用途**：约束配置所有权、注册加载流程与扩展方式，避免业务配置污染 `gitee.com/hq_project/yomi-boot`；说明能力按需裁剪的配置入口。
 - **边界**：架构总览与部署形态见 [Go架构规范](./Go架构规范.md)；本文件是配置专题权威说明。
-- **适用对象**：`gitee.com/hq_project/yomi-boot/component/core/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`、`gitee.com/hq_project/yomi-boot/plugin/builtin`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
+- **适用对象**：`gitee.com/hq_project/yomi-boot/component/core/config`、`gitee.com/hq_project/yomi-boot/boot/bootstrap`、`gitee.com/hq_project/yomi-boot/boot/server`、`gitee.com/hq_project/yomi-boot/plugin/builtin`，以及业务工程中各可部署单元的 `config` 与 `internal/bootstrap`、`internal/config`（惯例目录示例：`services/{unit}/`）。
 
 ---
 
@@ -65,7 +65,7 @@
 → 解析 YAML 根 key，与注册表做差集（非空则失败）
 → 按注册顺序 UnmarshalKey
 → Section.Validate(doc)
-→ 返回 Document；Host{Services{Doc}} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 bootstrap 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Services
+→ 返回 Document；Host{Services{Doc}} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 `boot/server` 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Services
 ```
 
 ### 4.2 未知根 key

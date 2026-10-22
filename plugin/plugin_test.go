@@ -123,3 +123,9 @@ func TestRuntimeHooksNil(t *testing.T) {
 		t.Fatal("nil Runtime 的 DrainHooks 应为 nil")
 	}
 }
+
+// TestRuntimeCloseNil 验证 nil Runtime 调用 Close 不崩溃
+func TestRuntimeCloseNil(t *testing.T) {
+	var rt *Runtime
+	rt.Close()
+}

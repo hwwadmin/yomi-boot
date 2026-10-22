@@ -73,8 +73,3 @@ func Plugins() []plugin.Plugin {
 		eventplugin.NewEvent(),
 	}
 }
-
-// WithCustom 返回内置插件链，并在末尾追加服务自定义插件。
-func WithCustom(custom []plugin.Plugin) []plugin.Plugin {
-	return append(Plugins(), custom...)
-}

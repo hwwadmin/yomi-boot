@@ -84,7 +84,7 @@ type Encoder interface {
 ```go
 func main() {
     response.MustRegister(/* 业务选择的 Encoder 实现 */)
-    // ... MustInit / MustBuildApp（内含 MustReady）
+    // ... bootstrap.MustInit / server.MustBuildApp（内含 MustReady）
 }
 ```
 

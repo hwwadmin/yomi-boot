@@ -1,6 +1,6 @@
-// 中间件与初始化单测。
+// HTTP 中间件链单测。
 
-package bootstrap
+package server
 
 import (
 	"context"
@@ -19,8 +19,6 @@ import (
 	redisratelimitplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisratelimit"
 	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
-
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
 )
 
 // ======================== mock 实现 ========================
@@ -49,63 +47,6 @@ func (m *mockTokenService) RevokeByUserID(_ context.Context, _ int64) error {
 }
 
 var _ token.TokenService = (*mockTokenService)(nil)
-
-// mockKafkaPublisher 用于测试的 Kafka 生产者实现
-type mockKafkaPublisher struct{}
-
-// Publish 实现 Publish 接口（测试桩）
-func (m *mockKafkaPublisher) Publish(_ context.Context, _ yomikafka.PublishRequest) error {
-	return nil
-}
-
-// PublishBatch 实现 PublishBatch 接口（测试桩）
-func (m *mockKafkaPublisher) PublishBatch(_ context.Context, _ []yomikafka.PublishRequest) error {
-	return nil
-}
-
-// PublishJSON 实现 PublishJSON 接口（测试桩）
-func (m *mockKafkaPublisher) PublishJSON(_ context.Context, _ string, _ string, _ any) error {
-	return nil
-}
-
-// PublishAsync 实现 PublishAsync 接口（测试桩）
-func (m *mockKafkaPublisher) PublishAsync(_ context.Context, _ yomikafka.PublishRequest) error {
-	return nil
-}
-
-// PublishBatchAsync 实现 PublishBatchAsync 接口（测试桩）
-func (m *mockKafkaPublisher) PublishBatchAsync(_ context.Context, _ []yomikafka.PublishRequest) error {
-	return nil
-}
-
-// PublishJSONAsync 实现 PublishJSONAsync 接口（测试桩）
-func (m *mockKafkaPublisher) PublishJSONAsync(_ context.Context, _ string, _ string, _ any) error {
-	return nil
-}
-
-// Close 实现 Close 接口（测试桩）
-func (m *mockKafkaPublisher) Close() error { return nil }
-
-var _ yomikafka.PublisherService = (*mockKafkaPublisher)(nil)
-
-// mockKafkaConsumer 用于测试的 Kafka 消费者实现
-type mockKafkaConsumer struct{}
-
-// Start 实现 Start 接口（测试桩）
-func (m *mockKafkaConsumer) Start(_ context.Context, _ string, _ yomikafka.ConsumerConfig, _ yomikafka.ConsumeHandler) error {
-	return nil
-}
-
-// Stop 实现 Stop 接口（测试桩）
-func (m *mockKafkaConsumer) Stop(_ string) error { return nil }
-
-// StopAll 实现 StopAll 接口（测试桩）
-func (m *mockKafkaConsumer) StopAll() error { return nil }
-
-// Close 实现 Close 接口（测试桩）
-func (m *mockKafkaConsumer) Close() error { return nil }
-
-var _ yomikafka.ConsumerService = (*mockKafkaConsumer)(nil)
 
 // middlewareTestRegistry 返回中间件单测用配置注册表
 func middlewareTestRegistry() *config.Registry {
@@ -181,12 +122,6 @@ func boolPtr(v bool) *bool {
 }
 
 // ======================== 测试用例 ========================
-
-// TestRuntime_CloseNilReceiver 测试 nil Runtime 调用 Close 不崩溃
-func TestRuntime_CloseNilReceiver(t *testing.T) {
-	var rt *plugin.Runtime
-	rt.Close()
-}
 
 // TestDefaultMiddlewares_AlwaysIncludesAuth 测试中间件链始终包含令牌鉴权位（是否生效由 auth.enabled 映射到组件内开关）
 func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {

@@ -6,6 +6,7 @@ package boot
 import (
 	"gitee.com/hq_project/yomi-boot/boot/bootstrap"
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
+	"gitee.com/hq_project/yomi-boot/boot/server"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/plugin"
@@ -13,30 +14,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Services 是进程已启动能力的聚合视图，等价于 plugin.Services。
-type Services = plugin.Services
-
-// InitOptions 是基础设施初始化扩展选项，等价于 bootstrap.InitOptions。
-type InitOptions = bootstrap.InitOptions
-
-// Registrar 是路由注册器，等价于 router.Registrar。
-type Registrar = router.Registrar
-
-// Middleware 是 HTTP 中间件。
-type Middleware = gin.HandlerFunc
-
 // WireFunc 在基础设施初始化完成后装配路由。
-type WireFunc func(services *Services) []Registrar
+type WireFunc func(services *plugin.Services) []router.Registrar
 
-// MiddlewareFactory 基于已初始化能力构建中间件链；Options.Middlewares 为空时使用 DefaultMiddlewares。
-type MiddlewareFactory func(services *Services) []Middleware
+// MiddlewareFactory 基于已初始化能力构建中间件链；Options.Middlewares 为空时使用 server.DefaultMiddlewares。
+type MiddlewareFactory func(services *plugin.Services) []gin.HandlerFunc
 
 // Options 启动选项
 type Options struct {
-	EnvPrefix   string            // 环境变量前缀，可为空
-	ConfigPath  string            // 配置文件路径，为空时使用 config.ResolvePath()
-	Init        InitOptions       // 基础设施初始化扩展选项
-	Middlewares MiddlewareFactory // 中间件工厂，为空时使用 DefaultMiddlewares
+	EnvPrefix   string                // 环境变量前缀，可为空
+	ConfigPath  string                // 配置文件路径，为空时使用 config.ResolvePath()
+	Init        bootstrap.InitOptions // 基础设施初始化扩展选项
+	Middlewares MiddlewareFactory     // 中间件工厂，为空时使用 server.DefaultMiddlewares
 }
 
 // Run 使用默认配置路径和默认中间件链启动 HTTP 服务，并阻塞运行至进程退出。
@@ -59,17 +48,12 @@ func RunWithOptions(opts Options, wire WireFunc) {
 		services, rt := bootstrap.MustInit(configPath, opts.EnvPrefix, opts.Init)
 		registrars := wire(services)
 
-		var middlewares []Middleware
+		var middlewares []gin.HandlerFunc
 		if opts.Middlewares != nil {
 			middlewares = opts.Middlewares(services)
 		} else {
-			middlewares = DefaultMiddlewares(services)
+			middlewares = server.DefaultMiddlewares(services)
 		}
-		return bootstrap.MustBuildApp(services, rt, registrars, middlewares)
+		return server.MustBuildApp(services, rt, registrars, middlewares)
 	})
-}
-
-// DefaultMiddlewares 返回通用 HTTP 中间件链。
-func DefaultMiddlewares(services *Services) []Middleware {
-	return bootstrap.DefaultMiddlewares(services)
 }

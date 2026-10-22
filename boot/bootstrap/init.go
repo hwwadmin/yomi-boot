@@ -18,6 +18,6 @@ func MustInit(configPath, envPrefix string, opts InitOptions) (*plugin.Services,
 	doc := config.MustLoadDocument(configPath, envPrefix, reg)
 
 	host := &plugin.Host{Services: plugin.Services{Doc: doc}}
-	rt := plugin.Run(host, registry.WithCustom(opts.customPlugins))
+	rt := plugin.Run(host, append(registry.Plugins(), opts.customPlugins...))
 	return &host.Services, rt
 }
