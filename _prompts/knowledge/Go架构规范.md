@@ -436,8 +436,10 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 CORS → traceid → httprecord → AccessMiddleware → httpguard → Recovery → token.AuthMiddleware → handler
 ```
 
+中间件始终挂载；`http_record.enabled` / `auth.enabled` 由插件映射为运行时 `MiddlewareEnabled`，关闭时由中间件在组件内短路放行，不在 `bootstrap` 层动态增删中间件。
+
 - **顺序约束**：`httprecord` 与文件 `AccessMiddleware` 必须位于 `httpguard` **外侧**。`httpguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
-- `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时直接放行。
+- `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。
 - `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/component/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)。

@@ -26,7 +26,7 @@ func (c BootConfig) EnabledOrDefault() bool {
 // ToConfig 转换为运行时配置
 func (c BootConfig) ToConfig() token.Config {
 	return token.Config{
-		Enabled:           c.EnabledOrDefault(),
+		MiddlewareEnabled: c.EnabledOrDefault(),
 		TokenTTLMinutes:   c.TokenTTLMinutes,
 		AllowMultiLogin:   c.AllowMultiLogin,
 		StorePrefix:       c.StorePrefix,
@@ -36,6 +36,9 @@ func (c BootConfig) ToConfig() token.Config {
 
 // Validate 校验 auth 配置段语义（仅 enabled=true 时校验）
 func (c BootConfig) Validate() error {
+	if !c.EnabledOrDefault() {
+		return nil
+	}
 	if err := c.ToConfig().Validate(); err != nil {
 		return errors.Wrap(err, "%s", SectionKey)
 	}

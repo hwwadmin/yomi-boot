@@ -46,9 +46,9 @@ type MemoryConfig struct {
 	Workers   int // Workers 是内存消费协程数（供消费端点读取）
 }
 
-// Config 表示 HTTP 访问记录采集配置（默认关闭，与文件 access 日志无关）
+// Config 表示 HTTP 访问记录采集配置
 type Config struct {
-	Enabled             bool           // Enabled 是否启用 HTTP 访问记录
+	MiddlewareEnabled   bool           // MiddlewareEnabled 控制采集中间件是否执行；由 BootConfig.enabled 映射
 	Provider            string         // Provider 是实现提供商：kafka、memory 或 redis_stream
 	KafkaTopic          string         // KafkaTopic 是 Kafka 发布/订阅主题
 	Stream              string         // Stream 是 Redis Stream 逻辑名（provider=redis_stream）
@@ -87,9 +87,6 @@ func (c Config) Validate() error {
 	}
 	if c.MaxResponseBodySize != nil && *c.MaxResponseBodySize < 0 {
 		return errors.New("max_response_body_size 不能小于 0")
-	}
-	if !c.Enabled {
-		return nil
 	}
 	switch c.ProviderOrDefault() {
 	case ProviderKafka, ProviderMemory, ProviderRedisStream:

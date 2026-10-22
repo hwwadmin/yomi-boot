@@ -170,7 +170,7 @@ func TestInfra_CleanupNilReceiver(t *testing.T) {
 	infra.Cleanup()
 }
 
-// TestDefaultMiddlewares_AlwaysIncludesAuth 测试中间件链始终包含令牌鉴权位（是否生效由 auth.enabled 决定）
+// TestDefaultMiddlewares_AlwaysIncludesAuth 测试中间件链始终包含令牌鉴权位（是否生效由 auth.enabled 映射到组件内开关）
 func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 	docEnabled := loadMiddlewareTestDoc(t, true)
 	infraEnabled := &Infra{
@@ -192,6 +192,6 @@ func TestDefaultMiddlewares_AlwaysIncludesAuth(t *testing.T) {
 	}
 	middlewaresDisabled := DefaultMiddlewares(infraDisabled)
 	if len(middlewaresEnabled) != len(middlewaresDisabled) {
-		t.Error("auth.enabled 开关不应改变中间件链长度")
+		t.Errorf("auth.enabled 不应改变中间件链长度: enabled=%d disabled=%d", len(middlewaresEnabled), len(middlewaresDisabled))
 	}
 }

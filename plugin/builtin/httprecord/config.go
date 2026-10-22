@@ -45,7 +45,7 @@ func (c BootConfig) EnabledOrDefault() bool {
 // ToConfig 转换为运行时配置
 func (c BootConfig) ToConfig() httprecord.Config {
 	return httprecord.Config{
-		Enabled:             c.EnabledOrDefault(),
+		MiddlewareEnabled:   c.EnabledOrDefault(),
 		Provider:            c.Provider,
 		KafkaTopic:          c.KafkaTopic,
 		Stream:              c.Stream,
@@ -66,8 +66,11 @@ func (c BootConfig) ToConfig() httprecord.Config {
 	}
 }
 
-// Validate 校验 http_record 配置段语义
+// Validate 校验 http_record 配置段语义（仅 enabled=true 时校验）
 func (c BootConfig) Validate() error {
+	if !c.EnabledOrDefault() {
+		return nil
+	}
 	if err := c.ToConfig().Validate(); err != nil {
 		return errors.Wrap(err, "%s", SectionKey)
 	}

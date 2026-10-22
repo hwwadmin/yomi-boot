@@ -11,10 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TestAuthMiddleware_DisabledPassesThrough 验证 auth.enabled=false 时中间件直接放行
+// TestAuthMiddleware_DisabledPassesThrough 验证中间件关闭时直接放行
 func TestAuthMiddleware_DisabledPassesThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	cfg := token.Config{Enabled: false}
+
+	cfg := token.Config{MiddlewareEnabled: false}
 
 	router := gin.New()
 	router.Use(token.AuthMiddleware(nil, cfg))
@@ -27,19 +28,19 @@ func TestAuthMiddleware_DisabledPassesThrough(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusNoContent {
-		t.Fatalf("auth.enabled=false 时应直接放行, got=%d", w.Code)
+		t.Fatalf("中间件关闭时应直接放行, got=%d", w.Code)
 	}
 }
 
-// TestAuthMiddleware_EnabledRequiresToken 验证 auth.enabled=true 且无 Token 时拒绝请求
-func TestAuthMiddleware_EnabledRequiresToken(t *testing.T) {
+// TestAuthMiddleware_RequiresToken 验证启用时无 Token 拒绝请求
+func TestAuthMiddleware_RequiresToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	response.RegisterDefaultForTest(t)
 
 	cfg := token.Config{
-		Enabled:         true,
-		TokenTTLMinutes: 60,
-		StorePrefix:     "test",
+		MiddlewareEnabled: true,
+		TokenTTLMinutes:   60,
+		StorePrefix:       "test",
 	}
 
 	router := gin.New()
@@ -53,6 +54,6 @@ func TestAuthMiddleware_EnabledRequiresToken(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	if w.Code == http.StatusNoContent {
-		t.Fatal("auth.enabled=true 且无 Token 时不应放行")
+		t.Fatal("中间件启用且无 Token 时不应放行")
 	}
 }

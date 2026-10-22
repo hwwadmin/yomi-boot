@@ -70,7 +70,7 @@ func NewMiddleware(svc HttpRecordService, cfg Config, app appctx.AppCtx) *Middle
 // 在请求前后采集访问信息，并在请求结束后调用 HttpRecordService 处理
 func (m *Middleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !m.cfg.Enabled || m.shouldSkip(c.Request.URL.Path) {
+		if !m.cfg.MiddlewareEnabled || m.shouldSkip(c.Request.URL.Path) {
 			c.Next()
 			return
 		}
