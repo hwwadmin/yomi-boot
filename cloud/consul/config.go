@@ -19,6 +19,8 @@ const (
 	defaultDiscoveryCacheSeconds = 30
 	// defaultHTTPTimeoutSeconds 是 Consul Agent HTTP 客户端默认超时秒数
 	defaultHTTPTimeoutSeconds = 10
+	// defaultDeregisterAfterSeconds 是健康检查连续失败后的默认注销秒数（30 分钟）
+	defaultDeregisterAfterSeconds = 30 * 60
 )
 
 // SectionKey YAML 根 key
@@ -35,6 +37,10 @@ type Config struct {
 	DiscoveryCacheSeconds int    `mapstructure:"discovery_cache_seconds"` // DiscoveryCacheSeconds 是服务发现缓存秒数
 	DiscoveryURLScheme    string `mapstructure:"discovery_url_scheme"`    // DiscoveryURLScheme 服务发现 URL 协议前缀，如 http:// / https://，留空则不拼接
 	HTTPTimeoutSeconds    int    `mapstructure:"http_timeout_seconds"`    // HTTPTimeoutSeconds 是访问 Consul Agent 的 HTTP 超时秒数，未配置默认 10
+	// DeregisterEnabled 是否在健康检查连续失败后自动注销，未配置默认 true
+	DeregisterEnabled *bool `mapstructure:"deregister_enabled"`
+	// DeregisterAfterSeconds 是健康检查连续失败后的注销秒数，未配置默认 1800（30 分钟），最小 60
+	DeregisterAfterSeconds int `mapstructure:"deregister_after_seconds"`
 }
 
 // Validate 在 Consul 启用时校验本段配置
@@ -53,6 +59,14 @@ func (c Config) Validate() error {
 	}
 	if c.HTTPTimeoutSeconds < 0 {
 		return errors.New("consul.http_timeout_seconds 不能为负数")
+	}
+	if c.DeregisterEnabledOrDefault() {
+		if c.DeregisterAfterSeconds < 0 {
+			return errors.New("consul.deregister_after_seconds 不能为负数")
+		}
+		if c.DeregisterAfterSeconds > 0 && c.DeregisterAfterSeconds < 60 {
+			return errors.New("consul.deregister_after_seconds 不能小于 60 秒（Consul 最小 1 分钟）")
+		}
 	}
 	if err := validateConsulHostPort(c.ServiceAddress, "consul.service_address"); err != nil {
 		return err
@@ -85,6 +99,22 @@ func (c Config) HTTPTimeoutOrDefault() time.Duration {
 		return defaultHTTPTimeoutSeconds * time.Second
 	}
 	return time.Duration(c.HTTPTimeoutSeconds) * time.Second
+}
+
+// DeregisterEnabledOrDefault 返回是否在健康检查连续失败后自动注销，未配置默认 true
+func (c Config) DeregisterEnabledOrDefault() bool {
+	if c.DeregisterEnabled == nil {
+		return true
+	}
+	return *c.DeregisterEnabled
+}
+
+// DeregisterCriticalServiceAfter 返回健康检查连续失败后的注销时长，未配置或为 0 时默认 30 分钟
+func (c Config) DeregisterCriticalServiceAfter() time.Duration {
+	if c.DeregisterAfterSeconds <= 0 {
+		return defaultDeregisterAfterSeconds * time.Second
+	}
+	return time.Duration(c.DeregisterAfterSeconds) * time.Second
 }
 
 // ServiceIDClean 返回配置的 Consul 服务实例 ID

@@ -26,18 +26,23 @@ func (c *Client) RegisterService(cfg Config, appName string) (string, error) {
 		return "", errors.Wrap(err, "consul.check_address 无效")
 	}
 	serviceID := cfg.ServiceIDClean()
+	check := &api.AgentServiceCheck{
+		HTTP:     checkURL,
+		Interval: "10s",
+		Timeout:  "3s",
+	}
+	deregisterAfter := "disabled"
+	if cfg.DeregisterEnabledOrDefault() {
+		deregisterAfter = cfg.DeregisterCriticalServiceAfter().String()
+		check.DeregisterCriticalServiceAfter = deregisterAfter
+	}
 
 	reg := &api.AgentServiceRegistration{
 		ID:      serviceID,
 		Name:    serviceName,
 		Port:    servicePort,
 		Address: serviceHost,
-		Check: &api.AgentServiceCheck{
-			HTTP:                           checkURL,
-			Interval:                       "10s",
-			Timeout:                        "3s",
-			DeregisterCriticalServiceAfter: "1m",
-		},
+		Check:   check,
 	}
 	if err := c.api.Agent().ServiceRegister(reg); err != nil {
 		return "", errors.Wrap(err, "consul 注册失败")
@@ -49,6 +54,7 @@ func (c *Client) RegisterService(cfg Config, appName string) (string, error) {
 		"service_name", serviceName,
 		"addr", fmt.Sprintf("%s:%d", serviceHost, servicePort),
 		"check_url", checkURL,
+		"deregister_after", deregisterAfter,
 	)
 	return serviceID, nil
 }
