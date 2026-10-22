@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,18 +27,43 @@ const maxErrorBodyRunes = 256
 
 // AddSagaStep 通过 Consul 解析目标服务端点地址，向 Saga 追加 Action/Compensate 步骤
 // consulClient 用于服务发现，serviceName 为目标微服务的 Consul 注册名
+// saga 与 consulClient 不能为 nil；解析出的地址必须是 http/https 绝对地址
 func AddSagaStep(ctx context.Context, saga *dtmcli.Saga, consulClient *consul.Client,
 	serviceName, actionEndpoint, compensateEndpoint string, payload any,
 ) error {
+	if saga == nil {
+		return errors.New("dtm: saga 不能为 nil")
+	}
+	if consulClient == nil {
+		return errors.New("dtm: consul 客户端未初始化")
+	}
 	actionURL, err := consulClient.ResolveHTTPBase(ctx, serviceName, actionEndpoint)
 	if err != nil {
+		return err
+	}
+	if err := validateBranchURL("action", actionURL); err != nil {
 		return err
 	}
 	compensateURL, err := consulClient.ResolveHTTPBase(ctx, serviceName, compensateEndpoint)
 	if err != nil {
 		return err
 	}
+	if err := validateBranchURL("compensate", compensateURL); err != nil {
+		return err
+	}
 	saga.Add(actionURL, compensateURL, payload)
+	return nil
+}
+
+// validateBranchURL 校验服务发现返回的分支地址可用于 DTM 回调
+func validateBranchURL(kind, raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return errors.Wrap(err, "dtm: %s 分支地址不合法", kind)
+	}
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return errors.Newf("dtm: %s 分支地址不合法: %s", kind, raw)
+	}
 	return nil
 }
 

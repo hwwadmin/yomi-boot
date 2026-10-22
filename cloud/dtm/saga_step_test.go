@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dtm-labs/client/dtmcli"
 )
 
 // newBlockingGidServer 返回一个收到请求后一直等到客户端断开的 /newGid 服务
@@ -115,5 +117,49 @@ func TestNewSagaRejectsNon200(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "status 500") {
 		t.Fatalf("错误信息应包含状态码，实际: %v", err)
+	}
+}
+
+// TestAddSagaStepRejectsNilSaga 验证 saga 为空时返回错误而非 panic
+func TestAddSagaStepRejectsNilSaga(t *testing.T) {
+	err := AddSagaStep(context.Background(), nil, nil, "svc", "/action", "/compensate", nil)
+	if err == nil || !strings.Contains(err.Error(), "saga") {
+		t.Fatalf("saga 为 nil 应返回可读错误，实际: %v", err)
+	}
+}
+
+// TestAddSagaStepRejectsNilConsul 验证 consul 客户端为空时返回错误而非 panic
+func TestAddSagaStepRejectsNilConsul(t *testing.T) {
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := AddSagaStep(context.Background(), saga, nil, "svc", "/action", "/compensate", nil)
+	if err == nil || !strings.Contains(err.Error(), "consul") {
+		t.Fatalf("consul 为 nil 应返回可读错误，实际: %v", err)
+	}
+}
+
+// TestValidateBranchURL 验证分支地址只接受带 http/https 与 host 的绝对地址
+func TestValidateBranchURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr bool
+	}{
+		{name: "http", raw: "http://10.0.0.1:8080/internal/v1/resource", wantErr: false},
+		{name: "https", raw: "https://10.0.0.1/internal/v1/resource", wantErr: false},
+		{name: "无协议", raw: "10.0.0.1:8080/internal/v1/resource", wantErr: true},
+		{name: "不支持的协议", raw: "ftp://10.0.0.1/resource", wantErr: true},
+		{name: "缺少 host", raw: "http:///internal/v1/resource", wantErr: true},
+		{name: "相对路径", raw: "/internal/v1/resource", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateBranchURL("action", tc.raw)
+			if tc.wantErr && err == nil {
+				t.Fatalf("期望拒绝 %q，实际通过", tc.raw)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("期望接受 %q，实际: %v", tc.raw, err)
+			}
+		})
 	}
 }
