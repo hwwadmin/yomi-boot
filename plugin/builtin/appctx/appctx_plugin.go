@@ -24,7 +24,7 @@ func NewAppCtx() plugin.Plugin {
 
 // Init 初始化 AppCtx、锁定时区并挂到 Host
 func (p *appCtxPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	cfg := bootCfg.ToConfig()
 	if err := appctx.LockTimezone(cfg.Timezone); err != nil {
 		panic(errors.Wrap(err, "appctx: 锁定时区失败"))

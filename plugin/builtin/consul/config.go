@@ -60,7 +60,7 @@ func (c BootConfig) Validate() error {
 
 // ConfigSection 返回 consul 配置段
 func ConfigSection() config.Section {
-	return config.NewSection(SectionKey, &BootConfig{}, func(c *BootConfig, _ *config.Document) error {
+	return config.NewSection(SectionKey, &BootConfig{}, func(c *BootConfig, _ *config.Config) error {
 		return c.Validate()
 	})
 }

@@ -24,7 +24,7 @@ func NewRedis() plugin.Plugin {
 
 // Init 初始化 Redis 客户端并挂到 Host
 func (p *redisPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

@@ -23,7 +23,7 @@ func NewRedisRateLimit() plugin.Plugin {
 
 // Init 初始化限流器并挂到 Host
 func (p *redisRateLimitPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		host.RateLimiter = redisratelimit.NewNoop()
 		p.SetStarted()

@@ -22,11 +22,11 @@ import (
 
 // DefaultMiddlewares 返回通用 HTTP 中间件链
 func DefaultMiddlewares(services *plugin.Services) []gin.HandlerFunc {
-	corsCfg := config.MustSection[corsplugin.BootConfig](services.Doc, corsplugin.SectionKey).ToConfig()
-	httpCfg := config.MustSection[routerplugin.BootConfig](services.Doc, routerplugin.SectionKey).ToConfig()
-	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](services.Doc, httprecordplugin.SectionKey).ToConfig()
-	authCfg := config.MustSection[tokenplugin.BootConfig](services.Doc, tokenplugin.SectionKey).ToConfig()
-	logCfg := config.MustSection[loggerplugin.BootConfig](services.Doc, loggerplugin.SectionKey).ToConfig()
+	corsCfg := config.MustSection[corsplugin.BootConfig](services.Config, corsplugin.SectionKey).ToConfig()
+	httpCfg := config.MustSection[routerplugin.BootConfig](services.Config, routerplugin.SectionKey).ToConfig()
+	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](services.Config, httprecordplugin.SectionKey).ToConfig()
+	authCfg := config.MustSection[tokenplugin.BootConfig](services.Config, tokenplugin.SectionKey).ToConfig()
+	logCfg := config.MustSection[loggerplugin.BootConfig](services.Config, loggerplugin.SectionKey).ToConfig()
 
 	return []gin.HandlerFunc{
 		cors.Middleware(corsCfg),

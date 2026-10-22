@@ -27,7 +27,7 @@ func NewIdempotencyStaleCleaner() plugin.Plugin {
 
 // Init 初始化幂等超时清理器并挂到 Host
 func (p *idempotencyStaleCleanerPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

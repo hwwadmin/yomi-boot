@@ -24,7 +24,7 @@ func NewDB() plugin.Plugin {
 
 // Init 初始化数据库连接并挂到 Host
 func (p *dbPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

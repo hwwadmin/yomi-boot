@@ -35,7 +35,7 @@ func NewConsul() plugin.Plugin {
 
 // Init 初始化 Consul 客户端；服务注册推迟到 Ready 阶段
 func (p *consulPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

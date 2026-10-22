@@ -15,8 +15,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadDocument 按注册表加载配置：严格根 key → Bind → Validate
-func LoadDocument(configPath, envPrefix string, reg *Registry) (*Document, error) {
+// LoadConfig 按注册表加载配置：严格根 key → Bind → Validate
+func LoadConfig(configPath, envPrefix string, reg *Registry) (*Config, error) {
 	if reg == nil {
 		return nil, errors.New("配置注册表不能为空")
 	}
@@ -55,7 +55,7 @@ func LoadDocument(configPath, envPrefix string, reg *Registry) (*Document, error
 		}
 	}
 
-	doc := &Document{
+	doc := &Config{
 		sections: make(map[string]Section, len(reg.sections)),
 		order:    make([]string, 0, len(reg.sections)),
 	}

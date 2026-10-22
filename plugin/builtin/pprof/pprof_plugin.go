@@ -31,7 +31,7 @@ func NewPprof() plugin.Plugin {
 
 // Init 初始化 pprof 性能剖析服务；未启用时不标记 Started
 func (p *pprofPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

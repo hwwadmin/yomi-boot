@@ -25,7 +25,7 @@ func NewRedisStream() plugin.Plugin {
 
 // Init 初始化 Redis Stream 组件并挂到 Host（复用 host.RedisClient，不耦合 RedisService）
 func (p *redisStreamPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

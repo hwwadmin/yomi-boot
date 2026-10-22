@@ -22,7 +22,7 @@ func MustBuildApp(services *plugin.Services, rt *plugin.Runtime, registrars []ro
 		panic("server: Services 不能为空")
 	}
 	response.MustReady()
-	httpCfg := config.MustSection[routerplugin.BootConfig](services.Doc, routerplugin.SectionKey).ToConfig()
+	httpCfg := config.MustSection[routerplugin.BootConfig](services.Config, routerplugin.SectionKey).ToConfig()
 
 	logger.SetupGin()
 	engine := router.MustNewRouter(

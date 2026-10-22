@@ -68,9 +68,9 @@ func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) (*p
 	for _, section := range pluginOpts.CustomConfigs() {
 		reg.Register(section)
 	}
-	doc := config.MustLoadDocument(configPath, envPrefix, reg)
+	doc := config.MustLoadConfig(configPath, envPrefix, reg)
 
-	host := &plugin.Host{Services: plugin.Services{Doc: doc}}
+	host := &plugin.Host{Services: plugin.Services{Config: doc}}
 	rt := plugin.Run(host, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
 	return &host.Services, rt
 }

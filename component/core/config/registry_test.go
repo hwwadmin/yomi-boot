@@ -43,8 +43,8 @@ func testRegistry() *config.Registry {
 	)
 }
 
-// TestLoadDocument_StrictUnknownRootKey 验证未注册根 key 时加载失败
-func TestLoadDocument_StrictUnknownRootKey(t *testing.T) {
+// TestLoadConfig_StrictUnknownRootKey 验证未注册根 key 时加载失败
+func TestLoadConfig_StrictUnknownRootKey(t *testing.T) {
 	path := writeTempYAML(t, `
 app:
   name: demo
@@ -55,7 +55,7 @@ snowflake:
 unknown_biz:
   foo: 1
 `)
-	_, err := config.LoadDocument(path, "YOMI_TEST", testRegistry())
+	_, err := config.LoadConfig(path, "YOMI_TEST", testRegistry())
 	if err == nil {
 		t.Fatal("期望未注册根 key 失败")
 	}
@@ -64,8 +64,8 @@ unknown_biz:
 	}
 }
 
-// TestLoadDocument_OK 验证合法 YAML 加载与 MustSection 取值
-func TestLoadDocument_OK(t *testing.T) {
+// TestLoadConfig_OK 验证合法 YAML 加载与 MustSection 取值
+func TestLoadConfig_OK(t *testing.T) {
 	path := writeTempYAML(t, `
 app:
   name: demo
@@ -75,7 +75,7 @@ http:
 snowflake:
   worker_id: 1
 `)
-	doc, err := config.LoadDocument(path, "YOMI_TEST", testRegistry())
+	doc, err := config.LoadConfig(path, "YOMI_TEST", testRegistry())
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
@@ -89,8 +89,8 @@ snowflake:
 	}
 }
 
-// TestLoadDocument_CustomBizSection 验证自定义业务配置段注册与加载
-func TestLoadDocument_CustomBizSection(t *testing.T) {
+// TestLoadConfig_CustomBizSection 验证自定义业务配置段注册与加载
+func TestLoadConfig_CustomBizSection(t *testing.T) {
 	path := writeTempYAML(t, `
 app:
   name: demo
@@ -107,7 +107,7 @@ biz:
 	const bizSectionKey = "biz"
 	biz := &bizConfig{}
 	reg := testRegistry().Register(config.NewSection(bizSectionKey, biz, nil))
-	doc, err := config.LoadDocument(path, "YOMI_TEST", reg)
+	doc, err := config.LoadConfig(path, "YOMI_TEST", reg)
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}

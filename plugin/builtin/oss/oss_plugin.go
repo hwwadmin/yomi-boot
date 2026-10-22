@@ -22,7 +22,7 @@ func NewOSS() plugin.Plugin {
 
 // Init 初始化对象存储并挂到 Host
 func (p *ossPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

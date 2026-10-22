@@ -24,9 +24,9 @@ import (
 )
 
 // Services 是进程启动后各插件写入、业务装配只读的能力集合。
-// 配置统一经 Doc 读取；未启用的能力保持零值。
+// 配置统一经 Config 读取；未启用的能力保持零值。
 type Services struct {
-	Doc *config.Document // 已绑定配置文档（含自定义段）
+	Config *config.Config // 已绑定配置（含自定义段）
 
 	AppCtx               appctx.AppCtx                // 应用上下文（名称、环境、版本）
 	DbType               enums.DbType                 // 数据库类型（db 插件写入）

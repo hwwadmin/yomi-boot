@@ -23,7 +23,7 @@ func NewDtm() plugin.Plugin {
 
 // Init 初始化 DTM 客户端并挂到 Host
 func (p *dtmPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	cfg := bootCfg.ToConfig()
 	enabled := bootCfg.EnabledOrDefault()
 	server := ""

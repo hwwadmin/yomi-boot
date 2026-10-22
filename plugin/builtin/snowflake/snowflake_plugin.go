@@ -23,7 +23,7 @@ func NewSnowflake() plugin.Plugin {
 
 // Init 初始化 ID 生成器并挂到 Host
 func (p *snowflakePlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	cfg := bootCfg.ToConfig()
 	host.IDGenerator = snowflake.MustNewGenerator(int64(cfg.WorkerID))
 	p.SetStarted()

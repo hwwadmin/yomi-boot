@@ -191,7 +191,7 @@ services/{domain}/
 
 | 包 | 职责 |
 | -- | ---- |
-| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`；`MustInit` 返回 `*plugin.Services` + `*plugin.Runtime`，配置经 `Services.Doc` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Run` / `RunWithOptions` 编排初始化、wire、HTTP 装配与 lifecycle |
+| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`；`MustInit` 返回 `*plugin.Services` + `*plugin.Runtime`，配置经 `Services.Config` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Run` / `RunWithOptions` 编排初始化、wire、HTTP 装配与 lifecycle |
 | `server` | `MustBuildApp`、`DefaultMiddlewares`；只处理 HTTP 侧（gin 引擎、中间件链、`http.Server`、`lifecycle.App`），不感知具体组件 |
 | `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`（初始化上下文）、`Services`（业务可见能力集合）、`Runtime`、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
 | `plugin/registry` | 内置插件启动顺序（`Plugins()`）与默认配置段注册表（`DefaultConfigRegistry()`）；`plugin` 根包不得 import 本包所依赖的 `plugin/builtin/**` |
@@ -243,7 +243,7 @@ services/{domain}/
 | `lifecycle` | HTTP 服务进程生命周期编排：`App`、`Run` / `RunContext`；只负责阶段顺序、信号与优雅停机，不感知具体组件 |
 | `cors` | 跨域中间件 |
 | `logger` | 日志初始化与配置；`MustInit` Fail Fast |
-| `config` | 配置加载抽象（Section/Registry/Document）、严格根 key、环境变量展开；`MustLoad` / `MustLoadDocument` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
+| `config` | 配置加载抽象（Section/Registry/Config）、严格根 key、环境变量展开；`LoadConfig` / `MustLoadConfig` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
 | `component/ai/llm` | 统一大模型对话门面：Chat / 流式（OpenAI / Anthropic）；`New`/`MustNew`；一实例一模型；独立哨兵 `AI_LLM_*`；不进插件链、不读 YAML、不做限流 |
@@ -270,7 +270,7 @@ services/{domain}/
 启动 / 运行 / 关闭三阶段异常策略以 [Go异常规范](./Go异常规范.md) §3.5 为准。本文仅强调装配侧：
 
 - 配置加载、插件 `Init`、HTTP 装配失败走启动 Fail Fast（log + panic）；**不**在插件 `Init` 失败时回滚已启动插件。
-- 各 gitee.com/hq_project/yomi-boot 库对外提供 `Must*` 包装（如 `config.MustLoad`）；构造函数内部假定入参已校验。
+- 各 gitee.com/hq_project/yomi-boot 库对外提供 `Must*` 包装（如 `config.MustLoadConfig`）；构造函数内部假定入参已校验。
 - HTTP 请求路径的 `error` 传播与 Recovery 见 Go异常规范。
 
 #### 3.4.2 启动链路
@@ -281,7 +281,7 @@ cmd/main.go
        └─ boot.RunWithOptions(bootOpts, wire)
             └─ lifecycle.Run(factory)
                  ├─ boot.MustInit(configPath, envPrefix, bootOpts.Plugin)
-                 │     ├─ registry.DefaultConfigRegistry + MustLoadDocument（含 bootOpts.Plugin.CustomConfigs()）
+                 │     ├─ registry.DefaultConfigRegistry + MustLoadConfig（含 bootOpts.Plugin.CustomConfigs()）
                  │     └─ plugin.Run(host, append(registry.Plugins(), bootOpts.Plugin.CustomPlugins()...))  # 按序 Init；是否启动看各段 enabled
                  ├─ wire(services) → []router.Registrar               # 手写 wiring，在 internal/bootstrap
                  └─ server.MustBuildApp(services, rt, registrars, middlewares) → *lifecycle.App
@@ -464,7 +464,7 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard �
 
 环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`gitee.com/hq_project/yomi-boot/component/core/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
 
-`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/component/core/config.LoadDocument` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
+`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/component/core/config.LoadConfig` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
 
 ```yaml
 # 入口编排 config/local.yml 示意

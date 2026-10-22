@@ -24,7 +24,7 @@ func NewKafka() plugin.Plugin {
 
 // Init 初始化 Kafka 组件并挂到 Host
 func (p *kafkaPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

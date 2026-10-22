@@ -12,9 +12,9 @@ import (
 
 // Section 一段可注册配置
 type Section interface {
-	Key() string                  // Key 返回 YAML 根 key，须全局唯一
-	Target() any                  // Target 返回供 UnmarshalKey 写入的指针
-	Validate(doc *Document) error // Validate 校验本段语义
+	Key() string                // Key 返回 YAML 根 key，须全局唯一
+	Target() any                // Target 返回供 UnmarshalKey 写入的指针
+	Validate(doc *Config) error // Validate 校验本段语义
 }
 
 // Registry 配置段注册表
@@ -79,14 +79,14 @@ func (r *Registry) Has(key string) bool {
 	return ok
 }
 
-// Document 已绑定的配置文档
-type Document struct {
+// Config 已绑定的配置
+type Config struct {
 	sections map[string]Section
 	order    []string
 }
 
-// Has 判断文档是否包含指定根 key
-func (d *Document) Has(key string) bool {
+// Has 判断配置是否包含指定根 key
+func (d *Config) Has(key string) bool {
 	if d == nil || d.sections == nil {
 		return false
 	}
@@ -94,8 +94,8 @@ func (d *Document) Has(key string) bool {
 	return ok
 }
 
-// Keys 返回文档中已绑定的根 key（注册顺序）
-func (d *Document) Keys() []string {
+// Keys 返回已绑定的根 key（注册顺序）
+func (d *Config) Keys() []string {
 	if d == nil {
 		return nil
 	}
@@ -105,9 +105,9 @@ func (d *Document) Keys() []string {
 }
 
 // MustSection 按 key 取出已绑定的强类型配置指针；缺失或类型不匹配时 panic
-func MustSection[T any](d *Document, key string) *T {
+func MustSection[T any](d *Config, key string) *T {
 	if d == nil || d.sections == nil {
-		panic(errors.New("配置文档不能为空"))
+		panic(errors.New("配置不能为空"))
 	}
 	normalized := strings.TrimSpace(key)
 	s, ok := d.sections[normalized]
@@ -125,11 +125,11 @@ func MustSection[T any](d *Document, key string) *T {
 type typedSection[T any] struct {
 	key      string
 	target   *T
-	validate func(*T, *Document) error
+	validate func(*T, *Config) error
 }
 
 // NewSection 创建指向已有 target 的配置段
-func NewSection[T any](key string, target *T, validate func(*T, *Document) error) Section {
+func NewSection[T any](key string, target *T, validate func(*T, *Config) error) Section {
 	if target == nil {
 		panic(errors.Newf("配置段 target 不能为空: %s", key))
 	}
@@ -151,7 +151,7 @@ func (s *typedSection[T]) Target() any {
 }
 
 // Validate 校验本段语义
-func (s *typedSection[T]) Validate(doc *Document) error {
+func (s *typedSection[T]) Validate(doc *Config) error {
 	if s.validate == nil {
 		return nil
 	}

@@ -28,7 +28,7 @@ func (p *loggerPlugin) Init(host *plugin.Host) {
 	if host.AppCtx == nil {
 		panic(errors.New("logger: 需要 AppCtx"))
 	}
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	p.closeFn = logger.MustInit(host.AppCtx.Name(), host.AppCtx.Env(), bootCfg.ToConfig())
 	p.SetStarted()
 }

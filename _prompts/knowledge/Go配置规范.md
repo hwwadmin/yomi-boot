@@ -20,7 +20,7 @@
 ## 2. 设计目标
 
 1. **配置分层**：组件库保留运行时 `Config`（如 `db.Config`、`token.Config`），不写 `mapstructure`；所有部署 YAML 绑定统一为 `BootConfig`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`），放在 `plugin/builtin/{lib}`（`cors`、`router` 也各占一个绑定包，即使没有生命周期插件实现）。
-2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/component/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Document`/`BoolOr` 等）。
+2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/component/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Config`/`BoolOr` 等）。
 3. **主动注册**：`plugin/registry.DefaultConfigRegistry()` 注册全部内置配置段；业务服务经 `plugin.PluginOptions.AddConfigSection` 追加。
 4. **Fail Fast**：加载与校验失败即 `Must*` panic。
 5. **未知根 key 严格失败**：YAML 根层未注册 key 一律拒绝。
@@ -50,13 +50,13 @@
 | `Section` | `Key` / `Target` / `Validate(doc)` |
 | `SectionKey` | `plugin/builtin/{lib}` 导出的 YAML 根 key 常量；`NewSection` / `MustSection` 禁止魔法字符串 |
 | `Registry` | `Register` / `Has` / `Keys` |
-| `Document` | 已绑定段；`MustSection[T]` |
+| `Config` | 已绑定段；`MustSection[T]` |
 | `NewSection` | 指向已有 target 的段工厂 |
-| `LoadDocument` / `MustLoadDocument` | 严格根 key → Bind → Validate |
+| `LoadConfig` / `MustLoadConfig` | 严格根 key → Bind → Validate |
 | `DefaultConfigRegistry` | `plugin/registry`：注册全部 `plugin/builtin/{lib}` 的 `ConfigSection()` |
 | `PluginOptions.AddConfigSection` | 业务在默认内置配置段后追加 |
-| `plugin.Services` | 运行时能力集合；配置统一经 `Doc` + `MustSection` 读取 |
-| `Services.Doc` | 启动后可取 boot 段与自定义段 |
+| `plugin.Services` | 运行时能力集合；配置统一经 `Config` + `MustSection` 读取 |
+| `Services.Config` | 启动后可取 boot 段与自定义段 |
 
 ### 4.1 加载流程
 
@@ -65,7 +65,7 @@
 → 解析 YAML 根 key，与注册表做差集（非空则失败）
 → 按注册顺序 UnmarshalKey
 → Section.Validate(doc)
-→ 返回 Document；Host{Services{Doc}} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 `boot/server` 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Services
+→ 返回 Config；Host{Services{Config}} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 `boot/server` 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Services
 ```
 
 ### 4.2 未知根 key
@@ -84,7 +84,7 @@ var pluginOpts plugin.PluginOptions
 pluginOpts.AddConfigSection(svcconfig.BizSection()) // key: biz
 services, rt := boot.MustInit(path, "YOMI_{BFF}", pluginOpts)
 defer rt.Close()
-biz := config.MustSection[svcconfig.BizConfig](services.Doc, svcconfig.SectionKey)
+biz := config.MustSection[svcconfig.BizConfig](services.Config, svcconfig.SectionKey)
 ```
 
 YAML：

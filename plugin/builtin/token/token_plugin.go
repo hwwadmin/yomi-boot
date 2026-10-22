@@ -25,7 +25,7 @@ func NewToken() plugin.Plugin {
 
 // Init 初始化令牌服务并挂到 Host
 func (p *tokenPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}

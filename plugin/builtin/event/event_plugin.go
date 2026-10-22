@@ -26,7 +26,7 @@ func NewEvent() plugin.Plugin {
 
 // Init 初始化消息队列事件组件并挂到 Host
 func (p *eventPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Doc, SectionKey)
+	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
 	if !bootCfg.AnyEnabledOrDefault() {
 		return
 	}
