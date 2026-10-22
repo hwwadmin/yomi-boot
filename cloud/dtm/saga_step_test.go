@@ -2,6 +2,7 @@ package dtm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,6 +152,66 @@ func TestAddSagaStepDisabled(t *testing.T) {
 	err := client.AddSagaStep(context.Background(), saga, "svc", "/action", "/compensate", nil)
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("未启用时应返回 ErrNotConfigured，实际: %v", err)
+	}
+}
+
+// TestGenGidPreservesContextError 验证调用方超时同时保留哨兵与 context 错误身份
+func TestGenGidPreservesContextError(t *testing.T) {
+	srv := newBlockingGidServer(t)
+	defer srv.Close()
+
+	client := NewClient(nil, srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := client.NewSaga(ctx)
+	if !errors.Is(err, ErrGenGidFailed) {
+		t.Fatalf("应保留 ErrGenGidFailed 身份，实际: %v", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("应保留 context.DeadlineExceeded 身份，实际: %v", err)
+	}
+}
+
+// TestGenGidPreservesJSONError 验证响应解析失败时保留底层 json 错误
+func TestGenGidPreservesJSONError(t *testing.T) {
+	srv := newJSONGidServer(t, http.StatusOK, `not-json`)
+	defer srv.Close()
+
+	_, err := NewClient(nil, srv.URL).NewSaga(context.Background())
+	if !errors.Is(err, ErrGenGidFailed) {
+		t.Fatalf("应保留 ErrGenGidFailed 身份，实际: %v", err)
+	}
+	var syntaxErr *json.SyntaxError
+	if !errors.As(err, &syntaxErr) {
+		t.Fatalf("应保留 json.SyntaxError，实际: %v", err)
+	}
+}
+
+// TestAppendSagaStepRejectsUnmarshalablePayload 验证 payload 无法序列化时返回错误而非 panic
+func TestAppendSagaStepRejectsUnmarshalablePayload(t *testing.T) {
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := appendSagaStep(saga, "http://127.0.0.1:8080/a", "http://127.0.0.1:8080/c", make(chan int))
+	if err == nil {
+		t.Fatal("不可序列化的 payload 应返回错误")
+	}
+	if len(saga.Steps) != 0 || len(saga.Payloads) != 0 {
+		t.Fatalf("序列化失败不应追加步骤，steps=%d payloads=%d", len(saga.Steps), len(saga.Payloads))
+	}
+}
+
+// TestAppendSagaStepPayload 验证正常 payload 序列化后写入 Saga
+func TestAppendSagaStepPayload(t *testing.T) {
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := appendSagaStep(saga, "http://127.0.0.1:8080/a", "http://127.0.0.1:8080/c", map[string]string{"name": "x"})
+	if err != nil {
+		t.Fatalf("追加分支失败: %v", err)
+	}
+	if len(saga.Steps) != 1 || len(saga.Payloads) != 1 {
+		t.Fatalf("应追加 1 个分支，steps=%d payloads=%d", len(saga.Steps), len(saga.Payloads))
+	}
+	if saga.Payloads[0] != `{"name":"x"}` {
+		t.Fatalf("payload 期望 {\"name\":\"x\"}，实际 %s", saga.Payloads[0])
 	}
 }
 

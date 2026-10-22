@@ -67,7 +67,16 @@ func (c *Client) AddSagaStep(ctx context.Context, saga *dtmcli.Saga,
 	if err := validateHTTPURL("compensate", compensateURL); err != nil {
 		return err
 	}
-	saga.Add(actionURL, compensateURL, payload)
+	return appendSagaStep(saga, actionURL, compensateURL, payload)
+}
+
+// appendSagaStep 先序列化 payload 再追加分支，避免 dtmcli 的 MustMarshalString 在失败时 panic
+func appendSagaStep(saga *dtmcli.Saga, actionURL, compensateURL string, payload any) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return errors.Wrap(err, "dtm: 序列化 Saga 分支 payload 失败")
+	}
+	saga.Add(actionURL, compensateURL, json.RawMessage(raw))
 	return nil
 }
 
@@ -79,7 +88,7 @@ func (c *Client) genGid(ctx context.Context) (string, error) {
 	url := strings.TrimRight(c.server, "/") + "/newGid"
 	resp, err := dtmcli.GetRestyClient2(c.effectiveTimeout()).R().SetContext(ctx).Get(url)
 	if err != nil {
-		return "", errors.Sentinel(fmt.Errorf("%w: %v", ErrGenGidFailed, err))
+		return "", errors.Sentinel(fmt.Errorf("%w: %w", ErrGenGidFailed, err))
 	}
 	if resp.StatusCode() != http.StatusOK {
 		return "", errors.Sentinel(fmt.Errorf("%w: status %d, resp: %s",
@@ -89,7 +98,7 @@ func (c *Client) genGid(ctx context.Context) (string, error) {
 		Gid string `json:"gid"`
 	}
 	if err := json.Unmarshal(resp.Body(), &res); err != nil {
-		return "", errors.Sentinel(fmt.Errorf("%w: %v", ErrGenGidFailed, err))
+		return "", errors.Sentinel(fmt.Errorf("%w: %w", ErrGenGidFailed, err))
 	}
 	if res.Gid == "" {
 		return "", errors.Sentinel(fmt.Errorf("%w: empty gid, resp: %s", ErrGenGidFailed, truncateBody(resp.String())))
