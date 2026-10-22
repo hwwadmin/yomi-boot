@@ -17,20 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// MustInit 初始化基础设施：注册配置段、加载校验、按序执行插件；失败时 panic。
-// 返回业务可见的能力集合与插件运行时；进程退出时由调用方关闭 Runtime。
-func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) (*plugin.Services, *plugin.Runtime) {
-	reg := registry.DefaultConfigRegistry()
-	for _, section := range pluginOpts.CustomConfigs() {
-		reg.Register(section)
-	}
-	doc := config.MustLoadDocument(configPath, envPrefix, reg)
-
-	host := &plugin.Host{Services: plugin.Services{Doc: doc}}
-	rt := plugin.Run(host, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
-	return &host.Services, rt
-}
-
 // WireFunc 在基础设施初始化完成后装配路由。
 type WireFunc func(services *plugin.Services) []router.Registrar
 
@@ -73,4 +59,18 @@ func RunWithOptions(opts Options, wire WireFunc) {
 		}
 		return server.MustBuildApp(services, rt, registrars, middlewares)
 	})
+}
+
+// MustInit 初始化基础设施：注册配置段、加载校验、按序执行插件；失败时 panic。
+// 返回业务可见的能力集合与插件运行时；进程退出时由调用方关闭 Runtime。
+func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) (*plugin.Services, *plugin.Runtime) {
+	reg := registry.DefaultConfigRegistry()
+	for _, section := range pluginOpts.CustomConfigs() {
+		reg.Register(section)
+	}
+	doc := config.MustLoadDocument(configPath, envPrefix, reg)
+
+	host := &plugin.Host{Services: plugin.Services{Doc: doc}}
+	rt := plugin.Run(host, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
+	return &host.Services, rt
 }
