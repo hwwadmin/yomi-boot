@@ -1,5 +1,5 @@
 ---
-description:基于spec文档开始落地代码
+description: 基于spec文档开始落地代码
 ---
 
 1. **全文执行** `_prompts/skills/spec落地执行.md`（《spec落地执行》）。

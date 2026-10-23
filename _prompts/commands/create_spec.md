@@ -1,5 +1,5 @@
 ---
-description:需求显化文档生成
+description: 需求显化文档生成
 ---
 
 1. **思维与口径（全程适用；分阶段执行 Skill 时也不得仅在落盘前补写；含义同 `deep_think` command）**：

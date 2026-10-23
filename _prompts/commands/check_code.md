@@ -1,5 +1,5 @@
 ---
-description:代码巡检
+description: 代码巡检
 ---
 
 1. **全文执行** `_prompts/skills/代码巡检.md`（《代码巡检》）。
