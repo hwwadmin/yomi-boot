@@ -56,7 +56,8 @@ import (
 //   - DefaultConfigs + config.NewRegistry + MustLoadConfig（含 PluginOptions 注册的自定义配置段）
 //   - boot.PluginSet 非 nil 时，改由调用方提供完整 Plugins / Configs
 //
-// Ready 按 Init 顺序执行，Drain 按 Init 逆序执行；仅 Started 插件参与（见 plugin.ReadyHook / DrainHook）。
+// Ready 按 Init 顺序执行，Drain 按 Init 逆序执行；仅已初始化插件参与，
+// Init 返回 plugin.ErrDisabled 的插件会被跳过（见 plugin.ReadyHook / DrainHook）。
 // Close 按 Init 逆序：先停 custom 插件，再关 event，随后 kafka-consumer 先于 kafka-publisher 关闭，
 // 避免消费侧收尾时仍需投递却发现生产者已关闭。
 func DefaultPlugins() []plugin.Plugin {

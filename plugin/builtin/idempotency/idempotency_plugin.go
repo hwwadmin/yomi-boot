@@ -19,7 +19,7 @@ const Name = "idempotency"
 
 // Idempotency 幂等 Processing 超时清理插件；自包含清理器
 type Idempotency struct {
-	plugin.PluginState
+	plugin.Base
 
 	cleaner *idempotency.StaleCleaner
 }
@@ -28,7 +28,7 @@ var _ plugin.Plugin = (*Idempotency)(nil)
 
 // NewIdempotency 创建幂等 Processing 超时清理生命周期插件
 func NewIdempotency() *Idempotency {
-	return &Idempotency{PluginState: plugin.NewPluginState(Name)}
+	return &Idempotency{Base: plugin.NewBase(Name)}
 }
 
 // From 从插件插槽中取出幂等清理插件；未注册时返回 nil
@@ -42,41 +42,42 @@ func From(slot *plugin.PluginSlot) *Idempotency {
 }
 
 // Init 初始化幂等超时清理器
-func (p *Idempotency) Init(slot *plugin.PluginSlot) {
+func (p *Idempotency) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
-		return
+		return plugin.ErrDisabled
 	}
 	app := appctxplugin.From(slot).AppCtx()
 	if app == nil {
-		panic(errors.New("idempotency: 需要 app 插件"))
+		return errors.New("idempotency: 需要 app 插件")
 	}
 	db := dbplugin.FromDB(slot)
 	if db.DB() == nil {
-		panic(errors.New("idempotency: 需要 db 插件（db.enabled=true）"))
+		return errors.New("idempotency: 需要 db 插件（db.enabled=true）")
 	}
 	redis := redisplugin.From(slot)
 	if redis.DistLockFactory() == nil {
-		panic(errors.New("idempotency: 需要 redis 插件提供 DistLockFactory"))
+		return errors.New("idempotency: 需要 redis 插件提供 DistLockFactory")
 	}
-	p.cleaner = idempotency.MustStartStaleCleanerFromConfig(context.Background(), idempotency.StaleCleanerDeps{
-		Repo:            idempotency.NewRepository(db.DB()),
-		DistLockFactory: redis.DistLockFactory(),
-		AppName:         app.Name(),
-		Config:          bootCfg.ToConfig(),
-	})
-	if p.cleaner != nil {
-		p.SetStarted()
+	cleaner := idempotency.NewStaleCleaner(
+		idempotency.NewRepository(db.DB()),
+		idempotency.StaleCleanerConfigFrom(bootCfg.ToConfig(), app.Name()),
+	)
+	if err := cleaner.Start(ctx, redis.DistLockFactory()); err != nil {
+		return err
 	}
+	p.cleaner = cleaner
+	return nil
 }
 
 // Close 关闭幂等超时清理资源
-func (p *Idempotency) Close() {
+func (p *Idempotency) Close(context.Context) error {
 	if p.cleaner == nil {
-		return
+		return nil
 	}
-	_ = p.cleaner.Close()
+	err := p.cleaner.Close()
 	p.cleaner = nil
+	return err
 }
 
 // Cleaner 返回幂等超时清理器；未启用时返回 nil

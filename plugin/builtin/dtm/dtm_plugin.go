@@ -4,6 +4,8 @@
 package dtmplugin
 
 import (
+	"context"
+
 	"gitee.com/hq_project/yomi-boot/component/cloud/dtm"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/plugin"
@@ -14,7 +16,7 @@ const Name = "dtm"
 
 // Dtm DTM 插件；自包含 DTM 客户端
 type Dtm struct {
-	plugin.PluginState
+	plugin.Base
 
 	client *dtm.Client
 }
@@ -23,7 +25,7 @@ var _ plugin.Plugin = (*Dtm)(nil)
 
 // NewDtm 创建 DTM 生命周期插件；客户端始终构造，enabled 时探活
 func NewDtm() *Dtm {
-	return &Dtm{PluginState: plugin.NewPluginState(Name)}
+	return &Dtm{Base: plugin.NewBase(Name)}
 }
 
 // From 从插件插槽中取出 DTM 插件；未注册时返回 nil
@@ -37,7 +39,7 @@ func From(slot *plugin.PluginSlot) *Dtm {
 }
 
 // Init 构造 DTM 客户端；enabled 时探活
-func (p *Dtm) Init(slot *plugin.PluginSlot) {
+func (p *Dtm) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	cfg := bootCfg.ToConfig()
 	enabled := bootCfg.EnabledOrDefault()
@@ -48,14 +50,14 @@ func (p *Dtm) Init(slot *plugin.PluginSlot) {
 	consul := consulplugin.From(slot)
 	p.client = dtm.NewClient(consul.Client(), server, dtm.WithTimeout(cfg.TimeoutOrDefault()))
 	if !enabled {
-		return
+		return plugin.ErrDisabled
 	}
 	dtm.ProbeServer(server)
-	p.SetStarted()
+	return nil
 }
 
 // Close DTM 客户端无资源需要释放
-func (p *Dtm) Close() {}
+func (p *Dtm) Close(context.Context) error { return nil }
 
 // Client 返回 DTM 客户端；未初始化时返回 nil
 func (p *Dtm) Client() *dtm.Client {

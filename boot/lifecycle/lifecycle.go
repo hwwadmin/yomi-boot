@@ -23,12 +23,13 @@ type Hook = func(context.Context) error
 
 // App 是一次 HTTP 服务进程的生命周期描述
 type App struct {
-	Name        string        // Name 是服务名，仅用于日志；来自 app.name
-	HTTPServer  *http.Server  // HTTPServer 是已装配但尚未监听的 HTTP 服务
-	OnReady     []Hook        // OnReady 在 HTTP 监听成功后按序执行；失败会导致启动失败
-	OnDraining  []Hook        // OnDraining 在 HTTP 停机前逆序执行；须尊重 ctx
-	StopTimeout time.Duration // StopTimeout 是 Drain + Stop 的总预算
-	Release     func()        // Release 在 HTTP 停止后释放基础设施资源
+	Name           string                      // Name 是服务名，仅用于日志；来自 app.name
+	HTTPServer     *http.Server                // HTTPServer 是已装配但尚未监听的 HTTP 服务
+	OnReady        []Hook                      // OnReady 在 HTTP 监听成功后按序执行；失败会导致启动失败
+	OnDraining     []Hook                      // OnDraining 在 HTTP 停机前逆序执行；须尊重 ctx
+	StopTimeout    time.Duration               // StopTimeout 是 Drain + HTTP Shutdown 的总预算
+	ReleaseTimeout time.Duration               // ReleaseTimeout 是插件资源释放的总预算
+	Release        func(context.Context) error // Release 在 HTTP 停止后释放基础设施资源
 }
 
 // Run 启动服务并阻塞至进程退出；启动/运行失败时 panic

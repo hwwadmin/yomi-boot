@@ -17,7 +17,7 @@ const Name = "consul"
 
 // Consul Consul 插件；自包含客户端与注册信息
 type Consul struct {
-	plugin.PluginState
+	plugin.Base
 
 	client    *consul.Client
 	cfg       consul.Config
@@ -33,7 +33,7 @@ var (
 
 // NewConsul 创建 Consul 生命周期插件
 func NewConsul() *Consul {
-	return &Consul{PluginState: plugin.NewPluginState(Name)}
+	return &Consul{Base: plugin.NewBase(Name)}
 }
 
 // From 从插件插槽中取出 Consul 插件；未注册时返回 nil
@@ -47,19 +47,24 @@ func From(slot *plugin.PluginSlot) *Consul {
 }
 
 // Init 初始化 Consul 客户端；服务注册推迟到 Ready 阶段
-func (p *Consul) Init(slot *plugin.PluginSlot) {
+func (p *Consul) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
-		return
+		return plugin.ErrDisabled
 	}
 	app := appctxplugin.From(slot).AppCtx()
 	if app == nil {
-		panic(errors.New("consul: 需要 app 插件"))
+		return errors.New("consul: 需要 app 插件")
 	}
-	p.cfg = bootCfg.ToConfig()
-	p.client = consul.MustNewClient(p.cfg)
+	cfg := bootCfg.ToConfig()
+	client, err := consul.NewClient(cfg)
+	if err != nil {
+		return err
+	}
+	p.cfg = cfg
+	p.client = client
 	p.appName = app.Name()
-	p.SetStarted()
+	return nil
 }
 
 // OnReady 在 HTTP 监听成功后注册服务
@@ -84,7 +89,7 @@ func (p *Consul) OnDraining(_ context.Context) error {
 }
 
 // Close 无需额外释放；注销由 OnDraining 完成
-func (p *Consul) Close() {}
+func (p *Consul) Close(context.Context) error { return nil }
 
 // Client 返回 Consul 客户端；未启用时返回 nil
 func (p *Consul) Client() *consul.Client {

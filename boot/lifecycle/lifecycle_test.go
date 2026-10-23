@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +39,10 @@ func TestRunContextPhases(t *testing.T) {
 			},
 		},
 		StopTimeout: time.Second,
-		Release:     func() { events = append(events, "release") },
+		Release: func(context.Context) error {
+			events = append(events, "release")
+			return nil
+		},
 	}
 
 	if err := RunContext(ctx, func() *App { return app }); err != nil {
@@ -70,7 +74,10 @@ func TestRunContextReadyFailure(t *testing.T) {
 			},
 		},
 		StopTimeout: time.Second,
-		Release:     func() { events = append(events, "release") },
+		Release: func(context.Context) error {
+			events = append(events, "release")
+			return nil
+		},
 	}
 
 	if err := RunContext(context.Background(), func() *App { return app }); err == nil {
@@ -95,7 +102,10 @@ func TestRunContextBindFailure(t *testing.T) {
 	app := &App{
 		Name:       "test",
 		HTTPServer: &http.Server{Addr: listener.Addr().String(), Handler: http.NewServeMux()},
-		Release:    func() { released = true },
+		Release: func(context.Context) error {
+			released = true
+			return nil
+		},
 	}
 
 	if err := RunContext(context.Background(), func() *App { return app }); err == nil {
@@ -110,6 +120,32 @@ func TestRunContextBindFailure(t *testing.T) {
 func TestRunContextNilApp(t *testing.T) {
 	if err := RunContext(context.Background(), func() *App { return nil }); err == nil {
 		t.Fatal("App 为 nil 时应返回错误")
+	}
+}
+
+// TestRunContextReleaseError 验证 Release 错误会从 RunContext 返回
+func TestRunContextReleaseError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := &App{
+		Name:       "test",
+		HTTPServer: &http.Server{Addr: "127.0.0.1:0", Handler: http.NewServeMux()},
+		OnReady: []Hook{
+			func(context.Context) error {
+				cancel()
+				return nil
+			},
+		},
+		StopTimeout: time.Second,
+		Release: func(context.Context) error {
+			return errors.New("release failed")
+		},
+	}
+
+	err := RunContext(ctx, func() *App { return app })
+	if err == nil || !strings.Contains(err.Error(), "release failed") {
+		t.Fatalf("RunContext 应返回 Release 错误，实际 %v", err)
 	}
 }
 

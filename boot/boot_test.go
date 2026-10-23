@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,17 +41,17 @@ snowflake:
 		t.Fatalf("写入测试配置失败: %v", err)
 	}
 
-	slot := MustInit(configPath, "", plugin.PluginOptions{}, nil)
-	t.Cleanup(slot.Close)
+	slot := MustInit(context.Background(), InitOptions{ConfigPath: configPath})
+	closeSlot(t, slot)
 
 	if got := appctxplugin.From(slot).AppCtx().Name(); got != "boot-test" {
 		t.Fatalf("app.name = %q, want %q", got, "boot-test")
 	}
 	if !slot.Started(appctxplugin.Name) {
-		t.Fatal("app 插件应处于已启动状态")
+		t.Fatal("app 插件应处于已初始化状态")
 	}
 	if slot.Started(dbplugin.DBName) {
-		t.Fatal("未启用 db 时不应启动 db 插件")
+		t.Fatal("未启用 db 时 db 插件应为跳过状态")
 	}
 	if _, ok := slot.Plugin(eventplugin.Name); !ok {
 		t.Fatal("event 插件应存在于插件链中")
@@ -68,11 +69,14 @@ func TestMustInitPluginSetUsesExactPlugins(t *testing.T) {
   timezone: UTC
 `)
 
-	slot := MustInit(configPath, "", plugin.PluginOptions{}, &PluginSet{
-		Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
-		Configs: []config.Section{appctxplugin.ConfigSection()},
+	slot := MustInit(context.Background(), InitOptions{
+		ConfigPath: configPath,
+		PluginSet: &PluginSet{
+			Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
+			Configs: []config.Section{appctxplugin.ConfigSection()},
+		},
 	})
-	t.Cleanup(slot.Close)
+	closeSlot(t, slot)
 
 	if got := len(slot.Plugins()); got != 1 {
 		t.Fatalf("插件数量 = %d, want 1", got)
@@ -98,14 +102,17 @@ func TestMustInitPluginSetWithCustomPlugin(t *testing.T) {
 	custom := newTestPlugin("test-plugin")
 	configPath := writeBootConfig(t, "biz:\n  flag: true\n")
 
-	slot := MustInit(configPath, "", plugin.PluginOptions{}, &PluginSet{
-		Plugins: []plugin.Plugin{custom},
-		Configs: []config.Section{config.NewSection("biz", biz, nil)},
+	slot := MustInit(context.Background(), InitOptions{
+		ConfigPath: configPath,
+		PluginSet: &PluginSet{
+			Plugins: []plugin.Plugin{custom},
+			Configs: []config.Section{config.NewSection("biz", biz, nil)},
+		},
 	})
-	t.Cleanup(slot.Close)
+	closeSlot(t, slot)
 
-	if !custom.Started() {
-		t.Fatal("自定义插件应已启动")
+	if !slot.Started("test-plugin") {
+		t.Fatal("自定义插件应已初始化")
 	}
 	if !biz.Flag {
 		t.Fatal("自定义配置段应已加载")
@@ -125,13 +132,17 @@ func TestMustInitPluginSetIgnoresCustomPlugins(t *testing.T) {
 	opts := plugin.PluginOptions{}
 	opts.AddCustomPlugin(newTestPlugin("ignored-custom"))
 
-	slot := MustInit(configPath, "", opts, &PluginSet{
-		Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
-		Configs: []config.Section{appctxplugin.ConfigSection()},
+	slot := MustInit(context.Background(), InitOptions{
+		ConfigPath: configPath,
+		Plugin:     opts,
+		PluginSet: &PluginSet{
+			Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
+			Configs: []config.Section{appctxplugin.ConfigSection()},
+		},
 	})
-	t.Cleanup(slot.Close)
+	closeSlot(t, slot)
 
-	if _, ok := slot.Plugin("ignored-custom"); ok {
+	if slot.Started("ignored-custom") {
 		t.Fatal("PluginSet 模式应忽略 PluginOptions 自定义插件")
 	}
 	if got := len(slot.Plugins()); got != 1 {
@@ -156,9 +167,13 @@ biz:
 `)
 
 	expectPanic(t, "未注册段", func() {
-		MustInit(configPath, "", opts, &PluginSet{
-			Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
-			Configs: []config.Section{appctxplugin.ConfigSection()},
+		MustInit(context.Background(), InitOptions{
+			ConfigPath: configPath,
+			Plugin:     opts,
+			PluginSet: &PluginSet{
+				Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
+				Configs: []config.Section{appctxplugin.ConfigSection()},
+			},
 		})
 	})
 }
@@ -174,17 +189,23 @@ db:
 `)
 
 	expectPanic(t, "未注册段", func() {
-		MustInit(configPath, "", plugin.PluginOptions{}, &PluginSet{
-			Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
-			Configs: []config.Section{appctxplugin.ConfigSection()},
+		MustInit(context.Background(), InitOptions{
+			ConfigPath: configPath,
+			PluginSet: &PluginSet{
+				Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
+				Configs: []config.Section{appctxplugin.ConfigSection()},
+			},
 		})
 	})
 }
 
 // TestMustInitPluginSetAllowsEmptySet 验证空 PluginSet 表示不装配任何插件与配置段
 func TestMustInitPluginSetAllowsEmptySet(t *testing.T) {
-	slot := MustInit(writeBootConfig(t, "{}\n"), "", plugin.PluginOptions{}, &PluginSet{})
-	t.Cleanup(slot.Close)
+	slot := MustInit(context.Background(), InitOptions{
+		ConfigPath: writeBootConfig(t, "{}\n"),
+		PluginSet:  &PluginSet{},
+	})
+	closeSlot(t, slot)
 
 	if got := len(slot.Plugins()); got != 0 {
 		t.Fatalf("插件数量 = %d, want 0", got)
@@ -193,18 +214,30 @@ func TestMustInitPluginSetAllowsEmptySet(t *testing.T) {
 
 // testPlugin 是仅用于 PluginSet 测试的最小插件
 type testPlugin struct {
-	plugin.PluginState
+	plugin.Base
 }
 
 func newTestPlugin(name string) *testPlugin {
-	return &testPlugin{PluginState: plugin.NewPluginState(name)}
+	return &testPlugin{Base: plugin.NewBase(name)}
 }
 
-func (p *testPlugin) Init(*plugin.PluginSlot) {
-	p.SetStarted()
+func (p *testPlugin) Init(context.Context, *plugin.PluginSlot) error {
+	return nil
 }
 
-func (p *testPlugin) Close() {}
+func (p *testPlugin) Close(context.Context) error {
+	return nil
+}
+
+// closeSlot 在测试结束时关闭插件插槽
+func closeSlot(t *testing.T, slot *plugin.PluginSlot) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := slot.Close(context.Background()); err != nil {
+			t.Errorf("关闭插件插槽失败: %v", err)
+		}
+	})
+}
 
 // writeBootConfig 写入临时 YAML 配置并返回路径
 func writeBootConfig(t *testing.T, content string) string {

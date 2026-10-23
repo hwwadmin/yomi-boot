@@ -154,7 +154,7 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | `server.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `MustBuildApp`、`serviceName` |
 | `middleware.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `DefaultMiddlewares` |
 | `lifecycle.go` / `run.go` | `gitee.com/hq_project/yomi-boot/boot/lifecycle/` | `App`、`Hook`、`Run` / `RunContext`、阶段编排与停机 |
-| `plugin.go` / `plugin_slot.go` / `options.go` | `gitee.com/hq_project/yomi-boot/plugin/` | `Plugin` 接口、`PluginState`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
+| `plugin.go` / `plugin_slot.go` / `options.go` | `gitee.com/hq_project/yomi-boot/plugin/` | `Plugin` 接口、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
 | `{组件}_plugin.go` | `gitee.com/hq_project/yomi-boot/plugin/builtin/{lib}/`，如 `plugin/builtin/db/`、`plugin/builtin/consul/` | 各组件生命周期插件实现与 YAML 绑定（包名 `{lib}plugin`；如 `db_plugin.go`、`tx_plugin.go`、`config.go`） |
 
 ### 3.8 gitee.com/hq_project/yomi-boot handler

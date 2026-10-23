@@ -82,8 +82,12 @@
 // services/{bff}/internal/bootstrap/server.go
 var pluginOpts plugin.PluginOptions
 pluginOpts.AddConfigSection(svcconfig.BizSection()) // key: biz
-slot := boot.MustInit(path, "YOMI_{BFF}", pluginOpts)
-defer slot.Close()
+slot := boot.MustInit(context.Background(), boot.InitOptions{
+    ConfigPath: path,
+    EnvPrefix:  "YOMI_{BFF}",
+    Plugin:     pluginOpts,
+})
+defer slot.Close(context.Background())
 biz := config.MustSection[svcconfig.BizConfig](slot.Config, svcconfig.SectionKey)
 ```
 

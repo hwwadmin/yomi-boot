@@ -7,6 +7,9 @@
 package boot
 
 import (
+	"context"
+	"time"
+
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
 	"gitee.com/hq_project/yomi-boot/boot/server"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
@@ -18,20 +21,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const defaultInitTimeout = 30 * time.Second
+
 // WireFunc 在插件初始化后装配路由。
 type WireFunc func(slot *plugin.PluginSlot) []router.Registrar
 
 // MiddlewareFactory 基于插件插槽构建 HTTP 中间件链。
 type MiddlewareFactory func(slot *plugin.PluginSlot) []gin.HandlerFunc
 
-// Options 启动选项
+// InitOptions 是基础设施初始化选项。
+type InitOptions struct {
+	ConfigPath  string               // 配置文件路径，为空时使用 config.ResolvePath()
+	EnvPrefix   string               // 环境变量前缀，可为空
+	Plugin      plugin.PluginOptions // 默认插件链的扩展项；PluginSet 优先
+	PluginSet   *PluginSet           // 完全自定义插件链与配置段；设置后优先于默认链
+	InitTimeout time.Duration        // 启动预算，0 时使用 30s；ctx 已带 deadline 时以 ctx 为准
+}
+
+// InitTimeoutOrDefault 返回启动预算，未配置时使用 30s。
+func (o InitOptions) InitTimeoutOrDefault() time.Duration {
+	if o.InitTimeout <= 0 {
+		return defaultInitTimeout
+	}
+	return o.InitTimeout
+}
+
+// Options 是 HTTP 启动选项。
 type Options struct {
-	EnvPrefix       string               // 环境变量前缀，可为空
-	ConfigPath      string               // 配置文件路径，为空时使用 config.ResolvePath()
-	Plugin          plugin.PluginOptions // 默认插件链的扩展项；PluginSet 优先
-	PluginSet       *PluginSet           // 完全自定义插件链与配置段；设置后优先于默认链
-	Middlewares     MiddlewareFactory    // 中间件工厂，为空时使用 server.DefaultMiddlewares
-	ResponseEncoder response.Encoder     // 响应编码器，为空时使用 DefaultEncoder（已注册则沿用）
+	InitOptions
+	Middlewares     MiddlewareFactory // 中间件工厂，为空时使用 server.DefaultMiddlewares
+	ResponseEncoder response.Encoder  // 响应编码器，为空时使用 DefaultEncoder（已注册则沿用）
 }
 
 // PluginSet 是完全自定义插件链的装配集合，设置后只使用其 Plugins 与 Configs。
@@ -44,7 +63,7 @@ type PluginSet struct {
 
 // Run 使用默认配置和默认中间件启动 HTTP 服务，阻塞至进程退出。
 func Run(envPrefix string, wire WireFunc) {
-	RunWithOptions(Options{EnvPrefix: envPrefix}, wire)
+	RunWithOptions(Options{InitOptions: InitOptions{EnvPrefix: envPrefix}}, wire)
 }
 
 // RunWithOptions 按 opts 初始化基础设施并启动 HTTP 服务，阻塞至进程退出。
@@ -58,14 +77,19 @@ func RunWithOptions(opts Options, wire WireFunc) {
 	registerResponseEncoder(opts.ResponseEncoder)
 
 	// 解析配置文件路径
-	configPath := opts.ConfigPath
-	if configPath == "" {
-		configPath = config.ResolvePath()
+	if opts.ConfigPath == "" {
+		opts.ConfigPath = config.ResolvePath()
 	}
 
 	lifecycle.Run(func() *lifecycle.App {
 		// 初始化基础设施：注册配置段、加载校验、按序执行插件
-		slot := MustInit(configPath, opts.EnvPrefix, opts.Plugin, opts.PluginSet)
+		slot := MustInit(context.Background(), opts.InitOptions)
+		defer func() {
+			if r := recover(); r != nil {
+				_ = slot.Close(context.Background())
+				panic(r)
+			}
+		}()
 
 		// 装配路由
 		registrars := wire(slot)
@@ -95,25 +119,36 @@ func registerResponseEncoder(enc response.Encoder) {
 }
 
 // MustInit 初始化配置与插件链并返回插件插槽，初始化失败时 panic。
-// pluginSet 非空时使用自定义插件与配置段，否则使用内置默认链并追加 pluginOpts 扩展。
-func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions, pluginSet *PluginSet) *plugin.PluginSlot {
+// ctx 控制启动预算；未携带 deadline 时使用 opts.InitTimeout（默认 30s）。
+// PluginSet 非空时使用自定义插件与配置段，否则使用内置默认链并追加 Plugin 扩展。
+func MustInit(ctx context.Context, opts InitOptions) *plugin.PluginSlot {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.InitTimeoutOrDefault())
+		defer cancel()
+	}
+
 	reg := config.NewRegistry()
 	var plugins []plugin.Plugin
-	if pluginSet != nil {
-		reg.Register(pluginSet.Configs...)
-		plugins = pluginSet.Plugins
+	if opts.PluginSet != nil {
+		reg.Register(opts.PluginSet.Configs...)
+		plugins = opts.PluginSet.Plugins
 	} else {
 		reg.Register(builtin.DefaultConfigs()...)
-		reg.Register(pluginOpts.CustomConfigs()...)
-		plugins = append(builtin.DefaultPlugins(), pluginOpts.CustomPlugins()...)
+		reg.Register(opts.Plugin.CustomConfigs()...)
+		plugins = append(builtin.DefaultPlugins(), opts.Plugin.CustomPlugins()...)
 	}
 
 	// 加载配置文件
-	cfg := config.MustLoadConfig(configPath, envPrefix, reg)
+	cfg := config.MustLoadConfig(opts.ConfigPath, opts.EnvPrefix, reg)
 
 	// 创建插件插槽并初始化插件
 	slot := plugin.NewPluginSlot(cfg, plugins)
-	slot.Init()
-
+	if err := slot.Init(ctx); err != nil {
+		panic(err)
+	}
 	return slot
 }

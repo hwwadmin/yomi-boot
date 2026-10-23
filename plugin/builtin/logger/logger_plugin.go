@@ -4,6 +4,8 @@
 package loggerplugin
 
 import (
+	"context"
+
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
@@ -15,34 +17,39 @@ const Name = "logger"
 
 // Logger 日志插件；日志枢纽为进程级单例，无需对外暴露组件
 type Logger struct {
-	plugin.PluginState
+	plugin.Base
 
-	closeFn func()
+	closeFn func() error
 }
 
 var _ plugin.Plugin = (*Logger)(nil)
 
 // NewLogger 创建日志生命周期插件
 func NewLogger() *Logger {
-	return &Logger{PluginState: plugin.NewPluginState(Name)}
+	return &Logger{Base: plugin.NewBase(Name)}
 }
 
 // Init 读取 log 配置并初始化日志枢纽
-func (p *Logger) Init(slot *plugin.PluginSlot) {
+func (p *Logger) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	app := appctxplugin.From(slot).AppCtx()
 	if app == nil {
-		panic(errors.New("logger: 需要 app 插件"))
+		return errors.New("logger: 需要 app 插件")
 	}
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
-	p.closeFn = logger.MustInit(app.Name(), app.Env(), bootCfg.ToConfig())
-	p.SetStarted()
+	closeFn, err := logger.InitLogger(app.Name(), app.Env(), bootCfg.ToConfig())
+	if err != nil {
+		return err
+	}
+	p.closeFn = closeFn
+	return nil
 }
 
 // Close 关闭日志资源（刷缓冲、关文件）
-func (p *Logger) Close() {
+func (p *Logger) Close(context.Context) error {
 	if p.closeFn == nil {
-		return
+		return nil
 	}
-	p.closeFn()
+	err := p.closeFn()
 	p.closeFn = nil
+	return err
 }

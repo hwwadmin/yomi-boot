@@ -22,16 +22,19 @@ type Server struct {
 	listener net.Listener
 }
 
-// MustStart 启动 pprof 服务并返回句柄；启动失败时 log + panic
-func MustStart(cfg Config) *Server {
+// Start 启动 pprof 服务并返回句柄。
+func Start(cfg Config) (*Server, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	addr := cfg.ListenAddr()
 	mux := http.NewServeMux()
 	registerRoutes(mux)
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		logger.ErrorWithoutCtx("pprof 监听失败", "addr", addr, "error", err)
-		panic(err)
+		return nil, errors.Wrap(err, "pprof 监听失败")
 	}
 
 	server := &http.Server{
@@ -46,7 +49,17 @@ func MustStart(cfg Config) *Server {
 	}()
 
 	logger.InfoWithoutCtx("pprof 服务启动完成", "addr", listener.Addr().String())
-	return &Server{server: server, listener: listener}
+	return &Server{server: server, listener: listener}, nil
+}
+
+// MustStart 启动 pprof 服务并返回句柄；启动失败时 log + panic
+func MustStart(cfg Config) *Server {
+	server, err := Start(cfg)
+	if err != nil {
+		logger.ErrorWithoutCtx("pprof 启动失败", "error", err)
+		panic(err)
+	}
+	return server
 }
 
 // Addr 返回实际监听地址；未启动时返回 nil

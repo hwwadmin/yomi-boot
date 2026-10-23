@@ -4,6 +4,8 @@
 package redisstreamplugin
 
 import (
+	"context"
+
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -15,7 +17,7 @@ const Name = "redisstream"
 
 // RedisStream Redis Stream 生命周期插件；自包含发布/消费组件
 type RedisStream struct {
-	plugin.PluginState
+	plugin.Base
 
 	components *redisstream.Components
 }
@@ -24,7 +26,7 @@ var _ plugin.Plugin = (*RedisStream)(nil)
 
 // NewRedisStream 创建 Redis Stream 生命周期插件
 func NewRedisStream() *RedisStream {
-	return &RedisStream{PluginState: plugin.NewPluginState(Name)}
+	return &RedisStream{Base: plugin.NewBase(Name)}
 }
 
 // From 从插件插槽中取出 Redis Stream 插件；未注册时返回 nil
@@ -38,26 +40,31 @@ func From(slot *plugin.PluginSlot) *RedisStream {
 }
 
 // Init 初始化 Redis Stream 组件，复用前序 redis 插件的原始客户端
-func (p *RedisStream) Init(slot *plugin.PluginSlot) {
+func (p *RedisStream) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
-		return
+		return plugin.ErrDisabled
 	}
 	redis := redisplugin.From(slot)
 	if redis.Client() == nil {
-		panic(errors.New("redis_stream: 需要 redis 插件（redis.enabled=true）"))
+		return errors.New("redis_stream: 需要 redis 插件（redis.enabled=true）")
 	}
-	p.components = redisstream.MustNewComponents(bootCfg.ToConfig(), redis.Client())
-	p.SetStarted()
+	components, err := redisstream.NewComponents(bootCfg.ToConfig(), redis.Client())
+	if err != nil {
+		return err
+	}
+	p.components = components
+	return nil
 }
 
 // Close 停止消费与发布侧资源；不关闭 Redis client
-func (p *RedisStream) Close() {
+func (p *RedisStream) Close(context.Context) error {
 	if p.components == nil {
-		return
+		return nil
 	}
-	_ = p.components.Close()
+	err := p.components.Close()
 	p.components = nil
+	return err
 }
 
 // Publisher 返回 Redis Stream 发布者；未启用时返回 nil

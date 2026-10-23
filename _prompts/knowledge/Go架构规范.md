@@ -98,7 +98,7 @@
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
 - `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
-- `plugin/` 提供 `Plugin`、`PluginState`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 与单插件关闭等待上限外只保存有序插件链，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
+- `plugin/` 提供 `Plugin`、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链与每个插件的初始化状态，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单放 `plugin/builtin` 根包（根包可 import 全部子包，`plugin/builtin/{lib}` 子包不得 import 根包，否则成环）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
@@ -179,7 +179,7 @@ services/{domain}/
 | ---- | -- |
 | `component/core/` | `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`traceid`、`utils` |
 | `boot/` | `boot`（启动快捷入口与初始化）、`server`（HTTP 装配）、`lifecycle`、`banner` |
-| `plugin/` | `Plugin` 接口、`PluginState`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
+| `plugin/` | `Plugin` 接口、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
 | `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
@@ -189,9 +189,9 @@ services/{domain}/
 
 | 包 | 职责 |
 | -- | ---- |
-| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`、`PluginSet`；`MustInit` 返回 `*plugin.PluginSlot`，配置经 `slot.Config` + `MustSection` 读取；默认插件顺序由 `plugin/builtin` 根包提供，插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Options.PluginSet` 非 nil 时完全使用其 `Plugins` / `Configs`，不再追加内置链与默认配置段，`PluginOptions` 自定义项被忽略；`Run` / `RunWithOptions` 编排响应编码器注册（`Options.ResponseEncoder`，为空时 `DefaultEncoder`）、初始化、wire、HTTP 装配与 lifecycle |
+| `boot` | `MustInit(ctx, InitOptions)`、`Run` / `RunWithOptions`、`Options`、`InitOptions`、`PluginSet`；`MustInit` 返回 `*plugin.PluginSlot`，配置经 `slot.Config` + `MustSection` 读取；默认插件顺序由 `plugin/builtin` 根包提供，插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`InitOptions.PluginSet` 非 nil 时完全使用其 `Plugins` / `Configs`，不再追加内置链与默认配置段，`PluginOptions` 自定义项被忽略；`Run` / `RunWithOptions` 编排响应编码器注册（`Options.ResponseEncoder`，为空时 `DefaultEncoder`）、初始化、wire、HTTP 装配与 lifecycle |
 | `server` | `MustBuildApp`、`DefaultMiddlewares`；只处理 HTTP 侧（gin 引擎、中间件链、`http.Server`、`lifecycle.App`），不感知具体组件 |
-| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`PluginSlot`（Config + 有序插件链，负责 Init / hook 收集 / 逆序 Close；单个插件 Close 限时，超时记 Warn 后继续）、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
+| `plugin` | 资源生命周期框架：`Plugin` 接口（`Init(ctx) error` / `Close(ctx) error`）、`Base`、`ErrDisabled`、`PluginSlot`（Config + 有序插件链，负责 Init / 失败回滚 / hook 收集 / 逆序 Close / 错误聚合）、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
 | `plugin/builtin`（根包） | 内置插件启动顺序（`DefaultPlugins()`）与默认配置段（`DefaultConfigs()`）；根包可 import 全部子包，子包不得 import 根包；`plugin` 根包不得 import 本包 |
 | `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；插件导出具体类型、`Name` 常量、`From` 与组件访问器，自包含其创建的组件；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 内核（无业务状态、不管理外部资源）；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`traceid`、`utils` |
@@ -267,7 +267,7 @@ services/{domain}/
 
 启动 / 运行 / 关闭三阶段异常策略以 [Go异常规范](./Go异常规范.md) §3.5 为准。本文仅强调装配侧：
 
-- 配置加载、插件 `Init`、HTTP 装配失败走启动 Fail Fast（log + panic）；**不**在插件 `Init` 失败时回滚已启动插件。
+- 配置加载、插件 `Init`、HTTP 装配失败走启动 Fail Fast（log + panic）；插件 `Init` 失败时由 `PluginSlot` 逆序回滚已初始化插件，再由 `boot.MustInit` panic。
 - 各 gitee.com/hq_project/yomi-boot 库对外提供 `Must*` 包装（如 `config.MustLoadConfig`）；构造函数内部假定入参已校验。
 - HTTP 请求路径的 `error` 传播与 Recovery 见 Go异常规范。
 
@@ -278,10 +278,10 @@ cmd/main.go
   └─ boot.Run(envPrefix, bootstrap.Wire)                  # 推荐入口：默认配置路径 + 默认中间件链
        └─ boot.RunWithOptions(bootOpts, wire)
             └─ lifecycle.Run(factory)
-                 ├─ boot.MustInit(configPath, envPrefix, bootOpts.Plugin, bootOpts.PluginSet)
+                 ├─ boot.MustInit(ctx, bootOpts.InitOptions)
                  │     ├─ PluginSet 为 nil：config.NewRegistry + builtin.DefaultConfigs + bootOpts.Plugin.CustomConfigs() + MustLoadConfig
                  │     ├─ PluginSet 非 nil：仅注册 PluginSet.Configs + MustLoadConfig
-                 │     └─ plugin.NewPluginSlot(cfg, plugins); slot.Init()  # 默认链追加 CustomPlugins；PluginSet 模式完全使用 Plugins；是否启动看各段 enabled
+                 │     └─ plugin.NewPluginSlot(cfg, plugins); slot.Init(ctx)  # 默认链追加 CustomPlugins；PluginSet 模式完全使用 Plugins；未启用插件返回 ErrDisabled
                  ├─ wire(slot) → []router.Registrar                    # 手写 wiring，在 internal/bootstrap
                  └─ server.MustBuildApp(slot, registrars, middlewares) → *lifecycle.App
 ```
@@ -289,7 +289,7 @@ cmd/main.go
 标准入口是根包 `boot`：
 
 - `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`；`wire` 通常是业务 `internal/bootstrap.Wire`。
-- `boot.RunWithOptions(bootOpts, wire)`：自定义 `ConfigPath`、`PluginOptions`、`PluginSet`（完全自定义插件链与配置段）或中间件工厂。
+- `boot.RunWithOptions(bootOpts, wire)`：通过 `bootOpts.InitOptions` 自定义 `ConfigPath`、`PluginOptions`、`PluginSet`（完全自定义插件链与配置段）、`InitTimeout`，并支持自定义中间件工厂。
 
 两者内部完成 `boot.MustInit → wire → server.MustBuildApp → lifecycle.Run`。
 
@@ -303,7 +303,7 @@ cmd/main.go
 - `server.go` 导出 `Wire(slot *plugin.PluginSlot) []router.Registrar` 作为手写组合根，通过各插件的 `From(slot)` 与组件访问器构造依赖链；`boot.Run(envPrefix, bootstrap.Wire)` 直接使用。
 - 需要自定义配置路径或完全自控启动时，可另提供 `NewApp(configPath string) *lifecycle.App` 并调用 `lifecycle.Run`；两种入口共用同一套 wire。
 - `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.Run`）；`internal/bootstrap/server.go` 只组装与 wiring。
-- `server.MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `slot.Close()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
+- `server.MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `slot.Close(ctx)`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`，插件释放使用独立的 `ReleaseTimeout` 预算。
 
 #### 3.4.4 插件生命周期
 
@@ -312,9 +312,8 @@ cmd/main.go
 ```go
 type Plugin interface {
     Name() string
-    Started() bool
-    Init(slot *PluginSlot)  // 失败 panic；按需启动由配置 enabled 控制
-    Close()                 // 只释放自己持有的资源；无返回值，失败静默
+    Init(ctx context.Context, slot *PluginSlot) error // 失败返回 error；未启用返回 ErrDisabled
+    Close(ctx context.Context) error                  // 释放自己持有的资源；须尊重 ctx
 }
 ```
 
@@ -323,23 +322,23 @@ type Plugin interface {
 ```go
 type PluginSlot struct {
     Config *config.Config
-    // 其余字段为有序插件链、名称索引与单插件关闭等待上限
+    // 其余字段为有序插件链、名称索引与每个插件的初始化状态
 }
 
 func NewPluginSlot(cfg *config.Config, plugins []Plugin) *PluginSlot
-func (s *PluginSlot) Init()
+func (s *PluginSlot) Init(ctx context.Context) error
 func (s *PluginSlot) Plugin(name string) (Plugin, bool)
 func (s *PluginSlot) MustPlugin(name string) Plugin
 func (s *PluginSlot) Started(name string) bool
 func (s *PluginSlot) ReadyHooks() []func(context.Context) error
 func (s *PluginSlot) DrainHooks() []func(context.Context) error
-func (s *PluginSlot) SetCloseTimeout(timeout time.Duration)
-func (s *PluginSlot) Close()
+func (s *PluginSlot) Close(ctx context.Context) error
 ```
 
 - 插件对象自包含其创建的组件；跨插件依赖在 `Init` 中经 `slot.MustPlugin(name)`（或各包的 `From(slot)`）取到前序插件，再调用其组件访问器。
 - 插件名称非空且唯一，重复注册在 `NewPluginSlot` 构造期 panic；`Init` 只能执行一次。
-- `Close` 逆序关闭插件链，对每个插件最多等待 `CloseTimeout`（默认 10 秒，`server.MustBuildApp` 对齐 `http.shutdown_timeout_seconds`）；超时记一条带插件名的 Warn 后继续关闭前序插件，单个插件卡住不会阻塞整次停机。
+- `Init` 按序执行；插件返回 error 或 panic 时，逆序回滚已初始化插件，返回聚合错误。`Init` 返回 `ErrDisabled` 的插件记为跳过，不参与 hook 与 `Close`。
+- `Close` 逆序关闭已初始化插件，使用调用方 ctx（无 deadline 时默认 10 秒）；单个插件超时或 panic 后继续关闭剩余插件，返回聚合错误。
 - 内置插件导出具体类型、`Name` 常量、`From` helper 与只读组件访问器；`From` 返回 nil 时访问器仍安全，依赖方按组件是否为 nil 做 Fail Fast。
 
 需要参与进程阶段（注册发现、缓存预热/落盘等）的插件按需实现两个可选接口：
@@ -354,20 +353,23 @@ type DrainHook interface {
 }
 ```
 
-- 只有 `Started() == true` 的插件会被收集；禁用组件不会误注册。
+- 只有已初始化插件会被收集；`Init` 返回 `ErrDisabled` 的插件会被跳过，不会误注册。
 - `server.MustBuildApp` 将 `slot.ReadyHooks()` / `slot.DrainHooks()` 搬运到 `lifecycle.App`；`lifecycle` 只按阶段调用函数，不认识任何具体组件。
 - `Ready` 按 Init 顺序执行，失败会导致启动失败；`Drain` 按 Init 逆序执行，失败只记录日志。
 - `Drain` 可能在 `Ready` 未完整执行时被调用（启动失败回滚），因此必须幂等。
 - 组件示例：Consul 插件在 `Init` 只创建 client，`OnReady` 注册服务，`OnDraining` 注销服务；业务 custom 插件可用同一契约做缓存预热/落盘。
-- 业务 custom 插件的 `Init(slot)` 可经 `kafkaplugin.FromConsumer(slot)`、`eventplugin.From(slot)` 等访问器读取前序插件组件，再把需要的依赖保存在自身字段中。
+- 业务 custom 插件的 `Init(ctx, slot)` 可经 `kafkaplugin.FromConsumer(slot)`、`eventplugin.From(slot)` 等访问器读取前序插件组件，再把需要的依赖保存在自身字段中。
 
-服务自定义插件 embed 导出的 `PluginState`，与内置插件写法一致：
+服务自定义插件 embed 导出的 `Base`，与内置插件写法一致：
 
 ```go
 type myConsumerPlugin struct {
-    plugin.PluginState
+    plugin.Base
     consumerID string
 }
+
+func (p *myConsumerPlugin) Init(ctx context.Context, slot *plugin.PluginSlot) error { ... }
+func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 ```
 
 **内置插件启动顺序**（不可随意调整；后序 `Init` 通过 `PluginSlot` 查找前序插件并读取其组件）：
