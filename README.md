@@ -30,48 +30,21 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 package main
 
 import (
-	"context"
-
 	"gitee.com/hq_project/yomi-boot/boot"
-	"gitee.com/hq_project/yomi-boot/component/common/handler"
-	"gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
-	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
-	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
-
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
+// envPrefix 是传给 boot.Run 的环境变量前缀。
+const envPrefix = "YOMI_DEMO"
+
 func main() {
-	boot.Run("YOMI_NOTE", func(slot *plugin.PluginSlot) []router.Registrar {
-		app := appctxplugin.From(slot).AppCtx()
-		db := dbplugin.FromDB(slot).DB()             // 未启用 db 时为 nil
-		redisSvc := redisplugin.From(slot).Service() // 未启用 redis 时为 nil
-
-		return []router.Registrar{
-			handler.NewHealthHandler("/health", "/ops/health", app),
-			&noteHandler{db: db, redis: redisSvc},
-		}
-	})
+	boot.Run(envPrefix, wire)
 }
 
-// noteHandler 是业务 Handler，基础设施由组合根注入。
-type noteHandler struct {
-	db    *gorm.DB
-	redis redis.RedisService
-}
-
-func (h *noteHandler) Routes(rg *gin.RouterGroup) {
-	rg.GET("/notes/count", func(c *gin.Context) {
-		handler.Handle(c, func(ctx context.Context) (int64, error) {
-			var count int64
-			err := h.db.WithContext(ctx).Table("notes").Count(&count).Error
-			return count, err
-		})
-	})
+// wire 是路由装配入口；示例无业务，返回空注册器列表。
+func wire(*plugin.PluginSlot) []router.Registrar {
+	return nil
 }
 ```
 
