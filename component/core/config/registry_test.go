@@ -117,6 +117,19 @@ biz:
 	}
 }
 
+// TestLoadConfig_EmptyRegistry 验证空注册表可加载空配置（PluginSet 零配置段场景）
+func TestLoadConfig_EmptyRegistry(t *testing.T) {
+	path := writeTempYAML(t, "{}\n")
+
+	cfg, err := config.LoadConfig(path, "", config.NewRegistry())
+	if err != nil {
+		t.Fatalf("加载失败: %v", err)
+	}
+	if got := len(cfg.Keys()); got != 0 {
+		t.Fatalf("配置段数量 = %d, want 0", got)
+	}
+}
+
 // TestRegistry_DuplicateKeyPanics 验证重复 key 注册 panic
 func TestRegistry_DuplicateKeyPanics(t *testing.T) {
 	defer func() {

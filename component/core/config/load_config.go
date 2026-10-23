@@ -20,9 +20,6 @@ func LoadConfig(configPath, envPrefix string, reg *Registry) (*Config, error) {
 	if reg == nil {
 		return nil, errors.New("配置注册表不能为空")
 	}
-	if len(reg.sections) == 0 {
-		return nil, errors.New("配置注册表不能为空段")
-	}
 
 	v := viper.New()
 	v.SetConfigFile(configPath)

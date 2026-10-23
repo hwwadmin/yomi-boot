@@ -189,7 +189,7 @@ services/{domain}/
 
 | 包 | 职责 |
 | -- | ---- |
-| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`；`MustInit` 返回 `*plugin.PluginSlot`，配置经 `slot.Config` + `MustSection` 读取；内置插件顺序由 `plugin/builtin` 根包提供；插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Run` / `RunWithOptions` 编排响应编码器注册（`Options.ResponseEncoder`，为空时 `DefaultEncoder`）、初始化、wire、HTTP 装配与 lifecycle |
+| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`、`PluginSet`；`MustInit` 返回 `*plugin.PluginSlot`，配置经 `slot.Config` + `MustSection` 读取；默认插件顺序由 `plugin/builtin` 根包提供，插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Options.PluginSet` 非 nil 时完全使用其 `Plugins` / `Configs`，不再追加内置链与默认配置段，`PluginOptions` 自定义项被忽略；`Run` / `RunWithOptions` 编排响应编码器注册（`Options.ResponseEncoder`，为空时 `DefaultEncoder`）、初始化、wire、HTTP 装配与 lifecycle |
 | `server` | `MustBuildApp`、`DefaultMiddlewares`；只处理 HTTP 侧（gin 引擎、中间件链、`http.Server`、`lifecycle.App`），不感知具体组件 |
 | `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`PluginSlot`（Config + 有序插件链，负责 Init / hook 收集 / 逆序 Close；单个插件 Close 限时，超时记 Warn 后继续）、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
 | `plugin/builtin`（根包） | 内置插件启动顺序（`DefaultPlugins()`）与默认配置段（`DefaultConfigs()`）；根包可 import 全部子包，子包不得 import 根包；`plugin` 根包不得 import 本包 |
@@ -278,9 +278,10 @@ cmd/main.go
   └─ boot.Run(envPrefix, bootstrap.Wire)                  # 推荐入口：默认配置路径 + 默认中间件链
        └─ boot.RunWithOptions(bootOpts, wire)
             └─ lifecycle.Run(factory)
-                 ├─ boot.MustInit(configPath, envPrefix, bootOpts.Plugin)
-                 │     ├─ config.NewRegistry + builtin.DefaultConfigs + MustLoadConfig（含 bootOpts.Plugin.CustomConfigs()）
-                 │     └─ plugin.NewPluginSlot(cfg, append(builtin.DefaultPlugins(), bootOpts.Plugin.CustomPlugins()...)); slot.Init()  # 按序 Init；是否启动看各段 enabled
+                 ├─ boot.MustInit(configPath, envPrefix, bootOpts.Plugin, bootOpts.PluginSet)
+                 │     ├─ PluginSet 为 nil：config.NewRegistry + builtin.DefaultConfigs + bootOpts.Plugin.CustomConfigs() + MustLoadConfig
+                 │     ├─ PluginSet 非 nil：仅注册 PluginSet.Configs + MustLoadConfig
+                 │     └─ plugin.NewPluginSlot(cfg, plugins); slot.Init()  # 默认链追加 CustomPlugins；PluginSet 模式完全使用 Plugins；是否启动看各段 enabled
                  ├─ wire(slot) → []router.Registrar                    # 手写 wiring，在 internal/bootstrap
                  └─ server.MustBuildApp(slot, registrars, middlewares) → *lifecycle.App
 ```
@@ -288,7 +289,7 @@ cmd/main.go
 标准入口是根包 `boot`：
 
 - `boot.Run(envPrefix, wire)`：默认配置路径与默认中间件链；服务名来自 `app.name`；`wire` 通常是业务 `internal/bootstrap.Wire`。
-- `boot.RunWithOptions(bootOpts, wire)`：自定义 `ConfigPath`、`PluginOptions` 或中间件工厂。
+- `boot.RunWithOptions(bootOpts, wire)`：自定义 `ConfigPath`、`PluginOptions`、`PluginSet`（完全自定义插件链与配置段）或中间件工厂。
 
 两者内部完成 `boot.MustInit → wire → server.MustBuildApp → lifecycle.Run`。
 

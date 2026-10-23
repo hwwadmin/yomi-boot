@@ -8,7 +8,8 @@
 // 继续关闭前序插件，避免单个插件卡住拖住整个进程。插件对象自包含其创建的组件，跨插件
 // 依赖通过 slot.Plugin / slot.MustPlugin 取到前序插件后调用其访问器，不再使用共享上下文。
 //
-// PluginOptions 汇总服务自定义插件与自定义配置段，作为插件链的扩展入口。
+// PluginOptions 汇总服务自定义插件与自定义配置段，是默认插件链的扩展入口；
+// 需要完全替换插件链与配置段时使用 boot.PluginSet。
 //
 // @author zwei
 package plugin
