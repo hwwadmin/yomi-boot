@@ -1,0 +1,82 @@
+# quick-starter-demo 的 dev 环境配置。
+#
+# 只包含组件库启动所必需的最小配置：app / http / log / snowflake。
+# 其余配置段均已在 registry 注册，未写出的段按零值处理（默认关闭）。
+# 切换环境：复制本文件为 local.yml / prod.yml，再设置 YOMI_CONFIG=local|prod。
+
+app:
+  name: quick-starter-demo # 服务名，作为日志 service 标签
+  env: dev                 # 运行环境
+  version: "0.0.1"         # 版本号
+  timezone: Asia/Shanghai  # 进程时区，须为 IANA 时区名
+
+http:
+  port: 8080
+  read_timeout_seconds: 30
+  write_timeout_seconds: 30
+  # router_prefix: /api    # 路由组前缀，可选
+
+log:
+  dir: logs          # 日志根目录，其下自动创建 access/info/error/debug
+  level: info        # 文件日志最低级别
+  console_level: debug # 控制台最低级别
+  rotation:          # 滚动与保留，必须显式配置
+    max_size_mb: 100
+    retention_days: 7
+    max_backups: 10
+    max_total_mb: 1000
+
+snowflake:
+  worker_id: 1 # 工作节点 ID（0~1023），多实例部署时须唯一
+
+# ---------------------------------------------------------------------------
+# 按需启用：取消注释并把 enabled 置为 true 即可验证对应组件；未启用的组件
+# 不创建连接、不参与就绪与排空。
+# ---------------------------------------------------------------------------
+
+# db:
+#   enabled: true
+#   type: mysql
+#   host: 127.0.0.1
+#   port: 3306
+#   user: root
+#   password: root
+#   database: quick_starter_demo
+#   max_open_conns: 20
+#   max_idle_conns: 10
+#   conn_max_lifetime_minutes: 30
+#   conn_max_idle_time_minutes: 10
+
+# redis:
+#   enabled: true
+#   addr: 127.0.0.1:6379
+#   password: ""
+#   db: 0
+
+# kafka:
+#   publisher_enabled: true
+#   brokers:
+#     - 127.0.0.1:9092
+#   client_id: quick-starter-demo
+#   dial_timeout_seconds: 5
+
+# pprof:
+#   enabled: true
+#   addr: :16080
+
+# consul:
+#   enabled: true
+#   addr: 127.0.0.1:8500
+#   service_id: quick-starter-demo-1
+#   service_name: quick-starter-demo
+#   service_address: 127.0.0.1:8080
+#   check_address: http://127.0.0.1:8080/health
+
+# dtm:
+#   enabled: true
+#   server: 127.0.0.1:36790
+
+# auth:
+#   enabled: true
+#   token_ttl_minutes: 120
+#   store_prefix: quick-starter-demo

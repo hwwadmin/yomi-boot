@@ -17,6 +17,7 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | `component/cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
 | `component/ai/` | AI 能力组件（LLM、Embedding、Jev、RAG、VectorDB）；不进插件链、不读 YAML、不参与插件生命周期 |
 | `plugin/` | 插件契约与内置插件：`Plugin`/`PluginState`/`PluginSlot`/`ReadyHook`/`DrainHook`；插件自包含其创建的组件，`plugin/builtin/{lib}` 负责内置插件实现与部署 YAML 绑定（`cors`/`router` 仅绑定） |
+| `quick-starter-demo/` | 最小启动示例：只有 `main` 与 `config`，无业务，用于验证组件库可独立跑通 |
 
 ## 快速启动
 
@@ -43,6 +44,8 @@ func main() {
 ```
 
 服务名统一来自配置 `app.name`。需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `boot.MustInit`、`server.MustBuildApp`、`lifecycle.Run` / `lifecycle.RunContext` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
+
+组件库自身的最小启动示例在 `quick-starter-demo/`：`cd quick-starter-demo && go run .`。
 
 ## 中间件推荐适配版本
 
