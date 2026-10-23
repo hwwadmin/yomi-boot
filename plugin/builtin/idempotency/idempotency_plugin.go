@@ -26,8 +26,8 @@ type Idempotency struct {
 
 var _ plugin.Plugin = (*Idempotency)(nil)
 
-// NewIdempotencyStaleCleaner 创建幂等 Processing 超时清理生命周期插件
-func NewIdempotencyStaleCleaner() *Idempotency {
+// NewIdempotency 创建幂等 Processing 超时清理生命周期插件
+func NewIdempotency() *Idempotency {
 	return &Idempotency{PluginState: plugin.NewPluginState(Name)}
 }
 

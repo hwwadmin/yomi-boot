@@ -74,7 +74,7 @@ func DefaultPlugins() []plugin.Plugin {
 		dbplugin.NewTx(),
 		consulplugin.NewConsul(),
 		dtmplugin.NewDtm(),
-		idempotencyplugin.NewIdempotencyStaleCleaner(),
+		idempotencyplugin.NewIdempotency(),
 		tokenplugin.NewToken(),
 		httprecordplugin.NewHttpRecord(),
 		eventplugin.NewEvent(),
