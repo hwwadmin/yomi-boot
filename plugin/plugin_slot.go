@@ -18,10 +18,10 @@ import (
 type PluginSlot struct {
 	Config *config.Config // Config 是已绑定配置（含自定义段）
 
-	chain  []Plugin
-	index  map[string]Plugin
-	inited bool
-	closed bool
+	chain  []Plugin          // chain 是注册顺序的插件链；Init/ReadyHooks/DrainHooks/Close 均按它遍历
+	index  map[string]Plugin // index 是插件名到插件实例的索引；仅用于按名查找
+	inited bool              // inited 标记 Init 是否已执行；禁止重复 Init
+	closed bool              // closed 标记 Close 是否已执行；Close 幂等，关闭后禁止 Init
 }
 
 // NewPluginSlot 创建插件插槽；插件为空、名称为空或重名时 panic（Fail Fast）
