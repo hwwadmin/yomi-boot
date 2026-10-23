@@ -22,16 +22,23 @@ func MustBuildApp(slot *plugin.PluginSlot, registrars []router.Registrar, middle
 	if slot == nil {
 		panic("server: PluginSlot 不能为空")
 	}
-	response.MustReady()
-	httpCfg := config.MustSection[routerplugin.BootConfig](slot.Config, routerplugin.SectionKey).ToConfig()
 
+	// 检查响应编码器注册
+	response.MustReady()
+	// 获取 HTTP 配置
+	httpCfg := config.MustSection[routerplugin.BootConfig](slot.Config, routerplugin.SectionKey).ToConfig()
+	// 配置 Gin 日志
 	logger.SetupGin()
+
+	// 创建路由引擎
 	engine := router.MustNewRouter(
 		httpCfg.RouterPrefixClean(),
 		registrars,
 		middlewares,
 		httpCfg.TrustedProxies,
 	)
+
+	// 创建 HTTP 服务
 	server := &http.Server{
 		Addr:              httpCfg.ListenAddr(),
 		Handler:           engine,
