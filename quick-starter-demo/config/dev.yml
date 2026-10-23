@@ -24,9 +24,10 @@ app:
 
 http:
   port: 8080
-  read_timeout_seconds: 30
-  write_timeout_seconds: 30
+  read_timeout_seconds: 30        # 读超时，默认 10
+  write_timeout_seconds: 30       # 写超时，默认 15
   read_header_timeout_seconds: 5  # 读请求头超时，默认 5
+  idle_timeout_seconds: 90        # 空闲连接超时，默认 90
   shutdown_timeout_seconds: 10    # 优雅停机超时，默认 10
   max_request_body_bytes: 1048576 # 请求体上限 1MB
   # router_prefix: /api           # 路由组前缀，可选

@@ -45,6 +45,7 @@ func MustBuildApp(slot *plugin.PluginSlot, registrars []router.Registrar, middle
 		ReadTimeout:       httpCfg.ReadTimeout(),
 		WriteTimeout:      httpCfg.WriteTimeout(),
 		ReadHeaderTimeout: httpCfg.ReadHeaderTimeout(),
+		IdleTimeout:       httpCfg.IdleTimeout(),
 	}
 
 	return &lifecycle.App{
