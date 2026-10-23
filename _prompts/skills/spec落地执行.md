@@ -20,7 +20,7 @@
 
 - **做什么**：阅读 `_feat-doc/.../spec.md`（及可选 `_doc/` PRD、`audit.md`），生成 `_task-doc/.../tasks.md`，按任务 TDD 实现并回写 tasks。
 - **为什么**：将已审核的技术 spec 转为可追踪的实现与验证。
-- **不做什么**：不修改 spec/audit 正文；不触发 quality_doc / check_code；不写前端实现（前端业务流程由 spec 描述，本工作流落地范围为 Go 后端）。
+- **不做什么**：不修改 spec/audit 正文；不触发 check_code；不写前端实现（前端业务流程由 spec 描述，本工作流落地范围为 Go 后端）。
 
 ---
 

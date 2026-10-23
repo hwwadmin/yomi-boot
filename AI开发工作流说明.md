@@ -10,7 +10,7 @@
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 充分讨论后 AI 生成 PRD | | AI 生成方案 | | 人工指引 | | AI 生成审核 | | 人工+AI 修订 | | AI 落地代码 |
 
-核心原则：**审核不通过，不写一行代码**。主闭环在 `do_spec` 结束；其后可用可选指令生成质量文档或做代码巡检。
+核心原则：**审核不通过，不写一行代码**。主闭环在 `do_spec` 结束；其后可用可选指令做代码巡检。
 
 本套母版**不含前端规程**（`_prompts` 内无 React/前端知识库与前端巡检技能）；`create_spec` 会在 spec 中描述**前端业务流程**（页面清单 / 功能点明细 / 用户操作步骤 / UI 提醒）供前端实现参考，`do_spec` 的落地范围为 Go 后端。
 
@@ -20,7 +20,7 @@
 
 ## 提示词工程如何使用
 
-业务工程直接把本仓 `_prompts/` **整体拷入工程根目录**即可，无外部查找：`_prompts/skills/`、`_prompts/knowledge/` 均相对工程根；PRD、spec、tasks 等产物（`_doc/`、`_feat-doc/`、`_task-doc/`、`_quality-doc/`、`_ipc-doc/`）同样落在工程根。
+业务工程直接把本仓 `_prompts/` **整体拷入工程根目录**即可，无外部查找：`_prompts/skills/`、`_prompts/knowledge/` 均相对工程根；PRD、spec、tasks 等产物（`_doc/`、`_feat-doc/`、`_task-doc/`、`_ipc-doc/`）同样落在工程根。
 
 ---
 
@@ -32,7 +32,6 @@
 | `create_spec` | 主路径 | 生成技术方案 | `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md` |
 | `audit_spec` | 主路径 | 审核技术方案 | `_feat-doc/{YYYYMMDD}_{需求名称}/audit.md` |
 | `do_spec` | 主路径 | 落地代码 | `_task-doc/{需求名称}/tasks.md` + 代码变更 |
-| `quality_doc` | **可选** | 生成测试用例与产品验收文档 | `_quality-doc/{YYYYMMDD}_{需求名称}/test.md` + `accept.md` |
 | `check_code` | **可选** | 代码质量巡检 | `_ipc-doc/{YYYYMMDD}_{需求名称}-ipc.md` |
 | `deep_think` | **可选** | 对当前问题做第一性原理 + 对抗性审查 | 对话结论（不落盘） |
 
@@ -138,27 +137,6 @@ AI 将：
 ## 附：可选指令
 
 以下指令**不纳入主闭环门禁**，彼此互不前置，也不由 `do_spec` 自动触发。
-
-### quality_doc — 测试用例与产品验收文档
-
-需要给测试/产品提供文档时，在对话中输入：
-
-```
-quality_doc _feat-doc/{YYYYMMDD}_{需求名称}/spec.md
-```
-
-可选补充 PRD：
-
-```
-需求来源：_doc/{YYYYMMDD}_{需求名称}-prd.md
-```
-
-AI 基于已审 `spec.md`（及 PRD）派生两份文档到：
-
-> `_quality-doc/{YYYYMMDD}_{需求名称}/test.md`（测试用例）  
-> `_quality-doc/{YYYYMMDD}_{需求名称}/accept.md`（产品验收）
-
-建议在审核闭合、具备稳定口径后再生成；不依赖 `check_code`。
 
 ### check_code — 代码质量巡检
 
