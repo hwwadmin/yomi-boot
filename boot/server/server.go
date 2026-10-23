@@ -27,6 +27,8 @@ func MustBuildApp(slot *plugin.PluginSlot, registrars []router.Registrar, middle
 	response.MustReady()
 	// 获取 HTTP 配置
 	httpCfg := config.MustSection[routerplugin.BootConfig](slot.Config, routerplugin.SectionKey).ToConfig()
+	// 关闭单个插件的等待上限与停机预算对齐，避免某个插件卡住时阻塞整条关闭链
+	slot.SetCloseTimeout(httpCfg.ShutdownTimeout())
 	// 配置 Gin 日志
 	logger.SetupGin()
 

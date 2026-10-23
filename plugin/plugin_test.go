@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 )
@@ -76,6 +77,17 @@ func (p *bothPlugin) OnReady(context.Context) error {
 func (p *bothPlugin) OnDraining(context.Context) error {
 	*p.drainCalls = append(*p.drainCalls, p.Name())
 	return nil
+}
+
+// blockingPlugin 的 Close 会阻塞到 release 关闭后返回
+type blockingPlugin struct {
+	basePlugin
+	release chan struct{}
+}
+
+// Close 等待测试释放，用于验证关闭超时
+func (p *blockingPlugin) Close() {
+	<-p.release
 }
 
 // providerPlugin 持有一个供后序插件读取的值
@@ -249,6 +261,35 @@ func TestPluginSlotCloseReverse(t *testing.T) {
 	if want := []string{"c", "b", "a"}; !slices.Equal(order, want) {
 		t.Fatalf("Close 顺序 = %v, want %v", order, want)
 	}
+}
+
+// TestPluginSlotCloseTimeoutContinues 验证单个插件关闭超时后仍继续关闭前序插件
+func TestPluginSlotCloseTimeoutContinues(t *testing.T) {
+	slow := &blockingPlugin{basePlugin: newBase("slow"), release: make(chan struct{})}
+
+	var closed []string
+	fast := &readyPlugin{basePlugin: newBase("fast")}
+	fast.closeOrder = &closed
+
+	// 逆序关闭：slow 先关闭并卡住，fast 必须在超时后仍被关闭
+	slot := newTestSlot(t, fast, slow)
+	slot.SetCloseTimeout(50 * time.Millisecond)
+
+	done := make(chan struct{})
+	go func() {
+		slot.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close 应在上限内返回，不应被卡住的插件拖住")
+	}
+	if want := []string{"fast"}; !slices.Equal(closed, want) {
+		t.Fatalf("超时后应继续关闭前序插件，关闭顺序 = %v, want %v", closed, want)
+	}
+	close(slow.release)
 }
 
 // TestPluginSlotDependencyLookup 验证插件可在 Init 中查找前序插件组件
