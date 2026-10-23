@@ -98,7 +98,7 @@ func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) *pl
 	cfg := config.MustLoadConfig(configPath, envPrefix, reg)
 
 	// 创建插件插槽并初始化插件
-	slot := plugin.NewPluginSlot(cfg, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
+	slot := plugin.NewPluginSlot(cfg, append(registry.DefaultPlugins(), pluginOpts.CustomPlugins()...))
 	slot.Init()
 
 	return slot

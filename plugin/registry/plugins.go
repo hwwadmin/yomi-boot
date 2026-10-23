@@ -22,7 +22,7 @@ import (
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
 
-// Plugins 按严格顺序返回全部内置插件；是否真正启动由各插件按配置 enabled 判断。
+// DefaultPlugins 按严格顺序返回全部内置插件；是否真正启动由各插件按配置 enabled 判断。
 //
 // # 为什么顺序很重要
 //
@@ -58,7 +58,7 @@ import (
 // Ready 按 Init 顺序执行，Drain 按 Init 逆序执行；仅 Started 插件参与（见 plugin.ReadyHook / DrainHook）。
 // Close 按 Init 逆序：先停 custom 插件，再关 event，随后 kafka-consumer 先于 kafka-publisher 关闭，
 // 避免消费侧收尾时仍需投递却发现生产者已关闭。
-func Plugins() []plugin.Plugin {
+func DefaultPlugins() []plugin.Plugin {
 	return []plugin.Plugin{
 		appctxplugin.NewAppCtx(),
 		loggerplugin.NewLogger(),
