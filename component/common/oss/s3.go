@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
+	"gitee.com/hq_project/yomi-boot/component/core/appctx"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"

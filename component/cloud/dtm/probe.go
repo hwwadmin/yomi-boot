@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
+	"gitee.com/hq_project/yomi-boot/component/core/appctx"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 const probeTimeout = 3 * time.Second

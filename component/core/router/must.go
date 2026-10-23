@@ -1,7 +1,7 @@
 package router
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 
 	"github.com/gin-gonic/gin"
 )

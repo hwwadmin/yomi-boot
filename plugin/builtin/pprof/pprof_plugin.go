@@ -7,9 +7,9 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	componentpprof "gitee.com/hq_project/yomi-boot/component/common/pprof"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 

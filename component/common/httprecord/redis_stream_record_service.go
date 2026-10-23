@@ -6,8 +6,8 @@ package httprecord
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // RedisStreamHttpRecordService 通过 Redis Stream 异步发布 HTTP 访问记录

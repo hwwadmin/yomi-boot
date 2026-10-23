@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/handler"
-	"gitee.com/hq_project/yomi-boot/component/common/router"
+	"gitee.com/hq_project/yomi-boot/component/core/handler"
 	"gitee.com/hq_project/yomi-boot/component/core/response"
+	"gitee.com/hq_project/yomi-boot/component/core/router"
 
 	"github.com/gin-gonic/gin"
 )

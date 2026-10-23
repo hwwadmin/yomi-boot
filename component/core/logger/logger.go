@@ -24,7 +24,7 @@ const (
 	colorReset       = "\033[0m"
 )
 
-// callerSkip 日志调用者跳过层级，补偿 component/common/logger、log.go 中 write/get 等包装层
+// callerSkip 日志调用者跳过层级，补偿 component/core/logger、log.go 中 write/get 等包装层
 const callerSkip = 2
 
 // logHub 持有分流后的 zap logger 与资源清理函数

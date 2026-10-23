@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // MemoryHttpRecordService 通过进程内内存队列异步处理 HTTP 访问记录

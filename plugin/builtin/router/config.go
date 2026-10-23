@@ -1,8 +1,8 @@
 package routerplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/router"
 )
 
 // SectionKey YAML 根 key

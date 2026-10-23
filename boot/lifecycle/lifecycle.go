@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/boot/banner"
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // Hook 是生命周期阶段钩子

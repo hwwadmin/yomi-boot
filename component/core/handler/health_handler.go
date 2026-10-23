@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
+	"gitee.com/hq_project/yomi-boot/component/core/appctx"
 
 	"github.com/gin-gonic/gin"
 )

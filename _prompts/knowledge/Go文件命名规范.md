@@ -57,7 +57,7 @@
 {module}_handler.go
 ```
 
-- 健康检查统一使用 `gitee.com/hq_project/yomi-boot/component/common/handler.NewHealthHandler(consulPath, opsPath, appCtx)`，分别注册 Consul 探针与运维探针，在 bootstrap 注册。
+- 健康检查统一使用 `gitee.com/hq_project/yomi-boot/component/core/handler.NewHealthHandler(consulPath, opsPath, appCtx)`，分别注册 Consul 探针与运维探针，在 bootstrap 注册。
 - 结构体：`{Module}Handler`（**示例**：`ResourceHandler`）。
 - 一个模块一个 handler 文件，包含该模块对外全部接口方法。
 
@@ -160,10 +160,10 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 ### 3.8 gitee.com/hq_project/yomi-boot handler
 
 ```text
-gitee.com/hq_project/yomi-boot/component/common/handler/base_handler.go
+gitee.com/hq_project/yomi-boot/component/core/handler/base_handler.go
 ```
 
-- 业务 handler 通过 alias 引用：`platformhandler "gitee.com/hq_project/yomi-boot/component/common/handler"`（模块路径以实际 `go.mod` 为准）。
+- 业务 handler 通过 alias 引用：`platformhandler "gitee.com/hq_project/yomi-boot/component/core/handler"`（模块路径以实际 `go.mod` 为准）。
 
 ### 3.9 命名对照总表
 

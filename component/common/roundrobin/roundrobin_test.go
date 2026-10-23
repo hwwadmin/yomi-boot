@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
+	"gitee.com/hq_project/yomi-boot/component/core/appctx"
 )
 
 // TestConfig_validate 校验合法配置通过及各非法字段拒绝

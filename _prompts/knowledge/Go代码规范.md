@@ -183,7 +183,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 
 ### 3.3.1 handler 协议适配辅助
 
-业务 handler 的 JSON 绑定、用例执行、分页响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/component/common/handler` 完成。
+业务 handler 的 JSON 绑定、用例执行、分页响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/component/core/handler` 完成。
 
 ##### 3.3.1.1 领域 handler
 
@@ -195,7 +195,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 | DTM Compensate | `dtm.BindAndHandleCompensate(c, uc.Compensate)` |
 
 - 领域 handler **禁止**从 token Context 取 userId；身份字段由 BFF 按接口 DTO 传入。
-- import 时可用别名：`platformhandler "gitee.com/hq_project/yomi-boot/component/common/handler"` 或 `handler "gitee.com/hq_project/yomi-boot/component/common/handler"`。
+- import 时可用别名：`platformhandler "gitee.com/hq_project/yomi-boot/component/core/handler"` 或 `handler "gitee.com/hq_project/yomi-boot/component/core/handler"`。
 
 ##### 3.3.1.2 BFF handler
 
@@ -212,7 +212,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（boot 未指定 `Options.ResponseEncoder` 时默认注册预制实现；低层启动路径须显式 `MustRegister`）。
 
 ```go
-// 正确：通过 gitee.com/hq_project/yomi-boot/component/common/handler 收口重复逻辑（示例）
+// 正确：通过 gitee.com/hq_project/yomi-boot/component/core/handler 收口重复逻辑（示例）
 func (h *ResourceHandler) handleGetProfile(c *gin.Context) {
     platformhandler.BindAndHandle(c, h.GetProfile.Execute)
 }

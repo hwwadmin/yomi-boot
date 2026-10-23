@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/appctx"
+	"gitee.com/hq_project/yomi-boot/component/core/appctx"
 )
 
 // watchdogInterval 返回看门狗续期间隔，默认 TTL/3

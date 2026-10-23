@@ -25,7 +25,7 @@
 - 适用于 `gitee.com/hq_project/yomi-boot/component/core/errors` 系统级错误包（`errors.New`、`errors.Wrap`、`errors.Stack` 等）。
 - 适用于 `gitee.com/hq_project/yomi-boot/component/core/errors.BizError`（可选，用于域错误携带 Code/Message）。
 - 适用于 `gitee.com/hq_project/yomi-boot/component/core/shared/error` 跨库通用哨兵，以及各库/业务就近定义的哨兵。
-- 适用于 `gitee.com/hq_project/yomi-boot/component/common/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
+- 适用于 `gitee.com/hq_project/yomi-boot/component/core/handler` 中 `WriteBusinessError` 等异常响应逻辑（委托 `response.Encoder`）。
 - 不适用于 panic 恢复（见 `gitee.com/hq_project/yomi-boot/boot/server` 中间件链 Recovery）。
 
 ### 2.2 关联文档

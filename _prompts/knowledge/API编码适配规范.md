@@ -22,7 +22,7 @@
 
 ### 2.1 适用范围
 
-- 适用于经 `gitee.com/hq_project/yomi-boot/component/common/handler` 写出的 HTTP 业务接口。
+- 适用于经 `gitee.com/hq_project/yomi-boot/component/core/handler` 写出的 HTTP 业务接口。
 - 适用于启动时确定唯一的 `response.Encoder`：`boot.Run` / `boot.RunWithOptions` 经 `Options.ResponseEncoder` 注册，未指定时默认注册 `response.DefaultEncoder`。
 - 低层启动路径（`boot.MustInit` + `server.MustBuildApp`）不经过 boot 的注册流程，须在 `main` 中显式 `response.MustRegister`。
 - **不**适用于 DTM Action/Compensate 回调、health 探活等明确走独立出口的路径。

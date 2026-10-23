@@ -9,9 +9,9 @@ package boot
 import (
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
 	"gitee.com/hq_project/yomi-boot/boot/server"
-	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/response"
+	"gitee.com/hq_project/yomi-boot/component/core/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
 	"gitee.com/hq_project/yomi-boot/plugin/registry"
 

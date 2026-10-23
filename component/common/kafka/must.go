@@ -1,7 +1,7 @@
 package kafka
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // MustNewPublisher 创建 Kafka 生产者，失败时 log + panic

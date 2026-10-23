@@ -214,7 +214,7 @@
 - [ ] 数据库引擎与 SQL 访问方案已分开描述，默认口径为 MySQL + `gorm`
 - [ ] 本地事务使用 `gorm.DB.Transaction`，未引入额外事务框架
 - [ ] 配置使用 `viper`，未并存第二套配置库；所有配置项已在 yml 中显化
-- [ ] 日志使用 `go.uber.org/zap`，统一通过 `gitee.com/hq_project/yomi-boot/component/common/logger` 输出，未并存 `log/slog`、`logrus` 等第二套日志入口
+- [ ] 日志使用 `go.uber.org/zap`，统一通过 `gitee.com/hq_project/yomi-boot/component/core/logger` 输出，未并存 `log/slog`、`logrus` 等第二套日志入口
 - [ ] 服务间通信默认 HTTP/HTTPS，未将 gRPC 作为服务间默认协议
 - [ ] 服务注册发现使用 Consul；跨域写使用 DTM Saga
 - [ ] DI 通过各服务 `internal/bootstrap/server.go` 手写 Wiring，未引入 Google `wire` / `fx` / `dig` 等 DI 框架

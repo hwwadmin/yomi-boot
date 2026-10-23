@@ -6,8 +6,8 @@ package ws
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // ServerHandler 是服务端会话回调；可通过 SessionContext.ConnID 做框架级推送

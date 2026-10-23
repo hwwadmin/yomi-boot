@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/logger"
 	"gitee.com/hq_project/yomi-boot/component/common/roundrobin"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 const staleCleanerRoundRobinPrefix = "idempotencyStaleProcessing"

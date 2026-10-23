@@ -3,7 +3,7 @@
 // @author zwei
 package snowflake
 
-import "gitee.com/hq_project/yomi-boot/component/common/logger"
+import "gitee.com/hq_project/yomi-boot/component/core/logger"
 
 // MustNewGenerator 创建雪花 ID 生成器，失败时 log + panic
 func MustNewGenerator(workerID int64) Generator {

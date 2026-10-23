@@ -7,8 +7,8 @@ import (
 	"context"
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/component/common/handler"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/handler"
 
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/gin-gonic/gin"
