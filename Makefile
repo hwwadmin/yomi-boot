@@ -63,10 +63,15 @@ test:
 layers:
 	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/core/... | \
 	  awk '{ \
-	         for (i = 2; i <= NF; i++) \
-	           if ($$i ~ /yomi-boot\/(boot|plugin)\// || $$i ~ /yomi-boot\/component\/(common|cloud|ai)\//) { \
-	             print "component/core 禁止依赖 boot/plugin/兄弟组件: " $$1 " -> " $$i; bad = 1 \
+	         siblingAllowed = ($$1 ~ /component\/core\/httpguard$$/); \
+	         for (i = 2; i <= NF; i++) { \
+	           if ($$i ~ /yomi-boot\/(boot|plugin)\//) { \
+	             print "component/core 禁止依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
 	           } \
+	           if (!siblingAllowed && $$i ~ /yomi-boot\/component\/(common|cloud|ai)\//) { \
+	             print "component/core 禁止依赖兄弟组件（httpguard 允许依赖 common）: " $$1 " -> " $$i; bad = 1 \
+	           } \
+	         } \
 	       } \
 	       END { exit bad }'
 	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/common/... | \
