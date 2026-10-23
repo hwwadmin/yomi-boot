@@ -1,7 +1,19 @@
 # quick-starter-demo 的 dev 环境配置。
 #
-# 只包含组件库启动所必需的最小配置：app / http / log / snowflake。
-# 其余配置段均已在内置清单注册，未写出的段按零值处理（默认关闭）。
+# 覆盖全部内置插件配置段（按需启停），仅排除分布式微服务组件：
+#   - consul：服务注册发现（分布式微服务基础设施）
+#   - dtm：分布式事务（分布式微服务基础设施）
+# 其余插件全部启用，用于在本地 Docker 中间件（MySQL / Redis / Kafka / RustFS）
+# 上验证组件库的完整启动链路。
+#
+# 依赖的中间件（本地 Docker）：
+#   MySQL    127.0.0.1:3306   root/hww350521   库 quick-starter-demo（已导入 sql/）
+#   Redis    127.0.0.1:6379
+#   Kafka    127.0.0.1:9092   SASL_PLAINTEXT + PLAIN  zwei/hww350521
+#   RustFS   127.0.0.1:9000   rustfsadmin/rustfsadmin
+#   Redis    127.0.0.1:6379   密码 hww350521
+#
+# 运行前进入本目录：cd quick-starter-demo && go run .
 # 切换环境：复制本文件为 local.yml / prod.yml，再设置 YOMI_CONFIG=local|prod。
 
 app:
@@ -14,69 +26,245 @@ http:
   port: 8080
   read_timeout_seconds: 30
   write_timeout_seconds: 30
-  # router_prefix: /api    # 路由组前缀，可选
+  read_header_timeout_seconds: 5  # 读请求头超时，默认 5
+  shutdown_timeout_seconds: 10    # 优雅停机超时，默认 10
+  max_request_body_bytes: 1048576 # 请求体上限 1MB
+  # router_prefix: /api           # 路由组前缀，可选
+  trusted_proxies: []             # 可信反向代理 IP/CIDR，空则仅信任 RemoteAddr
 
 log:
-  dir: logs          # 日志根目录，其下自动创建 access/info/error/debug
-  level: info        # 文件日志最低级别
+  dir: logs            # 日志根目录，其下自动创建 access/info/error/debug
+  level: info          # 文件日志最低级别
   console_level: debug # 控制台最低级别
-  rotation:          # 滚动与保留，必须显式配置
+  sensitive_match: contains # 敏感字段匹配方式：contains / exact
+  sensitive_keys:           # 日志中需要脱敏的字段名
+    - password
+    - token
+    - secret
+    - access_key
+  rotation:                 # 滚动与保留，必须显式配置
     max_size_mb: 100
     retention_days: 7
     max_backups: 10
     max_total_mb: 1000
+    compress: true
+  access:                   # 文件 access 中间件（与 http_record 采集相互独立）
+    enabled: true
+    skip_paths:
+      - /health
+      - /metrics
+      - /ready
+      - /live
+    max_body_bytes: 8192
+    max_field_bytes: 1024
+    record_body: false
+    to_console: false
+    sample_rate: 1
+
+cors:
+  enabled: true
+  allow_origins:
+    - "*"
+  allow_methods:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - OPTIONS
+  allow_headers:
+    - "*"
+  max_age: 86400
+  allow_credentials: false
+
+pprof:
+  enabled: true
+  addr: :16080
 
 snowflake:
   worker_id: 1 # 工作节点 ID（0~1023），多实例部署时须唯一
 
+db:
+  enabled: true
+  type: mysql
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: hww350521
+  database: quick-starter-demo
+  # params: "charset=utf8mb4" # MySQL 未配置 parseTime/loc 时自动补齐
+  max_open_conns: 20
+  max_idle_conns: 10
+  min_idle_conns: 2
+  conn_max_lifetime_minutes: 30
+  conn_max_idle_time_minutes: 10
+  slow_threshold_ms: 500 # 慢 SQL 阈值，0 关闭
+
+redis:
+  enabled: true
+  addr: 127.0.0.1:6379
+  password: hww350521
+  db: 0
+  command_timeout_ms: 3000
+
+ratelimit:
+  enabled: true
+  key_prefix: "quick_starter_demo:ratelimit:" # 仅允许小写字母、数字、冒号、下划线
+  redis_error_policy: fail_open               # Redis 故障策略：fail_open / fail_closed
+
+kafka:
+  publisher_enabled: true
+  consumer_enabled: true
+  brokers:
+    - 127.0.0.1:9092
+  client_id: quick-starter-demo
+  dial_timeout_seconds: 5
+  security_protocol: SASL_PLAINTEXT
+  sasl_mechanism: PLAIN
+  username: zwei
+  password: hww350521
+  # tls_skip_verify: false
+  # tls_ca_file: ""
+  # 生产者
+  required_acks: -1        # -1=all，0=none，1=leader
+  batch_size: 100          # 0 使用 kafka-go 默认值
+  batch_timeout_seconds: 1 # 0 使用 kafka-go 默认值
+  publish_worker:
+    work_num: 4
+    size: 256
+    submit_timeout_seconds: 3
+  # 消费者
+  min_bytes: 1
+  max_bytes: 10485760
+  max_wait_seconds: 1
+  start_offset: earliest
+
+redis_stream:
+  enabled: true
+  key_prefix: "quick_starter_demo:rs:" # 建议以 ':' 结尾，避免与 stream 名粘连
+  default_maxlen: 100000               # 0 表示不裁剪
+  block_ms: 1000
+  count: 100
+  claim_min_idle_ms: 60000
+  claim_interval_ms: 30000
+  stop_timeout_ms: 5000
+  publish_worker:
+    work_num: 2
+    size: 128
+    submit_timeout_seconds: 3
+
+oss:
+  enabled: true
+  provider: rustfs
+  public_base_url: http://127.0.0.1:9000
+  max_presign_expiry_seconds: 3600
+  rustfs:
+    endpoint: http://127.0.0.1:9000
+    access_key_id: rustfsadmin
+    secret_access_key: rustfsadmin
+    use_ssl: false
+    region: us-east-1
+  # 未使用 S3 / 阿里云 OSS 时保持零值即可
+  # s3:
+  #   region: us-east-1
+  #   access_key_id: ""
+  #   secret_access_key: ""
+  #   endpoint: ""
+  #   use_path_style: false
+  # alioss:
+  #   region: cn-hangzhou
+  #   access_key_id: ""
+  #   secret_access_key: ""
+  #   endpoint: ""
+  #   use_path_style: false
+
+idempotency:
+  stale_cleaner_enabled: true # 启动 Processing 超时清理
+  scan_interval_minutes: 5
+  stale_timeout_minutes: 30
+  batch_size: 100
+
+token:
+  enabled: true
+  token_ttl_minutes: 120
+  allow_multi_login: true
+  store_prefix: quick-starter-demo
+  skip_validate_paths:
+    - /health
+    - /ready
+    - /live
+    - /metrics
+
+http_record:
+  enabled: true
+  provider: kafka # kafka / memory / redis_stream
+  kafka_topic: yomi.http.record # 主题须预先创建，客户端不会触发 broker 自动建 topic
+  stream: yomi.http.record
+  skip_paths:
+    - /health
+    - /ready
+    - /live
+    - /metrics
+  max_request_body_size: 4096
+  max_response_body_size: 4096
+  record_request_body: true
+  record_response_body: true
+  mask_sensitive: true
+  memory: # provider=memory 时生效
+    queue_size: 1024
+    workers: 2
+  consumer:
+    enabled: true
+    group_id: quick-starter-demo-httprecord
+
+event:
+  outbox_enabled: true
+  inbox_enabled: true
+  service_name: quick-starter-demo
+  fetch_frequency_ms: 1000
+  fetch_size: 100
+  sent_thread_count: 2
+  fetch_timeout_minutes: 5
+  # 发件箱 DLQ
+  outbox_dlq_frequency_ms: 1000
+  outbox_dlq_size: 100
+  outbox_dlq_max_retry: 30
+  # 收件箱 DLQ
+  inbox_dlq_max_retry: 20
+  inbox_dlq_frequency_ms: 30000
+  inbox_dlq_size: 100
+  # 发件箱过期清理
+  outbox_cleanup_enabled: true
+  outbox_retention_days: 30
+  outbox_cleanup_frequency_ms: 3600000
+  outbox_cleanup_batch_size: 500
+  outbox_cleanup_max_batches: 20
+  # 收件箱过期清理
+  inbox_cleanup_enabled: true
+  inbox_retention_days: 30
+  inbox_cleanup_frequency_ms: 3600000
+  inbox_cleanup_batch_size: 500
+  inbox_cleanup_max_batches: 20
+
 # ---------------------------------------------------------------------------
-# 按需启用：取消注释并把 enabled 置为 true 即可验证对应组件；未启用的组件
-# 不创建连接、不参与就绪与排空。
+# 分布式微服务组件：本 demo 不启用（保持 enabled: false）。
+# 启用前需先启动本地 Consul / DTM 服务。
 # ---------------------------------------------------------------------------
 
-# db:
-#   enabled: true
-#   type: mysql
-#   host: 127.0.0.1
-#   port: 3306
-#   user: root
-#   password: root
-#   database: quick_starter_demo
-#   max_open_conns: 20
-#   max_idle_conns: 10
-#   conn_max_lifetime_minutes: 30
-#   conn_max_idle_time_minutes: 10
+consul:
+  enabled: false
+  addr: 127.0.0.1:8500
+  service_id: quick-starter-demo-1
+  service_name: quick-starter-demo
+  service_address: 127.0.0.1:8080
+  check_address: http://127.0.0.1:8080/health
+  discovery_cache_seconds: 30
+  discovery_url_scheme: http://
+  http_timeout_seconds: 10
+  deregister_enabled: true
+  deregister_after_seconds: 1800
 
-# redis:
-#   enabled: true
-#   addr: 127.0.0.1:6379
-#   password: ""
-#   db: 0
-
-# kafka:
-#   publisher_enabled: true
-#   brokers:
-#     - 127.0.0.1:9092
-#   client_id: quick-starter-demo
-#   dial_timeout_seconds: 5
-
-# pprof:
-#   enabled: true
-#   addr: :16080
-
-# consul:
-#   enabled: true
-#   addr: 127.0.0.1:8500
-#   service_id: quick-starter-demo-1
-#   service_name: quick-starter-demo
-#   service_address: 127.0.0.1:8080
-#   check_address: http://127.0.0.1:8080/health
-
-# dtm:
-#   enabled: true
-#   server: 127.0.0.1:36790
-
-# token:
-#   enabled: true
-#   token_ttl_minutes: 120
-#   store_prefix: quick-starter-demo
+dtm:
+  enabled: false
+  server: 127.0.0.1:36790
+  timeout: 3
