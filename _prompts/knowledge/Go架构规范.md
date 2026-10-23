@@ -24,7 +24,7 @@
 
 - 适用于 `gitee.com/hq_project/yomi-boot/`：可复用基础设施库；各能力插件统一编排，**是否真正启动以配置段 `enabled`（及同类开关）为准**，可按需裁剪。
 - 适用于基于 gitee.com/hq_project/yomi-boot 的多种部署形态（详见 §3.1.0、§3.4.5）：
-  - **轻量单体**：单进程、单库；通常只开 `db`（及按需 `redis`/`auth`），关闭 `consul`/`kafka`/`redis_stream`/`dtm`/`event` 等。
+  - **轻量单体**：单进程、单库；通常只开 `db`（及按需 `redis`/`token`），关闭 `consul`/`kafka`/`redis_stream`/`dtm`/`event` 等。
   - **大单体 / 模块化单体**：单部署单元内多业务模块分层；仍用同一套 boot/插件，按模块边界组织代码，不必拆多进程。
   - **分布式微服务**：多进程按服务类型独立部署；开 `consul`/`rpc`，跨域写按需开 `dtm`，异步按需开 `kafka` / `redis_stream` / `event`。
 - 适用于基于 gitee.com/hq_project/yomi-boot 组装的业务工程（独立 `go.mod`，经标准 `require` 引用 `gitee.com/hq_project/yomi-boot`；本地可用 `go.work` 联调）：具体服务名与业务域随产品演进，**以服务类型为准，不以某一仓库清单为准**。
@@ -81,8 +81,8 @@
 
 | 服务类型 | 职责 | gitee.com/hq_project/yomi-boot 典型启用 |
 | -------- | ---- | ---------------- |
-| **入口编排（BFF）** | 对外 API、鉴权、跨域读聚合、跨域写编排（Saga） | `auth`/`token`、按需 `db`/`redis`/`consul`/`dtm`/`kafka`/`redis_stream`/`event` |
-| **领域** | 单一业务边界内的读写与本地事务；对外提供内部 API | `db`、按需 `redis`（幂等/锁）、`consul`；通常关 `auth` |
+| **入口编排（BFF）** | 对外 API、鉴权、跨域读聚合、跨域写编排（Saga） | `token`、按需 `db`/`redis`/`consul`/`dtm`/`kafka`/`redis_stream`/`event` |
+| **领域** | 单一业务边界内的读写与本地事务；对外提供内部 API | `db`、按需 `redis`（幂等/锁）、`consul`；通常关 `token` |
 | **基础设施消费者（可选）** | 消费平台/异步消息并持久化，或提供对内查询 | `kafka` 或 `redisstream` + `AddCustomPlugin`；按需 `db` |
 
 - 同一进程可合并多种服务类型（单体）：例如入口 + 多领域模块共进程，跨模块走内存依赖。
@@ -388,7 +388,7 @@ type myConsumerPlugin struct {
 | 13 | consul | `consul.enabled=true`（Ready 阶段注册、Drain 阶段注销） |
 | 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活 |
 | 15 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
-| 16 | token | `auth.enabled=true`（依赖 redis 插件） |
+| 16 | token | `token.enabled=true`（依赖 redis 插件） |
 | 17 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
 | 18 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
 | 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可经 slot 依赖内置插件；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
@@ -410,21 +410,21 @@ type myConsumerPlugin struct {
 
 | 服务类型 | 典型做法 | 说明 |
 | -------- | -------- | ---- |
-| 入口编排（BFF） | `PluginOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/auth/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
-| 领域 | `PluginOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 auth | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
+| 入口编排（BFF） | `PluginOptions{}` + 按需 `AddConfigSection`；YAML 开 db/redis/token/consul（及按需 kafka/redis_stream/event/dtm） | 本进程独立库仅基础设施表；Redis 用于令牌 Store；禁止连领域库 |
+| 领域 | `PluginOptions{}`；YAML 开 db，按需 redis/kafka/redis_stream/consul，通常关 token | Redis 供幂等/锁等；业务层不直接访问 Redis 细节 |
 | 带消息消费的领域 | 上栏 + `AddCustomPlugin(消费者插件)` | 消费启停由自定义插件与配置控制 |
 
-各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`auth.enabled`、`event.outbox_enabled` / `event.inbox_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
+各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`token.enabled`、`event.outbox_enabled` / `event.inbox_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
 
 **形态裁剪参考（改配置即可，不必改 gitee.com/hq_project/yomi-boot 源码）**：
 
 | 形态 | 建议启用 | 建议关闭 / 暂缓 |
 | ---- | -------- | --------------- |
-| 轻量单体 | `db`；按需 `redis`、`auth`、`pprof` | `consul`、`kafka`、`redis_stream`、`dtm`、`event`、`http_record` |
+| 轻量单体 | `db`；按需 `redis`、`token`、`pprof` | `consul`、`kafka`、`redis_stream`、`dtm`、`event`、`http_record` |
 | 大单体 | 上栏 + 按需 `redis` 幂等/锁、`cronjob` | 无跨进程时不必开 `consul`/`dtm`；异步消息有需求再开 `kafka` 或 `redis_stream` |
-| 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `auth`；跨域写开 `dtm`；异步按需 `kafka`/`redis_stream`/`event` | 按服务类型裁剪（领域通常关 `auth`） |
+| 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `token`；跨域写开 `dtm`；异步按需 `kafka`/`redis_stream`/`event` | 按服务类型裁剪（领域通常关 `token`） |
 
-说明：开关名以各配置段为准（如 `db.enabled`、`auth.enabled`、`consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
+说明：开关名以各配置段为准（如 `db.enabled`、`token.enabled`、`consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
 
 ### 3.5 业务工程依赖 gitee.com/hq_project/yomi-boot
 
@@ -465,10 +465,10 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard → Recovery → token.Middleware → handler
 ```
 
-中间件始终挂载；`cors.enabled` 由 BootConfig 映射为 `cors.Config.MiddlewareEnabled`，`http_record.enabled` / `auth.enabled` 由插件映射为运行时 `MiddlewareEnabled`；关闭时由中间件在组件内短路放行，不在 `boot` 层动态增删中间件。
+中间件始终挂载；`cors.enabled` 由 BootConfig 映射为 `cors.Config.MiddlewareEnabled`，`http_record.enabled` / `token.enabled` 由插件映射为运行时 `MiddlewareEnabled`；关闭时由中间件在组件内短路放行，不在 `boot` 层动态增删中间件。
 
 - **顺序约束**：`httprecord.Middleware` 与 `logger.Middleware` 必须位于 `httpguard` **外侧**。`httpguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
-- `auth.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。
+- `token.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。
 - `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/component/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)。
@@ -499,7 +499,7 @@ consul:
 dtm:
   server: "http://localhost:36789/api/dtmsvr"
 
-auth:
+token:
   store_prefix: "yomi:token:{bff}"
 
 redis: ...
@@ -513,7 +513,7 @@ consul:
 db: ...
 redis: ...
 kafka: ...
-# 通常无 auth、无下游 client
+# 通常无 token、无下游 client
 ```
 
 ### 3.10 质量门禁（depguard）
@@ -626,7 +626,7 @@ kafka: ...
 
 - 业务以独立工程 + 可部署单元组织；禁止在业务工程根目录放置业务 `internal/biz` 或业务装配入口（应落在各可部署单元内）。基于 gitee.com/hq_project/yomi-boot 的单进程部署仍属合法形态（见 §3.1.0）。
 - 禁止领域进程之间 HTTP 互调（分布式形态；单体进程内模块调用不受此限）。
-- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/component/common/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `auth` 段）。
+- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/component/common/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `token` 段）。
 - 禁止服务间默认使用 gRPC 等其他 RPC 协议替代 HTTP（分布式形态）。
 - 禁止在 JSON Body 中传递 `traceId`（统一使用 Header `X-Trace-ID`）。
 - 禁止在领域 handler/usecase 中读取 token 或 `SessionFromContext`（分布式形态下的领域服务类型）。

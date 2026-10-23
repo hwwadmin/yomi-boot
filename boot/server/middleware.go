@@ -26,7 +26,7 @@ func DefaultMiddlewares(slot *plugin.PluginSlot) []gin.HandlerFunc {
 	corsCfg := config.MustSection[corsplugin.BootConfig](slot.Config, corsplugin.SectionKey).ToConfig()
 	httpCfg := config.MustSection[routerplugin.BootConfig](slot.Config, routerplugin.SectionKey).ToConfig()
 	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](slot.Config, httprecordplugin.SectionKey).ToConfig()
-	authCfg := config.MustSection[tokenplugin.BootConfig](slot.Config, tokenplugin.SectionKey).ToConfig()
+	tokenCfg := config.MustSection[tokenplugin.BootConfig](slot.Config, tokenplugin.SectionKey).ToConfig()
 	logCfg := config.MustSection[loggerplugin.BootConfig](slot.Config, loggerplugin.SectionKey).ToConfig()
 
 	return []gin.HandlerFunc{
@@ -36,6 +36,6 @@ func DefaultMiddlewares(slot *plugin.PluginSlot) []gin.HandlerFunc {
 		logger.Middleware(logCfg.Access),
 		httpguard.Middleware(httpCfg),
 		gin.Recovery(),
-		token.Middleware(tokenplugin.From(slot).Service(), authCfg),
+		token.Middleware(tokenplugin.From(slot).Service(), tokenCfg),
 	}
 }

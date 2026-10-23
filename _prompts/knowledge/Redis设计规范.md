@@ -67,7 +67,7 @@
 
 #### 3.2.3 令牌会话 Key
 
-多入口时令牌会话以 `config/*.yml` 的 `auth.store_prefix` 为前缀，**按端配置**（**示例**：`yomi:token:{endpoint}`）：
+多入口时令牌会话以 `config/*.yml` 的 `token.store_prefix` 为前缀，**按端配置**（**示例**：`yomi:token:{endpoint}`）：
 
 | Key 模式 | 数据结构 | 说明 |
 | -------- | -------- | ---- |

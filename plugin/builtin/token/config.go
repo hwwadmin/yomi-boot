@@ -7,9 +7,9 @@ import (
 )
 
 // SectionKey YAML 根 key
-const SectionKey = "auth"
+const SectionKey = "token"
 
-// BootConfig 表示 auth 配置段的 YAML 绑定
+// BootConfig 表示 token 配置段的 YAML 绑定
 type BootConfig struct {
 	Enabled           *bool    `mapstructure:"enabled"`             // Enabled 是否启用令牌服务，未配置默认 false
 	TokenTTLMinutes   int      `mapstructure:"token_ttl_minutes"`   // TokenTTLMinutes 是令牌有效期分钟数
@@ -34,7 +34,7 @@ func (c BootConfig) ToConfig() token.Config {
 	}
 }
 
-// Validate 校验 auth 配置段语义（仅 enabled=true 时校验）
+// Validate 校验 token 配置段语义（仅 enabled=true 时校验）
 func (c BootConfig) Validate() error {
 	if !c.EnabledOrDefault() {
 		return nil
@@ -45,7 +45,7 @@ func (c BootConfig) Validate() error {
 	return nil
 }
 
-// ConfigSection 返回 auth 配置段
+// ConfigSection 返回 token 配置段
 func ConfigSection() config.Section {
 	return config.NewSection(SectionKey, &BootConfig{}, func(c *BootConfig, _ *config.Config) error {
 		return c.Validate()

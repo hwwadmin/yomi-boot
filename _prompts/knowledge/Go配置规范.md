@@ -103,7 +103,7 @@ biz:
 - gitee.com/hq_project/yomi-boot 各基础设施能力通过对应配置段启用；未启用则插件不启动（或写入 Noop），**不强制**引入 Consul / Kafka / Redis Stream / DTM 等运行时依赖。
 - 插件在 `plugin/registry` 中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `gitee.com/hq_project/yomi-boot/plugin/registry/plugins.go`）。
 - 典型开关（以各配置段字段名为准）：
-  - `db.enabled`、`redis.enabled`、`auth.enabled`
+  - `db.enabled`、`redis.enabled`、`token.enabled`
   - `consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`
   - `event.outbox_enabled`、`event.inbox_enabled`
   - `pprof.enabled`、`http_record.enabled`、`oss.enabled`

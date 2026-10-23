@@ -76,7 +76,7 @@ snowflake:
 #   enabled: true
 #   server: 127.0.0.1:36790
 
-# auth:
+# token:
 #   enabled: true
 #   token_ttl_minutes: 120
 #   store_prefix: quick-starter-demo

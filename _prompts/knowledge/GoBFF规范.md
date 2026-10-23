@@ -25,7 +25,7 @@
 - 适用于所有**入口编排（BFF）**服务类型的可部署单元或其模块。
 - 入口编排是唯一允许跨域 HTTP 调用的层（分布式形态）。
 - 入口编排是唯一提交 DTM Saga 的层（若启用跨域写）。
-- 入口编排是唯一解析 token 并完成鉴权的层（若启用 `auth`）。
+- 入口编排是唯一解析 token 并完成鉴权的层（若启用 `token`）。
 
 ### 2.2 关联文档
 
@@ -128,8 +128,8 @@ resource, err := b.resourceClient.GetProfile(ctx, claims.SubjectID)
 | `gitee.com/hq_project/yomi-boot/component/common/token` | Store 接口、Redis 实现、Claims、`TokenService`、中间件 `Middleware`、Context 读写 |
 | BFF `handler/` | 通过 `services.TokenService` 使用签发/校验/撤销能力 |
 
-- 多入口时在 `config/*.yml` 的 **`auth`** 段按端配置不同 `store_prefix`；键模式见 [Redis设计规范](./Redis设计规范.md) §3.2.3。
-- `auth.enabled=true` 时由 token 插件在 `MustInit` 阶段初始化（依赖 Redis）。
+- 多入口时在 `config/*.yml` 的 **`token`** 段按端配置不同 `store_prefix`；键模式见 [Redis设计规范](./Redis设计规范.md) §3.2.3。
+- `token.enabled=true` 时由 token 插件在 `MustInit` 阶段初始化（依赖 Redis）。
 
 #### 3.3.2 登录 / 登出
 
@@ -230,7 +230,7 @@ return s.resourceClient.FindByUsername(ctx, input.Username)
 | -- | ---- |
 | 路由前缀 | 各入口独立 `http.router_prefix`（按端在配置中设置） |
 | 验密对象 | 各入口对应的主体领域 |
-| token | 统一 `infra.TokenService`（`gitee.com/hq_project/yomi-boot/component/common/token`），`auth.store_prefix` 按端隔离 |
+| token | 统一 `infra.TokenService`（`gitee.com/hq_project/yomi-boot/component/common/token`），`token.store_prefix` 按端隔离 |
 | 下游领域 client | 仅依赖本入口需要的 `{client}/{domain}` 包 |
 
 ---
