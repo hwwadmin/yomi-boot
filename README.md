@@ -7,46 +7,6 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 
 可通过 [https://gitee.com/hq_project/yomi-boot-template](https://gitee.com/hq_project/yomi-boot-template) 模板项目快速开始。
 
-## 目录结构
-
-| 目录 | 职责 |
-| ---- | ---- |
-| `boot/` | 启动流程编排：入口与初始化 `boot`、生命周期、启动 Banner |
-| `component/core/` | 无状态内核：bc、config、cors、errors、shared、traceid、utils；不持有全局可变状态、不管理外部资源，不依赖任何兄弟组件 |
-| `component/common/` | 通用能力组件（纯库）：appctx、handler、httpguard、logger、response、router、snowflake、DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket、pprof、集成测试客户端等；运行时 `Config` 不写 `mapstructure`；`cors`/`router`/`oss` 的 YAML 绑定在 `plugin/builtin/` |
-| `component/cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
-| `component/ai/` | AI 能力组件（LLM、Embedding、Jev、RAG、VectorDB）；不进插件链、不读 YAML、不参与插件生命周期 |
-| `plugin/` | 插件契约与内置插件：`Plugin`/`PluginState`/`PluginSlot`/`ReadyHook`/`DrainHook`；插件自包含其创建的组件，`plugin/builtin/{lib}` 负责内置插件实现与部署 YAML 绑定（`cors`/`router` 仅绑定） |
-| `quick-starter-demo/` | 最小启动示例：只有 `main` 与 `config`，无业务，用于验证组件库可独立跑通 |
-
-## 快速启动
-
-业务入口可直接使用根包 `boot` 完成基础设施初始化、路由装配、HTTP 服务构建与优雅停机：
-
-```go
-package main
-
-import (
-	"gitee.com/hq_project/yomi-boot/boot"
-	"gitee.com/hq_project/yomi-boot/component/common/router"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
-	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
-)
-
-func main() {
-	boot.Run("YOMI_NOTE", func(slot *plugin.PluginSlot) []router.Registrar {
-		db := dbplugin.FromDB(slot).DB()
-		redis := redisplugin.From(slot).Service()
-		return wireHandlers(db, redis) // 组合根按需取用插件自包含的组件
-	})
-}
-```
-
-服务名统一来自配置 `app.name`。需要自定义配置段、插件或中间件时使用 `boot.RunWithOptions`；低层 API `boot.MustInit`、`server.MustBuildApp`、`lifecycle.Run` / `lifecycle.RunContext` 仍然可用。自定义响应编码器仍须在 `boot.Run` 之前调用 `response.MustRegister(...)`。
-
-组件库自身的最小启动示例在 `quick-starter-demo/`：`cd quick-starter-demo && go run .`。
-
 ## 中间件推荐适配版本
 
 以下为业务工程对接本库时的**运行侧基础设施推荐适配版本**（非 Go 客户端库版本）。按需启用，未用到的中间件无需部署。Docker 镜像 tag 均为已发布的具体版本，不要用 `latest`。
@@ -62,6 +22,62 @@ func main() {
 | RustFS | **1.0.1** | `rustfs/rustfs:1.0.1` |
 | Milvus | **2.6.5**（配套 `milvus/client/v2` v2.6.5） | `milvusdb/milvus:v2.6.5` |
 
+## 快速启动
+
+业务入口可直接使用根包 `boot` 完成基础设施初始化、路由装配、HTTP 服务构建与优雅停机：
+
+```go
+package main
+
+import (
+	"context"
+
+	"gitee.com/hq_project/yomi-boot/boot"
+	"gitee.com/hq_project/yomi-boot/component/common/handler"
+	"gitee.com/hq_project/yomi-boot/component/common/redis"
+	"gitee.com/hq_project/yomi-boot/component/common/response"
+	"gitee.com/hq_project/yomi-boot/component/common/router"
+	"gitee.com/hq_project/yomi-boot/plugin"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+func main() {
+	// 响应编码器必须在 boot.Run 之前显式注册
+	response.MustRegister(response.DefaultEncoder{})
+
+	boot.Run("YOMI_NOTE", func(slot *plugin.PluginSlot) []router.Registrar {
+		app := appctxplugin.From(slot).AppCtx()
+		db := dbplugin.FromDB(slot).DB()             // 未启用 db 时为 nil
+		redisSvc := redisplugin.From(slot).Service() // 未启用 redis 时为 nil
+
+		return []router.Registrar{
+			handler.NewHealthHandler("/health", "/ops/health", app),
+			&noteHandler{db: db, redis: redisSvc},
+		}
+	})
+}
+
+// noteHandler 是业务 Handler，基础设施由组合根注入。
+type noteHandler struct {
+	db    *gorm.DB
+	redis redis.RedisService
+}
+
+func (h *noteHandler) Routes(rg *gin.RouterGroup) {
+	rg.GET("/notes/count", func(c *gin.Context) {
+		handler.Handle(c, func(ctx context.Context) (int64, error) {
+			var count int64
+			err := h.db.WithContext(ctx).Table("notes").Count(&count).Error
+			return count, err
+		})
+	})
+}
+```
 
 ## 许可证
 
