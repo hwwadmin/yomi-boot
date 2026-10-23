@@ -82,7 +82,7 @@
 // services/{bff}/internal/bootstrap/server.go
 var pluginOpts plugin.PluginOptions
 pluginOpts.AddConfigSection(svcconfig.BizSection()) // key: biz
-slot := boot.MustInit(context.Background(), boot.InitOptions{
+slot := boot.MustInit(context.Background(), boot.Options{
     ConfigPath: path,
     EnvPrefix:  "YOMI_{BFF}",
     Plugin:     pluginOpts,

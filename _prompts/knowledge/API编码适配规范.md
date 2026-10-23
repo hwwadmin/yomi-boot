@@ -87,9 +87,7 @@ type Encoder interface {
 ```go
 func main() {
     boot.RunWithOptions(boot.Options{
-        InitOptions: boot.InitOptions{
-            EnvPrefix: "YOMI_NOTE",
-        },
+        EnvPrefix:       "YOMI_NOTE",
         ResponseEncoder: nil, // 为空默认 response.DefaultEncoder{}
     }, wire)
 }

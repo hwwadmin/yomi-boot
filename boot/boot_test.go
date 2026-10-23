@@ -41,7 +41,7 @@ snowflake:
 		t.Fatalf("写入测试配置失败: %v", err)
 	}
 
-	slot := MustInit(context.Background(), InitOptions{ConfigPath: configPath})
+	slot := MustInit(context.Background(), Options{ConfigPath: configPath})
 	closeSlot(t, slot)
 
 	if got := appctxplugin.From(slot).AppCtx().Name(); got != "boot-test" {
@@ -69,7 +69,7 @@ func TestMustInitPluginSetUsesExactPlugins(t *testing.T) {
   timezone: UTC
 `)
 
-	slot := MustInit(context.Background(), InitOptions{
+	slot := MustInit(context.Background(), Options{
 		ConfigPath: configPath,
 		PluginSet: &PluginSet{
 			Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
@@ -102,7 +102,7 @@ func TestMustInitPluginSetWithCustomPlugin(t *testing.T) {
 	custom := newTestPlugin("test-plugin")
 	configPath := writeBootConfig(t, "biz:\n  flag: true\n")
 
-	slot := MustInit(context.Background(), InitOptions{
+	slot := MustInit(context.Background(), Options{
 		ConfigPath: configPath,
 		PluginSet: &PluginSet{
 			Plugins: []plugin.Plugin{custom},
@@ -132,7 +132,7 @@ func TestMustInitPluginSetIgnoresCustomPlugins(t *testing.T) {
 	opts := plugin.PluginOptions{}
 	opts.AddCustomPlugin(newTestPlugin("ignored-custom"))
 
-	slot := MustInit(context.Background(), InitOptions{
+	slot := MustInit(context.Background(), Options{
 		ConfigPath: configPath,
 		Plugin:     opts,
 		PluginSet: &PluginSet{
@@ -167,7 +167,7 @@ biz:
 `)
 
 	expectPanic(t, "未注册段", func() {
-		MustInit(context.Background(), InitOptions{
+		MustInit(context.Background(), Options{
 			ConfigPath: configPath,
 			Plugin:     opts,
 			PluginSet: &PluginSet{
@@ -189,7 +189,7 @@ db:
 `)
 
 	expectPanic(t, "未注册段", func() {
-		MustInit(context.Background(), InitOptions{
+		MustInit(context.Background(), Options{
 			ConfigPath: configPath,
 			PluginSet: &PluginSet{
 				Plugins: []plugin.Plugin{appctxplugin.NewAppCtx()},
@@ -201,7 +201,7 @@ db:
 
 // TestMustInitPluginSetAllowsEmptySet 验证空 PluginSet 表示不装配任何插件与配置段
 func TestMustInitPluginSetAllowsEmptySet(t *testing.T) {
-	slot := MustInit(context.Background(), InitOptions{
+	slot := MustInit(context.Background(), Options{
 		ConfigPath: writeBootConfig(t, "{}\n"),
 		PluginSet:  &PluginSet{},
 	})

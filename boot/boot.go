@@ -29,28 +29,23 @@ type WireFunc func(slot *plugin.PluginSlot) []router.Registrar
 // MiddlewareFactory 基于插件插槽构建 HTTP 中间件链。
 type MiddlewareFactory func(slot *plugin.PluginSlot) []gin.HandlerFunc
 
-// InitOptions 是基础设施初始化选项。
-type InitOptions struct {
-	ConfigPath  string               // 配置文件路径，为空时使用 config.ResolvePath()
-	EnvPrefix   string               // 环境变量前缀，可为空
-	Plugin      plugin.PluginOptions // 默认插件链的扩展项；PluginSet 优先
-	PluginSet   *PluginSet           // 完全自定义插件链与配置段；设置后优先于默认链
-	InitTimeout time.Duration        // 启动预算，0 时使用 30s；ctx 已带 deadline 时以 ctx 为准
+// Options 是启动选项。
+type Options struct {
+	EnvPrefix       string               // 环境变量前缀，可为空
+	ConfigPath      string               // 配置文件路径，为空时使用 config.ResolvePath()
+	Plugin          plugin.PluginOptions // 默认插件链的扩展项；PluginSet 优先
+	PluginSet       *PluginSet           // 完全自定义插件链与配置段；设置后优先于默认链
+	InitTimeout     time.Duration        // 启动预算，0 时使用 30s；ctx 已带 deadline 时以 ctx 为准
+	Middlewares     MiddlewareFactory    // 中间件工厂，为空时使用 server.DefaultMiddlewares
+	ResponseEncoder response.Encoder     // 响应编码器，为空时使用 DefaultEncoder（已注册则沿用）
 }
 
-// InitTimeoutOrDefault 返回启动预算，未配置时使用 30s。
-func (o InitOptions) InitTimeoutOrDefault() time.Duration {
+// initTimeoutOrDefault 返回启动预算，未配置时使用 30s。
+func (o Options) initTimeoutOrDefault() time.Duration {
 	if o.InitTimeout <= 0 {
 		return defaultInitTimeout
 	}
 	return o.InitTimeout
-}
-
-// Options 是 HTTP 启动选项。
-type Options struct {
-	InitOptions
-	Middlewares     MiddlewareFactory // 中间件工厂，为空时使用 server.DefaultMiddlewares
-	ResponseEncoder response.Encoder  // 响应编码器，为空时使用 DefaultEncoder（已注册则沿用）
 }
 
 // PluginSet 是完全自定义插件链的装配集合，设置后只使用其 Plugins 与 Configs。
@@ -63,7 +58,7 @@ type PluginSet struct {
 
 // Run 使用默认配置和默认中间件启动 HTTP 服务，阻塞至进程退出。
 func Run(envPrefix string, wire WireFunc) {
-	RunWithOptions(Options{InitOptions: InitOptions{EnvPrefix: envPrefix}}, wire)
+	RunWithOptions(Options{EnvPrefix: envPrefix}, wire)
 }
 
 // RunWithOptions 按 opts 初始化基础设施并启动 HTTP 服务，阻塞至进程退出。
@@ -83,7 +78,7 @@ func RunWithOptions(opts Options, wire WireFunc) {
 
 	lifecycle.Run(func() *lifecycle.App {
 		// 初始化基础设施：注册配置段、加载校验、按序执行插件
-		slot := MustInit(context.Background(), opts.InitOptions)
+		slot := MustInit(context.Background(), opts)
 		defer func() {
 			if r := recover(); r != nil {
 				_ = slot.Close(context.Background())
@@ -119,15 +114,14 @@ func registerResponseEncoder(enc response.Encoder) {
 }
 
 // MustInit 初始化配置与插件链并返回插件插槽，初始化失败时 panic。
-// ctx 控制启动预算；未携带 deadline 时使用 opts.InitTimeout（默认 30s）。
 // PluginSet 非空时使用自定义插件与配置段，否则使用内置默认链并追加 Plugin 扩展。
-func MustInit(ctx context.Context, opts InitOptions) *plugin.PluginSlot {
+func MustInit(ctx context.Context, opts Options) *plugin.PluginSlot {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opts.InitTimeoutOrDefault())
+		ctx, cancel = context.WithTimeout(ctx, opts.initTimeoutOrDefault())
 		defer cancel()
 	}
 
