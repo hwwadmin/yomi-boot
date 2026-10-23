@@ -23,3 +23,13 @@ func MustNewConsumerManager(cfg ConsumerManagerConfig) ConsumerService {
 	}
 	return manager
 }
+
+// MustNewAdmin 创建 Kafka 管理端，失败时 log + panic
+func MustNewAdmin(cfg ConnectionConfig) AdminService {
+	admin, err := NewAdmin(cfg)
+	if err != nil {
+		logger.ErrorWithoutCtx("kafka 管理端初始化失败", "error", err)
+		panic(err)
+	}
+	return admin
+}

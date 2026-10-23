@@ -242,3 +242,21 @@ func NewConsumerManager(t testing.TB, broker *MockBroker) kafka.ConsumerService 
 	})
 	return consumer
 }
+
+// NewAdmin 创建 kafka 管理端并在测试结束时释放。
+func NewAdmin(t testing.TB, broker *MockBroker) kafka.AdminService {
+	t.Helper()
+	if broker == nil {
+		t.Fatal("broker 不能为空")
+		return nil
+	}
+
+	admin, err := kafka.NewAdmin(broker.ConnectionConfig())
+	if err != nil {
+		t.Fatalf("初始化 kafka 管理端失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = admin.Close()
+	})
+	return admin
+}
