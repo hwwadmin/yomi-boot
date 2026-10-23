@@ -1,4 +1,4 @@
-// 默认配置段注册表。
+// 默认配置段。
 
 package registry
 
@@ -24,9 +24,9 @@ import (
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 )
 
-// DefaultConfigRegistry 按注册顺序返回全部内置配置段的注册表。
-func DefaultConfigRegistry() *config.Registry {
-	return config.NewRegistry().Register(
+// DefaultConfigs 按注册顺序返回全部内置配置段。
+func DefaultConfigs() []config.Section {
+	return []config.Section{
 		appctxplugin.ConfigSection(),
 		routerplugin.ConfigSection(),
 		loggerplugin.ConfigSection(),
@@ -45,5 +45,5 @@ func DefaultConfigRegistry() *config.Registry {
 		redisratelimitplugin.ConfigSection(),
 		ossplugin.ConfigSection(),
 		pprofplugin.ConfigSection(),
-	)
+	}
 }

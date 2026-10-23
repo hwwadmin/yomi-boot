@@ -89,10 +89,9 @@ func registerResponseEncoder(enc response.Encoder) {
 // 返回插件插槽；进程退出时由 lifecycle 调用 slot.Close 逆序释放资源。
 func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) *plugin.PluginSlot {
 	// 注册配置段
-	reg := registry.DefaultConfigRegistry()
-	for _, section := range pluginOpts.CustomConfigs() {
-		reg.Register(section)
-	}
+	reg := config.NewRegistry()
+	reg.Register(registry.DefaultConfigs()...)
+	reg.Register(pluginOpts.CustomConfigs()...)
 
 	// 加载配置文件
 	cfg := config.MustLoadConfig(configPath, envPrefix, reg)

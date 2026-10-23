@@ -53,7 +53,7 @@ import (
 //
 // # 非插件（由 boot.MustInit 直接处理，不在此列表）
 //
-//   - registry.DefaultConfigRegistry + MustLoadConfig（含 PluginOptions 注册的自定义配置段）
+//   - registry.DefaultConfigs + config.NewRegistry + MustLoadConfig（含 PluginOptions 注册的自定义配置段）
 //
 // Ready 按 Init 顺序执行，Drain 按 Init 逆序执行；仅 Started 插件参与（见 plugin.ReadyHook / DrainHook）。
 // Close 按 Init 逆序：先停 custom 插件，再关 event，随后 kafka-consumer 先于 kafka-publisher 关闭，
