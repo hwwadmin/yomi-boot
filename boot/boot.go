@@ -43,23 +43,32 @@ func RunWithOptions(opts Options, wire WireFunc) {
 	if wire == nil {
 		panic("boot: WireFunc 不能为空")
 	}
+
+	// 注册响应编码器
 	registerResponseEncoder(opts.ResponseEncoder)
 
+	// 解析配置文件路径
 	configPath := opts.ConfigPath
 	if configPath == "" {
 		configPath = config.ResolvePath()
 	}
 
 	lifecycle.Run(func() *lifecycle.App {
+		// 初始化基础设施：注册配置段、加载校验、按序执行插件
 		slot := MustInit(configPath, opts.EnvPrefix, opts.Plugin)
+
+		// 装配路由
 		registrars := wire(slot)
 
+		// 构建中间件链
 		var middlewares []gin.HandlerFunc
 		if opts.Middlewares != nil {
 			middlewares = opts.Middlewares(slot)
 		} else {
 			middlewares = server.DefaultMiddlewares(slot)
 		}
+
+		// 构建 HTTP 服务
 		return server.MustBuildApp(slot, registrars, middlewares)
 	})
 }
@@ -79,13 +88,18 @@ func registerResponseEncoder(enc response.Encoder) {
 // MustInit 初始化基础设施：注册配置段、加载校验、按序执行插件；失败时 panic。
 // 返回插件插槽；进程退出时由 lifecycle 调用 slot.Close 逆序释放资源。
 func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) *plugin.PluginSlot {
+	// 注册配置段
 	reg := registry.DefaultConfigRegistry()
 	for _, section := range pluginOpts.CustomConfigs() {
 		reg.Register(section)
 	}
+
+	// 加载配置文件
 	cfg := config.MustLoadConfig(configPath, envPrefix, reg)
 
+	// 创建插件插槽并初始化插件
 	slot := plugin.NewPluginSlot(cfg, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
 	slot.Init()
+
 	return slot
 }
