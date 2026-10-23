@@ -140,7 +140,7 @@ func TestAdminCreateTopicInvalidConfig(t *testing.T) {
 // TestAdminCloseIdempotent 验证 Close 可重复调用
 func TestAdminCloseIdempotent(t *testing.T) {
 	broker := kafkatest.NewMockBroker(t, kafkatest.SeedTopics(1, "orders"))
-	admin, err := kafka.NewAdmin(broker.ConnectionConfig())
+	admin, err := kafka.NewAdmin(context.Background(), broker.ConnectionConfig())
 	if err != nil {
 		t.Fatalf("NewAdmin: %v", err)
 	}

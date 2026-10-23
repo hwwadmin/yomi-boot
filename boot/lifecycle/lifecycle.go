@@ -32,8 +32,9 @@ type App struct {
 	Release        func(context.Context) error // Release 在 HTTP 停止后释放基础设施资源
 }
 
-// Run 启动服务并阻塞至进程退出；启动/运行失败时 panic
-func Run(factory func() *App) {
+// Run 启动服务并阻塞至进程退出；factory 接收信号 ctx，启动期可随信号取消。
+// 启动/运行失败时 panic。
+func Run(factory func(context.Context) *App) {
 	// 监听系统中断信号
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

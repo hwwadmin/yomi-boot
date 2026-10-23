@@ -44,13 +44,13 @@ func FromDB(slot *plugin.PluginSlot) *DB {
 }
 
 // Init 初始化数据库连接
-func (p *DB) Init(_ context.Context, slot *plugin.PluginSlot) error {
+func (p *DB) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return plugin.ErrDisabled
 	}
 	cfg := bootCfg.ToConfig()
-	conn, stopIdle, err := db.Open(cfg)
+	conn, stopIdle, err := db.Open(ctx, cfg)
 	if err != nil {
 		return err
 	}

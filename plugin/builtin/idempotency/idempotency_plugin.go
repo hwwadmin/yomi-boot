@@ -42,7 +42,7 @@ func From(slot *plugin.PluginSlot) *Idempotency {
 }
 
 // Init 初始化幂等超时清理器
-func (p *Idempotency) Init(ctx context.Context, slot *plugin.PluginSlot) error {
+func (p *Idempotency) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return plugin.ErrDisabled
@@ -63,7 +63,7 @@ func (p *Idempotency) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 		idempotency.NewRepository(db.DB()),
 		idempotency.StaleCleanerConfigFrom(bootCfg.ToConfig(), app.Name()),
 	)
-	if err := cleaner.Start(ctx, redis.DistLockFactory()); err != nil {
+	if err := cleaner.Start(slot.RuntimeContext(), redis.DistLockFactory()); err != nil {
 		return err
 	}
 	p.cleaner = cleaner

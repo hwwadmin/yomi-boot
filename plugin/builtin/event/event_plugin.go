@@ -44,7 +44,7 @@ func From(slot *plugin.PluginSlot) *Event {
 }
 
 // Init 初始化消息队列事件组件
-func (p *Event) Init(ctx context.Context, slot *plugin.PluginSlot) error {
+func (p *Event) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.AnyEnabledOrDefault() {
 		return plugin.ErrDisabled
@@ -97,7 +97,7 @@ func (p *Event) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	if err != nil {
 		return err
 	}
-	if err := components.Start(ctx); err != nil {
+	if err := components.Start(slot.RuntimeContext()); err != nil {
 		_ = components.Close()
 		return err
 	}

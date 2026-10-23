@@ -473,6 +473,39 @@ func TestPluginSlotDependencyLookup(t *testing.T) {
 	}
 }
 
+// TestPluginSlotRuntimeContextCanceledOnClose 验证运行期 ctx 在 Close 时取消。
+func TestPluginSlotRuntimeContextCanceledOnClose(t *testing.T) {
+	slot := newTestSlot(t, &readyPlugin{basePlugin: newBase("a")})
+	if err := slot.Init(context.Background()); err != nil {
+		t.Fatalf("Init 失败: %v", err)
+	}
+
+	runtimeCtx := slot.RuntimeContext()
+	if runtimeCtx.Err() != nil {
+		t.Fatal("Init 成功后运行期 ctx 不应取消")
+	}
+	if err := slot.Close(context.Background()); err != nil {
+		t.Fatalf("Close 失败: %v", err)
+	}
+	if runtimeCtx.Err() == nil {
+		t.Fatal("Close 后运行期 ctx 应取消")
+	}
+}
+
+// TestPluginSlotRuntimeContextCanceledOnInitFailure 验证 Init 失败回滚时取消运行期 ctx。
+func TestPluginSlotRuntimeContextCanceledOnInitFailure(t *testing.T) {
+	fail := &basePlugin{Base: NewBase("fail"), initErr: errors.New("boom")}
+	slot := newTestSlot(t, fail)
+
+	runtimeCtx := slot.RuntimeContext()
+	if err := slot.Init(context.Background()); err == nil {
+		t.Fatal("Init 应返回错误")
+	}
+	if runtimeCtx.Err() == nil {
+		t.Fatal("Init 失败后运行期 ctx 应取消")
+	}
+}
+
 // TestPluginSlotNil 验证 nil PluginSlot 的生命周期方法安全。
 func TestPluginSlotNil(t *testing.T) {
 	var slot *PluginSlot

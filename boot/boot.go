@@ -76,9 +76,9 @@ func RunWithOptions(opts Options, wire WireFunc) {
 		opts.ConfigPath = config.ResolvePath()
 	}
 
-	lifecycle.Run(func() *lifecycle.App {
+	lifecycle.Run(func(ctx context.Context) *lifecycle.App {
 		// 初始化基础设施：注册配置段、加载校验、按序执行插件
-		slot := MustInit(context.Background(), opts)
+		slot := MustInit(ctx, opts)
 		defer func() {
 			if r := recover(); r != nil {
 				_ = slot.Close(context.Background())

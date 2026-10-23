@@ -338,6 +338,7 @@ func (s *PluginSlot) Close(ctx context.Context) error
 - 插件对象自包含其创建的组件；跨插件依赖在 `Init` 中经 `slot.MustPlugin(name)`（或各包的 `From(slot)`）取到前序插件，再调用其组件访问器。
 - 插件名称非空且唯一，重复注册在 `NewPluginSlot` 构造期 panic；`Init` 只能执行一次。
 - `Init` 按序执行；插件返回 error 或 panic 时，逆序回滚已初始化插件，返回聚合错误。`Init` 返回 `ErrDisabled` 的插件记为跳过，不参与 hook 与 `Close`。
+- `Init` 入参 ctx 只约束启动操作；需要长期运行的后台任务使用 `slot.RuntimeContext()`，该 ctx 在 `Close` 或 Init 失败回滚时取消。
 - `Close` 逆序关闭已初始化插件，使用调用方 ctx（无 deadline 时默认 10 秒）；单个插件超时或 panic 后继续关闭剩余插件，返回聚合错误。
 - 内置插件导出具体类型、`Name` 常量、`From` helper 与只读组件访问器；`From` 返回 nil 时访问器仍安全，依赖方按组件是否为 nil 做 Fail Fast。
 

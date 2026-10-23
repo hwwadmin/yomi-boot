@@ -43,13 +43,13 @@ func From(slot *plugin.PluginSlot) *Redis {
 }
 
 // Init 初始化 Redis 客户端、RedisService 与分布式锁工厂
-func (p *Redis) Init(_ context.Context, slot *plugin.PluginSlot) error {
+func (p *Redis) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return plugin.ErrDisabled
 	}
 	cfg := bootCfg.ToConfig()
-	client, err := yomiredis.NewClient(cfg)
+	client, err := yomiredis.NewClient(ctx, cfg)
 	if err != nil {
 		return err
 	}

@@ -32,8 +32,8 @@ type PublisherService interface {
 	Close() error
 }
 
-// NewPublisher 根据生产者配置创建 Kafka 生产者；发布工作池随生产者创建并启动
-func NewPublisher(cfg PublisherConfig) (PublisherService, error) {
+// NewPublisher 根据生产者配置创建 Kafka 生产者；ctx 约束连接验证，发布工作池随生产者创建并启动
+func NewPublisher(ctx context.Context, cfg PublisherConfig) (PublisherService, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func NewPublisher(cfg PublisherConfig) (PublisherService, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateConnection(conn, cfg.Connection.DialTimeout()); err != nil {
+	if err := validateConnection(ctx, conn, cfg.Connection.DialTimeout()); err != nil {
 		return nil, errors.Wrap(err, "kafka连接验证失败")
 	}
 

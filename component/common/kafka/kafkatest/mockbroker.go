@@ -215,7 +215,7 @@ func NewPublisher(t testing.TB, broker *MockBroker) kafka.PublisherService {
 		return nil
 	}
 
-	publisher, err := kafka.NewPublisher(broker.PublisherConfig())
+	publisher, err := kafka.NewPublisher(context.Background(), broker.PublisherConfig())
 	if err != nil {
 		t.Fatalf("初始化 kafka 生产者失败: %v", err)
 	}
@@ -233,7 +233,7 @@ func NewConsumerManager(t testing.TB, broker *MockBroker) kafka.ConsumerService 
 		return nil
 	}
 
-	consumer, err := kafka.NewConsumerManager(broker.ConsumerManagerConfig())
+	consumer, err := kafka.NewConsumerManager(context.Background(), broker.ConsumerManagerConfig())
 	if err != nil {
 		t.Fatalf("初始化 kafka 消费者管理器失败: %v", err)
 	}
@@ -251,7 +251,7 @@ func NewAdmin(t testing.TB, broker *MockBroker) kafka.AdminService {
 		return nil
 	}
 
-	admin, err := kafka.NewAdmin(broker.ConnectionConfig())
+	admin, err := kafka.NewAdmin(context.Background(), broker.ConnectionConfig())
 	if err != nil {
 		t.Fatalf("初始化 kafka 管理端失败: %v", err)
 	}

@@ -15,7 +15,8 @@ import (
 const defaultStopTimeout = 10 * time.Second
 
 // RunContext 使用调用方提供的 ctx 启动服务，返回错误而不 panic；ctx 取消时执行优雅停机。
-func RunContext(ctx context.Context, factory func() *App) (runErr error) {
+// factory 接收同一个 ctx，启动期可随 ctx 取消。
+func RunContext(ctx context.Context, factory func(context.Context) *App) (runErr error) {
 	ctx = appctx.OrBackground(ctx)
 	if ctx.Err() != nil {
 		return nil
@@ -24,7 +25,7 @@ func RunContext(ctx context.Context, factory func() *App) (runErr error) {
 		return errors.New("lifecycle: factory 不能为空")
 	}
 
-	app := factory()
+	app := factory(ctx)
 	if app == nil {
 		return errors.New("lifecycle: App 不能为空")
 	}

@@ -35,12 +35,12 @@ func FromPublisher(slot *plugin.PluginSlot) *Publisher {
 }
 
 // Init 初始化 Kafka 生产者
-func (p *Publisher) Init(_ context.Context, slot *plugin.PluginSlot) error {
+func (p *Publisher) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.PublisherEnabledOrDefault() {
 		return plugin.ErrDisabled
 	}
-	publisher, err := kafka.NewPublisher(bootCfg.ToPublisherConfig())
+	publisher, err := kafka.NewPublisher(ctx, bootCfg.ToPublisherConfig())
 	if err != nil {
 		return err
 	}

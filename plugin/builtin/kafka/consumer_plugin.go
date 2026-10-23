@@ -35,12 +35,12 @@ func FromConsumer(slot *plugin.PluginSlot) *Consumer {
 }
 
 // Init 初始化 Kafka 消费者管理器
-func (p *Consumer) Init(_ context.Context, slot *plugin.PluginSlot) error {
+func (p *Consumer) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.ConsumerEnabledOrDefault() {
 		return plugin.ErrDisabled
 	}
-	consumer, err := kafka.NewConsumerManager(bootCfg.ToConsumerManagerConfig())
+	consumer, err := kafka.NewConsumerManager(ctx, bootCfg.ToConsumerManagerConfig())
 	if err != nil {
 		return err
 	}

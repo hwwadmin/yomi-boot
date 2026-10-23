@@ -21,16 +21,19 @@ const (
 
 // PluginSlot 是统一的插件插槽。
 //
-// 除 Config 与插件链外只保存每个插件的初始化状态；Init / Close 负责整条链的
-// 顺序、回滚与错误聚合，插件不再自行维护启动状态。
+// 除 Config 与插件链外只保存每个插件的初始化状态与运行期 ctx；Init / Close 负责整条链的
+// 顺序、回滚与错误聚合，插件不再自行维护启动状态。Init 入参 ctx 只约束启动操作，
+// 长期后台任务使用 RuntimeContext。
 type PluginSlot struct {
 	Config *config.Config // Config 是已绑定配置（含自定义段）
 
-	chain  []Plugin       // chain 是注册顺序的插件链
-	index  map[string]int // index 是插件名到链下标的索引
-	states []pluginState  // states 与 chain 一一对应
-	inited bool           // inited 标记 Init 是否已执行
-	closed bool           // closed 标记 Close 是否已执行或 Init 已失败
+	chain         []Plugin           // chain 是注册顺序的插件链
+	index         map[string]int     // index 是插件名到链下标的索引
+	states        []pluginState      // states 与 chain 一一对应
+	inited        bool               // inited 标记 Init 是否已执行
+	closed        bool               // closed 标记 Close 是否已执行或 Init 已失败
+	runtimeCtx    context.Context    // runtimeCtx 是插件后台任务的运行期上下文
+	runtimeCancel context.CancelFunc // runtimeCancel 在 Close 或 Init 失败时取消 runtimeCtx
 }
 
 // pluginState 是单个插件的生命周期状态。
@@ -45,10 +48,13 @@ func NewPluginSlot(cfg *config.Config, plugins []Plugin) *PluginSlot {
 		panic(errors.New("plugin: Config 不能为空"))
 	}
 
+	runtimeCtx, runtimeCancel := context.WithCancel(context.Background())
 	slot := &PluginSlot{
-		Config: cfg,
-		chain:  make([]Plugin, 0, len(plugins)),
-		index:  make(map[string]int, len(plugins)),
+		Config:        cfg,
+		chain:         make([]Plugin, 0, len(plugins)),
+		index:         make(map[string]int, len(plugins)),
+		runtimeCtx:    runtimeCtx,
+		runtimeCancel: runtimeCancel,
 	}
 	for _, p := range plugins {
 		if p == nil {
@@ -111,6 +117,9 @@ func (s *PluginSlot) Close(ctx context.Context) error {
 		return nil
 	}
 	s.closed = true
+	if s.runtimeCancel != nil {
+		s.runtimeCancel()
+	}
 	ctx = orBackground(ctx)
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -134,6 +143,9 @@ func (s *PluginSlot) Close(ctx context.Context) error {
 
 // unwind 逆序关闭 chain[:failedIndex] 中已初始化的插件，并标记插槽关闭。
 func (s *PluginSlot) unwind(ctx context.Context, failedIndex int) error {
+	if s.runtimeCancel != nil {
+		s.runtimeCancel()
+	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultUnwindTimeout)
 	defer cancel()
 
@@ -211,6 +223,15 @@ func (s *PluginSlot) MustPlugin(name string) Plugin {
 		panic(errors.Newf("plugin: 未注册插件: %s", name))
 	}
 	return p
+}
+
+// RuntimeContext 返回插件后台任务的运行期上下文，在 Close 或 Init 失败时取消。
+// 插件 Init 应使用入参 ctx 做启动操作；需要长期运行的后台任务应使用本方法返回的 ctx。
+func (s *PluginSlot) RuntimeContext() context.Context {
+	if s == nil || s.runtimeCtx == nil {
+		return context.Background()
+	}
+	return s.runtimeCtx
 }
 
 // Started 返回指定名称的插件是否已初始化；未注册或 Init 返回 ErrDisabled 时为 false。

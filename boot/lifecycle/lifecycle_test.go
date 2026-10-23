@@ -45,7 +45,7 @@ func TestRunContextPhases(t *testing.T) {
 		},
 	}
 
-	if err := RunContext(ctx, func() *App { return app }); err != nil {
+	if err := RunContext(ctx, func(context.Context) *App { return app }); err != nil {
 		t.Fatalf("RunContext 返回错误: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestRunContextReadyFailure(t *testing.T) {
 		},
 	}
 
-	if err := RunContext(context.Background(), func() *App { return app }); err == nil {
+	if err := RunContext(context.Background(), func(context.Context) *App { return app }); err == nil {
 		t.Fatal("Ready 失败时 RunContext 应返回错误")
 	}
 
@@ -108,7 +108,7 @@ func TestRunContextBindFailure(t *testing.T) {
 		},
 	}
 
-	if err := RunContext(context.Background(), func() *App { return app }); err == nil {
+	if err := RunContext(context.Background(), func(context.Context) *App { return app }); err == nil {
 		t.Fatal("端口被占用时 RunContext 应返回错误")
 	}
 	if !released {
@@ -118,7 +118,7 @@ func TestRunContextBindFailure(t *testing.T) {
 
 // TestRunContextNilApp 验证 factory 返回 nil 时返回错误
 func TestRunContextNilApp(t *testing.T) {
-	if err := RunContext(context.Background(), func() *App { return nil }); err == nil {
+	if err := RunContext(context.Background(), func(context.Context) *App { return nil }); err == nil {
 		t.Fatal("App 为 nil 时应返回错误")
 	}
 }
@@ -143,9 +143,44 @@ func TestRunContextReleaseError(t *testing.T) {
 		},
 	}
 
-	err := RunContext(ctx, func() *App { return app })
+	err := RunContext(ctx, func(context.Context) *App { return app })
 	if err == nil || !strings.Contains(err.Error(), "release failed") {
 		t.Fatalf("RunContext 应返回 Release 错误，实际 %v", err)
+	}
+}
+
+// TestRunContextFactoryReceivesContext 验证 factory 收到调用方 ctx
+func TestRunContextFactoryReceivesContext(t *testing.T) {
+	type ctxKey struct{}
+
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKey{}, "value"))
+	defer cancel()
+
+	app := &App{
+		Name:       "test",
+		HTTPServer: &http.Server{Addr: "127.0.0.1:0", Handler: http.NewServeMux()},
+		OnReady: []Hook{
+			func(context.Context) error {
+				cancel()
+				return nil
+			},
+		},
+		StopTimeout: time.Second,
+		Release: func(context.Context) error {
+			return nil
+		},
+	}
+
+	var got string
+	err := RunContext(ctx, func(factoryCtx context.Context) *App {
+		got, _ = factoryCtx.Value(ctxKey{}).(string)
+		return app
+	})
+	if err != nil {
+		t.Fatalf("RunContext 返回错误: %v", err)
+	}
+	if got != "value" {
+		t.Fatalf("factory ctx value = %q, want %q", got, "value")
 	}
 }
 
@@ -155,7 +190,7 @@ func TestRunContextCanceledBeforeFactory(t *testing.T) {
 	cancel()
 
 	called := false
-	if err := RunContext(ctx, func() *App {
+	if err := RunContext(ctx, func(context.Context) *App {
 		called = true
 		return nil
 	}); err != nil {

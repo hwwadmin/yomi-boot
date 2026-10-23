@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -40,17 +41,17 @@ func normalizeBrokers(brokers []string) []string {
 }
 
 // validateConnection 在连接超时内逐个拨号验证 broker 可达
-func validateConnection(conn connection, timeout time.Duration) error {
+func validateConnection(ctx context.Context, conn connection, timeout time.Duration) error {
 	if conn.dialer == nil {
 		return errors.New("kafka dialer 未初始化")
 	}
 
-	ctx, cancel := appctx.BackgroundWithTimeout(timeout)
+	validateCtx, cancel := appctx.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var joined error
 	for _, broker := range conn.brokers {
-		rawConn, err := conn.dialer.DialContext(ctx, "tcp", broker)
+		rawConn, err := conn.dialer.DialContext(validateCtx, "tcp", broker)
 		if err != nil {
 			joined = errors.Join(joined, errors.Wrap(err, "连接 broker %s 失败", broker))
 			continue

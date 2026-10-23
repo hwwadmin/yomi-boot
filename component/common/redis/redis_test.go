@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 func TestNewClient_AppliesCommandTimeout(t *testing.T) {
 	mr := miniredis.RunT(t)
 
-	client, err := NewClient(Config{Addr: mr.Addr(), CommandTimeoutMs: 1500})
+	client, err := NewClient(context.Background(), Config{Addr: mr.Addr(), CommandTimeoutMs: 1500})
 	if err != nil {
 		t.Fatalf("NewClient 失败: %v", err)
 	}

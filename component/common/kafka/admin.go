@@ -76,8 +76,8 @@ type admin struct {
 
 var _ AdminService = (*admin)(nil)
 
-// NewAdmin 根据连接配置创建 Kafka 管理端
-func NewAdmin(cfg ConnectionConfig) (AdminService, error) {
+// NewAdmin 根据连接配置创建 Kafka 管理端；ctx 约束连接验证
+func NewAdmin(ctx context.Context, cfg ConnectionConfig) (AdminService, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func NewAdmin(cfg ConnectionConfig) (AdminService, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateConnection(conn, cfg.DialTimeout()); err != nil {
+	if err := validateConnection(ctx, conn, cfg.DialTimeout()); err != nil {
 		return nil, errors.Wrap(err, "kafka连接验证失败")
 	}
 

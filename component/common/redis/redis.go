@@ -4,6 +4,8 @@
 package redis
 
 import (
+	"context"
+
 	"gitee.com/hq_project/yomi-boot/component/core/appctx"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
@@ -11,13 +13,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// NewClient 根据 Redis 配置创建并验证客户端连接；调用方应确保 cfg 已通过 Validate
-func NewClient(cfg Config) (*redis.Client, error) {
-	return newClient(cfg)
+// NewClient 根据 Redis 配置创建并验证客户端连接；ctx 约束连接验证，调用方应确保 cfg 已通过 Validate
+func NewClient(ctx context.Context, cfg Config) (*redis.Client, error) {
+	return newClient(ctx, cfg)
 }
 
 // newClient 假定 cfg 已通过语义校验，仅处理连接与 Ping 验证
-func newClient(cfg Config) (*redis.Client, error) {
+func newClient(ctx context.Context, cfg Config) (*redis.Client, error) {
 	timeout := cfg.CommandTimeout()
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
@@ -30,10 +32,10 @@ func newClient(cfg Config) (*redis.Client, error) {
 		ContextTimeoutEnabled: true,
 	})
 
-	ctx, cancel := appctx.BackgroundWithTimeout(timeout)
+	pingCtx, cancel := appctx.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if err := client.Ping(ctx).Err(); err != nil {
+	if err := client.Ping(pingCtx).Err(); err != nil {
 		_ = client.Close()
 		return nil, errors.Wrap(err, "redis连接验证失败")
 	}

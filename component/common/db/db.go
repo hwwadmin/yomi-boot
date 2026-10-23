@@ -18,14 +18,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// Open 根据配置初始化 DB 连接；调用方应确保 cfg 已通过 Validate。
+// Open 根据配置初始化 DB 连接；ctx 约束启动预热，调用方应确保 cfg 已通过 Validate。
 // 当 min_idle_conns>0 时会预热并启动保活，返回的 stop 须在关闭 DB 前调用（无保活时为 nil）。
-func Open(cfg Config) (*gorm.DB, func(), error) {
-	return open(cfg)
+func Open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return open(ctx, cfg)
 }
 
 // open 假定 cfg 已通过语义校验，仅处理连接、连接池、预热与保活
-func open(cfg Config) (*gorm.DB, func(), error) {
+func open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "生成DSN失败")
@@ -60,7 +63,7 @@ func open(cfg Config) (*gorm.DB, func(), error) {
 
 	var stop func()
 	if cfg.MinIdleConns > 0 {
-		warmCtx, cancel := context.WithTimeout(context.Background(), idleWarmTimeout)
+		warmCtx, cancel := context.WithTimeout(ctx, idleWarmTimeout)
 		err = warmIdle(warmCtx, sqlDB, cfg.MinIdleConns)
 		cancel()
 		if err != nil {

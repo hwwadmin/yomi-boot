@@ -21,6 +21,7 @@ type Plugin interface {
 	// Name 返回插件名称，同一插件链内唯一。
 	Name() string
 	// Init 初始化插件；失败时返回 error，ctx 取消时返回 ctx.Err()。
+	// ctx 只约束启动操作；需要长期运行的后台任务使用 slot.RuntimeContext()。
 	// 失败前须自行清理本次申请的资源；未启用时返回 ErrDisabled。
 	Init(ctx context.Context, slot *PluginSlot) error
 	// Close 释放插件资源；须尊重 ctx，可重复调用。

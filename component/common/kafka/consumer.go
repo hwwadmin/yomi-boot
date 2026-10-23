@@ -70,8 +70,8 @@ type consumerEntry struct {
 	ctx      context.Context    // ctx 是消费者独立运行上下文
 }
 
-// NewConsumerManager 根据消费者管理器配置创建消费者管理器；消费者在 Start 时才建立连接
-func NewConsumerManager(cfg ConsumerManagerConfig) (ConsumerService, error) {
+// NewConsumerManager 根据消费者管理器配置创建消费者管理器；ctx 约束连接验证，消费者在 Start 时才建立连接
+func NewConsumerManager(ctx context.Context, cfg ConsumerManagerConfig) (ConsumerService, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func NewConsumerManager(cfg ConsumerManagerConfig) (ConsumerService, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateConnection(conn, cfg.Connection.DialTimeout()); err != nil {
+	if err := validateConnection(ctx, conn, cfg.Connection.DialTimeout()); err != nil {
 		return nil, errors.Wrap(err, "kafka连接验证失败")
 	}
 

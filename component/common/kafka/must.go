@@ -1,12 +1,14 @@
 package kafka
 
 import (
+	"context"
+
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // MustNewPublisher 创建 Kafka 生产者，失败时 log + panic
-func MustNewPublisher(cfg PublisherConfig) PublisherService {
-	publisher, err := NewPublisher(cfg)
+func MustNewPublisher(ctx context.Context, cfg PublisherConfig) PublisherService {
+	publisher, err := NewPublisher(ctx, cfg)
 	if err != nil {
 		logger.ErrorWithoutCtx("kafka 生产者初始化失败", "error", err)
 		panic(err)
@@ -15,8 +17,8 @@ func MustNewPublisher(cfg PublisherConfig) PublisherService {
 }
 
 // MustNewConsumerManager 创建 Kafka 消费者管理器，失败时 log + panic
-func MustNewConsumerManager(cfg ConsumerManagerConfig) ConsumerService {
-	manager, err := NewConsumerManager(cfg)
+func MustNewConsumerManager(ctx context.Context, cfg ConsumerManagerConfig) ConsumerService {
+	manager, err := NewConsumerManager(ctx, cfg)
 	if err != nil {
 		logger.ErrorWithoutCtx("kafka 消费者管理器初始化失败", "error", err)
 		panic(err)
@@ -25,8 +27,8 @@ func MustNewConsumerManager(cfg ConsumerManagerConfig) ConsumerService {
 }
 
 // MustNewAdmin 创建 Kafka 管理端，失败时 log + panic
-func MustNewAdmin(cfg ConnectionConfig) AdminService {
-	admin, err := NewAdmin(cfg)
+func MustNewAdmin(ctx context.Context, cfg ConnectionConfig) AdminService {
+	admin, err := NewAdmin(ctx, cfg)
 	if err != nil {
 		logger.ErrorWithoutCtx("kafka 管理端初始化失败", "error", err)
 		panic(err)
