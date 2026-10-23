@@ -6,32 +6,60 @@ package redisratelimitplugin
 import (
 	"gitee.com/hq_project/yomi-boot/component/common/redisratelimit"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
 )
 
-// redisRateLimitPlugin 限流插件
-type redisRateLimitPlugin struct {
+const Name = "redisratelimit"
+
+// RedisRateLimit 限流插件；自包含限流器，未启用时为 Noop
+type RedisRateLimit struct {
 	plugin.PluginState
+
+	limiter redisratelimit.LimitService
 }
 
-const redisRateLimitName = "redisratelimit"
+var _ plugin.Plugin = (*RedisRateLimit)(nil)
 
-// NewRedisRateLimit 创建限流生命周期插件（依赖 RedisService；未启用时写入 Noop）
-func NewRedisRateLimit() plugin.Plugin {
-	return &redisRateLimitPlugin{PluginState: plugin.NewPluginState(redisRateLimitName)}
+// NewRedisRateLimit 创建限流生命周期插件
+func NewRedisRateLimit() *RedisRateLimit {
+	return &RedisRateLimit{PluginState: plugin.NewPluginState(Name)}
 }
 
-// Init 初始化限流器并挂到 Host
-func (p *redisRateLimitPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+// From 从插件插槽中取出限流插件；未注册时返回 nil
+func From(slot *plugin.PluginSlot) *RedisRateLimit {
+	if slot == nil {
+		return nil
+	}
+	p, _ := slot.Plugin(Name)
+	rateLimitPlugin, _ := p.(*RedisRateLimit)
+	return rateLimitPlugin
+}
+
+// Init 初始化限流器；未启用时使用 Noop
+func (p *RedisRateLimit) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
-		host.RateLimiter = redisratelimit.NewNoop()
+		p.limiter = redisratelimit.NewNoop()
 		p.SetStarted()
 		return
 	}
-	host.RateLimiter = redisratelimit.New(host.RedisService, bootCfg.ToConfig())
+	redis := redisplugin.From(slot)
+	if redis.Service() == nil {
+		panic(errors.New("redisratelimit: 需要 redis 插件（redis.enabled=true）"))
+	}
+	p.limiter = redisratelimit.New(redis.Service(), bootCfg.ToConfig())
 	p.SetStarted()
 }
 
-// Close 关闭限流资源
-func (p *redisRateLimitPlugin) Close(_ *plugin.Host) {}
+// Close 限流器无资源需要释放
+func (p *RedisRateLimit) Close() {}
+
+// Limiter 返回限流服务；未初始化时返回 Noop
+func (p *RedisRateLimit) Limiter() redisratelimit.LimitService {
+	if p == nil || p.limiter == nil {
+		return redisratelimit.NewNoop()
+	}
+	return p.limiter
+}

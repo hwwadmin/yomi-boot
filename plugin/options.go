@@ -13,7 +13,8 @@ type PluginOptions struct {
 	customConfigs []config.Section
 }
 
-// AddCustomPlugin 注册服务自定义插件（Init 挂在内置插件链末尾，晚于 event；可依赖 KafkaConsumer / Event.Receiver 等）
+// AddCustomPlugin 注册服务自定义插件（Init 挂在内置插件链末尾，晚于 event；
+// 可在 Init 中通过 slot 查找前序插件并读取其组件）
 func (opts *PluginOptions) AddCustomPlugin(customPlugin Plugin) *PluginOptions {
 	opts.customPlugins = append(opts.customPlugins, customPlugin)
 	return opts

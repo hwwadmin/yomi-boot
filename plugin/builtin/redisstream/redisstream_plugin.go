@@ -6,45 +6,72 @@ package redisstreamplugin
 import (
 	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
 )
 
-// redisStreamPlugin Redis Stream 生命周期插件
-type redisStreamPlugin struct {
+const Name = "redisstream"
+
+// RedisStream Redis Stream 生命周期插件；自包含发布/消费组件
+type RedisStream struct {
 	plugin.PluginState
-	components *redisstream.Components // components 供 Close 时释放
+
+	components *redisstream.Components
 }
 
-// redisStreamName 是插件在生命周期中的名称
-const redisStreamName = "redisstream"
+var _ plugin.Plugin = (*RedisStream)(nil)
 
 // NewRedisStream 创建 Redis Stream 生命周期插件
-func NewRedisStream() plugin.Plugin {
-	return &redisStreamPlugin{PluginState: plugin.NewPluginState(redisStreamName)}
+func NewRedisStream() *RedisStream {
+	return &RedisStream{PluginState: plugin.NewPluginState(Name)}
 }
 
-// Init 初始化 Redis Stream 组件并挂到 Host（复用 host.RedisClient，不耦合 RedisService）
-func (p *redisStreamPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+// From 从插件插槽中取出 Redis Stream 插件；未注册时返回 nil
+func From(slot *plugin.PluginSlot) *RedisStream {
+	if slot == nil {
+		return nil
+	}
+	p, _ := slot.Plugin(Name)
+	redisStreamPlugin, _ := p.(*RedisStream)
+	return redisStreamPlugin
+}
+
+// Init 初始化 Redis Stream 组件，复用前序 redis 插件的原始客户端
+func (p *RedisStream) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}
-	if host.RedisClient == nil {
-		panic("redis_stream.enabled=true 但 RedisClient 未初始化（请先启用 redis）")
+	redis := redisplugin.From(slot)
+	if redis.Client() == nil {
+		panic(errors.New("redis_stream: 需要 redis 插件（redis.enabled=true）"))
 	}
-	components := redisstream.MustNewComponents(bootCfg.ToConfig(), host.RedisClient)
-	p.components = components
-	host.RedisStreamComponents = components
-	host.RedisStreamPublisher = components.Publisher
-	host.RedisStreamConsumer = components.Consumer
+	p.components = redisstream.MustNewComponents(bootCfg.ToConfig(), redis.Client())
 	p.SetStarted()
 }
 
 // Close 停止消费与发布侧资源；不关闭 Redis client
-func (p *redisStreamPlugin) Close(_ *plugin.Host) {
+func (p *RedisStream) Close() {
 	if p.components == nil {
 		return
 	}
 	_ = p.components.Close()
 	p.components = nil
+}
+
+// Publisher 返回 Redis Stream 发布者；未启用时返回 nil
+func (p *RedisStream) Publisher() redisstream.PublisherService {
+	if p == nil || p.components == nil {
+		return nil
+	}
+	return p.components.Publisher
+}
+
+// Consumer 返回 Redis Stream 消费者；未启用时返回 nil
+func (p *RedisStream) Consumer() redisstream.ConsumerService {
+	if p == nil || p.components == nil {
+		return nil
+	}
+	return p.components.Consumer
 }

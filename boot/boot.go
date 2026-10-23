@@ -1,6 +1,6 @@
 // Package boot 提供项目启动快捷入口与基础设施初始化。
 //
-// MustInit 注册配置段、加载配置文档并按内置插件清单启动资源；Run / RunWithOptions
+// MustInit 注册配置段、加载配置文档并按内置插件清单初始化插件链；Run / RunWithOptions
 // 在此基础上完成路由装配、HTTP 服务构建与 lifecycle 编排。
 //
 // @author zwei
@@ -18,10 +18,10 @@ import (
 )
 
 // WireFunc 在基础设施初始化完成后装配路由。
-type WireFunc func(services *plugin.Services) []router.Registrar
+type WireFunc func(slot *plugin.PluginSlot) []router.Registrar
 
-// MiddlewareFactory 基于已初始化能力构建中间件链；Options.Middlewares 为空时使用 server.DefaultMiddlewares。
-type MiddlewareFactory func(services *plugin.Services) []gin.HandlerFunc
+// MiddlewareFactory 基于已初始化的插件链构建中间件链；Options.Middlewares 为空时使用 server.DefaultMiddlewares。
+type MiddlewareFactory func(slot *plugin.PluginSlot) []gin.HandlerFunc
 
 // Options 启动选项
 type Options struct {
@@ -48,29 +48,29 @@ func RunWithOptions(opts Options, wire WireFunc) {
 	}
 
 	lifecycle.Run(func() *lifecycle.App {
-		services, rt := MustInit(configPath, opts.EnvPrefix, opts.Plugin)
-		registrars := wire(services)
+		slot := MustInit(configPath, opts.EnvPrefix, opts.Plugin)
+		registrars := wire(slot)
 
 		var middlewares []gin.HandlerFunc
 		if opts.Middlewares != nil {
-			middlewares = opts.Middlewares(services)
+			middlewares = opts.Middlewares(slot)
 		} else {
-			middlewares = server.DefaultMiddlewares(services)
+			middlewares = server.DefaultMiddlewares(slot)
 		}
-		return server.MustBuildApp(services, rt, registrars, middlewares)
+		return server.MustBuildApp(slot, registrars, middlewares)
 	})
 }
 
 // MustInit 初始化基础设施：注册配置段、加载校验、按序执行插件；失败时 panic。
-// 返回业务可见的能力集合与插件运行时；进程退出时由调用方关闭 Runtime。
-func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) (*plugin.Services, *plugin.Runtime) {
+// 返回插件插槽；进程退出时由 lifecycle 调用 slot.Close 逆序释放资源。
+func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) *plugin.PluginSlot {
 	reg := registry.DefaultConfigRegistry()
 	for _, section := range pluginOpts.CustomConfigs() {
 		reg.Register(section)
 	}
 	cfg := config.MustLoadConfig(configPath, envPrefix, reg)
 
-	host := &plugin.Host{Services: plugin.Services{Config: cfg}}
-	rt := plugin.Run(host, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
-	return &host.Services, rt
+	slot := plugin.NewPluginSlot(cfg, append(registry.Plugins(), pluginOpts.CustomPlugins()...))
+	slot.Init()
+	return slot
 }

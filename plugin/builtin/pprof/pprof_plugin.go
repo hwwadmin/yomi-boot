@@ -14,24 +14,27 @@ import (
 )
 
 const (
-	pprofName   = "pprof"
+	Name        = "pprof"
 	stopTimeout = 3 * time.Second
 )
 
-// pprofPlugin pprof 性能剖析插件
-type pprofPlugin struct {
+// Pprof pprof 性能剖析插件；自包含剖析服务
+type Pprof struct {
 	plugin.PluginState
+
 	server *componentpprof.Server
 }
 
+var _ plugin.Plugin = (*Pprof)(nil)
+
 // NewPprof 创建 pprof 生命周期插件
-func NewPprof() plugin.Plugin {
-	return &pprofPlugin{PluginState: plugin.NewPluginState(pprofName)}
+func NewPprof() *Pprof {
+	return &Pprof{PluginState: plugin.NewPluginState(Name)}
 }
 
 // Init 初始化 pprof 性能剖析服务；未启用时不标记 Started
-func (p *pprofPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+func (p *Pprof) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}
@@ -40,7 +43,7 @@ func (p *pprofPlugin) Init(host *plugin.Host) {
 }
 
 // Close 优雅停止 pprof 服务
-func (p *pprofPlugin) Close(_ *plugin.Host) {
+func (p *Pprof) Close() {
 	if p.server == nil {
 		return
 	}

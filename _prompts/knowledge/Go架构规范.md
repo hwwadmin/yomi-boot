@@ -98,8 +98,8 @@
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
 - `component/core/` 提供 bc、config、cors、errors、shared、traceid、utils，是无状态内核；`component/common/` 提供 appctx、handler、httpguard、logger、response、router、snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
-- `plugin/` 提供 `Plugin`、`PluginState`、`Runtime`、`Host`、`Services`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/registry`（`Plugins()`、`DefaultConfigRegistry()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
-- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单只能放 `plugin/registry`；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时写入 `Services.OSS`）。
+- `plugin/` 提供 `Plugin`、`PluginState`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/registry`（`Plugins()`、`DefaultConfigRegistry()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
+- `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单只能放 `plugin/registry`；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
@@ -180,22 +180,22 @@ services/{domain}/
 | ---- | -- |
 | `component/core/` | `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `boot/` | `boot`（启动快捷入口与初始化）、`server`（HTTP 装配）、`lifecycle`、`banner` |
-| `plugin/` | `Plugin` 接口、`PluginState`、`Runtime`、`Host`、`Services`、`PluginOptions`、`ReadyHook` / `DrainHook` |
+| `plugin/` | `Plugin` 接口、`PluginState`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
 | `plugin/registry/` | 内置插件启动顺序 `Plugins()`、默认配置段注册表 `DefaultConfigRegistry()` |
 | `plugin/builtin/` | 内置插件与各能力 YAML 绑定（`appctx`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `appctx`、`handler`、`httpguard`、`logger`、`response`、`router`、`snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
 | `component/ai/` | `llm`、`embedding`、`jev`、`rag`、`vectordb` |
 
-依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包不得 import `plugin/builtin/**`，`plugin/registry` 可 import 全部 `plugin/builtin/**`；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/registry` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段。
+依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors`，不得 import `plugin/builtin/**`，`plugin/registry` 可 import 全部 `plugin/builtin/**`；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/registry` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段与访问器。
 
 | 包 | 职责 |
 | -- | ---- |
-| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`；`MustInit` 返回 `*plugin.Services` + `*plugin.Runtime`，配置经 `Services.Config` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Run` / `RunWithOptions` 编排初始化、wire、HTTP 装配与 lifecycle |
+| `boot` | `MustInit`、`Run` / `RunWithOptions`、`Options`；`MustInit` 返回 `*plugin.PluginSlot`，配置经 `slot.Config` + `MustSection` 读取；内置插件顺序由 `plugin/registry` 提供；插件扩展经 `plugin.PluginOptions`（`AddConfigSection` / `AddCustomPlugin`）；`Run` / `RunWithOptions` 编排初始化、wire、HTTP 装配与 lifecycle |
 | `server` | `MustBuildApp`、`DefaultMiddlewares`；只处理 HTTP 侧（gin 引擎、中间件链、`http.Server`、`lifecycle.App`），不感知具体组件 |
-| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`Host`（初始化上下文）、`Services`（业务可见能力集合）、`Runtime`、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
+| `plugin` | 资源生命周期框架：`Plugin` 接口、`PluginState`、`PluginSlot`（Config + 有序插件链，负责 Init / hook 收集 / 逆序 Close）、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
 | `plugin/registry` | 内置插件启动顺序（`Plugins()`）与默认配置段注册表（`DefaultConfigRegistry()`）；`plugin` 根包不得 import 本包所依赖的 `plugin/builtin/**` |
-| `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
+| `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；插件导出具体类型、`Name` 常量、`From` 与组件访问器，自包含其创建的组件；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 无状态内核；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `bc`、`config`、`cors`、`errors`、`shared`、`traceid`、`utils` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
@@ -251,7 +251,7 @@ services/{domain}/
 | `component/ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进插件链、不读 YAML、不做限流 |
 | `component/ai/rag` | 检索增强数据门面：切块（recursive / fixed / sentence / markdown，可自定义）/ 向量化 / 入库 / 检索 / 删除；基于 `component/ai/embedding` + `component/ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进插件链、不读 YAML、不做限流 |
 | `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；不进插件链、不读 YAML |
-| `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 写入 `Services.OSS` |
+| `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
 
 **平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/`）：
 
@@ -282,9 +282,9 @@ cmd/main.go
             └─ lifecycle.Run(factory)
                  ├─ boot.MustInit(configPath, envPrefix, bootOpts.Plugin)
                  │     ├─ registry.DefaultConfigRegistry + MustLoadConfig（含 bootOpts.Plugin.CustomConfigs()）
-                 │     └─ plugin.Run(host, append(registry.Plugins(), bootOpts.Plugin.CustomPlugins()...))  # 按序 Init；是否启动看各段 enabled
-                 ├─ wire(services) → []router.Registrar               # 手写 wiring，在 internal/bootstrap
-                 └─ server.MustBuildApp(services, rt, registrars, middlewares) → *lifecycle.App
+                 │     └─ plugin.NewPluginSlot(cfg, append(registry.Plugins(), bootOpts.Plugin.CustomPlugins()...)); slot.Init()  # 按序 Init；是否启动看各段 enabled
+                 ├─ wire(slot) → []router.Registrar                    # 手写 wiring，在 internal/bootstrap
+                 └─ server.MustBuildApp(slot, registrars, middlewares) → *lifecycle.App
 ```
 
 标准入口是根包 `boot`：
@@ -301,10 +301,10 @@ cmd/main.go
 #### 3.4.3 bootstrap 约定
 
 - 每个可部署单元 `internal/bootstrap/` 下以 **`server.go`** 为装配入口；需要消息消费者时另增 `*_consumer_plugin.go`。
-- `server.go` 导出 `Wire(services *plugin.Services) []router.Registrar` 作为手写组合根，通过显式 `NewXxx` 构造依赖链；`boot.Run(envPrefix, bootstrap.Wire)` 直接使用。
+- `server.go` 导出 `Wire(slot *plugin.PluginSlot) []router.Registrar` 作为手写组合根，通过各插件的 `From(slot)` 与组件访问器构造依赖链；`boot.Run(envPrefix, bootstrap.Wire)` 直接使用。
 - 需要自定义配置路径或完全自控启动时，可另提供 `NewApp(configPath string) *lifecycle.App` 并调用 `lifecycle.Run`；两种入口共用同一套 wire。
 - `main.go` 只调用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.Run`）；`internal/bootstrap/server.go` 只组装与 wiring。
-- `server.MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `plugin.Runtime.Close()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
+- `server.MustBuildApp` 返回的 `lifecycle.App.Release` 绑定 `slot.Close()`；停机顺序为 `OnDraining` → HTTP `Shutdown` → 插件逆序 `Close`。
 
 #### 3.4.4 插件生命周期
 
@@ -314,10 +314,32 @@ cmd/main.go
 type Plugin interface {
     Name() string
     Started() bool
-    Init(host *Host)   // 失败 panic；按需启动由配置 enabled 控制
-    Close(host *Host)  // 无返回值；尽力释放，失败静默
+    Init(slot *PluginSlot)  // 失败 panic；按需启动由配置 enabled 控制
+    Close()                 // 只释放自己持有的资源；无返回值，失败静默
 }
 ```
+
+`PluginSlot` 是唯一的插件容器：
+
+```go
+type PluginSlot struct {
+    Config *config.Config
+    // 其余字段为有序插件链与名称索引
+}
+
+func NewPluginSlot(cfg *config.Config, plugins []Plugin) *PluginSlot
+func (s *PluginSlot) Init()
+func (s *PluginSlot) Plugin(name string) (Plugin, bool)
+func (s *PluginSlot) MustPlugin(name string) Plugin
+func (s *PluginSlot) Started(name string) bool
+func (s *PluginSlot) ReadyHooks() []func(context.Context) error
+func (s *PluginSlot) DrainHooks() []func(context.Context) error
+func (s *PluginSlot) Close()
+```
+
+- 插件对象自包含其创建的组件；跨插件依赖在 `Init` 中经 `slot.MustPlugin(name)`（或各包的 `From(slot)`）取到前序插件，再调用其组件访问器。
+- 插件名称非空且唯一，重复注册在 `NewPluginSlot` 构造期 panic；`Init` 只能执行一次。
+- 内置插件导出具体类型、`Name` 常量、`From` helper 与只读组件访问器；`From` 返回 nil 时访问器仍安全，依赖方按组件是否为 nil 做 Fail Fast。
 
 需要参与进程阶段（注册发现、缓存预热/落盘等）的插件按需实现两个可选接口：
 
@@ -332,10 +354,11 @@ type DrainHook interface {
 ```
 
 - 只有 `Started() == true` 的插件会被收集；禁用组件不会误注册。
-- `server.MustBuildApp` 将 `Runtime.ReadyHooks()` / `DrainHooks()` 搬运到 `lifecycle.App`；`lifecycle` 只按阶段调用函数，不认识任何具体组件。
+- `server.MustBuildApp` 将 `slot.ReadyHooks()` / `slot.DrainHooks()` 搬运到 `lifecycle.App`；`lifecycle` 只按阶段调用函数，不认识任何具体组件。
 - `Ready` 按 Init 顺序执行，失败会导致启动失败；`Drain` 按 Init 逆序执行，失败只记录日志。
 - `Drain` 可能在 `Ready` 未完整执行时被调用（启动失败回滚），因此必须幂等。
 - 组件示例：Consul 插件在 `Init` 只创建 client，`OnReady` 注册服务，`OnDraining` 注销服务；业务 custom 插件可用同一契约做缓存预热/落盘。
+- 业务 custom 插件的 `Init(slot)` 可经 `kafkaplugin.FromConsumer(slot)`、`eventplugin.From(slot)` 等访问器读取前序插件组件，再把需要的依赖保存在自身字段中。
 
 服务自定义插件 embed 导出的 `PluginState`，与内置插件写法一致：
 
@@ -346,29 +369,29 @@ type myConsumerPlugin struct {
 }
 ```
 
-**内置插件启动顺序**（不可随意调整；后序 `Init` 依赖前序写入 `Host` 的字段）：
+**内置插件启动顺序**（不可随意调整；后序 `Init` 通过 `PluginSlot` 查找前序插件并读取其组件）：
 
 | 序号 | 插件 | 启动条件 |
 | ---- | ---- | -------- |
-| 1 | app | 始终（写入 `Host.AppCtx`） |
-| 2 | logger | 始终 |
+| 1 | app | 始终（提供 `AppCtx`） |
+| 2 | logger | 始终（依赖 app 插件） |
 | 3 | pprof | `pprof.enabled=true` 时启动（默认 false） |
-| 4 | db | `db.enabled=true` |
-| 5 | redis | `redis.enabled=true` |
-| 6 | redisratelimit | 始终写入 RateLimiter（未启用时为 Noop） |
-| 7 | kafka-publisher | `kafka.publisher_enabled=true`（写入 `Host.KafkaPublisher`） |
-| 8 | kafka-consumer | `kafka.consumer_enabled=true`（写入 `Host.KafkaConsumer`） |
-| 9 | redisstream | `redis_stream.enabled=true`（依赖 `RedisClient`） |
+| 4 | db | `db.enabled=true`（提供 `DB` 与 `DbType`） |
+| 5 | redis | `redis.enabled=true`（提供 `Client` / `RedisService` / `DistLockFactory`） |
+| 6 | redisratelimit | 始终启动（未启用时 `Limiter` 为 Noop） |
+| 7 | kafka-publisher | `kafka.publisher_enabled=true` |
+| 8 | kafka-consumer | `kafka.consumer_enabled=true` |
+| 9 | redisstream | `redis_stream.enabled=true`（依赖 redis 插件 `Client`） |
 | 10 | snowflake | 始终 |
-| 11 | oss | `oss.enabled=true`（写入 `Host.OSS`） |
-| 12 | tx | `host.DB` 存在 |
-| 13 | consul | `consul.enabled=true`（写入 `Host.ConsulClient`；Ready 阶段注册、Drain 阶段注销） |
-| 14 | dtm | 构造 `Host.DtmClient`（注入 `Host.ConsulClient`）；`dtm.enabled=true` 时探活 |
-| 15 | idempotency | `idempotency.stale_cleaner_enabled=true` |
-| 16 | token | `auth.enabled=true` |
+| 11 | oss | `oss.enabled=true` |
+| 12 | tx | db 插件已启用 |
+| 13 | consul | `consul.enabled=true`（Ready 阶段注册、Drain 阶段注销） |
+| 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活 |
+| 15 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
+| 16 | token | `auth.enabled=true`（依赖 redis 插件） |
 | 17 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
 | 18 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可依赖 KafkaConsumer / RedisStreamConsumer / Event.Receiver；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
+| 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可经 slot 依赖内置插件；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
 **插件 Close 语义**：
 

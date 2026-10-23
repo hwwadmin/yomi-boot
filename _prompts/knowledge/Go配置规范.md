@@ -55,8 +55,8 @@
 | `LoadConfig` / `MustLoadConfig` | 严格根 key → Bind → Validate |
 | `DefaultConfigRegistry` | `plugin/registry`：注册全部 `plugin/builtin/{lib}` 的 `ConfigSection()` |
 | `PluginOptions.AddConfigSection` | 业务在默认内置配置段后追加 |
-| `plugin.Services` | 运行时能力集合；配置统一经 `Config` + `MustSection` 读取 |
-| `Services.Config` | 启动后可取 boot 段与自定义段 |
+| `plugin.PluginSlot` | 统一插件插槽：`Config` + 有序插件链；配置统一经 `Config` + `MustSection` 读取 |
+| `PluginSlot.Config` | 启动后可取 boot 段与自定义段 |
 
 ### 4.1 加载流程
 
@@ -65,7 +65,7 @@
 → 解析 YAML 根 key，与注册表做差集（非空则失败）
 → 按注册顺序 UnmarshalKey
 → Section.Validate(cfg)
-→ 返回 Config；Host{Services{Config}} → app 插件写 AppCtx → 各插件读自己的 BootConfig、ToConfig 后构造组件、跨库依赖取 Host 运行态；HTTP 装配在 `boot/server` 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig → Services
+→ 返回 Config；`NewPluginSlot(Config, 插件链)` → app 插件提供 AppCtx → 各插件读自己的 BootConfig、ToConfig 后在自身字段构造组件；后序插件经 slot 查找前序插件访问器；HTTP 装配在 `boot/server` 读 `plugin/builtin/cors` / `plugin/builtin/router` 的 BootConfig 与插件访问器
 ```
 
 ### 4.2 未知根 key
@@ -82,9 +82,9 @@
 // services/{bff}/internal/bootstrap/server.go
 var pluginOpts plugin.PluginOptions
 pluginOpts.AddConfigSection(svcconfig.BizSection()) // key: biz
-services, rt := boot.MustInit(path, "YOMI_{BFF}", pluginOpts)
-defer rt.Close()
-biz := config.MustSection[svcconfig.BizConfig](services.Config, svcconfig.SectionKey)
+slot := boot.MustInit(path, "YOMI_{BFF}", pluginOpts)
+defer slot.Close()
+biz := config.MustSection[svcconfig.BizConfig](slot.Config, svcconfig.SectionKey)
 ```
 
 YAML：

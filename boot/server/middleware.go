@@ -11,6 +11,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/cors"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 	corsplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/cors"
 	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
@@ -21,20 +22,20 @@ import (
 )
 
 // DefaultMiddlewares 返回通用 HTTP 中间件链
-func DefaultMiddlewares(services *plugin.Services) []gin.HandlerFunc {
-	corsCfg := config.MustSection[corsplugin.BootConfig](services.Config, corsplugin.SectionKey).ToConfig()
-	httpCfg := config.MustSection[routerplugin.BootConfig](services.Config, routerplugin.SectionKey).ToConfig()
-	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](services.Config, httprecordplugin.SectionKey).ToConfig()
-	authCfg := config.MustSection[tokenplugin.BootConfig](services.Config, tokenplugin.SectionKey).ToConfig()
-	logCfg := config.MustSection[loggerplugin.BootConfig](services.Config, loggerplugin.SectionKey).ToConfig()
+func DefaultMiddlewares(slot *plugin.PluginSlot) []gin.HandlerFunc {
+	corsCfg := config.MustSection[corsplugin.BootConfig](slot.Config, corsplugin.SectionKey).ToConfig()
+	httpCfg := config.MustSection[routerplugin.BootConfig](slot.Config, routerplugin.SectionKey).ToConfig()
+	httpRecordCfg := config.MustSection[httprecordplugin.BootConfig](slot.Config, httprecordplugin.SectionKey).ToConfig()
+	authCfg := config.MustSection[tokenplugin.BootConfig](slot.Config, tokenplugin.SectionKey).ToConfig()
+	logCfg := config.MustSection[loggerplugin.BootConfig](slot.Config, loggerplugin.SectionKey).ToConfig()
 
 	return []gin.HandlerFunc{
 		cors.Middleware(corsCfg),
 		traceid.Middleware(),
-		httprecord.Middleware(services.HttpRecordService, httpRecordCfg, services.AppCtx),
+		httprecord.Middleware(httprecordplugin.From(slot).Service(), httpRecordCfg, appctxplugin.From(slot).AppCtx()),
 		logger.Middleware(logCfg.Access),
 		httpguard.Middleware(httpCfg),
 		gin.Recovery(),
-		token.Middleware(services.TokenService, authCfg),
+		token.Middleware(tokenplugin.From(slot).Service(), authCfg),
 	}
 }

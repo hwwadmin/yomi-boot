@@ -6,35 +6,55 @@ import (
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
-// kafkaConsumerPlugin Kafka 消费者插件
-type kafkaConsumerPlugin struct {
+const ConsumerName = "kafka-consumer"
+
+// Consumer Kafka 消费者插件；自包含消费者管理器
+type Consumer struct {
 	plugin.PluginState
+
 	consumer kafka.ConsumerService
 }
 
-const consumerName = "kafka-consumer"
+var _ plugin.Plugin = (*Consumer)(nil)
 
 // NewKafkaConsumer 创建 Kafka 消费者生命周期插件
-func NewKafkaConsumer() plugin.Plugin {
-	return &kafkaConsumerPlugin{PluginState: plugin.NewPluginState(consumerName)}
+func NewKafkaConsumer() *Consumer {
+	return &Consumer{PluginState: plugin.NewPluginState(ConsumerName)}
 }
 
-// Init 初始化 Kafka 消费者管理器并挂到 Host
-func (p *kafkaConsumerPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+// FromConsumer 从插件插槽中取出 Kafka 消费者插件；未注册时返回 nil
+func FromConsumer(slot *plugin.PluginSlot) *Consumer {
+	if slot == nil {
+		return nil
+	}
+	p, _ := slot.Plugin(ConsumerName)
+	consumerPlugin, _ := p.(*Consumer)
+	return consumerPlugin
+}
+
+// Init 初始化 Kafka 消费者管理器
+func (p *Consumer) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.ConsumerEnabledOrDefault() {
 		return
 	}
 	p.consumer = kafka.MustNewConsumerManager(bootCfg.ToConsumerManagerConfig())
-	host.KafkaConsumer = p.consumer
 	p.SetStarted()
 }
 
 // Close 停止全部 Kafka 消费者
-func (p *kafkaConsumerPlugin) Close(_ *plugin.Host) {
+func (p *Consumer) Close() {
 	if p.consumer == nil {
 		return
 	}
 	_ = p.consumer.Close()
 	p.consumer = nil
+}
+
+// Service 返回 Kafka 消费者管理器；未启用时返回 nil
+func (p *Consumer) Service() kafka.ConsumerService {
+	if p == nil {
+		return nil
+	}
+	return p.consumer
 }

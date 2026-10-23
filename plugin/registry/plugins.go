@@ -26,28 +26,29 @@ import (
 //
 // # 为什么顺序很重要
 //
-// 后序插件 Init 时从 plugin.Host 读取前序插件写入的资源；顺序错误会导致 Init panic。
+// 后序插件在 Init 中通过 PluginSlot 按名称取到前序插件，并读取其自包含组件；
+// 顺序错误会导致依赖检查失败并 panic。
 //
 // # 启动顺序（不可随意调整）
 //
-//  1. app         — 始终启动，写入 Host.AppCtx，并按 app.timezone 锁定进程时区
-//  2. logger      — 始终启动（依赖 AppCtx）
+//  1. app         — 始终启动；提供 AppCtx 并按 app.timezone 锁定进程时区
+//  2. logger      — 始终启动（依赖 app 插件）
 //  3. pprof       — pprof.enabled=true 时启动（默认 false）
-//  4. db          — db.enabled=true 时启动（写入 Host.DbType）
-//  5. redis       — redis.enabled=true 时启动
-//  6. redisratelimit — 始终写入 RateLimiter（未启用时为 Noop；启用时依赖 RedisService）
-//  7. kafka-publisher — kafka.publisher_enabled=true 时启动（写入 Host.KafkaPublisher）
-//  8. kafka-consumer  — kafka.consumer_enabled=true 时启动（写入 Host.KafkaConsumer）
-//  9. redisstream — redis_stream.enabled=true 时启动（依赖 RedisClient）
+//  4. db          — db.enabled=true 时启动（提供 DB 与 DbType）
+//  5. redis       — redis.enabled=true 时启动（提供 Client / RedisService / DistLockFactory）
+//  6. redisratelimit — 始终启动（未启用时 Limiter 为 Noop；启用时依赖 redis 插件）
+//  7. kafka-publisher — kafka.publisher_enabled=true 时启动
+//  8. kafka-consumer  — kafka.consumer_enabled=true 时启动
+//  9. redisstream — redis_stream.enabled=true 时启动（依赖 redis 插件 Client）
 //  10. snowflake  — 始终启动
-//  11. oss        — oss.enabled=true 时启动（写入 Host.OSS）
-//  12. tx         — host.DB 存在时启动
-//  13. consul     — consul.enabled=true 时启动（写入 Host.ConsulClient；Ready 注册 / Drain 注销）
-//  14. dtm        — 构造 Host.DtmClient（注入 Host.ConsulClient）；enabled 时探活
-//  15. idempotency — stale_cleaner_enabled=true 时启动
+//  11. oss        — oss.enabled=true 时启动
+//  12. tx         — db 插件已启用时启动
+//  13. consul     — consul.enabled=true 时启动（Ready 注册 / Drain 注销）
+//  14. dtm        — 始终构造客户端（注入 consul 插件 Client）；enabled 时探活
+//  15. idempotency — stale_cleaner_enabled=true 时启动（依赖 app/db/redis 插件）
 //  16. token      — auth.enabled=true 时启动服务；middleware 始终挂载，受 auth.enabled 控制
 //  17. httprecord — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务；未启用时不创建服务（中间件短路）；默认关，文件 access 由 logger.Middleware 负责
-//  18. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 AppCtx/DbType 等运行态）
+//  18. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 app/db/tx/redis/kafka/snowflake 插件）
 //  19. custom     — PluginOptions.AddCustomPlugin 注册的服务自定义插件
 //
 // # 非插件（由 boot.MustInit 直接处理，不在此列表）

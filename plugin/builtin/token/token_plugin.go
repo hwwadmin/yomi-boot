@@ -9,42 +9,66 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
 )
 
-// tokenPlugin 令牌服务插件
-type tokenPlugin struct {
+const Name = "token"
+
+// Token 令牌服务插件；自包含令牌服务
+type Token struct {
 	plugin.PluginState
+
+	service token.TokenService
 }
 
-const tokenName = "token"
+var _ plugin.Plugin = (*Token)(nil)
 
 // NewToken 创建令牌服务生命周期插件
-func NewToken() plugin.Plugin {
-	return &tokenPlugin{PluginState: plugin.NewPluginState(tokenName)}
+func NewToken() *Token {
+	return &Token{PluginState: plugin.NewPluginState(Name)}
 }
 
-// Init 初始化令牌服务并挂到 Host
-func (p *tokenPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+// From 从插件插槽中取出令牌服务插件；未注册时返回 nil
+func From(slot *plugin.PluginSlot) *Token {
+	if slot == nil {
+		return nil
+	}
+	p, _ := slot.Plugin(Name)
+	tokenPlugin, _ := p.(*Token)
+	return tokenPlugin
+}
+
+// Init 初始化令牌服务
+func (p *Token) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}
-	if host.RedisService == nil {
-		logger.ErrorWithoutCtx("token 初始化失败", "error", errors.New("RedisService 未初始化"))
-		panic(errors.New("token: 需要 RedisService"))
+	redis := redisplugin.From(slot)
+	if redis.Service() == nil {
+		logger.ErrorWithoutCtx("token 初始化失败", "error", errors.New("redis 插件未启动"))
+		panic(errors.New("token: 需要 redis 插件（redis.enabled=true）"))
 	}
-	if host.DistLockFactory == nil {
+	if redis.DistLockFactory() == nil {
 		logger.ErrorWithoutCtx("token 初始化失败", "error", errors.New("DistLockFactory 未初始化"))
-		panic(errors.New("token: 需要 DistLockFactory"))
+		panic(errors.New("token: 需要 redis 插件提供 DistLockFactory"))
 	}
-	host.TokenService = token.NewService(
+	p.service = token.NewService(
 		token.NewUUIDGenerator(),
-		token.NewRedisStore(host.RedisService),
+		token.NewRedisStore(redis.Service()),
 		bootCfg.ToConfig(),
-		host.DistLockFactory,
+		redis.DistLockFactory(),
 	)
 	p.SetStarted()
 }
 
-// Close 关闭令牌服务资源
-func (p *tokenPlugin) Close(_ *plugin.Host) {}
+// Close 令牌服务无资源需要释放
+func (p *Token) Close() {}
+
+// Service 返回令牌服务；未启用时返回 nil
+func (p *Token) Service() token.TokenService {
+	if p == nil {
+		return nil
+	}
+	return p.service
+}

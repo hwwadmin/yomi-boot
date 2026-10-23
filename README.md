@@ -16,7 +16,7 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | `component/common/` | 通用能力组件（纯库）：appctx、handler、httpguard、logger、response、router、snowflake、DB、Redis、Kafka、Redis Stream、对象存储、令牌、限流、幂等、事件、调度、worker、WebSocket、pprof、集成测试客户端等；运行时 `Config` 不写 `mapstructure`；`cors`/`router`/`oss` 的 YAML 绑定在 `plugin/builtin/` |
 | `component/cloud/` | 分布式组件：服务发现（Consul）、分布式事务（DTM）、跨服务 RPC |
 | `component/ai/` | AI 能力组件（LLM、Embedding、Jev、RAG、VectorDB）；不进插件链、不读 YAML、不参与插件生命周期 |
-| `plugin/` | 插件契约与内置插件：`Plugin`/`PluginState`/`Runtime`/`Host`/`ReadyHook`/`DrainHook`；`plugin/builtin/{lib}` 承载内置插件实现与部署 YAML 绑定（`cors`/`router` 仅绑定） |
+| `plugin/` | 插件契约与内置插件：`Plugin`/`PluginState`/`PluginSlot`/`ReadyHook`/`DrainHook`；插件自包含其创建的组件，`plugin/builtin/{lib}` 负责内置插件实现与部署 YAML 绑定（`cors`/`router` 仅绑定） |
 
 ## 快速启动
 
@@ -29,11 +29,15 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
+	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
 )
 
 func main() {
-	boot.Run("YOMI_NOTE", func(services *plugin.Services) []router.Registrar {
-		return wireHandlers(services) // wireHandlers 为业务装配函数
+	boot.Run("YOMI_NOTE", func(slot *plugin.PluginSlot) []router.Registrar {
+		db := dbplugin.FromDB(slot).DB()
+		redis := redisplugin.From(slot).Service()
+		return wireHandlers(db, redis) // 组合根按需取用插件自包含的组件
 	})
 }
 ```

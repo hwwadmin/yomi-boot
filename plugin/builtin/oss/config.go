@@ -1,6 +1,6 @@
 // Package ossplugin 对象存储插件：YAML 绑定（SectionKey、BootConfig、ConfigSection、ToConfig）与生命周期实现。
 //
-// oss.enabled=true 时由 NewOSS 构造 Storage 并写入 Host.OSS，业务从 Services.OSS 读取。
+// oss.enabled=true 时由 NewOSS 构造 Storage 并保存在插件内，业务经 From(slot).Storage() 读取。
 //
 // @author zwei
 package ossplugin

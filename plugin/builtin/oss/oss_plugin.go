@@ -8,27 +8,49 @@ import (
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
-// ossPlugin 对象存储插件
-type ossPlugin struct {
+const Name = "oss"
+
+// OSS 对象存储插件；自包含存储客户端
+type OSS struct {
 	plugin.PluginState
+
+	storage oss.Storage
 }
 
-const ossName = "oss"
+var _ plugin.Plugin = (*OSS)(nil)
 
 // NewOSS 创建对象存储生命周期插件
-func NewOSS() plugin.Plugin {
-	return &ossPlugin{PluginState: plugin.NewPluginState(ossName)}
+func NewOSS() *OSS {
+	return &OSS{PluginState: plugin.NewPluginState(Name)}
 }
 
-// Init 初始化对象存储并挂到 Host
-func (p *ossPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+// From 从插件插槽中取出对象存储插件；未注册时返回 nil
+func From(slot *plugin.PluginSlot) *OSS {
+	if slot == nil {
+		return nil
+	}
+	p, _ := slot.Plugin(Name)
+	ossPlugin, _ := p.(*OSS)
+	return ossPlugin
+}
+
+// Init 初始化对象存储
+func (p *OSS) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}
-	host.OSS = oss.MustNew(bootCfg.ToConfig())
+	p.storage = oss.MustNew(bootCfg.ToConfig())
 	p.SetStarted()
 }
 
-// Close 对象存储无连接资源需释放
-func (p *ossPlugin) Close(_ *plugin.Host) {}
+// Close 对象存储无连接资源需要释放
+func (p *OSS) Close() {}
+
+// Storage 返回对象存储；未启用时返回 nil
+func (p *OSS) Storage() oss.Storage {
+	if p == nil {
+		return nil
+	}
+	return p.storage
+}

@@ -6,25 +6,42 @@ package httprecordplugin
 import (
 	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
+	redisstreamplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisstream"
 )
 
-// httpRecordPlugin HTTP 访问记录插件
-type httpRecordPlugin struct {
+const Name = "httprecord"
+
+// HttpRecord HTTP 访问记录插件；自包含按 provider 装配的记录服务
+type HttpRecord struct {
 	plugin.PluginState
+
+	service   httprecord.HttpRecordService
 	memorySvc *httprecord.MemoryHttpRecordService
 }
 
-const httpRecordName = "httprecord"
+var _ plugin.Plugin = (*HttpRecord)(nil)
 
 // NewHttpRecord 创建 HTTP 访问记录生命周期插件
-func NewHttpRecord() plugin.Plugin {
-	return &httpRecordPlugin{PluginState: plugin.NewPluginState(httpRecordName)}
+func NewHttpRecord() *HttpRecord {
+	return &HttpRecord{PluginState: plugin.NewPluginState(Name)}
 }
 
-// Init 装配 HttpRecordService：未启用时不创建服务（中间件短路）；启用时按 provider 分发 kafka / memory / redis_stream
-func (p *httpRecordPlugin) Init(host *plugin.Host) {
-	bootCfg := config.MustSection[BootConfig](host.Config, SectionKey)
+// From 从插件插槽中取出 HTTP 访问记录插件；未注册时返回 nil
+func From(slot *plugin.PluginSlot) *HttpRecord {
+	if slot == nil {
+		return nil
+	}
+	p, _ := slot.Plugin(Name)
+	httpRecordPlugin, _ := p.(*HttpRecord)
+	return httpRecordPlugin
+}
+
+// Init 按 provider 装配 HttpRecordService：未启用时不创建服务（中间件短路）
+func (p *HttpRecord) Init(slot *plugin.PluginSlot) {
+	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return
 	}
@@ -32,36 +49,39 @@ func (p *httpRecordPlugin) Init(host *plugin.Host) {
 
 	switch cfg.ProviderOrDefault() {
 	case httprecord.ProviderKafka:
-		if host.KafkaPublisher == nil {
-			panic("http_record.enabled=true 且 provider=kafka 但 KafkaPublisher 未初始化")
+		publisher := kafkaplugin.FromPublisher(slot).Service()
+		if publisher == nil {
+			panic(errors.New("http_record: provider=kafka 需要 kafka-publisher 插件"))
 		}
-		host.HttpRecordService = httprecord.NewKafkaHttpRecordService(
-			host.KafkaPublisher,
-			cfg.KafkaTopicOrDefault(),
-		)
+		p.service = httprecord.NewKafkaHttpRecordService(publisher, cfg.KafkaTopicOrDefault())
 	case httprecord.ProviderMemory:
-		svc := httprecord.NewMemoryHttpRecordService(cfg.Memory.QueueSizeOrDefault())
-		p.memorySvc = svc
-		host.HttpRecordService = svc
+		p.memorySvc = httprecord.NewMemoryHttpRecordService(cfg.Memory.QueueSizeOrDefault())
+		p.service = p.memorySvc
 	case httprecord.ProviderRedisStream:
-		if host.RedisStreamPublisher == nil {
-			panic("http_record.enabled=true 且 provider=redis_stream 但 RedisStreamPublisher 未初始化")
+		publisher := redisstreamplugin.From(slot).Publisher()
+		if publisher == nil {
+			panic(errors.New("http_record: provider=redis_stream 需要 redisstream 插件"))
 		}
-		host.HttpRecordService = httprecord.NewRedisStreamHttpRecordService(
-			host.RedisStreamPublisher,
-			cfg.StreamOrDefault(),
-		)
+		p.service = httprecord.NewRedisStreamHttpRecordService(publisher, cfg.StreamOrDefault())
 	default:
-		panic("http_record.provider 不支持: " + cfg.ProviderOrDefault())
+		panic(errors.Newf("http_record: 不支持的 provider: %s", cfg.ProviderOrDefault()))
 	}
 	p.SetStarted()
 }
 
 // Close 关闭内存队列服务（若有）；不等待排空
-func (p *httpRecordPlugin) Close(_ *plugin.Host) {
-	if p.memorySvc == nil {
-		return
+func (p *HttpRecord) Close() {
+	if p.memorySvc != nil {
+		p.memorySvc.Close()
+		p.memorySvc = nil
 	}
-	p.memorySvc.Close()
-	p.memorySvc = nil
+	p.service = nil
+}
+
+// Service 返回 HTTP 访问记录服务；未启用时返回 nil
+func (p *HttpRecord) Service() httprecord.HttpRecordService {
+	if p == nil {
+		return nil
+	}
+	return p.service
 }
