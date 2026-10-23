@@ -105,7 +105,7 @@ body, ok := testclient.Post(LoginURL(), "", bff.AdminLoginInput{
 
 - 使用 `gitee.com/hq_project/yomi-boot/component/common/testclient` 发起请求，读取 `(body, ok)` 返回值。
 - `ok` 为 true 表示 HTTP 状态码 200；失败时 `body` 含响应体或错误信息。
-- 需要解包业务载荷时，直接用 `response.Enc().Parse` / `IsSuccess`（与 httprecord 同口径）；测试进程须已 `MustRegister`（或 `RegisterDefaultForTest`）。
+- 需要解包业务载荷时，直接用 `response.Enc().Parse` / `IsSuccess`（与 httprecord 同口径）；测试进程须已注册 Encoder（经过 boot 启动时已默认注册，直接构造时用 `MustRegister` 或 `RegisterDefaultForTest`）。
 - 默认**不断言**业务 `code` 字符串（如 `"OK"` / `"USER_NOT_FOUND"`）（由与被测源码同包的单元测试覆盖）。
 - 失败时打印 URL、请求体、响应体，便于排查。
 

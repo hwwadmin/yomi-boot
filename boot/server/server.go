@@ -7,9 +7,9 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/response"
 	"gitee.com/hq_project/yomi-boot/plugin"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"

@@ -12,7 +12,7 @@
 
 ## 1. 文档定位
 
-- **用途**：约束 **BFF / 领域服务 HTTP 出口** 的编码适配方式：业务结果与 error 如何交给 Encoder、如何显式注册、handler 边界如何收口。
+- **用途**：约束 **BFF / 领域服务 HTTP 出口** 的编码适配方式：业务结果与 error 如何交给 Encoder、如何确定编码器（boot 默认 / 显式指定）、handler 边界如何收口。
 - **边界**：**不**定义某一套固定响应 JSON（字段名、成功码字面量、分页 `total` 位置、HTTP 状态等均由**已注册的 Encoder 实现**决定）。**不**规定 HTTP 方法（入口编排对外方法见 [Go架构规范](./Go架构规范.md) §3.6；微服务间见 [微服务调用规范](./微服务调用规范.md) §3）。微服务间请求信封见微服务调用规范；异常创建与哨兵见 [Go异常规范](./Go异常规范.md)。
 - **适用对象**：后端协议适配、脚手架接入、前后端契约对齐（契约细节以各服务 Encoder 为准）、代码评审。
 
@@ -23,7 +23,8 @@
 ### 2.1 适用范围
 
 - 适用于经 `gitee.com/hq_project/yomi-boot/component/common/handler` 写出的 HTTP 业务接口。
-- 适用于业务服务启动时对 `response.Encoder` 的显式注册。
+- 适用于启动时确定唯一的 `response.Encoder`：`boot.Run` / `boot.RunWithOptions` 经 `Options.ResponseEncoder` 注册，未指定时默认注册 `response.DefaultEncoder`。
+- 低层启动路径（`boot.MustInit` + `server.MustBuildApp`）不经过 boot 的注册流程，须在 `main` 中显式 `response.MustRegister`。
 - **不**适用于 DTM Action/Compensate 回调、health 探活等明确走独立出口的路径。
 
 ### 2.2 关联文档
@@ -41,7 +42,7 @@
 
 ### 3.1 核心原则
 
-1. **脚手架不静默绑定响应格式**：未 `MustRegister` 不得写出业务响应。
+1. **启动必须确定唯一 Encoder**：`boot` 未指定 `Options.ResponseEncoder` 时默认注册 `DefaultEncoder`；低层启动路径未 `MustRegister` 不得写出业务响应。
 2. **JSON 形状属于 Encoder 实现**：成功/失败/分页如何序列化、HTTP 状态码如何取值，全部由实现决定；**不得**把某一预制实现（如 `DefaultEncoder`）的字段写成全站强制契约。
 3. **handler 只做适配调用**：把 usecase 的 `(data, nil)` / `error` 交给 Encoder，禁止业务路径手写 `c.JSON` 拼信封。
 4. **错误不在 boot 内投影为固定码表后再编码**：框架抛简单 err；写出时把 err 交给 `EncodeFailure`。
@@ -79,7 +80,20 @@ type Encoder interface {
 
 业务可自定义字段形状；**本规范不强制某一套 JSON 字段名。**
 
-### 3.3 显式注册
+### 3.3 注册与默认值
+
+常规启动使用 `boot.RunWithOptions`：`Options.ResponseEncoder` 为空时 boot 注册 `response.DefaultEncoder`，显式赋值则注册指定实现。
+
+```go
+func main() {
+    boot.RunWithOptions(boot.Options{
+        EnvPrefix:       "YOMI_NOTE",
+        ResponseEncoder: nil, // 为空默认 response.DefaultEncoder{}
+    }, wire)
+}
+```
+
+低层启动路径（`boot.MustInit` + `server.MustBuildApp` 或直接使用 `lifecycle`）不经过 boot 的注册流程，须自行注册：
 
 ```go
 func main() {
@@ -90,11 +104,12 @@ func main() {
 
 | API | 说明 |
 | --- | ---- |
-| `MustRegister(enc)` | main 显式注册，进程内仅一次；禁止 `init` 静默注册 |
+| `boot.Options.ResponseEncoder` | 常规启动入口；为空时 boot 默认注册 `DefaultEncoder` |
+| `MustRegister(enc)` | 低层路径显式注册，进程内仅一次；禁止 `init` 静默注册 |
 | `MustReady()` | 启动路径断言已注册 |
 | `Enc()` | 取得全局 Encoder；未注册则 panic |
 
-gitee.com/hq_project/yomi-boot 可提供预制实现（如 `response.DefaultEncoder`）供业务**显式选择**注册；**预制 ≠ 本规范定义的唯一契约**，也不得被理解为全站强制响应格式。
+gitee.com/hq_project/yomi-boot 提供的预制实现（如 `response.DefaultEncoder`）是 boot 的缺省值，业务可经 `Options.ResponseEncoder` 替换；**预制 ≠ 本规范定义的唯一契约**，也不得被理解为全站强制响应格式。
 
 ### 3.4 handler 适配收口
 
@@ -125,7 +140,7 @@ gitee.com/hq_project/yomi-boot 可提供预制实现（如 `response.DefaultEnco
 
 ## 4. 检查清单
 
-- [ ] 业务 `main` 已 `MustRegister`，未依赖静默默认
+- [ ] 启动已确定唯一 Encoder（`boot.Options.ResponseEncoder`；低层路径已 `MustRegister`），未依赖包 init 静默默认
 - [ ] 业务接口经 `WriteSuccess` / `WritePageSuccess` / `WriteBusinessError`（或 BindAndHandle*）写出
 - [ ] 未在 usecase/service/repo 中 `c.JSON` 拼业务响应
 - [ ] 自定义 Encoder 实现了全部接口方法（含 `Parse`、`IsSuccess`）

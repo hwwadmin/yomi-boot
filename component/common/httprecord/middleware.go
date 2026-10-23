@@ -16,8 +16,8 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/appctx"
 	"gitee.com/hq_project/yomi-boot/component/common/logger"
-	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/common/token"
+	"gitee.com/hq_project/yomi-boot/component/core/response"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
 	"gitee.com/hq_project/yomi-boot/component/core/utils/httputil"

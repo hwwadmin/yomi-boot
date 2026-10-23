@@ -1,4 +1,4 @@
-// Package response 提供默认 Encoder（当前 API 风格预制实现，须显式 MustRegister）
+// Package response 提供默认 Encoder（当前 API 风格预制实现）
 //
 // @author zwei
 package response
@@ -13,7 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// DefaultEncoder 当前 API 风格的预制 Encoder，须业务 main 显式 MustRegister。
+// DefaultEncoder 当前 API 风格的预制 Encoder，boot.Options.ResponseEncoder
+// 为空时由 boot 默认注册。
 // 写出：{code,msg,timestamp,data}，分页另含顶层 total；HTTP 固定 200。
 // 失败：code/msg 直接取自 err（*BizError 取其 Code/Message，其余取 Error()）。
 type DefaultEncoder struct{}

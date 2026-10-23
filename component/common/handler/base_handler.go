@@ -7,8 +7,8 @@ import (
 	"context"
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/response"
 	"gitee.com/hq_project/yomi-boot/component/core/shared/dto"
 	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
 

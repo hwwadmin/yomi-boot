@@ -209,7 +209,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 
 分页 usecase 入参嵌入 `dto.PageInput`，出参直接返回 `*dto.PageOutput[TItem]`；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页辅助方法见 [Go数据库规范](./Go数据库规范.md) §3.2.2。
 
-用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（可选用预制实现，但须显式 `MustRegister`）。
+用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（boot 未指定 `Options.ResponseEncoder` 时默认注册预制实现；低层启动路径须显式 `MustRegister`）。
 
 ```go
 // 正确：通过 gitee.com/hq_project/yomi-boot/component/common/handler 收口重复逻辑（示例）

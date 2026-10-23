@@ -14,7 +14,6 @@ package main
 
 import (
 	"gitee.com/hq_project/yomi-boot/boot"
-	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
@@ -23,8 +22,6 @@ import (
 const envPrefix = "YOMI_DEMO"
 
 func main() {
-	// 响应编码器由业务 main 显式注册，必须在 boot.Run 之前完成。
-	response.MustRegister(response.DefaultEncoder{})
 	boot.Run(envPrefix, wire)
 }
 

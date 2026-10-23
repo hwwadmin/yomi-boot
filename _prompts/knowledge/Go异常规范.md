@@ -213,7 +213,7 @@ BindAndHandle / Handle / ...
 
 | 阶段 | 策略 | 典型场景 |
 | ---- | ---- | -------- |
-| 启动 | log + **panic** | 配置、插件 Init、`MustRegister` 缺失（`MustReady`）、`server.MustBuildApp`；插件 Init 失败**不**回滚已启动插件 |
+| 启动 | log + **panic** | 配置、插件 Init、`MustRegister` 缺失（`MustReady`，绕过 boot 默认注册时）、`server.MustBuildApp`；插件 Init 失败**不**回滚已启动插件 |
 | 运行 | `error` 传播 + Handler → Encoder | usecase/service/repository、HTTP 请求；Recovery 捕获 handler panic |
 | 关闭 | 尽力释放，失败静默跳过 | 插件 Close、Cleanup |
 
@@ -226,7 +226,7 @@ BindAndHandle / Handle / ...
 - [ ] 框架/通用失败使用 `shared/error` 或库内哨兵，`Error()` 为 code
 - [ ] 域错误在业务 `bizerr`，未要求 gitee.com/hq_project/yomi-boot 增加权限类哨兵
 - [ ] Handler 统一经 `WriteBusinessError` → Encoder，未绕过 Encoder 手写业务响应（HTTP/JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)）
-- [ ] `main` 已 `response.MustRegister`
+- [ ] 启动已确定 `response.Encoder`（`boot.Options.ResponseEncoder`，为空时 boot 默认注册；低层路径须 `MustRegister`）
 - [ ] `errors.Stack` 仅用于日志
 - [ ] 中间层包装上抛时未打印日志；已拍栈 err 未再次 `Sentinel`
 

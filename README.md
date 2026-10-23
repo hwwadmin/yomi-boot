@@ -35,7 +35,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/boot"
 	"gitee.com/hq_project/yomi-boot/component/common/handler"
 	"gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/common/response"
 	"gitee.com/hq_project/yomi-boot/component/common/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
@@ -47,9 +46,6 @@ import (
 )
 
 func main() {
-	// 响应编码器必须在 boot.Run 之前显式注册
-	response.MustRegister(response.DefaultEncoder{})
-
 	boot.Run("YOMI_NOTE", func(slot *plugin.PluginSlot) []router.Registrar {
 		app := appctxplugin.From(slot).AppCtx()
 		db := dbplugin.FromDB(slot).DB()             // 未启用 db 时为 nil

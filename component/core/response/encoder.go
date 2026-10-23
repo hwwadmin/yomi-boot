@@ -20,7 +20,8 @@ type Response struct {
 
 // Encoder 负责业务 HTTP 响应的 JSON 组装与解析。
 // 字段形状、成败语义与 HTTP 状态码均由实现决定；脚手架只调用本接口。
-// 业务须在 main 中 MustRegister，禁止包 init 静默注册。
+// 常规启动经 boot.Options.ResponseEncoder 指定，为空时 boot 注册 DefaultEncoder；
+// 低层启动路径须自行 MustRegister，禁止包 init 静默注册。
 type Encoder interface {
 	EncodeSuccess(c *gin.Context, data any)
 	EncodePage(c *gin.Context, items any, total int64)

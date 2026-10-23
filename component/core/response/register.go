@@ -11,8 +11,9 @@ var (
 	ready      bool
 )
 
-// MustRegister 在业务 main 中显式注册 Encoder，进程内仅允许调用一次。
-// enc 为 nil 或重复注册时 panic。禁止在包 init 中调用本函数。
+// MustRegister 注册 Encoder，进程内仅允许调用一次。
+// 常规启动由 boot.Options.ResponseEncoder 完成（为空时注册 DefaultEncoder）；
+// 低层启动路径可在 main 中显式调用本函数。enc 为 nil 或重复注册时 panic。禁止在包 init 中调用。
 func MustRegister(enc Encoder) {
 	if enc == nil {
 		panic("response: Encoder 不能为 nil")
@@ -32,17 +33,17 @@ func MustReady() {
 	registerMu.RLock()
 	defer registerMu.RUnlock()
 	if !ready {
-		panic("response: 未调用 response.MustRegister，请在 main 中显式注册 Encoder")
+		panic("response: 未注册 Encoder；boot.Run 默认注册 DefaultEncoder，低层启动路径请在 main 中调用 response.MustRegister")
 	}
 }
 
 // Enc 返回已注册的全局 Encoder。
-// 未调用 MustRegister 时 panic。
+// 未注册时 panic。
 func Enc() Encoder {
 	registerMu.RLock()
 	defer registerMu.RUnlock()
 	if !ready || globalEnc == nil {
-		panic("response: 未调用 response.MustRegister，请在 main 中显式注册 Encoder")
+		panic("response: 未注册 Encoder；boot.Run 默认注册 DefaultEncoder，低层启动路径请在 main 中调用 response.MustRegister")
 	}
 	return globalEnc
 }
