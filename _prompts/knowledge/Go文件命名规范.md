@@ -150,7 +150,7 @@ update_status_handler.go   # 内含 UpdateStatusAction、UpdateStatusCompensate
 | `*_consumer_plugin.go` | 同上（按需） | Kafka 消费者自定义插件 |
 | `boot.go` | `gitee.com/hq_project/yomi-boot/boot/` | 启动快捷入口与初始化：`Run` / `RunWithOptions` / `Options` / `MustInit` |
 | `options.go` | `gitee.com/hq_project/yomi-boot/plugin/` | `PluginOptions`、`AddCustomPlugin`、`AddConfigSection` |
-| `plugins.go` / `configs.go` | `gitee.com/hq_project/yomi-boot/plugin/catalog/` | 内置插件编排顺序、默认配置段 |
+| `plugins.go` / `configs.go` | `gitee.com/hq_project/yomi-boot/plugin/builtin/`（根包 `builtin`） | 内置插件编排顺序、默认配置段 |
 | `server.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `MustBuildApp`、`serviceName` |
 | `middleware.go` | `gitee.com/hq_project/yomi-boot/boot/server/` | `DefaultMiddlewares` |
 | `lifecycle.go` / `run.go` | `gitee.com/hq_project/yomi-boot/boot/lifecycle/` | `App`、`Hook`、`Run` / `RunContext`、阶段编排与停机 |

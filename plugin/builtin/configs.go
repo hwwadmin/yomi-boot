@@ -1,6 +1,6 @@
 // 默认配置段。
 
-package catalog
+package builtin
 
 import (
 	"gitee.com/hq_project/yomi-boot/component/core/config"

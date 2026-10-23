@@ -1,7 +1,7 @@
 # quick-starter-demo 的 dev 环境配置。
 #
 # 只包含组件库启动所必需的最小配置：app / http / log / snowflake。
-# 其余配置段均已在 catalog 注册，未写出的段按零值处理（默认关闭）。
+# 其余配置段均已在内置清单注册，未写出的段按零值处理（默认关闭）。
 # 切换环境：复制本文件为 local.yml / prod.yml，再设置 YOMI_CONFIG=local|prod。
 
 app:
