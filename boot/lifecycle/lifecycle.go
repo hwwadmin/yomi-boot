@@ -33,10 +33,14 @@ type App struct {
 
 // Run 启动服务并阻塞至进程退出；启动/运行失败时 panic
 func Run(factory func() *App) {
+	// 监听系统中断信号
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// 打印banner
 	banner.Banner()
+
+	// 启动服务
 	if err := RunContext(ctx, factory); err != nil {
 		logger.ErrorWithoutCtx("服务运行失败", "error", err)
 		panic(err)
