@@ -21,7 +21,7 @@
 
 1. **配置分层**：组件库保留运行时 `Config`（如 `db.Config`、`token.Config`），不写 `mapstructure`；所有部署 YAML 绑定统一为 `BootConfig`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`），放在 `plugin/builtin/{lib}`（`cors`、`router` 也各占一个绑定包，即使没有生命周期插件实现）。
 2. **薄配置内核**：`gitee.com/hq_project/yomi-boot/component/core/config` 只提供加载 / 注册 / 校验编排（`Section`/`Registry`/`Config`/`BoolOr` 等）。
-3. **主动注册**：`plugin/registry.DefaultConfigs()` 返回全部内置配置段，`boot.MustInit` 用 `config.NewRegistry()` 装入；业务服务经 `plugin.PluginOptions.AddConfigSection` 追加。
+3. **主动注册**：`plugin/catalog.DefaultConfigs()` 返回全部内置配置段，`boot.MustInit` 用 `config.NewRegistry()` 装入；业务服务经 `plugin.PluginOptions.AddConfigSection` 追加。
 4. **Fail Fast**：加载与校验失败即 `Must*` panic。
 5. **未知根 key 严格失败**：YAML 根层未注册 key 一律拒绝。
 6. **按需裁剪**：各能力插件是否真正启动由配置段开关控制，不强制引入未用中间件。
@@ -53,7 +53,7 @@
 | `Config` | 已绑定段；`MustSection[T]` |
 | `NewSection` | 指向已有 target 的段工厂 |
 | `LoadConfig` / `MustLoadConfig` | 严格根 key → Bind → Validate |
-| `DefaultConfigs` | `plugin/registry`：返回全部 `plugin/builtin/{lib}` 的 `ConfigSection()` |
+| `DefaultConfigs` | `plugin/catalog`：返回全部 `plugin/builtin/{lib}` 的 `ConfigSection()` |
 | `PluginOptions.AddConfigSection` | 业务在默认内置配置段后追加 |
 | `plugin.PluginSlot` | 统一插件插槽：`Config` + 有序插件链；配置统一经 `Config` + `MustSection` 读取 |
 | `PluginSlot.Config` | 启动后可取 boot 段与自定义段 |
@@ -101,7 +101,7 @@ biz:
 ## 6. 能力按需裁剪（enabled）
 
 - gitee.com/hq_project/yomi-boot 各基础设施能力通过对应配置段启用；未启用则插件不启动（或写入 Noop），**不强制**引入 Consul / Kafka / Redis Stream / DTM 等运行时依赖。
-- 插件在 `plugin/registry` 中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `gitee.com/hq_project/yomi-boot/plugin/registry/plugins.go`）。
+- 插件在 `plugin/catalog` 中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `gitee.com/hq_project/yomi-boot/plugin/catalog/plugins.go`）。
 - 典型开关（以各配置段字段名为准）：
   - `db.enabled`、`redis.enabled`、`token.enabled`
   - `consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`

@@ -13,7 +13,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/response"
 	"gitee.com/hq_project/yomi-boot/component/core/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
-	"gitee.com/hq_project/yomi-boot/plugin/registry"
+	"gitee.com/hq_project/yomi-boot/plugin/catalog"
 
 	"github.com/gin-gonic/gin"
 )
@@ -90,14 +90,14 @@ func registerResponseEncoder(enc response.Encoder) {
 func MustInit(configPath, envPrefix string, pluginOpts plugin.PluginOptions) *plugin.PluginSlot {
 	// 注册配置段
 	reg := config.NewRegistry()
-	reg.Register(registry.DefaultConfigs()...)
+	reg.Register(catalog.DefaultConfigs()...)
 	reg.Register(pluginOpts.CustomConfigs()...)
 
 	// 加载配置文件
 	cfg := config.MustLoadConfig(configPath, envPrefix, reg)
 
 	// 创建插件插槽并初始化插件
-	slot := plugin.NewPluginSlot(cfg, append(registry.DefaultPlugins(), pluginOpts.CustomPlugins()...))
+	slot := plugin.NewPluginSlot(cfg, append(catalog.DefaultPlugins(), pluginOpts.CustomPlugins()...))
 	slot.Init()
 
 	return slot
