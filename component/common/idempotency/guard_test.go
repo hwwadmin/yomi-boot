@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
@@ -85,6 +86,14 @@ func TestExecute_FirstCallRunsBusinessAndReplayHitsCache(t *testing.T) {
 	if row.Status != StatusCompleted {
 		t.Fatalf("幂等记录应已完成, status=%d", row.Status)
 	}
+	// 回写缓存必须与 DB 快照字节一致
+	payload, err := env.client.Get(ctx, resultRedisKey(testKey("k1"))).Result()
+	if err != nil {
+		t.Fatalf("结果缓存未回写: %v", err)
+	}
+	if payload != string(row.ResponseData) {
+		t.Fatalf("缓存快照应与 DB 一致, cache=%q, db=%q", payload, string(row.ResponseData))
+	}
 
 	// 同键重放：命中 Redis 结果缓存，业务不重复执行
 	got, err = Execute(env.guard, env.runner, ctx, testKey("k1"), fn)
@@ -93,8 +102,8 @@ func TestExecute_FirstCallRunsBusinessAndReplayHitsCache(t *testing.T) {
 	}
 }
 
-// TestExecute_ReplayReturnsHistoryFromDBAfterCacheLost 缓存丢失后从 DB 回放历史结果，业务不重复执行
-// 这是冲突即空操作修复的回归测试：唯一键冲突后必须能在原事务内查到已完成记录
+// TestExecute_ReplayReturnsHistoryFromDBAfterCacheLost 缓存丢失后锁内 DB 查证回放历史快照并自愈缓存，
+// 业务不重复执行
 func TestExecute_ReplayReturnsHistoryFromDBAfterCacheLost(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
@@ -127,6 +136,39 @@ func TestExecute_ReplayReturnsHistoryFromDBAfterCacheLost(t *testing.T) {
 	env.db.Model(&SysBiz{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("不应产生重复幂等记录, count=%d", count)
+	}
+	// 自愈断言：回放后缓存已重建
+	if _, err := env.client.Get(ctx, resultRedisKey(testKey("k2"))).Result(); err != nil {
+		t.Fatalf("回放后应回写缓存自愈: %v", err)
+	}
+}
+
+// TestExecute_ProcessingRowFailsFast 防御场景：已提交的处理中记录快速失败，业务不执行
+func TestExecute_ProcessingRowFailsFast(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	// 直接种一条提交态的处理中记录（正常编排不可见，属防御场景）
+	repo := NewRepository(env.db)
+	claimed, err := repo.TryInsert(ctx, &SysBiz{
+		BizID: "biz-k6", BizSubID: "sub-k6", OperationType: "TEST_OP", Status: StatusProcessing,
+		BaseModel: orm.BaseModel{ID: 900},
+	})
+	if err != nil || !claimed {
+		t.Fatalf("造数失败, claimed=%v, err=%v", claimed, err)
+	}
+
+	calls := 0
+	fn := func(context.Context) (string, error) {
+		calls++
+		return "x", nil
+	}
+	if _, err := Execute(env.guard, env.runner, ctx, testKey("k6"), fn); !errors.Is(err, ErrProcessing) {
+		t.Fatalf("处理中记录应返回 ErrProcessing, err=%v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("业务不应执行, calls=%d", calls)
 	}
 }
 

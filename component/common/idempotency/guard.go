@@ -1,9 +1,12 @@
 // Package idempotency 提供业务幂等守卫能力
 //
-// 采用 Redis 结果缓存 + 分布式锁 + DB 幂等表三层策略：
-//   - 第一层：Redis 结果缓存（热读，重复请求直接返回）
-//   - 第二层：分布式锁（miss 后串行化，避免并发执行业务）
-//   - 第三层：DB 唯一索引 + 幂等表（持久化兜底）
+// 以 sys_biz 幂等表为真源、Redis 结果缓存为快路径，配合分布式锁串行同键请求：
+//   - 快路径：命中 Redis 结果缓存直接返回
+//   - 分布式锁：缓存 miss 后串行化，锁内 double-check 缓存
+//   - DB 查证：锁内查 sys_biz，已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈
+//   - 事务抢占：INSERT 以「冲突即空操作」语义抢占处理权，执行业务并标记完成后提交，再回写缓存
+//
+// 缓存回写失败只告警不影响业务结果，后续重复请求回源 DB 自愈。
 //
 // @author zwei
 package idempotency
@@ -66,10 +69,19 @@ func NewGuard(
 	}
 }
 
-// Execute 执行幂等保护，按 Redis 快路径 → 分布式锁 → 事务 → commit 后写 Redis 的顺序编排
+// snapshot 是已完成请求的可回放快照：result 返回给调用方，data 与 DB 存储的原始字节一致，
+// 回写结果缓存时原样使用，保证 Redis 与 DB 的快照始终相同
+type snapshot[T any] struct {
+	result T
+	data   []byte
+}
+
+// Execute 执行幂等保护，编排顺序：Redis 快路径 → 分布式锁 → 锁内 double-check →
+// DB 查证回放 → 事务抢占执行 → 回写缓存
 //
-// T 必须与 fn 的返回类型一致，DB/Redis 重放时会反序列化到同一类型。
-// txRunner 由调用方注入；本地事务可直接传 tx.Executor（内嵌 Runner），Saga 分支传 *dtm.TxRunner。
+// T 必须与 fn 的返回类型一致且可 JSON 往返，DB/Redis 重放时会反序列化到同一类型。
+// txRunner 由调用方注入，且必须是本次调用的最外层事务边界：传入的 ctx 不得已绑定同源事务，
+// 否则「事务提交后才写缓存」的时序承诺失效。
 func Execute[T any](
 	g *Guard,
 	txRunner tx.Runner,
@@ -97,14 +109,11 @@ func Execute[T any](
 	}
 
 	// Step 2: 缓存未命中，按幂等键获取分布式锁并启用看门狗续期
-	lock := g.distLockFactory.GetLock(
-		lockRedisKey(key),
-		distlock.WithWatchdog(true),
-	)
+	lock := g.distLockFactory.GetLock(lockRedisKey(key), distlock.WithWatchdog(true))
 
 	var result T
 	err := distlock.RunWithLock(ctx, lock, func(runCtx context.Context) error {
-		// Step 3: 锁内 double-check，避免并发 miss 重复执行业务
+		// Step 3: 锁内 double-check，避免并发 miss 重复走后续流程
 		if cached, found, err := loadFromRedis[T](g, runCtx, rk); err != nil {
 			return err
 		} else if found {
@@ -112,26 +121,29 @@ func Execute[T any](
 			return nil
 		}
 
-		// Step 4: 事务内 INSERT 抢处理权、执行业务并标记完成
-		var bizResult T
+		// Step 4: DB 查证——已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈快路径
+		snap, err := findCompletedSnapshot[T](g, runCtx, key)
+		if err != nil {
+			return err
+		}
+		if snap != nil {
+			result = snap.result
+			writeCache(g, runCtx, rk, snap.data)
+			return nil
+		}
+
+		// Step 5: 事务内抢占处理权、执行业务并标记完成，任一环节失败整体回滚
 		if err := txRunner.Run(runCtx, func(txCtx context.Context) error {
 			var innerErr error
-			bizResult, innerErr = runBusinessOnce(g, txCtx, key, fn)
+			snap, innerErr = runBusinessOnce[T](g, txCtx, key, fn)
 			return innerErr
 		}); err != nil {
 			return err
 		}
+		result = snap.result
 
-		// Step 5: 事务已 commit，写入结果缓存供后续重复请求读取
-		responseData, err := marshalResult(bizResult)
-		if err != nil {
-			return err
-		}
-		if err := saveToRedis(g, runCtx, rk, responseData); err != nil {
-			logger.Error(runCtx, "[幂等]结果缓存写入失败，业务已成功",
-				"bizId", key.BizID, "bizSubId", key.BizSubID, "redisKey", rk, "error", err)
-		}
-		result = bizResult
+		// Step 6: 事务已提交，回写缓存供后续重复请求读取
+		writeCache(g, runCtx, rk, snap.data)
 		return nil
 	})
 	if err != nil {
@@ -140,20 +152,19 @@ func Execute[T any](
 	return result, nil
 }
 
-// runBusinessOnce 在事务内执行一次业务：INSERT 抢锁 → fn → MarkCompleted
+// runBusinessOnce 在事务内执行一次业务：INSERT 抢占 → fn → MarkCompleted
 //
-// INSERT 唯一键冲突时不再执行业务，直接从 DB 读取已完成结果
+// INSERT 冲突说明处理权已被他人拿走（DB 查证与抢占之间的窗口、锁丢失等），
+// 从 DB 回放历史快照兜底。
 func runBusinessOnce[T any](
 	g *Guard,
 	ctx context.Context,
 	key Key,
 	fn func(ctx context.Context) (T, error),
-) (T, error) {
-	var zero T
-
+) (*snapshot[T], error) {
 	id, err := g.idGenerator.NextID()
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 	row := &SysBiz{
 		BizID:         key.BizID,
@@ -167,48 +178,58 @@ func runBusinessOnce[T any](
 
 	// 以「冲突即空操作」语义抢占处理权：冲突说明已有请求在处理或已完成，
 	// 且插入不报错、事务不中止，可直接在当前事务内反查已完成结果
-	claimed, insertErr := g.repo.TryInsert(ctx, row)
-	if insertErr != nil {
-		return zero, insertErr
+	claimed, err := g.repo.TryInsert(ctx, row)
+	if err != nil {
+		return nil, err
 	}
 	if !claimed {
-		return loadCompletedResult[T](g, ctx, key)
+		snap, err := findCompletedSnapshot[T](g, ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		if snap == nil {
+			return nil, errors.Sentinel(ErrDuplicateWithoutRecord)
+		}
+		return snap, nil
 	}
 
 	// 当前请求获得处理权，执行业务函数
-	fnResult, fnErr := fn(ctx)
-	if fnErr != nil {
-		return zero, fnErr
+	fnResult, err := fn(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	// 持久化响应快照并标记为已完成
-	responseData, fnErr := marshalResult(fnResult)
-	if fnErr != nil {
-		return zero, fnErr
+	// 持久化响应快照并标记为已完成；快照字节同时用于回写结果缓存
+	responseData, err := marshalResult(fnResult)
+	if err != nil {
+		return nil, err
 	}
-	if fnErr = g.repo.MarkCompleted(ctx, row.ID, responseData); fnErr != nil {
-		return zero, fnErr
+	if err := g.repo.MarkCompleted(ctx, row.ID, responseData); err != nil {
+		return nil, err
 	}
-	return fnResult, nil
+	return &snapshot[T]{result: fnResult, data: responseData}, nil
 }
 
-// loadCompletedResult 从 DB 读取已完成幂等记录并反序列化为 T
+// findCompletedSnapshot 查询已完成请求的可回放快照，无已完成记录时返回 nil
 //
-// 记录不存在返回 ErrDuplicateWithoutRecord，仍在处理中返回 ErrProcessing
-func loadCompletedResult[T any](g *Guard, ctx context.Context, key Key) (T, error) {
-	var zero T
-
-	existing, findErr := g.repo.FindByKey(ctx, key.BizID, key.BizSubID)
-	if findErr != nil {
-		return zero, findErr
+// 处理中的记录属防御性场景（INSERT 与标记完成同事务提交，正常编排不可见），返回 ErrProcessing。
+// 由 DB 查证与 INSERT 冲突回退两条路径共用，保证回放判定一致。
+func findCompletedSnapshot[T any](g *Guard, ctx context.Context, key Key) (*snapshot[T], error) {
+	row, err := g.repo.FindByKey(ctx, key.BizID, key.BizSubID)
+	if err != nil {
+		return nil, err
 	}
-	if existing == nil {
-		return zero, errors.Sentinel(ErrDuplicateWithoutRecord)
+	if row == nil {
+		return nil, nil
 	}
-	if existing.Status != StatusCompleted {
-		return zero, errors.Sentinel(ErrProcessing)
+	if row.Status != StatusCompleted {
+		return nil, errors.Sentinel(ErrProcessing)
 	}
-	return unmarshalResult[T](existing.ResponseData)
+	result, err := unmarshalResult[T](row.ResponseData)
+	if err != nil {
+		return nil, err
+	}
+	return &snapshot[T]{result: result, data: row.ResponseData}, nil
 }
 
 // loadFromRedis 从 Redis 读取并反序列化幂等结果
@@ -230,13 +251,12 @@ func loadFromRedis[T any](g *Guard, ctx context.Context, rk string) (T, bool, er
 	return result, true, nil
 }
 
-// saveToRedis 将响应快照写入 Redis 结果缓存
-func saveToRedis(g *Guard, ctx context.Context, rk string, responseData []byte) error {
-	payload := string(responseData)
-	if payload == "" {
-		payload = "{}"
+// writeCache 将响应快照字节写入结果缓存；失败仅告警——缓存只是快路径，
+// 后续重复请求会回源 DB 自愈，不允许影响业务结果
+func writeCache(g *Guard, ctx context.Context, rk string, data []byte) {
+	if err := g.redisService.OpsStr4Set(ctx, rk, string(data), defaultCacheTTL); err != nil {
+		logger.Warn(ctx, "[幂等]结果缓存写入失败，后续重复请求将回源 DB", "redisKey", rk, "error", err)
 	}
-	return g.redisService.OpsStr4Set(ctx, rk, payload, defaultCacheTTL)
 }
 
 // resultRedisKey 生成结果缓存 Redis Key
