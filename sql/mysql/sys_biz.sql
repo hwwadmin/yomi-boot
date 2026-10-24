@@ -1,5 +1,6 @@
 -- 平台共享 DDL：业务幂等表（各领域库内各建一份）
--- 权威定义仅此一份；与 component/idempotency 封装口径一致。
+-- MySQL 版；PostgreSQL 版见 sql/pgsql/sys_biz.sql，两份字段口径一致。
+-- 与 component/idempotency 封装口径一致。
 
 CREATE TABLE IF NOT EXISTS `sys_biz` (
     `id` bigint NOT NULL COMMENT '主键ID',

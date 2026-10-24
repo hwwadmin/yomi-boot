@@ -1,5 +1,6 @@
 -- ----------------------------
 -- 消息队列事件模块建表脚本
+-- MySQL 版；PostgreSQL 版见 sql/pgsql/sys_event.sql（PG 索引名带表前缀，因 PG 索引名 schema 级全局唯一）。
 -- 作者: zwei
 -- 说明:
 --   event_id 是全局唯一事件 ID（建议使用雪花 ID），所有 event 表统一遵守此约定；
