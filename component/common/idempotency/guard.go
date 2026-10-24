@@ -80,8 +80,9 @@ type snapshot[T any] struct {
 // DB 查证回放 → 事务抢占执行 → 回写缓存
 //
 // T 必须与 fn 的返回类型一致且可 JSON 往返，DB/Redis 重放时会反序列化到同一类型。
-// txRunner 由调用方注入，且必须是本次调用的最外层事务边界：传入的 ctx 不得已绑定同源事务，
-// 否则「事务提交后才写缓存」的时序承诺失效。
+// txRunner 由调用方注入，且必须是本次调用的最外层事务边界：传入的 ctx 已绑定同源事务时
+// 返回 ErrNestedTx fail-fast——嵌套复用形态没有本函数的提交点，「事务提交后才写缓存」
+// 的时序承诺无法兑现。
 func Execute[T any](
 	g *Guard,
 	txRunner tx.Runner,
@@ -94,6 +95,10 @@ func Execute[T any](
 	// 校验事务运行器（参数校验）与幂等键
 	if txRunner == nil {
 		return zero, errors.Sentinel(ErrGuardNotReady)
+	}
+	// 嵌套复用形态下本函数没有提交点，缓存回写会跑在真实提交之前，直接拒绝
+	if txRunner.InTx(ctx) {
+		return zero, errors.Sentinel(ErrNestedTx)
 	}
 	if key.BizID == "" || key.BizSubID == "" || key.OperationType == "" {
 		return zero, errors.Sentinel(ErrKeyInvalid)

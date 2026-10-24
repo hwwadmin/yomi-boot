@@ -61,6 +61,17 @@ func (r *TxRunner) Run(ctx context.Context, fn func(ctx context.Context) error) 
 	return r.runner.Run(ctx, fn)
 }
 
+// InTx 报告 ctx 是否已绑定本数据源的事务
+//
+// Barrier 形态（分支回调）由 Run 自行开启并提交事务，提交点归 Run 所有，不算绑定；
+// 其余形态委托内层 LocalRunner。
+func (r *TxRunner) InTx(ctx context.Context) bool {
+	if _, ok := BarrierFromContext(ctx); ok {
+		return false
+	}
+	return r.runner.InTx(ctx)
+}
+
 // runBarrier 在 DTM Barrier 事务中执行回调函数
 func (r *TxRunner) runBarrier(ctx context.Context, bb *dtmcli.BranchBarrier, fn func(ctx context.Context) error) error {
 	bb.DBType = r.dtmDBType

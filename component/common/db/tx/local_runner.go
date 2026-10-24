@@ -47,6 +47,12 @@ func (r *LocalRunner) Run(ctx context.Context, fn func(ctx context.Context) erro
 	})
 }
 
+// InTx 报告 ctx 是否已绑定本数据源的事务（嵌套复用形态，提交点归最外层所有）
+func (r *LocalRunner) InTx(ctx context.Context) bool {
+	_, ok := FromContext(ctx, r.root)
+	return ok
+}
+
 // RunAutonomous 在独立连接上执行自治事务：回调返回 error 时回滚，否则提交。
 // 与 ctx 中已有的事务互不影响：外层回滚不会撤销这里的写入，这里的失败也不会回滚外层。
 // 回调 ctx 不随调用方取消（保留 ctx 值），超时由 timeout 控制，timeout <= 0 时取默认值。

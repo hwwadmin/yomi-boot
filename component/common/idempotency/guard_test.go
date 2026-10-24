@@ -254,3 +254,35 @@ func TestExecute_InvalidInput(t *testing.T) {
 		t.Fatalf("幂等键不完整应返回 ErrKeyInvalid, err=%v", err)
 	}
 }
+
+// TestExecute_RejectsNestedTx 调用方 ctx 已绑定同源事务时 fail-fast，不产生任何副作用
+func TestExecute_RejectsNestedTx(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	calls := 0
+	fn := func(context.Context) (string, error) {
+		calls++
+		return "x", nil
+	}
+
+	err := env.runner.Run(ctx, func(txCtx context.Context) error {
+		_, err := Execute(env.guard, env.runner, txCtx, testKey("k7"), fn)
+		return err
+	})
+	if !errors.Is(err, ErrNestedTx) {
+		t.Fatalf("嵌套事务应返回 ErrNestedTx, err=%v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("业务不应执行, calls=%d", calls)
+	}
+	var count int64
+	env.db.Model(&SysBiz{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("不应产生幂等记录, count=%d", count)
+	}
+	if _, err := env.client.Get(ctx, resultRedisKey(testKey("k7"))).Result(); !errors.Is(err, redis.Nil) {
+		t.Fatalf("不应写结果缓存, err=%v", err)
+	}
+}

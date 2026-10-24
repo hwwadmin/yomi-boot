@@ -13,6 +13,10 @@ import (
 type Runner interface {
 	// Run 在事务中执行 fn；已处于同一数据源事务中时复用外层事务
 	Run(ctx context.Context, fn func(ctx context.Context) error) error
+
+	// InTx 报告 ctx 是否已绑定本数据源的事务（嵌套复用形态，提交点归最外层所有）；
+	// Barrier 等由 Run 自行开启并提交事务的形态不算绑定——提交点归 Run 所有
+	InTx(ctx context.Context) bool
 }
 
 // Executor 在 Runner 之上提供自治事务能力

@@ -14,4 +14,6 @@ var (
 	ErrGuardNotReady = errors.NewNoStack("sysbiz: guard not ready")
 	// ErrDuplicateWithoutRecord 唯一键冲突但查不到记录
 	ErrDuplicateWithoutRecord = errors.NewNoStack("sysbiz: duplicate key without record")
+	// ErrNestedTx 调用方 ctx 已绑定同源事务；Execute 须为写路径最外层事务边界
+	ErrNestedTx = errors.NewNoStack("sysbiz: nested transaction")
 )
