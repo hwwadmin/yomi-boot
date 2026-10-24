@@ -7,6 +7,8 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/pem"
+	"math/big"
+	"reflect"
 	"testing"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -79,6 +81,20 @@ func TestInvalidKey(t *testing.T) {
 	if err := Verify(badPub, []byte("m"), []byte("sig")); err == nil {
 		t.Fatal("缺坐标公钥验签应失败")
 	}
+
+	// 越界标量（D = N+1）应返回错误；该密钥无法经任何合法 API 构造，用 reflect 模拟手工拼装
+	bigD := *priv
+	scalar := new(big.Int).Add(priv.Curve.Params().N, big.NewInt(1))
+	reflect.ValueOf(&bigD).Elem().FieldByName("D").Set(reflect.ValueOf(scalar))
+	if _, err := Sign(&bigD, []byte("m")); err == nil {
+		t.Fatal("越界标量私钥签名应失败")
+	}
+
+	// 不在曲线上的坐标应返回错误
+	offCurve := &ecdsa.PublicKey{Curve: elliptic.P384(), X: big.NewInt(1), Y: big.NewInt(1)}
+	if err := Verify(offCurve, []byte("m"), []byte("sig")); err == nil {
+		t.Fatal("不在曲线上的公钥验签应失败")
+	}
 }
 
 // TestPEMRoundTrip 验证 PKCS#8 / SEC1 私钥与 PKIX 公钥 PEM 往返
@@ -122,7 +138,7 @@ func TestPEMRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsedSEC1.D.Cmp(priv.D) != 0 {
+	if !parsedSEC1.Equal(priv) {
 		t.Fatal("SEC1 私钥解析结果不一致")
 	}
 }

@@ -26,31 +26,46 @@ func GenerateKey() (*ecdsa.PrivateKey, error) {
 }
 
 // validPrivateKey 校验 P-384 私钥的曲线、标量与公钥坐标
-func validPrivateKey(key *ecdsa.PrivateKey) error {
+// 经 GenerateKey / ParsePrivateKeyPEM 产出的密钥必然通过；手工拼装的非法密钥
+// （nil 标量/坐标、越界标量、不在曲线上的点）返回错误而非 panic。
+func validPrivateKey(key *ecdsa.PrivateKey) (err error) {
+	// 标准库 Bytes 内部直接解引用标量与坐标，对 nil 字段会 panic；统一归一为错误
+	defer func() {
+		if p := recover(); p != nil {
+			err = errors.New("ecdsap384: private key 无效")
+		}
+	}()
 	if key == nil {
 		return errors.New("ecdsap384: private key 为 nil")
 	}
 	if !isP384(key.Curve) {
 		return errors.New("ecdsap384: private key 不是 P-384 曲线")
 	}
-	if key.D == nil || key.D.Sign() <= 0 || key.D.Cmp(key.Curve.Params().N) >= 0 {
-		return errors.New("ecdsap384: private key 无效")
-	}
-	if key.X == nil || key.Y == nil || !key.IsOnCurve(key.X, key.Y) {
+	if _, pointErr := key.PublicKey.Bytes(); pointErr != nil {
 		return errors.New("ecdsap384: private key 公钥坐标无效")
+	}
+	if _, rawErr := key.Bytes(); rawErr != nil {
+		return errors.New("ecdsap384: private key 无效")
 	}
 	return nil
 }
 
 // validPublicKey 校验 P-384 公钥的曲线与坐标
-func validPublicKey(key *ecdsa.PublicKey) error {
+// 经 ParsePublicKeyPEM 产出的公钥必然通过；手工拼装的非法公钥（nil 坐标、不在曲线上）返回错误而非 panic。
+func validPublicKey(key *ecdsa.PublicKey) (err error) {
+	// 同 validPrivateKey：nil 坐标在标准库 Bytes 中表现为 panic，归一为错误
+	defer func() {
+		if p := recover(); p != nil {
+			err = errors.New("ecdsap384: public key 无效")
+		}
+	}()
 	if key == nil {
 		return errors.New("ecdsap384: public key 为 nil")
 	}
 	if !isP384(key.Curve) {
 		return errors.New("ecdsap384: public key 不是 P-384 曲线")
 	}
-	if key.X == nil || key.Y == nil || !key.IsOnCurve(key.X, key.Y) {
+	if _, pointErr := key.Bytes(); pointErr != nil {
 		return errors.New("ecdsap384: public key 无效")
 	}
 	return nil
