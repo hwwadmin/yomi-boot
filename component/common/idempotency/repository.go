@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"gorm.io/gorm"
@@ -25,7 +25,7 @@ func NewRepository(dbConn *gorm.DB) *Repository {
 
 // Insert 插入幂等记录
 func (r *Repository) Insert(ctx context.Context, row *SysBiz) error {
-	if err := db.Exec(ctx, r.DB).Create(row).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Create(row).Error; err != nil {
 		return errors.Wrap(err, "插入幂等记录失败")
 	}
 	return nil
@@ -34,7 +34,7 @@ func (r *Repository) Insert(ctx context.Context, row *SysBiz) error {
 // FindByKey 按幂等键查询，记录不存在时返回 nil, nil
 func (r *Repository) FindByKey(ctx context.Context, bizID, bizSubID string) (*SysBiz, error) {
 	var row SysBiz
-	err := db.Exec(ctx, r.DB).
+	err := tx.Exec(ctx, r.DB).
 		Where("biz_id = ? AND biz_sub_id = ?", bizID, bizSubID).
 		First(&row).Error
 	if err != nil {
@@ -48,7 +48,7 @@ func (r *Repository) FindByKey(ctx context.Context, bizID, bizSubID string) (*Sy
 
 // MarkCompleted 标记完成并缓存响应
 func (r *Repository) MarkCompleted(ctx context.Context, id int64, responseData []byte) error {
-	result := db.Exec(ctx, r.DB).Model(&SysBiz{}).
+	result := tx.Exec(ctx, r.DB).Model(&SysBiz{}).
 		Where("id = ? AND status = ?", id, StatusProcessing).
 		Updates(map[string]any{
 			"status":        StatusCompleted,
@@ -68,7 +68,7 @@ func (r *Repository) DeleteStaleProcessing(ctx context.Context, before time.Time
 	if limit <= 0 {
 		return 0, errors.New("清理批量大小必须大于 0")
 	}
-	result := db.Exec(ctx, r.DB).Unscoped().
+	result := tx.Exec(ctx, r.DB).Unscoped().
 		Where("status = ? AND update_time < ?", StatusProcessing, before).
 		Limit(limit).
 		Delete(&SysBiz{})

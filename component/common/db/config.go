@@ -1,6 +1,7 @@
-// Package db 提供数据库访问配置
+// 数据源配置
 //
 // @author zwei
+
 package db
 
 import (

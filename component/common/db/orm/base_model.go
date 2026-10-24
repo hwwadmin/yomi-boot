@@ -1,7 +1,8 @@
-// Package db 提供数据库连接初始化与通用持久化模型
+// 通用持久化模型
 //
 // @author zwei
-package db
+
+package orm
 
 import (
 	"time"

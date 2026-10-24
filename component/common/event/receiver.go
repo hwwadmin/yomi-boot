@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
@@ -25,7 +26,7 @@ import (
 type Receiver struct {
 	inboxRepo    *repo.InboxRepo
 	inboxDlqRepo *repo.InboxDlqRepo
-	txExecutor   db.TxExecutor
+	txExecutor   tx.Executor
 	lockFactory  distlock.DistLockFactory
 	cfg          cfg.Runtime
 	idGen        snowflake.Generator
@@ -35,7 +36,7 @@ type Receiver struct {
 func NewReceiver(
 	inboxRepo *repo.InboxRepo,
 	inboxDlqRepo *repo.InboxDlqRepo,
-	txExecutor db.TxExecutor,
+	txExecutor tx.Executor,
 	lockFactory distlock.DistLockFactory,
 	runtime cfg.Runtime,
 	idGen snowflake.Generator,
@@ -154,7 +155,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 				EventID:     evt.EventID,
 				Topic:       evt.Topic,
 				Payload:     evt.Payload,
-				BaseModel: db.BaseModel{
+				BaseModel: orm.BaseModel{
 					ID: inboxID,
 				},
 			}
@@ -241,7 +242,7 @@ func (r *Receiver) moveToInboxDlq(ctx context.Context, evt Event, cause error, r
 		Payload:     evt.Payload,
 		ErrorMsg:    truncateInboxDlqError(cause),
 		RetryCount:  retryCount,
-		BaseModel: db.BaseModel{
+		BaseModel: orm.BaseModel{
 			ID: id,
 		},
 	})

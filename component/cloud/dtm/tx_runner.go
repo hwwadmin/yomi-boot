@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 
@@ -28,25 +28,25 @@ type barrierKey struct{}
 // TxRunner 运行本地事务，当上下文中包含 DTM Barrier 元数据时自动使用 Barrier 事务
 type TxRunner struct {
 	DB         *gorm.DB
-	TxExecutor db.TxExecutor
+	TxExecutor tx.Executor
 	dtmDBType  string
 }
 
 // NewTxRunner 创建支持 Saga 事务的事务运行器
 // barrierTableName 为 DTM Barrier 表名，传入空字符串时默认使用 DefaultBarrierTableName
-// gdb 与 tx 为必填依赖，缺失时启动期 fail-fast
-func NewTxRunner(gdb *gorm.DB, tx db.TxExecutor, dbType enums.DbType, barrierTableName string) *TxRunner {
+// gdb 与 executor 为必填依赖，缺失时启动期 fail-fast
+func NewTxRunner(gdb *gorm.DB, executor tx.Executor, dbType enums.DbType, barrierTableName string) *TxRunner {
 	if gdb == nil {
 		panic("dtm: NewTxRunner gdb 不能为 nil")
 	}
-	if tx == nil {
-		panic("dtm: NewTxRunner tx 不能为 nil")
+	if executor == nil {
+		panic("dtm: NewTxRunner executor 不能为 nil")
 	}
 	if barrierTableName == "" {
 		barrierTableName = DefaultBarrierTableName
 	}
 	dtmcli.SetBarrierTableName(barrierTableName)
-	return &TxRunner{DB: gdb, TxExecutor: tx, dtmDBType: toDBType(dbType)}
+	return &TxRunner{DB: gdb, TxExecutor: executor, dtmDBType: toDBType(dbType)}
 }
 
 // Run 在普通事务或 DTM Barrier 事务中执行 fn
@@ -69,8 +69,8 @@ func (r *TxRunner) runBarrier(ctx context.Context, bb *dtmcli.BranchBarrier, fn 
 		_ = gtx.Rollback()
 		return errors.Newf("DTM Barrier 无法获取 *sql.Tx，ConnPool 实际类型: %T", gtx.Statement.ConnPool)
 	}
-	return bb.Call(sqlTx, func(tx *sql.Tx) error {
-		txCtx := db.WithTx(ctx, gtx)
+	return bb.Call(sqlTx, func(*sql.Tx) error {
+		txCtx := tx.WithContext(ctx, r.DB, gtx)
 		return fn(txCtx)
 	})
 }

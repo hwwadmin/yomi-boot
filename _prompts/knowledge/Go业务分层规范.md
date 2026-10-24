@@ -123,7 +123,7 @@ handler/                         biz/handler/
 
 - 接口：`repo/contract/{域}/{module}_repo_contract.go`。
 - 实现：`repo/db/{域}/` 含 `{module}_repo.go`、`{module}_model.go`、`{module}_mapper.go`。
-- 只负责数据存取；通过 `db.Exec(ctx, r.DB)` 感知事务。
+- 只负责数据存取；通过 `tx.Exec(ctx, r.DB)` 感知事务。
 - **禁止**业务规则；**禁止**自行开启事务。
 
 #### 3.4.6 internal/bizerr/
@@ -177,9 +177,9 @@ Client → BFF handler → saga → DTM → 单分支 Action/Compensate handler 
 
 ```text
 handler → usecase → domain/contract
-usecase → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db, gitee.com/hq_project/yomi-boot/component/cloud/dtm（barrier）, gitee.com/hq_project/yomi-boot/component/common/idempotency（写幂等）
+usecase → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db/tx, gitee.com/hq_project/yomi-boot/component/cloud/dtm（barrier）, gitee.com/hq_project/yomi-boot/component/common/idempotency（写幂等）
 service → domain/contract, repo/contract
-repo/db → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db
+repo/db → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db/orm, gitee.com/hq_project/yomi-boot/component/common/db/tx
 ```
 
 禁止：

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
 	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
@@ -156,7 +156,7 @@ func TestReceiverMovesToInboxDlqAfterRetryExhausted(t *testing.T) {
 	receiver := NewReceiver(
 		repo.NewInboxRepo(gormDB),
 		repo.NewInboxDlqRepo(gormDB),
-		db.NewTxManager(gormDB),
+		tx.NewManager(gormDB),
 		factory,
 		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 2},
 		gen,

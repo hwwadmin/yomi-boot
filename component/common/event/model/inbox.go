@@ -3,7 +3,7 @@
 // @author zwei
 package model
 
-import "gitee.com/hq_project/yomi-boot/component/common/db"
+import "gitee.com/hq_project/yomi-boot/component/common/db/orm"
 
 // SysEventInbox 映射 sys_event_inbox 收件箱表
 type SysEventInbox struct {
@@ -11,7 +11,7 @@ type SysEventInbox struct {
 	EventID     string `gorm:"column:event_id;size:100;not null"`     // EventID 是全局唯一事件 ID
 	Topic       string `gorm:"column:topic;size:200;not null"`        // Topic 是事件主题
 	Payload     string `gorm:"column:payload;type:longtext"`          // Payload 是事件负载
-	db.BaseModel
+	orm.BaseModel
 }
 
 // TableName 返回收件箱表名

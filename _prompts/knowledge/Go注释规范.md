@@ -119,7 +119,7 @@ type UserQuery struct {
 ```go
 // NewRepository 创建用户仓储，返回 contract 接口类型
 func NewRepository(db *gorm.DB) userrepocontract.UserRepository {
-    return &Repository{BaseRepository: db.BaseRepository{DB: db}}
+    return &Repository{BaseRepository: orm.BaseRepository{DB: db}}
 }
 
 // FindByID 根据主键查询用户，返回 nil 表示不存在

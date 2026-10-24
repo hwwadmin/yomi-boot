@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
@@ -163,7 +164,7 @@ func runBusinessOnce[T any](
 		BizSubID:      key.BizSubID,
 		OperationType: key.OperationType,
 		Status:        StatusProcessing,
-		BaseModel: db.BaseModel{
+		BaseModel: orm.BaseModel{
 			ID: id,
 		},
 	}

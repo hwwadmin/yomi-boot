@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
 	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
@@ -31,7 +31,7 @@ type Processor struct {
 	outboxRepo     *repo.OutboxRepo
 	dlq            *DlqHandler
 	kafkaPublisher yomikafka.PublisherService
-	txExecutor     db.TxExecutor
+	txExecutor     tx.Executor
 	worker         worker.WorkerService
 	queueSize      int        // queueSize 是发送队列的实际容量
 	closeMu        sync.Mutex // closeMu 保护 closed 并发调用
@@ -45,7 +45,7 @@ func NewProcessor(
 	outboxRepo *repo.OutboxRepo,
 	dlq *DlqHandler,
 	kafkaPublisher yomikafka.PublisherService,
-	txExecutor db.TxExecutor,
+	txExecutor tx.Executor,
 	parentCtx context.Context,
 ) (*Processor, error) {
 	if outboxRepo == nil {

@@ -7,7 +7,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
@@ -16,12 +17,12 @@ import (
 
 // OutboxDlqRepo 发件箱死信仓储
 type OutboxDlqRepo struct {
-	db.BaseRepository
+	orm.BaseRepository
 }
 
 // NewOutboxDlqRepo 创建发件箱死信仓储
 func NewOutboxDlqRepo(dbConn *gorm.DB) *OutboxDlqRepo {
-	return &OutboxDlqRepo{BaseRepository: db.BaseRepository{DB: dbConn}}
+	return &OutboxDlqRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
 }
 
 // Insert 插入死信记录
@@ -35,7 +36,7 @@ func (r *OutboxDlqRepo) Insert(ctx context.Context, row *model.SysEventOutboxDlq
 // Fetch 获取待重试死信（仅返回未达最大重试次数且已过退避窗口的记录）
 func (r *OutboxDlqRepo) Fetch(ctx context.Context, serviceName string, size int, maxRetry int, now time.Time) ([]model.SysEventOutboxDlq, error) {
 	var rows []model.SysEventOutboxDlq
-	query := db.Exec(ctx, r.DB).
+	query := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutboxDlq{}).
 		Where("service_name = ?", serviceName)
 	if maxRetry > 0 {
@@ -96,7 +97,7 @@ func (r *OutboxDlqRepo) ResetRetryCountInTimeRange(
 	if to.Before(from) {
 		return 0, errors.New("重置 DLQ 重试计数时结束时间不能早于开始时间")
 	}
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutboxDlq{}).
 		Where("service_name = ? AND create_time >= ? AND create_time <= ?", serviceName, from, to).
 		Updates(map[string]any{

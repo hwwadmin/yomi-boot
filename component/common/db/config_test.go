@@ -1,3 +1,7 @@
+// 数据源配置的单元测试
+//
+// @author zwei
+
 package db
 
 import (

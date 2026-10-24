@@ -3,7 +3,7 @@
 // @author zwei
 package idempotency
 
-import "gitee.com/hq_project/yomi-boot/component/common/db"
+import "gitee.com/hq_project/yomi-boot/component/common/db/orm"
 
 // 处理状态
 const (
@@ -18,7 +18,7 @@ type SysBiz struct {
 	OperationType string `gorm:"column:operation_type;size:32;not null"` // OperationType 是操作类型
 	Status        int8   `gorm:"column:status;not null;default:1"`       // Status 是处理状态：1-处理中，2-已完成
 	ResponseData  []byte `gorm:"column:response_data;type:json"`         // ResponseData 是响应数据快照
-	db.BaseModel
+	orm.BaseModel
 }
 
 // TableName 返回 sys_biz 幂等表名

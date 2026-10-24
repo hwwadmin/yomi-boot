@@ -7,7 +7,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
@@ -33,12 +34,12 @@ LIMIT ?`
 
 // InboxRepo 收件箱仓储
 type InboxRepo struct {
-	db.BaseRepository
+	orm.BaseRepository
 }
 
 // NewInboxRepo 创建收件箱仓储
 func NewInboxRepo(dbConn *gorm.DB) *InboxRepo {
-	return &InboxRepo{BaseRepository: db.BaseRepository{DB: dbConn}}
+	return &InboxRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
 }
 
 // Insert 插入收件箱记录
@@ -55,7 +56,7 @@ func (r *InboxRepo) Exists(ctx context.Context, serviceName, eventID string) (bo
 		return false, nil
 	}
 	var count int64
-	err := db.Exec(ctx, r.DB).Model(&model.SysEventInbox{}).
+	err := tx.Exec(ctx, r.DB).Model(&model.SysEventInbox{}).
 		Where("service_name = ? AND event_id = ?", serviceName, eventID).
 		Count(&count).Error
 	if err != nil {
@@ -77,7 +78,7 @@ func (r *InboxRepo) ListConsumedBefore(
 	var rows []struct {
 		ID int64
 	}
-	err := db.Exec(ctx, r.DB).
+	err := tx.Exec(ctx, r.DB).
 		Raw(listConsumedBeforeSQL, serviceName, createdBefore, limit).
 		Scan(&rows).Error
 	if err != nil {

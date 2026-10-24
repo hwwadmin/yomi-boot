@@ -6,7 +6,7 @@ package dbplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
@@ -16,7 +16,7 @@ const TxName = "tx"
 type Tx struct {
 	plugin.Base
 
-	executor db.TxExecutor
+	executor tx.Executor
 }
 
 var _ plugin.Plugin = (*Tx)(nil)
@@ -42,7 +42,7 @@ func (p *Tx) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	if dbPlugin.DB() == nil {
 		return plugin.ErrDisabled
 	}
-	p.executor = db.NewTxManager(dbPlugin.DB())
+	p.executor = tx.NewManager(dbPlugin.DB())
 	return nil
 }
 
@@ -50,7 +50,7 @@ func (p *Tx) Init(_ context.Context, slot *plugin.PluginSlot) error {
 func (p *Tx) Close(context.Context) error { return nil }
 
 // Executor 返回事务执行器；未启用时返回 nil
-func (p *Tx) Executor() db.TxExecutor {
+func (p *Tx) Executor() tx.Executor {
 	if p == nil {
 		return nil
 	}

@@ -1,3 +1,7 @@
+// 最小空闲连接保活的单元测试
+//
+// @author zwei
+
 package db
 
 import (
@@ -49,7 +53,7 @@ func TestIdleKeeperStopIdempotent(t *testing.T) {
 
 // TestEnsureMinIdle_TopsUp 验证按 min_idle 补足空闲连接
 func TestEnsureMinIdle_TopsUp(t *testing.T) {
-	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(txTestModel{}))
+	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(idleTestModel{}))
 	defer cleanup()
 	sqlDB.SetMaxOpenConns(5)
 	sqlDB.SetMaxIdleConns(3)
@@ -64,7 +68,7 @@ func TestEnsureMinIdle_TopsUp(t *testing.T) {
 
 // TestEnsureMinIdle_SkipsWhenSaturated 验证池满时不抢连接、不阻塞
 func TestEnsureMinIdle_SkipsWhenSaturated(t *testing.T) {
-	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(txTestModel{}))
+	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(idleTestModel{}))
 	defer cleanup()
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
@@ -88,7 +92,7 @@ func TestEnsureMinIdle_SkipsWhenSaturated(t *testing.T) {
 
 // TestEnsureMinIdle_NoOpWhenEnough 验证空闲达标后不再新开连接
 func TestEnsureMinIdle_NoOpWhenEnough(t *testing.T) {
-	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(txTestModel{}))
+	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(idleTestModel{}))
 	defer cleanup()
 	sqlDB.SetMaxOpenConns(5)
 	sqlDB.SetMaxIdleConns(3)
@@ -107,7 +111,7 @@ func TestEnsureMinIdle_NoOpWhenEnough(t *testing.T) {
 
 // TestEnsureMinIdle_RespectsMaxIdle 验证持有量受 max_idle 约束
 func TestEnsureMinIdle_RespectsMaxIdle(t *testing.T) {
-	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(txTestModel{}))
+	sqlDB, _, cleanup := dbtest.NewSQL(t, dbtest.WithTables(idleTestModel{}))
 	defer cleanup()
 	sqlDB.SetMaxOpenConns(5)
 	sqlDB.SetMaxIdleConns(1)
@@ -118,4 +122,15 @@ func TestEnsureMinIdle_RespectsMaxIdle(t *testing.T) {
 	if got := sqlDB.Stats().Idle; got != 1 {
 		t.Fatalf("空闲连接应受 max_idle 限制为 1，实际 %d", got)
 	}
+}
+
+// idleTestModel 最小空闲保活单测用 GORM 模型
+type idleTestModel struct {
+	ID   int64  `gorm:"column:id;primaryKey"`
+	Name string `gorm:"column:name"`
+}
+
+// TableName 返回最小空闲保活单测表名
+func (idleTestModel) TableName() string {
+	return "idle_test_model"
 }

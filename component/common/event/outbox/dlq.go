@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
@@ -33,7 +34,7 @@ type DlqHandler struct {
 	outboxRepo     *repo.OutboxRepo
 	dlqRepo        *repo.OutboxDlqRepo
 	kafkaPublisher yomikafka.PublisherService
-	txExecutor     db.TxExecutor
+	txExecutor     tx.Executor
 	idGen          snowflake.Generator
 }
 
@@ -43,7 +44,7 @@ func NewDlqHandler(
 	outboxRepo *repo.OutboxRepo,
 	dlqRepo *repo.OutboxDlqRepo,
 	kafkaPublisher yomikafka.PublisherService,
-	txExecutor db.TxExecutor,
+	txExecutor tx.Executor,
 	idGen snowflake.Generator,
 ) *DlqHandler {
 	return &DlqHandler{
@@ -66,7 +67,7 @@ func (d *DlqHandler) Enqueue(ctx context.Context, row model.SysEventOutbox, caus
 		ServiceName:   row.ServiceName,
 		EventOutboxID: row.ID,
 		ErrorMsg:      coreErrorMessage(cause),
-		BaseModel: db.BaseModel{
+		BaseModel: orm.BaseModel{
 			ID: id,
 		},
 	}

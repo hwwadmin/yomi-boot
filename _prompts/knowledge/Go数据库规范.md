@@ -12,7 +12,7 @@
 
 ## 1. 文档定位
 
-- **用途**：约束 Go 项目中数据库访问层的实现方式，包括 GORM Model 设计与 `db.BaseModel` 组合复用、链式查询调用、事务感知的 repository 实现，确保数据访问层统一、可维护。复杂查询可回退到原生 SQL。
+- **用途**：约束 Go 项目中数据库访问层的实现方式，包括 GORM Model 设计与 `orm.BaseModel` 组合复用、链式查询调用、事务感知的 repository 实现，确保数据访问层统一、可维护。复杂查询可回退到原生 SQL。
 - **边界**：不覆盖表命名、字段设计、索引策略和 DDL 编写细则，相关内容由数据库表设计规范约束；不覆盖数据库运维、部署和迁移流程。
 - **适用对象**：所有使用 `gorm.io/gorm` 作为数据库访问方案的 Go 项目。
 
@@ -23,7 +23,7 @@
 ### 2.1 适用范围
 
 - 适用于基于 gitee.com/hq_project/yomi-boot 的业务工程中 repository 实现（惯例目录示例：`services/{unit}/internal/biz/repo/`）。
-- 适用于 Go Model 与数据库表之间的 GORM 映射约定，以及 `db.BaseModel` 的组合复用。
+- 适用于 Go Model 与数据库表之间的 GORM 映射约定，以及 `orm.BaseModel` 的组合复用。
 - 适用于 GORM 链式查询和原生 SQL 混合使用的场景。
 
 ### 2.2 关联文档
@@ -32,7 +32,7 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 约束 domain/repo 分层职责与 Entity 建模口径 |
 | `_prompts/knowledge/Go架构规范.md` | 项目架构 | 约束 repository 层在整体项目结构中的位置 |
-| `_prompts/knowledge/Go事务规范.md` | 事务控制 | 约束 `db.TxExecutor` 接口、`TxManager` 实现、Context 事务传递与 repository 事务感知实现 |
+| `_prompts/knowledge/Go事务规范.md` | 事务控制 | 约束 `tx.Executor` 接口、`tx.Manager` 实现、Context 事务传递与 repository 事务感知实现 |
 | `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | 约束 gorm 作为默认 SQL 访问库的选型理由 |
 | `_prompts/knowledge/数据库表设计规范.md` | 表设计规范 | 约束表命名、字段、索引与 DDL 设计，Go Model 须与其保持一致 |
 | `_prompts/knowledge/Go注释规范.md` | 注释规范 | 约束 Model 和 Repository 的注释口径 |
@@ -75,10 +75,10 @@
 
 - 优先使用 GORM 链式查询。常规 CRUD 操作使用 GORM 的链式 API。
 - 复杂查询回退到原生 SQL。
-- **执行器获取**：统一通过 `db.Exec(ctx, r.DB)` 获取 GORM 实例（自动识别事务上下文）。
+- **执行器获取**：统一通过 `tx.Exec(ctx, r.DB)` 获取 GORM 实例（自动识别事务上下文）。
 - **条件片段**：`Where` 条件使用 GORM 标准占位符写法（如 `"status = ?"`、`"id IN ?"`）；列名须为代码中固定的数据库字段名，禁止将用户输入或变量拼接到 SQL 片段中。
-- **LIKE 查询**：模糊匹配的值须通过 `db.LikeFull` / `db.LikeLeft` / `db.LikeRight` 转义通配符后传入。
-- **分页**：使用 `db.ApplyPage(query, page, pageSize, order)` 或基类 `r.CountPage(ctx, query, page, pageSize, order, &rows)`。
+- **LIKE 查询**：模糊匹配的值须通过 `orm.LikeFull` / `orm.LikeLeft` / `orm.LikeRight` 转义通配符后传入。
+- **分页**：使用 `orm.ApplyPage(query, page, pageSize, order)` 或基类 `r.CountPage(ctx, query, page, pageSize, order, &rows)`。
 - **基类优先**：单行/批量 CRUD 优先使用 `BaseRepository` 提供的 `FirstByID`、`FirstByField`、`UpdateByID` 等方法，避免重复实现。
 
 ##### 示例
@@ -90,12 +90,12 @@ found, err := r.FirstByField(ctx, "username", username, &model)
 
 // 多行查询
 var list []userModel
-err := db.Exec(ctx, r.DB).Where("status = ?", status).Find(&list).Error
+err := tx.Exec(ctx, r.DB).Where("status = ?", status).Find(&list).Error
 
 // 条件分页（LIKE + 等值）
-query := db.Exec(ctx, r.DB).Model(&userModel{})
+query := tx.Exec(ctx, r.DB).Model(&userModel{})
 if input.Username != "" {
-    query = query.Where("username LIKE ?", db.LikeFull(input.Username))
+    query = query.Where("username LIKE ?", orm.LikeFull(input.Username))
 }
 if input.Status != "" {
     query = query.Where("status = ?", input.Status)
@@ -110,7 +110,7 @@ err = r.BaseRepository.Create(ctx, model)
 err = r.UpdateFieldByID(ctx, id, &userModel{}, "status", newStatus)
 
 // 多字段更新
-err = db.Exec(ctx, r.DB).Model(&userModel{}).
+err = tx.Exec(ctx, r.DB).Model(&userModel{}).
     Where("id = ?", id).
     Updates(map[string]any{"nickname": displayName}).Error
 
@@ -125,9 +125,9 @@ err = r.DeleteByID(ctx, id, &userModel{})
 
 ```go
 // LIKE 值转义（列名固定，值走参数化）
-query.Where("username LIKE ?", db.LikeFull(val))  // %value%
-query.Where("code LIKE ?", db.LikeLeft(val))      // %value
-query.Where("name LIKE ?", db.LikeRight(val))     // value%
+query.Where("username LIKE ?", orm.LikeFull(val))  // %value%
+query.Where("code LIKE ?", orm.LikeLeft(val))      // %value
+query.Where("name LIKE ?", orm.LikeRight(val))     // value%
 
 // 其他常见条件
 query.Where("status = ?", status)
@@ -135,7 +135,7 @@ query.Where("id IN ?", ids)
 query.Where("age BETWEEN ? AND ?", min, max)
 ```
 
-辅助方法位于 `gitee.com/hq_project/yomi-boot/component/common/db/`：`db_help.go` 提供 LIKE 模式（`LikeLeft`/`LikeRight`/`LikeFull`）与分页（`ApplyPage`）；`tx_manager.go` 提供事务感知执行器（`Exec`）。
+辅助方法位于 `gitee.com/hq_project/yomi-boot/component/common/db/orm`：`like.go` 提供 LIKE 模式（`LikeLeft`/`LikeRight`/`LikeFull`），`page.go` 提供分页（`ApplyPage`）；事务感知执行器 `Exec` 位于 `gitee.com/hq_project/yomi-boot/component/common/db/tx`。
 
 #### 3.2.3 原生 SQL 回退
 
@@ -151,7 +151,7 @@ GROUP BY r.id, r.code
 `
 
 var results []ReportDTO
-err := db.Exec(ctx, r.DB).Raw(complexReportSQL, status, since).Scan(&results).Error
+err := tx.Exec(ctx, r.DB).Raw(complexReportSQL, status, since).Scan(&results).Error
 ```
 
 ### 3.3 Entity 与 Model 映射规则
@@ -193,7 +193,7 @@ Go Model 与数据库表一一对应，使用 GORM tag 映射列名：
 package repo
 
 import (
-    "gitee.com/hq_project/yomi-boot/component/common/db"
+    "gitee.com/hq_project/yomi-boot/component/common/db/orm"
     "{client}/{domain}/enums"
 )
 
@@ -205,7 +205,7 @@ type resourceModel struct {
     Nickname    string                `gorm:"column:nickname"`
     Email       *string               `gorm:"column:email"`
     Status      enums.ResourceStatus  `gorm:"column:status"`
-    db.BaseModel
+    orm.BaseModel
 }
 
 func (userModel) TableName() string {
@@ -223,9 +223,9 @@ Model 映射规则：
 | 可空字段 | 使用 `*T` 指针类型（如 `*string`），对应表的 `NULL` 列 |
 | 非空字段 | 使用 `T` 值类型（如 `string`、`time.Time`），对应表的 `NOT NULL` 列 |
 | 枚举字段 | 使用 `enums.XxxStatus` 等自定义 string 类型 |
-| 审计字段 | 通过内嵌 `db.BaseModel` 复用 |
+| 审计字段 | 通过内嵌 `orm.BaseModel` 复用 |
 | Go 字段名与列名 | 允许不一致（如 `Nickname` → `gorm:"column:nickname"`） |
-| 软删除 | 通过 `db.BaseModel` 内嵌的 `DeleteTime gorm.DeletedAt` 实现 |
+| 软删除 | 通过 `orm.BaseModel` 内嵌的 `DeleteTime gorm.DeletedAt` 实现 |
 
 #### 3.3.3 Mapper 定义
 
@@ -234,7 +234,6 @@ Model 映射规则：
 package repo
 
 import (
-    "gitee.com/hq_project/yomi-boot/component/common/db"
     "gitee.com/hq_project/yomi-boot/component/core/utils/ptrutil"
 
     domainuser "{domain-service}/internal/biz/domain/contract/user" // 示例：业务工程 module 路径
@@ -264,7 +263,7 @@ Mapper 规则：
 
 #### 3.3.4 基础 Model（BaseModel）
 
-项目使用自定义 `BaseModel` 替代 `gorm.Model`，以支持业务审计字段。`BaseModel` 定义在 `gitee.com/hq_project/yomi-boot/component/common/db/base_model.go` 中：
+项目使用自定义 `BaseModel` 替代 `gorm.Model`，以支持业务审计字段。`BaseModel` 定义在 `gitee.com/hq_project/yomi-boot/component/common/db/orm/base_model.go` 中：
 
 ```go
 type BaseModel struct {
@@ -287,14 +286,14 @@ type userModel struct {
     Nickname    string           `gorm:"column:nickname"`
     Email       *string          `gorm:"column:email"`
     Status      enums.UserStatus `gorm:"column:status"`
-    db.BaseModel
+    orm.BaseModel
 }
 ```
 
 规则：
 
-- `BaseModel` 放置在 `gitee.com/hq_project/yomi-boot/component/common/db/` 中，作为平台基础设施。
-- 业务 Model 通过内嵌 `db.BaseModel` 自动获得 ID、审计字段和软删除能力。
+- `BaseModel` 放置在 `gitee.com/hq_project/yomi-boot/component/common/db/orm/` 中，作为平台基础设施。
+- 业务 Model 通过内嵌 `orm.BaseModel` 自动获得 ID、审计字段和软删除能力。
 - Entity 中的时间字段为 `int64` 毫秒时间戳，Model 中为 `time.Time`，由 mapper 转换。
 
 #### 3.3.5 Model 与表设计的对齐要求
@@ -309,18 +308,18 @@ Model 定义必须与数据库表设计规范保持一致：
 
 #### 3.3.6 复杂原生 SQL 管理
 
-复杂原生 SQL 不单独建 `sqlfiles` 包或根目录 `sql/` 查询目录；在对应 `repo/db/{module}/` 文件内以私有常量维护 SQL 文本，通过 `db.Exec(ctx, r.DB).Raw(...)` 执行，并遵守 §3.2.3 占位符传参规则。
+复杂原生 SQL 不单独建 `sqlfiles` 包或根目录 `sql/` 查询目录；在对应 `repo/db/{module}/` 文件内以私有常量维护 SQL 文本，通过 `tx.Exec(ctx, r.DB).Raw(...)` 执行，并遵守 §3.2.3 占位符传参规则。
 
 ### 3.4 Repository 层职责与示例
 
 #### 3.4.1 职责边界
 
 - repository 只负责数据读写；入参/返回值用 domain/contract 的 Entity 和 DTO，不暴露 Model。
-- 事务由 usecase 控制；repository 通过 `db.Exec(ctx, r.DB)` 感知事务，方法签名不含 `*gorm.DB`。
+- 事务由 usecase 控制；repository 通过 `tx.Exec(ctx, r.DB)` 感知事务，方法签名不含 `*gorm.DB`。
 
 #### 3.4.2 Repository 定义与实现
 
-Repository 嵌入 `db.BaseRepository` 基类，实现 repo/contract 中的 `{Module}Repository` 接口：
+Repository 嵌入 `orm.BaseRepository` 基类，实现 repo/contract 中的 `{Module}Repository` 接口：
 
 ```go
 package repo
@@ -330,15 +329,15 @@ import (
     "gorm.io/gorm"
     domainuser "{domain-service}/internal/biz/domain/contract/user" // 示例：业务工程 module 路径
     userrepocontract "{domain-service}/internal/biz/repo/contract/user" // 示例
-    "gitee.com/hq_project/yomi-boot/component/common/db"
+    "gitee.com/hq_project/yomi-boot/component/common/db/orm"
 )
 
 type Repository struct {
-    db.BaseRepository
+    orm.BaseRepository
 }
 
 func NewRepository(d *gorm.DB) userrepocontract.UserRepository {
-    return &Repository{BaseRepository: db.BaseRepository{DB: d}}
+    return &Repository{BaseRepository: orm.BaseRepository{DB: d}}
 }
 
 func (r *Repository) FindByID(ctx context.Context, id int64) (*domainuser.User, error) {
@@ -383,7 +382,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 > | 批量硬删除 | `DeleteBatch(ctx, ids, model)` | `Unscoped` + `IN` |
 > | 批量软删除 | `SoftDeleteBatch(ctx, ids, model)` | `Model` + `IN` |
 > | 分页 | `CountPage(ctx, query, page, pageSize, order, &rows)` | 内部调用 `ApplyPage` |
-> | 原生 SQL | `db.Exec(ctx, r.DB).Raw(sql, args...).Scan(&dest)` | 仅用于复杂查询 |
+> | 原生 SQL | `tx.Exec(ctx, r.DB).Raw(sql, args...).Scan(&dest)` | 仅用于复杂查询 |
 >
 > 对于复合条件、多表 JOIN、`gorm.Expr` 表达式等场景，直接使用原生 GORM 链式写法。
 
@@ -391,8 +390,8 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 
 事务控制规范统一收口到 [Go事务规范](./Go事务规范.md)，本文仅列出与 repository 层相关的核心约定：
 
-- Repository 嵌入 `db.BaseRepository`，通过 `db.Exec(ctx, r.DB)` 自动感知事务上下文——在事务闭包内自动使用事务连接，事务外使用普通连接。
-- Repository 不自行管理事务，事务边界由 usecase 通过 `db.TxExecutor.Execute` 控制。
+- Repository 嵌入 `orm.BaseRepository`，通过 `tx.Exec(ctx, r.DB)` 自动感知事务上下文——在事务闭包内自动使用事务连接，事务外使用普通连接。
+- Repository 不自行管理事务，事务边界由 usecase 通过 `tx.Executor.Execute` 控制。
 - Repository 方法签名中**不出现 `*gorm.DB` 参数**，事务通过 Context 隐式传递。
 
 详细的事务管理器实现、usecase 中使用事务的示例以及分布式事务方案，请直接参考 [Go事务规范](./Go事务规范.md)。
@@ -401,7 +400,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 
 ## 4. 检查清单
 
-对照 §3.3–§3.4 与 [Go业务分层规范](./Go业务分层规范.md) §4；重点确认 Entity/Model 分离、Mapper 收口、`db.Exec` 事务感知、构造器返回 repo/contract 接口。
+对照 §3.3–§3.4 与 [Go业务分层规范](./Go业务分层规范.md) §4；重点确认 Entity/Model 分离、Mapper 收口、`tx.Exec` 事务感知、构造器返回 repo/contract 接口。
 
 ## 5. 禁止项
 

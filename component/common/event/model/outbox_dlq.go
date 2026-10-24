@@ -6,7 +6,7 @@ package model
 import (
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 )
 
 // SysEventOutboxDlq 映射 sys_event_outbox_dlq 发件箱死信表
@@ -17,7 +17,7 @@ type SysEventOutboxDlq struct {
 	RetryCount     int        `gorm:"column:retry_count;not null;default:0"`
 	RetryLastTime  *time.Time `gorm:"column:retry_last_time"`
 	RetryAfterTime *time.Time `gorm:"column:retry_after_time"`
-	db.BaseModel
+	orm.BaseModel
 }
 
 // TableName 返回发件箱死信表名

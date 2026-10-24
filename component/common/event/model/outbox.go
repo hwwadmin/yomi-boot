@@ -6,7 +6,7 @@ package model
 import (
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 )
 
 // SysEventOutbox 映射 sys_event_outbox 发件箱表
@@ -18,7 +18,7 @@ type SysEventOutbox struct {
 	Status      OutboxStatus `gorm:"column:status;size:20;not null;default:PENDING"`
 	FetchTime   *time.Time   `gorm:"column:fetch_time"`
 	SentTime    *time.Time   `gorm:"column:sent_time"`
-	db.BaseModel
+	orm.BaseModel
 }
 
 // TableName 返回发件箱表名

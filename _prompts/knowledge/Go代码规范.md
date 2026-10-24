@@ -589,7 +589,7 @@ type CreateRoleInput struct {
 
 ### 3.9 接口实现编译期校验
 
-凡 struct 显式实现某接口（如 `{Module}Service`、`{Module}Repository`、`RedisService`、`TxExecutor` 等），**必须**在实现类型定义之后、构造函数之前添加编译期断言，确保接口方法增删或签名变更时编译器立即报错，而不是等到 bootstrap 装配或运行期才暴露遗漏。
+凡 struct 显式实现某接口（如 `{Module}Service`、`{Module}Repository`、`RedisService`、`tx.Executor` 等），**必须**在实现类型定义之后、构造函数之前添加编译期断言，确保接口方法增删或签名变更时编译器立即报错，而不是等到 bootstrap 装配或运行期才暴露遗漏。
 
 ```go
 // 正确：实现类型定义后立即声明编译期断言
@@ -623,13 +623,13 @@ func NewRedisHelper(client *redisv9.Client) *RedisHelper {
 ```go
 // 正确：repository 实现编译期校验
 type Repository struct {
-    db.BaseRepository
+    orm.BaseRepository
 }
 
 var _ userrepocontract.UserRepository = (*Repository)(nil)
 
 // 错误：缺少编译期断言，接口方法变更时可能静默遗漏
-// type Repository struct { db.BaseRepository }
+// type Repository struct { orm.BaseRepository }
 // func NewRepository(...) *Repository { ... }
 ```
 

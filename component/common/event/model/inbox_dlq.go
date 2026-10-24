@@ -6,7 +6,7 @@ package model
 import (
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 )
 
 // SysEventInboxDlq 映射 sys_event_inbox_dlq 收件箱死信表
@@ -19,7 +19,7 @@ type SysEventInboxDlq struct {
 	RetryCount     int        `gorm:"column:retry_count;not null;default:0"`                                 // RetryCount 是已重试次数
 	RetryLastTime  *time.Time `gorm:"column:retry_last_time"`                                                // RetryLastTime 是最后重投时间
 	RetryAfterTime *time.Time `gorm:"column:retry_after_time"`                                               // RetryAfterTime 是最早可重投时间
-	db.BaseModel
+	orm.BaseModel
 }
 
 // TableName 返回收件箱死信表名

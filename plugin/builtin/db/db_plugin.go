@@ -8,7 +8,6 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/db"
 	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 	"gitee.com/hq_project/yomi-boot/plugin"
 
@@ -17,13 +16,11 @@ import (
 
 const DBName = "db"
 
-// DB 数据库插件；自包含连接、数据库类型与空闲保活停止函数
+// DB 数据库插件；自包含数据源及其生命周期
 type DB struct {
 	plugin.Base
 
-	db       *gorm.DB
-	dbType   enums.DbType
-	stopIdle func()
+	conn *db.Conn
 }
 
 var _ plugin.Plugin = (*DB)(nil)
@@ -43,38 +40,28 @@ func FromDB(slot *plugin.PluginSlot) *DB {
 	return dbPlugin
 }
 
-// Init 初始化数据库连接
+// Init 初始化数据源
 func (p *DB) Init(ctx context.Context, slot *plugin.PluginSlot) error {
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
 	if !bootCfg.EnabledOrDefault() {
 		return plugin.ErrDisabled
 	}
-	cfg := bootCfg.ToConfig()
-	conn, stopIdle, err := db.Open(ctx, cfg)
+	conn, err := db.Open(ctx, bootCfg.ToConfig())
 	if err != nil {
 		return err
 	}
-	p.db = conn
-	p.dbType = cfg.Type
-	p.stopIdle = stopIdle
+	p.conn = conn
 	return nil
 }
 
-// Close 停止空闲保活并关闭数据库连接资源
+// Close 停止空闲保活并关闭连接池
 func (p *DB) Close(context.Context) error {
-	if p.stopIdle != nil {
-		p.stopIdle()
-		p.stopIdle = nil
-	}
-	if p.db == nil {
+	if p == nil || p.conn == nil {
 		return nil
 	}
-	sqlDB, err := p.db.DB()
-	p.db = nil
-	if err != nil {
-		return errors.Wrap(err, "获取底层 sql.DB 失败")
-	}
-	return sqlDB.Close()
+	err := p.conn.Close()
+	p.conn = nil
+	return err
 }
 
 // DB 返回业务数据库连接；未启用时返回 nil
@@ -82,7 +69,7 @@ func (p *DB) DB() *gorm.DB {
 	if p == nil {
 		return nil
 	}
-	return p.db
+	return p.conn.GORM()
 }
 
 // Type 返回数据库类型；未启用时返回空值
@@ -90,5 +77,5 @@ func (p *DB) Type() enums.DbType {
 	if p == nil {
 		return ""
 	}
-	return p.dbType
+	return p.conn.Type()
 }

@@ -55,5 +55,5 @@
 
 - [ ] tasks.md 已生成且与 spec 范围一致
 - [ ] 实现符合 spec 分层与选型（含 UseCase 编排、领域边界）
-- [ ] 写路径事务与幂等落点与 spec 一致（`TxExecutor` / `idempotency.Execute` / Saga Execute-Compensate 成对）
+- [ ] 写路径事务与幂等落点与 spec 一致（`tx.Executor` / `idempotency.Execute` / Saga Execute-Compensate 成对）
 - [ ] 相关测试已执行并通过或说明未执行原因

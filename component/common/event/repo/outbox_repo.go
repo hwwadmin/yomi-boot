@@ -7,7 +7,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
@@ -37,12 +38,12 @@ LIMIT ?`
 
 // OutboxRepo 发件箱仓储
 type OutboxRepo struct {
-	db.BaseRepository
+	orm.BaseRepository
 }
 
 // NewOutboxRepo 创建发件箱仓储
 func NewOutboxRepo(dbConn *gorm.DB) *OutboxRepo {
-	return &OutboxRepo{BaseRepository: db.BaseRepository{DB: dbConn}}
+	return &OutboxRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
 }
 
 // Insert 插入发件箱记录
@@ -56,7 +57,7 @@ func (r *OutboxRepo) Insert(ctx context.Context, row *model.SysEventOutbox) erro
 // FetchPending 获取待处理事件
 func (r *OutboxRepo) FetchPending(ctx context.Context, serviceName string, size int) ([]model.SysEventOutbox, error) {
 	var rows []model.SysEventOutbox
-	err := db.Exec(ctx, r.DB).
+	err := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("service_name = ? AND status = ?", serviceName, model.OutboxStatusPending).
 		Order("create_time ASC").
@@ -71,7 +72,7 @@ func (r *OutboxRepo) FetchPending(ctx context.Context, serviceName string, size 
 // FetchFetchedTimeout 获取停留在 FETCHED 状态超时的事件
 func (r *OutboxRepo) FetchFetchedTimeout(ctx context.Context, serviceName string, timeoutBefore time.Time) ([]model.SysEventOutbox, error) {
 	var rows []model.SysEventOutbox
-	err := db.Exec(ctx, r.DB).
+	err := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("service_name = ? AND status = ? AND fetch_time < ?",
 			serviceName, model.OutboxStatusFetched, timeoutBefore).
@@ -113,7 +114,7 @@ func (r *OutboxRepo) MarkFetchedBatch(ctx context.Context, ids []int64, fetchTim
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id IN ? AND status = ?", ids, model.OutboxStatusPending).
 		Updates(map[string]any{
@@ -128,7 +129,7 @@ func (r *OutboxRepo) MarkFetchedBatch(ctx context.Context, ids []int64, fetchTim
 	}
 
 	var fetchedIDs []int64
-	if err := db.Exec(ctx, r.DB).
+	if err := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id IN ? AND status = ?", ids, model.OutboxStatusFetched).
 		Pluck("id", &fetchedIDs).Error; err != nil {
@@ -142,7 +143,7 @@ func (r *OutboxRepo) MarkPendingBatch(ctx context.Context, ids []int64, fetchTim
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id IN ? AND status = ? AND fetch_time < ?",
 			ids, model.OutboxStatusFetched, fetchTimeBefore).
@@ -158,7 +159,7 @@ func (r *OutboxRepo) MarkPendingBatch(ctx context.Context, ids []int64, fetchTim
 
 // MarkSentSuccess 仅将仍为 FETCHED 的记录标记为发送成功，返回是否实际更新
 func (r *OutboxRepo) MarkSentSuccess(ctx context.Context, id int64, sentTime time.Time) (bool, error) {
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id = ? AND status = ?", id, model.OutboxStatusFetched).
 		Updates(map[string]any{
@@ -173,7 +174,7 @@ func (r *OutboxRepo) MarkSentSuccess(ctx context.Context, id int64, sentTime tim
 
 // MarkSentFail 仅将仍为 FETCHED 的记录标记为发送失败，返回是否实际更新
 func (r *OutboxRepo) MarkSentFail(ctx context.Context, id int64) (bool, error) {
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id = ? AND status = ?", id, model.OutboxStatusFetched).
 		Updates(map[string]any{
@@ -187,7 +188,7 @@ func (r *OutboxRepo) MarkSentFail(ctx context.Context, id int64) (bool, error) {
 
 // MarkSentSuccessFromDlq 将非发送成功状态的事件标记为发送成功，用于死信重投成功后的回写
 func (r *OutboxRepo) MarkSentSuccessFromDlq(ctx context.Context, id int64, sentTime time.Time) (bool, error) {
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id = ? AND status <> ?", id, model.OutboxStatusSentSuccess).
 		Updates(map[string]any{
@@ -205,7 +206,7 @@ func (r *OutboxRepo) RestorePendingBatch(ctx context.Context, ids []int64) error
 	if len(ids) == 0 {
 		return nil
 	}
-	result := db.Exec(ctx, r.DB).
+	result := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventOutbox{}).
 		Where("id IN ? AND status = ?", ids, model.OutboxStatusFetched).
 		Updates(map[string]any{
@@ -231,7 +232,7 @@ func (r *OutboxRepo) ListSentSuccessBefore(
 	var rows []struct {
 		ID int64
 	}
-	err := db.Exec(ctx, r.DB).
+	err := tx.Exec(ctx, r.DB).
 		Raw(listSentSuccessBeforeSQL, serviceName, model.OutboxStatusSentSuccess, sentBefore, limit).
 		Scan(&rows).Error
 	if err != nil {

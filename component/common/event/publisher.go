@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
 	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
@@ -56,7 +57,7 @@ func (p *Publisher) Publish(ctx context.Context, evt Event) error {
 		Topic:       evt.Topic,
 		Payload:     evt.Payload,
 		Status:      model.OutboxStatusPending,
-		BaseModel: db.BaseModel{
+		BaseModel: orm.BaseModel{
 			ID: id,
 		},
 	}

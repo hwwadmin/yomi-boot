@@ -1,12 +1,14 @@
-// Package db 提供数据库连接初始化能力
+// 数据源连接、连接池与生命周期
 //
 // @author zwei
+
 package db
 
 import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -18,9 +20,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// Open 根据配置初始化 DB 连接；ctx 约束启动预热，调用方应确保 cfg 已通过 Validate。
-// 当 min_idle_conns>0 时会预热并启动保活，返回的 stop 须在关闭 DB 前调用（无保活时为 nil）。
-func Open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
+// Conn 表示已初始化的数据源，持有 GORM 句柄、数据库类型与连接池保活
+type Conn struct {
+	db   *gorm.DB
+	typ  enums.DbType
+	stop func()
+
+	closeErr error
+	once     sync.Once
+}
+
+// Open 根据配置初始化数据源；ctx 约束启动预热，调用方应确保 cfg 已通过 Validate。
+// 当 min_idle_conns>0 时会预热并启动保活，返回的 Conn 在 Close 时先停保活再关池。
+func Open(ctx context.Context, cfg Config) (*Conn, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -28,10 +40,10 @@ func Open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
 }
 
 // open 假定 cfg 已通过语义校验，仅处理连接、连接池、预热与保活
-func open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
+func open(ctx context.Context, cfg Config) (*Conn, error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "生成DSN失败")
+		return nil, errors.Wrap(err, "生成DSN失败")
 	}
 
 	var dialector gorm.Dialector
@@ -41,19 +53,19 @@ func open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
 	case enums.Postgres:
 		dialector = postgres.Open(dsn)
 	default:
-		return nil, nil, errors.Newf("不支持的数据库类型: %s", cfg.Type)
+		return nil, errors.Newf("不支持的数据库类型: %s", cfg.Type)
 	}
 
-	db, err := gorm.Open(dialector, &gorm.Config{
+	gormDB, err := gorm.Open(dialector, &gorm.Config{
 		Logger: newGormLogger(cfg),
 	})
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "初始化数据库连接失败")
+		return nil, errors.Wrap(err, "初始化数据库连接失败")
 	}
 
-	sqlDB, err := db.DB()
+	sqlDB, err := gormDB.DB()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "获取底层 sql.DB 失败")
+		return nil, errors.Wrap(err, "获取底层 sql.DB 失败")
 	}
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
@@ -68,7 +80,7 @@ func open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
 		cancel()
 		if err != nil {
 			_ = sqlDB.Close()
-			return nil, nil, err
+			return nil, err
 		}
 		keeper := startIdleKeeper(sqlDB, cfg.MinIdleConns, cfg.MaxIdleConns, maintainInterval(idleTimeout))
 		if keeper != nil {
@@ -87,7 +99,48 @@ func open(ctx context.Context, cfg Config) (*gorm.DB, func(), error) {
 		"slow_threshold_ms", cfg.SlowThreshold().Milliseconds(),
 	)
 
-	return db, stop, nil
+	return &Conn{db: gormDB, typ: cfg.Type, stop: stop}, nil
+}
+
+// GORM 返回数据源的 GORM 句柄；未初始化时返回 nil
+func (c *Conn) GORM() *gorm.DB {
+	if c == nil {
+		return nil
+	}
+	return c.db
+}
+
+// Type 返回数据库类型；未初始化时返回空值
+func (c *Conn) Type() enums.DbType {
+	if c == nil {
+		return ""
+	}
+	return c.typ
+}
+
+// Close 停止空闲保活并关闭连接池，可重复调用
+func (c *Conn) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	c.once.Do(func() {
+		if c.stop != nil {
+			c.stop()
+			c.stop = nil
+		}
+		if c.db == nil {
+			return
+		}
+		sqlDB, dbErr := c.db.DB()
+		c.db = nil
+		if dbErr != nil {
+			c.closeErr = errors.Wrap(dbErr, "获取底层 sql.DB 失败")
+			return
+		}
+		c.closeErr = sqlDB.Close()
+	})
+	return c.closeErr
 }
 
 // buildDSN 根据不同数据库类型返回对应格式的连接串
@@ -103,7 +156,7 @@ func buildDSN(cfg Config) (string, error) {
 }
 
 // withMySQLDefaults 为 MySQL 参数补齐 parseTime=true 与 loc=Local（未显式配置时），
-// 避免 BaseModel 的 time.Time 列因缺少 parseTime 读取失败或按 UTC 解析导致时区错位
+// 避免 orm.BaseModel 的 time.Time 列因缺少 parseTime 读取失败或按 UTC 解析导致时区错位
 func withMySQLDefaults(params string) string {
 	params = strings.TrimLeft(params, "?&")
 

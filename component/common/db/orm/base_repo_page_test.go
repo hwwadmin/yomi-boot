@@ -1,7 +1,8 @@
-// Package db 的 CountPage 分页行为单测
+// CountPage 分页行为单测
 //
 // @author zwei
-package db
+
+package orm
 
 import (
 	"context"

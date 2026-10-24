@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：约束领域 usecase 层事务边界、DTM barrier 下的本地子事务、以及 BFF 与领域在分布式写场景下的职责划分。
-- **边界**：Saga 编排见 [GoBFF规范](./GoBFF规范.md)；repository 事务感知见 [Go数据库规范](./Go数据库规范.md)；`TxExecutor` 实现位于 `gitee.com/hq_project/yomi-boot/component/common/db`；**信封与业务幂等细则见 [微服务调用规范](./微服务调用规范.md) §3.4，本文不重复**。
+- **边界**：Saga 编排见 [GoBFF规范](./GoBFF规范.md)；repository 事务感知见 [Go数据库规范](./Go数据库规范.md)；`tx.Executor` 实现位于 `gitee.com/hq_project/yomi-boot/component/common/db/tx`；**信封与业务幂等细则见 [微服务调用规范](./微服务调用规范.md) §3.4，本文不重复**。
 - **适用对象**：领域写 usecase、DTM 分支 Handler、BFF `saga/` 实现与评审。
 
 ---
@@ -65,12 +65,12 @@ domain / repo        无感知 DTM
 | **领域 handler** | Action 调 `Execute`；Compensate 调 `Compensate`；**仅** DTM 回调入口 | 暴露 BFF 可直调写路由；`BindAndHandle` 写接口；同一 URL `IsCallback` 分流 |
 | **领域 usecase** | `idempotency.Execute` + barrier + `TxRunner` 本地子事务 | 跨域 HTTP；读 token |
 | **service** | 不感知事务 | 接收 `*gorm.DB` 事务参数 |
-| **repository** | `db.Exec(ctx, r.DB)` 感知 Context 事务 | 自行 Begin/Commit |
+| **repository** | `tx.Exec(ctx, r.DB)` 感知 Context 事务 | 自行 Begin/Commit |
 
 ### 3.3 本地事务（usecase 内部）
 
 - 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹；`txRunner` 类型为 `idempotency.TxRunner`。
-- 本地事务使用 `idempotency.NewDBTxRunner(infra.TxExecutor)`，内部经 `gitee.com/hq_project/yomi-boot/component/common/db` 包的 `TxExecutor` 管理 GORM 事务。
+- 本地事务使用 `idempotency.NewDBTxRunner(infra.TxExecutor)`，内部经 `gitee.com/hq_project/yomi-boot/component/common/db/tx` 包的 `tx.Executor` 管理 GORM 事务。
 - 参与 DTM Saga 分支时传入 `*dtm.TxRunner`；它满足 `idempotency.TxRunner`，由 `component/cloud/dtm` 配合 barrier 执行。`component/common/idempotency` 与 `component/cloud/dtm` 之间没有包依赖。
 - 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `idempotency.TxRunner`，不要写死 `*dtm.TxRunner`。
 - 业务结果通过闭包变量捕获，不在事务闭包内组装 HTTP Output。
@@ -138,8 +138,8 @@ saga.Submit()
 
 ### 3.5 事务上下文传递
 
-- GORM 事务由 `TxExecutor.Execute` 内部 `db.Transaction` 管理。
-- repository 通过 `db.Exec(ctx, r.DB)` 获取当前事务连接。
+- GORM 事务由 `tx.Executor.Execute` 内部 `gorm.DB.Transaction` 管理。
+- repository 通过 `tx.Exec(ctx, r.DB)` 获取当前事务连接。
 - 禁止将 `*gorm.DB` 作为参数在层间传递。
 - 事务闭包内使用 `executeCtx`，不用外层 `ctx` 写库。
 

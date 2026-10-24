@@ -1,6 +1,7 @@
-// Package db 最小空闲连接预热与保活
+// 最小空闲连接预热与保活
 //
 // @author zwei
+
 package db
 
 import (

@@ -1,7 +1,8 @@
-// Package db 提供 SQL 标识符校验与结构化排序子句
+// SQL 标识符校验与结构化排序子句
 //
 // @author zwei
-package db
+
+package orm
 
 import (
 	"regexp"

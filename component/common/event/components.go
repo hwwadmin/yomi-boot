@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
 	"gitee.com/hq_project/yomi-boot/component/common/event/outbox"
@@ -26,7 +26,7 @@ import (
 // Deps 事件组件依赖
 type Deps struct {
 	DB              *gorm.DB
-	TxExecutor      db.TxExecutor
+	TxExecutor      tx.Executor
 	KafkaPublisher  yomikafka.PublisherService
 	DistLockFactory distlock.DistLockFactory
 	IDGenerator     snowflake.Generator
@@ -47,7 +47,7 @@ type Components struct {
 	retentionCleaner *RetentionCleaner
 	processor        *outbox.Processor
 	kafkaPublisher   yomikafka.PublisherService
-	txExecutor       db.TxExecutor
+	txExecutor       tx.Executor
 	lockFactory      distlock.DistLockFactory
 
 	cancel  context.CancelFunc

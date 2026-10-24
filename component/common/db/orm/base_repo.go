@@ -1,27 +1,30 @@
-// Package db 提供通用仓储基类，封装常见 CRUD 操作
+// 通用仓储基类
 //
 // @author zwei
-package db
+
+package orm
 
 import (
 	"context"
 	"reflect"
 
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// BaseRepository 通用仓储基类，可嵌入到具体仓储结构中复用
+// BaseRepository 通用仓储基类，可嵌入到具体仓储结构中复用。
+// DB 必须是数据源根句柄（db.Conn.GORM() 返回值），事务解析依赖该句柄。
 //
 // 使用示例：
 //
 //	type UserRepo struct {
-//	    db.BaseRepository
+//	    orm.BaseRepository
 //	}
 //	func NewUserRepo(d *gorm.DB) *UserRepo {
-//	    return &UserRepo{BaseRepository: db.BaseRepository{DB: d}}
+//	    return &UserRepo{BaseRepository: orm.BaseRepository{DB: d}}
 //	}
 type BaseRepository struct {
 	DB *gorm.DB
@@ -64,7 +67,7 @@ func uniqueIDs(ids []int64) []int64 {
 
 // Create 持久化一条记录
 func (r *BaseRepository) Create(ctx context.Context, model any) error {
-	if err := Exec(ctx, r.DB).Create(model).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Create(model).Error; err != nil {
 		return errors.Wrap(err, "创建记录失败")
 	}
 	return nil
@@ -75,7 +78,7 @@ func (r *BaseRepository) CreateInBatches(ctx context.Context, models any, batchS
 	if batchSize <= 0 {
 		return errors.Newf("batchSize 必须大于 0: %d", batchSize)
 	}
-	if err := Exec(ctx, r.DB).CreateInBatches(models, batchSize).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).CreateInBatches(models, batchSize).Error; err != nil {
 		return errors.Wrap(err, "批量创建记录失败")
 	}
 	return nil
@@ -87,7 +90,7 @@ func (r *BaseRepository) CreateInBatches(ctx context.Context, models any, batchS
 
 // FirstByID 根据主键 id 查询单条记录
 func (r *BaseRepository) FirstByID(ctx context.Context, id int64, dest any) (bool, error) {
-	err := Exec(ctx, r.DB).Where("id = ?", id).First(dest).Error
+	err := tx.Exec(ctx, r.DB).Where("id = ?", id).First(dest).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil
 	}
@@ -102,7 +105,7 @@ func (r *BaseRepository) FirstByField(ctx context.Context, field string, value a
 	if err := ValidateSQLIdentifier(field); err != nil {
 		return false, errors.Wrap(err, "非法字段名")
 	}
-	err := Exec(ctx, r.DB).Where(clause.Eq{Column: clause.Column{Name: field}, Value: value}).First(dest).Error
+	err := tx.Exec(ctx, r.DB).Where(clause.Eq{Column: clause.Column{Name: field}, Value: value}).First(dest).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil
 	}
@@ -114,7 +117,7 @@ func (r *BaseRepository) FirstByField(ctx context.Context, field string, value a
 
 // FindAll 查询表中全部记录
 func (r *BaseRepository) FindAll(ctx context.Context, model any, dest any) error {
-	if err := Exec(ctx, r.DB).Model(model).Find(dest).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Model(model).Find(dest).Error; err != nil {
 		return errors.Wrap(err, "查询全部记录失败")
 	}
 	return nil
@@ -141,7 +144,7 @@ func (r *BaseRepository) FindByIDs(ctx context.Context, ids []int64, model any, 
 			end = len(ids)
 		}
 		chunk := reflect.New(sliceType)
-		if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", ids[start:end]).Find(chunk.Interface()).Error; err != nil {
+		if err := tx.Exec(ctx, r.DB).Model(model).Where("id IN ?", ids[start:end]).Find(chunk.Interface()).Error; err != nil {
 			return errors.Wrap(err, "根据主键列表查询失败")
 		}
 		combined = reflect.AppendSlice(combined, chunk.Elem())
@@ -156,7 +159,7 @@ func (r *BaseRepository) ExistsByField(ctx context.Context, field string, value 
 		return false, errors.Wrap(err, "非法字段名")
 	}
 	var count int64
-	err := Exec(ctx, r.DB).Model(model).Where(clause.Eq{Column: clause.Column{Name: field}, Value: value}).Count(&count).Error
+	err := tx.Exec(ctx, r.DB).Model(model).Where(clause.Eq{Column: clause.Column{Name: field}, Value: value}).Count(&count).Error
 	if err != nil {
 		return false, errors.Wrap(err, "检查字段是否存在失败")
 	}
@@ -169,7 +172,7 @@ func (r *BaseRepository) ExistsByField(ctx context.Context, field string, value 
 
 // UpdateAll 全量更新记录（按主键匹配，存在则更新全部字段，不存在则插入）
 func (r *BaseRepository) UpdateAll(ctx context.Context, model any) error {
-	if err := Exec(ctx, r.DB).Save(model).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Save(model).Error; err != nil {
 		return errors.Wrap(err, "全量更新记录失败")
 	}
 	return nil
@@ -177,7 +180,7 @@ func (r *BaseRepository) UpdateAll(ctx context.Context, model any) error {
 
 // UpdateAllBatch 批量全量更新记录（逐条按主键匹配 upsert）
 func (r *BaseRepository) UpdateAllBatch(ctx context.Context, models any) error {
-	if err := Exec(ctx, r.DB).Save(models).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Save(models).Error; err != nil {
 		return errors.Wrap(err, "批量全量更新记录失败")
 	}
 	return nil
@@ -185,7 +188,7 @@ func (r *BaseRepository) UpdateAllBatch(ctx context.Context, models any) error {
 
 // UpdateByID 根据主键更新记录（多字段）
 func (r *BaseRepository) UpdateByID(ctx context.Context, id int64, model any, updates map[string]any) error {
-	if err := Exec(ctx, r.DB).Model(model).Where("id = ?", id).Updates(updates).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Model(model).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return errors.Wrap(err, "根据主键更新记录失败")
 	}
 	return nil
@@ -196,7 +199,7 @@ func (r *BaseRepository) UpdateFieldByID(ctx context.Context, id int64, model an
 	if err := ValidateSQLIdentifier(field); err != nil {
 		return errors.Wrap(err, "非法字段名")
 	}
-	if err := Exec(ctx, r.DB).Model(model).Where("id = ?", id).Updates(map[string]any{field: value}).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Model(model).Where("id = ?", id).Updates(map[string]any{field: value}).Error; err != nil {
 		return errors.Wrap(err, "根据主键更新字段失败")
 	}
 	return nil
@@ -209,7 +212,7 @@ func (r *BaseRepository) UpdateBatch(ctx context.Context, ids []int64, model any
 		return nil
 	}
 	return forEachIDChunk(ids, func(chunk []int64) error {
-		if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", chunk).Updates(updates).Error; err != nil {
+		if err := tx.Exec(ctx, r.DB).Model(model).Where("id IN ?", chunk).Updates(updates).Error; err != nil {
 			return errors.Wrap(err, "批量更新记录失败")
 		}
 		return nil
@@ -222,7 +225,7 @@ func (r *BaseRepository) UpdateBatch(ctx context.Context, ids []int64, model any
 
 // DeleteByID 根据主键硬删除记录（跳过 GORM 软删除）
 func (r *BaseRepository) DeleteByID(ctx context.Context, id int64, model any) error {
-	if err := Exec(ctx, r.DB).Unscoped().Where("id = ?", id).Delete(model).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Unscoped().Where("id = ?", id).Delete(model).Error; err != nil {
 		return errors.Wrap(err, "根据主键删除记录失败")
 	}
 	return nil
@@ -230,7 +233,7 @@ func (r *BaseRepository) DeleteByID(ctx context.Context, id int64, model any) er
 
 // SoftDeleteByID 根据主键软删除记录
 func (r *BaseRepository) SoftDeleteByID(ctx context.Context, id int64, model any) error {
-	if err := Exec(ctx, r.DB).Model(model).Where("id = ?", id).Delete(model).Error; err != nil {
+	if err := tx.Exec(ctx, r.DB).Model(model).Where("id = ?", id).Delete(model).Error; err != nil {
 		return errors.Wrap(err, "根据主键软删除记录失败")
 	}
 	return nil
@@ -243,7 +246,7 @@ func (r *BaseRepository) DeleteBatch(ctx context.Context, ids []int64, model any
 		return nil
 	}
 	return forEachIDChunk(ids, func(chunk []int64) error {
-		if err := Exec(ctx, r.DB).Unscoped().Where("id IN ?", chunk).Delete(model).Error; err != nil {
+		if err := tx.Exec(ctx, r.DB).Unscoped().Where("id IN ?", chunk).Delete(model).Error; err != nil {
 			return errors.Wrap(err, "批量删除记录失败")
 		}
 		return nil
@@ -257,7 +260,7 @@ func (r *BaseRepository) SoftDeleteBatch(ctx context.Context, ids []int64, model
 		return nil
 	}
 	return forEachIDChunk(ids, func(chunk []int64) error {
-		if err := Exec(ctx, r.DB).Model(model).Where("id IN ?", chunk).Delete(model).Error; err != nil {
+		if err := tx.Exec(ctx, r.DB).Model(model).Where("id IN ?", chunk).Delete(model).Error; err != nil {
 			return errors.Wrap(err, "批量软删除记录失败")
 		}
 		return nil

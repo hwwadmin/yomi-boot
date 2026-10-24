@@ -7,7 +7,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
+	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/event/model"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
@@ -17,17 +18,17 @@ import (
 
 // InboxDlqRepo 收件箱死信仓储
 type InboxDlqRepo struct {
-	db.BaseRepository
+	orm.BaseRepository
 }
 
 // NewInboxDlqRepo 创建收件箱死信仓储
 func NewInboxDlqRepo(dbConn *gorm.DB) *InboxDlqRepo {
-	return &InboxDlqRepo{BaseRepository: db.BaseRepository{DB: dbConn}}
+	return &InboxDlqRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
 }
 
 // Insert 插入收件箱死信记录；同一服务下 eventId 已存在时保持原记录不变
 func (r *InboxDlqRepo) Insert(ctx context.Context, row *model.SysEventInboxDlq) error {
-	if err := db.Exec(ctx, r.DB).
+	if err := tx.Exec(ctx, r.DB).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		Create(row).Error; err != nil {
 		return errors.Wrap(err, "插入收件箱死信记录失败")
@@ -41,7 +42,7 @@ func (r *InboxDlqRepo) Fetch(ctx context.Context, serviceName string, size int, 
 		return nil, nil
 	}
 	var rows []model.SysEventInboxDlq
-	err := db.Exec(ctx, r.DB).
+	err := tx.Exec(ctx, r.DB).
 		Model(&model.SysEventInboxDlq{}).
 		Where("service_name = ? AND (retry_after_time IS NULL OR retry_after_time <= ?)", serviceName, now).
 		Order("create_time ASC").
