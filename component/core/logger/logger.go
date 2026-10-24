@@ -1,6 +1,3 @@
-// Package logger 提供统一日志初始化能力
-//
-// @author zwei
 package logger
 
 import (

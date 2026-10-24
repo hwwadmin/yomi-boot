@@ -13,8 +13,8 @@ const SectionKey = "log"
 type RotationBootConfig struct {
 	MaxSizeMB     int   `mapstructure:"max_size_mb"`    // 单文件大小上限（MB）
 	RetentionDays int   `mapstructure:"retention_days"` // 历史保留天数
-	MaxBackups    int   `mapstructure:"max_backups"`    // 历史文件个数上限
-	MaxTotalMB    int   `mapstructure:"max_total_mb"`   // 单类型目录总容量上限（MB）
+	MaxBackups    int   `mapstructure:"max_backups"`    // 历史文件个数上限（按日志类型目录分别计，每类保留最新 N 个）
+	MaxTotalMB    int   `mapstructure:"max_total_mb"`   // 整个 logs 根目录总容量上限（MB），统计含活跃日志文件；超出时从最旧历史开始删除
 	Compress      *bool `mapstructure:"compress"`       // 历史是否 gzip；nil 默认 true
 }
 

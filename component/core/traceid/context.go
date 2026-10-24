@@ -1,6 +1,3 @@
-// Package traceid 提供请求链路追踪 ID 能力
-//
-// @author zwei
 package traceid
 
 import (

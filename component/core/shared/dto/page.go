@@ -1,6 +1,3 @@
-// Package dto 提供跨模块复用的传输结构定义
-//
-// @author zwei
 package dto
 
 import "gitee.com/hq_project/yomi-boot/component/core/shared"

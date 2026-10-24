@@ -1,6 +1,3 @@
-// Package logger 提供日志输出配置
-//
-// @author zwei
 package logger
 
 import (
@@ -29,8 +26,8 @@ var reservedFieldKeys = map[string]struct{}{
 type RotationConfig struct {
 	MaxSizeMB     int   // 单文件大小上限（MB）
 	RetentionDays int   // 历史保留天数
-	MaxBackups    int   // 历史文件个数上限
-	MaxTotalMB    int   // 单类型目录总容量上限（MB）
+	MaxBackups    int   // 历史文件个数上限（按日志类型目录分别计，每类保留最新 N 个）
+	MaxTotalMB    int   // 整个 logs 根目录总容量上限（MB），统计含活跃日志文件；超出时从最旧历史开始删除
 	Compress      *bool // 历史是否 gzip；nil 默认 true
 }
 

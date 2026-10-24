@@ -1,6 +1,3 @@
-// Package handler 提供健康检查与运维探针 Handler
-//
-// @author zwei
 package handler
 
 import (

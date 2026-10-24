@@ -1,11 +1,3 @@
-// Package logger HTTP 文件 access 中间件
-//
-// 同一次入站 HTTP 产生成对 access 日志（类 AOP around）：
-//   - 请求侧字段先缓冲，handler 结束后再决定是否落盘
-//   - 落盘时成对写入：direction=inbound + direction=outbound
-//   - sample_rate 默认 1（全量）；仅约束成功请求；status>=400 必采
-//
-// @author zwei
 package logger
 
 import (

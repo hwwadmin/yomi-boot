@@ -1,6 +1,3 @@
-// Package config 提供可注册配置段的加载抽象
-//
-// @author zwei
 package config
 
 import (

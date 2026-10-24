@@ -1,8 +1,3 @@
-// Package errors 提供业务异常类型，用于业务域携带可选 code
-//
-// 框架库请使用各包自行维护的简单哨兵 error，不要使用 BizError 定义框架错误。
-//
-// @author zwei
 package errors
 
 import "fmt"

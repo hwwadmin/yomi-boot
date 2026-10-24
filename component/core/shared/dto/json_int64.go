@@ -1,6 +1,3 @@
-// Package dto 提供跨模块复用的传输结构定义与 JSON 辅助类型
-//
-// @author zwei
 package dto
 
 import (

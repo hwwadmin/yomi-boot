@@ -1,6 +1,3 @@
-// Package config 提供环境变量占位符替换能力
-//
-// @author zwei
 package config
 
 import (

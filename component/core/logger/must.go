@@ -1,6 +1,3 @@
-// Package logger Fail Fast 初始化
-//
-// @author zwei
 package logger
 
 import (

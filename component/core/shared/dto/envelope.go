@@ -1,6 +1,3 @@
-// Package dto 提供跨服务通用数据传输对象
-//
-// @author zwei
 package dto
 
 // MsRequestEnvelope 微服务间请求信封字段（与各接口业务字段同级平铺）

@@ -1,6 +1,3 @@
-// Package response 测试辅助
-//
-// @author zwei
 package response
 
 import "testing"

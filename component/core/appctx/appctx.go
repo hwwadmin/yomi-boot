@@ -1,6 +1,3 @@
-// Package appctx 提供应用静态上下文能力
-//
-// @author zwei
 package appctx
 
 // AppCtx 表示应用静态上下文能力接口

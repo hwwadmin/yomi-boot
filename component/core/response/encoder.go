@@ -1,6 +1,3 @@
-// Package response 定义 HTTP 响应编码器接口
-//
-// @author zwei
 package response
 
 import (

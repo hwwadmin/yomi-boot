@@ -1,6 +1,3 @@
-// Package logger access 请求/响应体与 Header 采集
-//
-// @author zwei
 package logger
 
 import (

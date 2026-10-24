@@ -1,6 +1,3 @@
-// Package errors 基于 github.com/pkg/errors 与标准库提供错误能力
-//
-// @author zwei
 package errors
 
 import (

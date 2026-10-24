@@ -1,6 +1,3 @@
-// Package config 提供基于注册表的配置加载
-//
-// @author zwei
 package config
 
 import (

@@ -1,6 +1,3 @@
-// Package config 提供配置加载、校验和访问能力
-//
-// @author zwei
 package config
 
 import (

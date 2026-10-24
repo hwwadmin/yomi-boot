@@ -1,6 +1,3 @@
-// Package config 提供 Fail Fast 配置加载与校验
-//
-// @author zwei
 package config
 
 import (

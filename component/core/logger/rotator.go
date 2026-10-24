@@ -1,6 +1,3 @@
-// Package logger 提供文件日志滚动能力
-//
-// @author zwei
 package logger
 
 import (
@@ -323,7 +320,7 @@ func (r *FileRotator) cleanup() error {
 		}
 	}
 
-	// 3) 按 max_total_mb：整个 root 历史合计，删最旧
+	// 3) 按 max_total_mb：整个 root 目录合计（含活跃日志文件），删最旧历史
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].modTime.Before(files[j].modTime)
 	})

@@ -1,6 +1,3 @@
-// Package appctx 提供应用基础元信息与进程时区配置
-//
-// @author zwei
 package appctx
 
 import (

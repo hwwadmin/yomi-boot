@@ -1,6 +1,3 @@
-// Package handler 提供 handler 层通用协议适配能力
-//
-// @author zwei
 package handler
 
 import (

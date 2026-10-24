@@ -1,6 +1,3 @@
-// Package response 提供默认 Encoder（当前 API 风格预制实现）
-//
-// @author zwei
 package response
 
 import (

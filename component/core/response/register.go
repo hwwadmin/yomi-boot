@@ -1,6 +1,3 @@
-// Package response 提供 Encoder 的显式全局注册
-//
-// @author zwei
 package response
 
 import "sync"

@@ -1,8 +1,3 @@
-// Package logger 文件日志统一 sensitive 语义
-//
-// 仅由 log.sensitive_keys / log.sensitive_match 驱动；keys 为空则不脱敏。
-//
-// @author zwei
 package logger
 
 import (
