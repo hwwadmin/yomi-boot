@@ -269,3 +269,4 @@ dtm:
   enabled: false
   server: 127.0.0.1:36790
   timeout: 3
+  barrier_table: sys_barrier

@@ -13,9 +13,10 @@ const SectionKey = "dtm"
 
 // BootConfig 表示 dtm 配置段的 YAML 绑定
 type BootConfig struct {
-	Enabled *bool  `mapstructure:"enabled"` // Enabled 是否启用 DTM，未配置默认 false
-	Server  string `mapstructure:"server"`  // Server 是 DTM 服务器地址
-	Timeout int    `mapstructure:"timeout"` // Timeout 是控制面请求超时秒数，未配置默认 3
+	Enabled      *bool  `mapstructure:"enabled"`       // Enabled 是否启用 DTM，未配置默认 false
+	Server       string `mapstructure:"server"`        // Server 是 DTM 服务器地址
+	Timeout      int    `mapstructure:"timeout"`       // Timeout 是控制面请求超时秒数，未配置默认 3
+	BarrierTable string `mapstructure:"barrier_table"` // BarrierTable 是 DTM Barrier 表名，未配置默认 sys_barrier
 }
 
 // EnabledOrDefault 返回是否启用 DTM，未配置默认 false
@@ -25,7 +26,7 @@ func (c BootConfig) EnabledOrDefault() bool {
 
 // ToConfig 转换为运行时配置
 func (c BootConfig) ToConfig() dtm.Config {
-	return dtm.Config{Server: c.Server, Timeout: c.Timeout}
+	return dtm.Config{Server: c.Server, Timeout: c.Timeout, BarrierTable: c.BarrierTable}
 }
 
 // Validate 校验 dtm 配置段语义（仅 enabled=true 时校验）

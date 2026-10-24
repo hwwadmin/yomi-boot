@@ -70,9 +70,10 @@ domain / repo        无感知 DTM
 ### 3.3 本地事务（usecase 内部）
 
 - 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹；`txRunner` 类型为 `tx.Runner`。
-- 本地事务直接传入 `infra.TxExecutor`（`tx.Executor` 内嵌 `tx.Runner`），由 `gitee.com/hq_project/yomi-boot/component/common/db/tx` 管理 GORM 事务。
-- 参与 DTM Saga 分支时传入 `*dtm.TxRunner`；它满足 `tx.Runner`，由 `component/cloud/dtm` 配合 barrier 执行。`component/common/idempotency` 与 `component/cloud/dtm` 之间没有包依赖。
-- 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `tx.Runner`，不要写死 `*dtm.TxRunner`。
+- 本地事务由装配层传入 `tx.Executor`（如 `dbplugin.FromTx(slot).Executor()`），`tx.Executor` 内嵌 `tx.Runner`，由 `gitee.com/hq_project/yomi-boot/component/common/db/tx` 管理 GORM 事务。
+- 参与 DTM Saga 分支时由装配层传入 `dtmplugin.From(slot).Runner()`；由 `plugin/builtin/dtm` 在 `dtm.enabled=true` 且 db 插件可用时构造，满足 `tx.Runner`，配合 barrier 执行。`component/common/idempotency` 与 `component/cloud/dtm` 之间没有包依赖。
+- 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `tx.Runner`，不要写死具体实现。
+- `dtm.barrier_table` 指定 Barrier 表名，默认 `sys_barrier`；dtm 或 db 未启用时 `Runner()` 返回 nil，由 wire 决定是否 Fail Fast。
 - 业务结果通过闭包变量捕获，不在事务闭包内组装 HTTP Output。
 - **上述事务边界仅用于 usecase 内部**；**禁止**据此在领域 handler 再暴露一条供 BFF 直调的非 Saga 写 HTTP 路由。
 

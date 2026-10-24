@@ -113,6 +113,7 @@ biz:
   - `pprof.enabled`、`http_record.enabled`、`oss.enabled`
   - `cors.enabled`（默认 true；历史无开关即启用，现允许关闭；不需要 CORS 的新服务应显式设为 false）
   - `idempotency.stale_cleaner_enabled` 等同类开关
+- DTM Barrier 表名由 `dtm.barrier_table` 配置，默认 `sys_barrier`；仅在 `dtm.enabled=true` 且 db 插件可用时由 dtm 插件构造 `tx.Runner`。
 - **默认值语义**：历史无开关的可裁剪能力新增 `enabled` 时，`*bool` 的 nil 必须解释为 true（如 `cors.enabled`）；已有 `enabled` 的能力保持原默认值（大多为 false）。强制启动项（`app`/`http`/`log`/`snowflake`）不提供 `enabled`。禁用某段时跳过本段语义校验；中间件类能力仍挂载在链上，由运行时 `MiddlewareEnabled` 短路。
 - 部署形态（轻量单体 / 大单体 / 分布式微服务）的推荐开关组合见 [Go架构规范](./Go架构规范.md) §3.1.0 与 §3.4.5。
 - **裁剪原则**：先关后开；业务未用到的中间件不要为了「对齐样板」而全部 `enabled: true`。切换形态优先改 YAML，不改 gitee.com/hq_project/yomi-boot 源码。

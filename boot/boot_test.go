@@ -12,6 +12,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/plugin"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
+	dtmplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/dtm"
 	eventplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/event"
 	snowflakeplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/snowflake"
 )
@@ -52,6 +53,9 @@ snowflake:
 	}
 	if slot.Started(dbplugin.DBName) {
 		t.Fatal("未启用 db 时 db 插件应为跳过状态")
+	}
+	if dtmplugin.From(slot).Runner() != nil {
+		t.Fatal("未启用 dtm 时 Runner 应返回 nil")
 	}
 	if _, ok := slot.Plugin(eventplugin.Name); !ok {
 		t.Fatal("event 插件应存在于插件链中")

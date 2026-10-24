@@ -11,6 +11,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
 	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+
+	"gorm.io/gorm"
 )
 
 // TestTxRunner_RunUsesBoundRoot 验证无 barrier 时 Run 在绑定数据源上提交事务
@@ -60,6 +62,16 @@ func TestTxRunner_RunRollbackOnError(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("回滚后期望 0 条，实际 %d", count)
 	}
+}
+
+// TestNewTxRunner_RejectsInvalidBarrierTable 验证非法 Barrier 表名在构造期被拒绝
+func TestNewTxRunner_RejectsInvalidBarrierTable(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("非法 barrier_table 期望 panic")
+		}
+	}()
+	NewTxRunner(&gorm.DB{}, enums.MySQL, "sys_barrier; DROP TABLE x")
 }
 
 // dtmTestModel TxRunner 单测用 GORM 模型

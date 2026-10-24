@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -36,13 +37,17 @@ var _ tx.Runner = (*TxRunner)(nil)
 
 // NewTxRunner 创建支持 Saga 事务的事务运行器。
 // root 必须是数据源根句柄，普通事务与 barrier 事务绑定同一数据源；
-// barrierTableName 为空时使用 DefaultBarrierTableName。
+// barrierTableName 为空时使用 DefaultBarrierTableName，非法标识符 panic。
 func NewTxRunner(root *gorm.DB, dbType enums.DbType, barrierTableName string) *TxRunner {
 	if root == nil {
 		panic("dtm: NewTxRunner root 不能为 nil")
 	}
+	barrierTableName = strings.TrimSpace(barrierTableName)
 	if barrierTableName == "" {
 		barrierTableName = DefaultBarrierTableName
+	}
+	if !barrierTablePattern.MatchString(barrierTableName) {
+		panic(fmt.Sprintf("dtm: barrier_table 非法: %s", barrierTableName))
 	}
 	dtmcli.SetBarrierTableName(barrierTableName)
 	return &TxRunner{root: root, runner: tx.NewLocalRunner(root), dtmDBType: toDBType(dbType)}

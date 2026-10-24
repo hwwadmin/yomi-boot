@@ -196,7 +196,7 @@ services/{domain}/
 | `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；插件导出具体类型、`Name` 常量、`From` 与组件访问器，自包含其创建的组件；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 内核（无业务状态、不管理外部资源）；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`traceid`、`utils` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
-| `dtm` | Saga 客户端、GORM barrier、`TxRunner`（实现 `tx.Runner`）、`BindAndHandleAction/Compensate` |
+| `dtm` | Saga 客户端、GORM barrier、`TxRunner`（实现 `tx.Runner`，由 `plugin/builtin/dtm` 在 db 可用时构造）、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
 | `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
@@ -390,7 +390,7 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 | 11 | oss | `oss.enabled=true` |
 | 12 | tx | db 插件已启用 |
 | 13 | consul | `consul.enabled=true`（Ready 阶段注册、Drain 阶段注销） |
-| 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活 |
+| 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活；db 可用时构造 `tx.Runner`（供 Saga 分支 usecase 注入） |
 | 15 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
 | 16 | token | `token.enabled=true`（依赖 redis 插件） |
 | 17 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
@@ -504,6 +504,7 @@ consul:
 
 dtm:
   server: "http://localhost:36789/api/dtmsvr"
+  barrier_table: "sys_barrier"
 
 token:
   store_prefix: "yomi:token:{bff}"
