@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
 	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
 	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
@@ -21,7 +20,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 
 	"github.com/google/uuid"
 )
@@ -36,7 +34,6 @@ const (
 type Guard struct {
 	repo            *Repository
 	idGenerator     snowflake.Generator
-	dbType          enums.DbType
 	redisService    yomiredis.RedisService
 	distLockFactory distlock.DistLockFactory
 }
@@ -46,7 +43,6 @@ type Guard struct {
 func NewGuard(
 	repo *Repository,
 	idGenerator snowflake.Generator,
-	dbType enums.DbType,
 	redisService yomiredis.RedisService,
 	distLockFactory distlock.DistLockFactory,
 ) *Guard {
@@ -65,7 +61,6 @@ func NewGuard(
 	return &Guard{
 		repo:            repo,
 		idGenerator:     idGenerator,
-		dbType:          dbType,
 		redisService:    redisService,
 		distLockFactory: distLockFactory,
 	}
@@ -170,11 +165,13 @@ func runBusinessOnce[T any](
 		},
 	}
 
-	// 通过唯一索引抢占处理权，冲突说明已有请求在处理或已完成
-	if insertErr := g.repo.Insert(ctx, row); insertErr != nil {
-		if !db.IsDuplicateKey(insertErr, g.dbType) {
-			return zero, insertErr
-		}
+	// 以「冲突即空操作」语义抢占处理权：冲突说明已有请求在处理或已完成，
+	// 且插入不报错、事务不中止，可直接在当前事务内反查已完成结果
+	claimed, insertErr := g.repo.TryInsert(ctx, row)
+	if insertErr != nil {
+		return zero, insertErr
+	}
+	if !claimed {
 		return loadCompletedResult[T](g, ctx, key)
 	}
 

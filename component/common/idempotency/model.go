@@ -13,11 +13,11 @@ const (
 
 // SysBiz 映射 sys_biz 幂等表
 type SysBiz struct {
-	BizID         string `gorm:"column:biz_id;size:100;not null"`        // BizID 是业务幂等键
-	BizSubID      string `gorm:"column:biz_sub_id;size:100;not null"`    // BizSubID 是业务子幂等键
-	OperationType string `gorm:"column:operation_type;size:32;not null"` // OperationType 是操作类型
-	Status        int8   `gorm:"column:status;not null;default:1"`       // Status 是处理状态：1-处理中，2-已完成
-	ResponseData  []byte `gorm:"column:response_data;type:json"`         // ResponseData 是响应数据快照
+	BizID         string `gorm:"column:biz_id;size:100;not null;uniqueIndex:uk_biz,priority:1"`     // BizID 是业务幂等键
+	BizSubID      string `gorm:"column:biz_sub_id;size:100;not null;uniqueIndex:uk_biz,priority:2"` // BizSubID 是业务子幂等键
+	OperationType string `gorm:"column:operation_type;size:32;not null"`                            // OperationType 是操作类型
+	Status        int8   `gorm:"column:status;not null;default:1"`                                  // Status 是处理状态：1-处理中，2-已完成
+	ResponseData  []byte `gorm:"column:response_data;type:json"`                                    // ResponseData 是响应数据快照
 	orm.BaseModel
 }
 
