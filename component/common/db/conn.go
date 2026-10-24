@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -20,9 +21,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// Conn 表示已初始化的数据源，持有 GORM 句柄、数据库类型与连接池保活
+// Conn 表示已初始化的数据源，持有 GORM 句柄、数据库类型与连接池保活。
+// GORM/Close 均并发安全，可在关停阶段与业务读并发调用
 type Conn struct {
-	db   *gorm.DB
+	db   atomic.Pointer[gorm.DB]
 	typ  enums.DbType
 	stop func()
 
@@ -99,15 +101,17 @@ func open(ctx context.Context, cfg Config) (*Conn, error) {
 		"slow_threshold_ms", cfg.SlowThreshold().Milliseconds(),
 	)
 
-	return &Conn{db: gormDB, typ: cfg.Type, stop: stop}, nil
+	conn := &Conn{typ: cfg.Type, stop: stop}
+	conn.db.Store(gormDB)
+	return conn, nil
 }
 
-// GORM 返回数据源的 GORM 句柄；未初始化时返回 nil
+// GORM 返回数据源的 GORM 句柄；未初始化或已 Close 时返回 nil
 func (c *Conn) GORM() *gorm.DB {
 	if c == nil {
 		return nil
 	}
-	return c.db
+	return c.db.Load()
 }
 
 // Type 返回数据库类型；未初始化时返回空值
@@ -118,7 +122,7 @@ func (c *Conn) Type() enums.DbType {
 	return c.typ
 }
 
-// Close 停止空闲保活并关闭连接池，可重复调用
+// Close 停止空闲保活并关闭连接池，可重复调用；与 GORM 并发调用安全，关闭后 GORM 返回 nil
 func (c *Conn) Close() error {
 	if c == nil {
 		return nil
@@ -129,11 +133,13 @@ func (c *Conn) Close() error {
 			c.stop()
 			c.stop = nil
 		}
-		if c.db == nil {
+		gormDB := c.db.Load()
+		if gormDB == nil {
 			return
 		}
-		sqlDB, dbErr := c.db.DB()
-		c.db = nil
+		// 先置空句柄再关池：让并发读方尽早看到 nil（关闭后 GORM 返回 nil 的既定契约）
+		c.db.Store(nil)
+		sqlDB, dbErr := gormDB.DB()
 		if dbErr != nil {
 			c.closeErr = errors.Wrap(dbErr, "获取底层 sql.DB 失败")
 			return

@@ -302,7 +302,7 @@ func (r *BaseRepository) CountPage(ctx context.Context, query *gorm.DB, page, pa
 // resetPageDest 将分页 dest 置为空结果：切片置 len=0，其它可设值类型置零值
 func resetPageDest(dest any) error {
 	v := reflect.ValueOf(dest)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return errors.New("分页 dest 须为非空指针")
 	}
 	elem := v.Elem()
