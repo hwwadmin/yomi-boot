@@ -391,7 +391,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 事务控制规范统一收口到 [Go事务规范](./Go事务规范.md)，本文仅列出与 repository 层相关的核心约定：
 
 - Repository 嵌入 `orm.BaseRepository`，通过 `tx.Exec(ctx, r.DB)` 自动感知事务上下文——在事务闭包内自动使用事务连接，事务外使用普通连接。
-- Repository 不自行管理事务，事务边界由 usecase 通过 `tx.Executor.Execute` 控制。
+- Repository 不自行管理事务，事务边界由 usecase 通过 `tx.Runner.Run` 控制。
 - Repository 方法签名中**不出现 `*gorm.DB` 参数**，事务通过 Context 隐式传递。
 
 详细的事务管理器实现、usecase 中使用事务的示例以及分布式事务方案，请直接参考 [Go事务规范](./Go事务规范.md)。

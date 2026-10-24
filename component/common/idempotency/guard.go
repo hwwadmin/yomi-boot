@@ -15,6 +15,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/db"
 	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
@@ -73,10 +74,10 @@ func NewGuard(
 // Execute 执行幂等保护，按 Redis 快路径 → 分布式锁 → 事务 → commit 后写 Redis 的顺序编排
 //
 // T 必须与 fn 的返回类型一致，DB/Redis 重放时会反序列化到同一类型。
-// txRunner 由调用方注入；本地事务可用 NewDBTxRunner 构造。
+// txRunner 由调用方注入；本地事务可直接传 tx.Executor（内嵌 Runner），Saga 分支传 *dtm.TxRunner。
 func Execute[T any](
 	g *Guard,
-	txRunner TxRunner,
+	txRunner tx.Runner,
 	ctx context.Context,
 	key Key,
 	fn func(ctx context.Context) (T, error),

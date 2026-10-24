@@ -180,7 +180,7 @@ func (p *Processor) push(ctx context.Context, row model.SysEventOutbox) error {
 	if err := p.kafkaPublisher.PublishJSON(ctx, row.Topic, row.EventID, evt); err != nil {
 		logger.Error(ctx, "消息队列事件推送失败",
 			"eventId", row.EventID, "topic", row.Topic, "error", err)
-		if txErr := p.txExecutor.Execute(ctx, func(txCtx context.Context) error {
+		if txErr := p.txExecutor.Run(ctx, func(txCtx context.Context) error {
 			updated, updateErr := p.outboxRepo.MarkSentFail(txCtx, row.ID)
 			if updateErr != nil {
 				return updateErr

@@ -63,16 +63,16 @@ domain / repo        无感知 DTM
 | ---- | ---- | ---- |
 | **BFF saga/** | 提交 Saga；组装 payload（信封 + 补偿快照）；**唯一写入口** | 操作领域 DB；直调领域写 HTTP；Facade/Direct 回退 |
 | **领域 handler** | Action 调 `Execute`；Compensate 调 `Compensate`；**仅** DTM 回调入口 | 暴露 BFF 可直调写路由；`BindAndHandle` 写接口；同一 URL `IsCallback` 分流 |
-| **领域 usecase** | `idempotency.Execute` + barrier + `TxRunner` 本地子事务 | 跨域 HTTP；读 token |
+| **领域 usecase** | `idempotency.Execute` + barrier + `tx.Runner` 本地子事务 | 跨域 HTTP；读 token |
 | **service** | 不感知事务 | 接收 `*gorm.DB` 事务参数 |
 | **repository** | `tx.Exec(ctx, r.DB)` 感知 Context 事务 | 自行 Begin/Commit |
 
 ### 3.3 本地事务（usecase 内部）
 
-- 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹；`txRunner` 类型为 `idempotency.TxRunner`。
-- 本地事务使用 `idempotency.NewDBTxRunner(infra.TxExecutor)`，内部经 `gitee.com/hq_project/yomi-boot/component/common/db/tx` 包的 `tx.Executor` 管理 GORM 事务。
-- 参与 DTM Saga 分支时传入 `*dtm.TxRunner`；它满足 `idempotency.TxRunner`，由 `component/cloud/dtm` 配合 barrier 执行。`component/common/idempotency` 与 `component/cloud/dtm` 之间没有包依赖。
-- 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `idempotency.TxRunner`，不要写死 `*dtm.TxRunner`。
+- 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹；`txRunner` 类型为 `tx.Runner`。
+- 本地事务直接传入 `infra.TxExecutor`（`tx.Executor` 内嵌 `tx.Runner`），由 `gitee.com/hq_project/yomi-boot/component/common/db/tx` 管理 GORM 事务。
+- 参与 DTM Saga 分支时传入 `*dtm.TxRunner`；它满足 `tx.Runner`，由 `component/cloud/dtm` 配合 barrier 执行。`component/common/idempotency` 与 `component/cloud/dtm` 之间没有包依赖。
+- 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `tx.Runner`，不要写死 `*dtm.TxRunner`。
 - 业务结果通过闭包变量捕获，不在事务闭包内组装 HTTP Output。
 - **上述事务边界仅用于 usecase 内部**；**禁止**据此在领域 handler 再暴露一条供 BFF 直调的非 Saga 写 HTTP 路由。
 
@@ -138,7 +138,7 @@ saga.Submit()
 
 ### 3.5 事务上下文传递
 
-- GORM 事务由 `tx.Executor.Execute` 内部 `gorm.DB.Transaction` 管理。
+- GORM 事务由 `tx.Runner.Run` 内部 `gorm.DB.Transaction` 管理。
 - repository 通过 `tx.Exec(ctx, r.DB)` 获取当前事务连接。
 - 禁止将 `*gorm.DB` 作为参数在层间传递。
 - 事务闭包内使用 `executeCtx`，不用外层 `ctx` 写库。
@@ -172,7 +172,7 @@ saga.Submit()
 
 ## 4. 检查清单
 
-- [ ] 领域写 usecase 经 `idempotency.Execute` + `TxRunner` 控制本地子事务
+- [ ] 领域写 usecase 经 `idempotency.Execute` + `tx.Runner` 控制本地子事务
 - [ ] Saga 写用例同文件含 `Execute` 与 `Compensate`
 - [ ] Handler Action/Compensate 为独立方法，路由 `/compensate` 成对，且均为 DTM 入口
 - [ ] 领域无 BFF 可直调写路由

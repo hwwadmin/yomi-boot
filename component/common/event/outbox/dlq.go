@@ -196,7 +196,7 @@ func (d *DlqHandler) markSentSuccessAndClearDlqWithRetry(
 	sentTime time.Time,
 ) bool {
 	for retry := 1; retry <= sentSuccessPersistRetryTimes; retry++ {
-		err := d.txExecutor.Execute(ctx, func(txCtx context.Context) error {
+		err := d.txExecutor.Run(ctx, func(txCtx context.Context) error {
 			return d.dlqRepo.DeleteWithOutboxSuccess(txCtx, outbox, dlq, sentTime, d.outboxRepo)
 		})
 		if err == nil {

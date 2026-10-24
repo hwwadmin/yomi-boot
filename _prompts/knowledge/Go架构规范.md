@@ -196,7 +196,7 @@ services/{domain}/
 | `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；插件导出具体类型、`Name` 常量、`From` 与组件访问器，自包含其创建的组件；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
 | `component/core` | 内核（无业务状态、不管理外部资源）；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`traceid`、`utils` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
-| `dtm` | Saga 客户端、GORM barrier、`TxRunner`、`BindAndHandleAction/Compensate` |
+| `dtm` | Saga 客户端、GORM barrier、`TxRunner`（实现 `tx.Runner`）、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
 | `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |

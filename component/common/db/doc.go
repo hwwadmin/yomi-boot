@@ -7,7 +7,8 @@
 //   - gitee.com/hq_project/yomi-boot/component/common/db/dbtest：基于 go-mysql-mocker 的测试辅助
 //
 // 业务代码按需 import 子包：Model 内嵌 orm.BaseModel，Repository 内嵌 orm.BaseRepository 并通过 tx.Exec
-// 感知事务，usecase 通过 tx.Executor 控制事务边界；只有启动装配层使用本包的 Config/Open/MustOpen。
+// 感知事务，usecase 通过 tx.Runner 控制事务边界（需要自治事务时用 tx.Executor）；只有启动装配层使用
+// 本包的 Config/Open/MustOpen。
 //
 // @author zwei
 package db

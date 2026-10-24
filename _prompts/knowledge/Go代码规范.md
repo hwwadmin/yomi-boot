@@ -63,7 +63,7 @@
 
 | 层 | 编排职责 | 典型场景 |
 |----|----------|----------|
-| **usecase** | 应用编排 | 入参 Validate、调用 domain service、写用例包裹 idempotency.Execute + TxRunner |
+| **usecase** | 应用编排 | 入参 Validate、调用 domain service、写用例包裹 idempotency.Execute + tx.Runner |
 | **service** | 同域编排 | 创建前唯一性校验再落库；删除前清关联再删主表；Assign 前校验角色状态再 ReplaceRels |
 | **repository** | 无编排 | 单步 SQL/GORM 读写 |
 
@@ -640,7 +640,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - [ ] usecase 的 `Validate()` 覆盖入参基础校验（判空、格式、Trim 等），不承担领域不变量
 - [ ] service 承担同域编排、领域规则与不变量校验，repository 不承载业务校验
 - [ ] usecase 与 service 未重复实现同一校验规则
-- [ ] usecase 只做应用编排（Validate → idempotency/TxRunner → service），跨域编排只在 BFF
+- [ ] usecase 只做应用编排（Validate → idempotency/tx.Runner → service），跨域编排只在 BFF
 - [ ] 各层方法未对注入依赖做 `== nil` 判空
 - [ ] 显式实现接口的 struct（Service、Repository、platform 能力等）已添加 `var _ Interface = (*Impl)(nil)` 编译期断言
 - [ ] Redis 读写通过 `redis.RedisService` 完成，业务与 platform 消费方未直接使用 `*redis.Client`；业务层不调用 `redisplugin.Redis.Client()`

@@ -136,7 +136,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 		defer stop()
 
 		result := receiveFail
-		txErr := r.txExecutor.Execute(runCtx, func(txCtx context.Context) error {
+		txErr := r.txExecutor.Run(runCtx, func(txCtx context.Context) error {
 			exists, existErr := r.inboxRepo.Exists(txCtx, r.cfg.ServiceName, evt.EventID)
 			if existErr != nil {
 				return existErr

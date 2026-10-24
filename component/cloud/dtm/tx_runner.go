@@ -27,26 +27,25 @@ type barrierKey struct{}
 
 // TxRunner 运行本地事务，当上下文中包含 DTM Barrier 元数据时自动使用 Barrier 事务
 type TxRunner struct {
-	DB         *gorm.DB
-	TxExecutor tx.Executor
-	dtmDBType  string
+	root      *gorm.DB
+	runner    tx.Runner
+	dtmDBType string
 }
 
-// NewTxRunner 创建支持 Saga 事务的事务运行器
-// barrierTableName 为 DTM Barrier 表名，传入空字符串时默认使用 DefaultBarrierTableName
-// gdb 与 executor 为必填依赖，缺失时启动期 fail-fast
-func NewTxRunner(gdb *gorm.DB, executor tx.Executor, dbType enums.DbType, barrierTableName string) *TxRunner {
-	if gdb == nil {
-		panic("dtm: NewTxRunner gdb 不能为 nil")
-	}
-	if executor == nil {
-		panic("dtm: NewTxRunner executor 不能为 nil")
+var _ tx.Runner = (*TxRunner)(nil)
+
+// NewTxRunner 创建支持 Saga 事务的事务运行器。
+// root 必须是数据源根句柄，普通事务与 barrier 事务绑定同一数据源；
+// barrierTableName 为空时使用 DefaultBarrierTableName。
+func NewTxRunner(root *gorm.DB, dbType enums.DbType, barrierTableName string) *TxRunner {
+	if root == nil {
+		panic("dtm: NewTxRunner root 不能为 nil")
 	}
 	if barrierTableName == "" {
 		barrierTableName = DefaultBarrierTableName
 	}
 	dtmcli.SetBarrierTableName(barrierTableName)
-	return &TxRunner{DB: gdb, TxExecutor: executor, dtmDBType: toDBType(dbType)}
+	return &TxRunner{root: root, runner: tx.NewManager(root), dtmDBType: toDBType(dbType)}
 }
 
 // Run 在普通事务或 DTM Barrier 事务中执行 fn
@@ -54,13 +53,13 @@ func (r *TxRunner) Run(ctx context.Context, fn func(ctx context.Context) error) 
 	if bb, ok := BarrierFromContext(ctx); ok {
 		return r.runBarrier(ctx, bb, fn)
 	}
-	return r.TxExecutor.Execute(ctx, fn)
+	return r.runner.Run(ctx, fn)
 }
 
 // runBarrier 在 DTM Barrier 事务中执行回调函数
 func (r *TxRunner) runBarrier(ctx context.Context, bb *dtmcli.BranchBarrier, fn func(ctx context.Context) error) error {
 	bb.DBType = r.dtmDBType
-	gtx := r.DB.WithContext(ctx).Begin()
+	gtx := r.root.WithContext(ctx).Begin()
 	if gtx.Error != nil {
 		return errors.Wrap(gtx.Error, "开启 DTM Barrier 事务失败")
 	}
@@ -70,7 +69,7 @@ func (r *TxRunner) runBarrier(ctx context.Context, bb *dtmcli.BranchBarrier, fn 
 		return errors.Newf("DTM Barrier 无法获取 *sql.Tx，ConnPool 实际类型: %T", gtx.Statement.ConnPool)
 	}
 	return bb.Call(sqlTx, func(*sql.Tx) error {
-		txCtx := tx.WithContext(ctx, r.DB, gtx)
+		txCtx := tx.WithContext(ctx, r.root, gtx)
 		return fn(txCtx)
 	})
 }

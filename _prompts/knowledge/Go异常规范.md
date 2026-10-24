@@ -34,7 +34,7 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go代码规范.md` | 编码规范 | 校验分层、接口实现编译期断言 |
 | `_prompts/knowledge/Go业务分层规范.md` | 分层职责 | handler/usecase/service/repo 各层职责 |
-| `_prompts/knowledge/Go事务规范.md` | 事务异常 | TxRunner/barrier 内异常处理、幂等 Guard 错误 |
+| `_prompts/knowledge/Go事务规范.md` | 事务异常 | tx.Runner/barrier 内异常处理、幂等 Guard 错误 |
 | `_prompts/knowledge/微服务调用规范.md` | 微服务信封 | 下游错误传递与 BizError 构造 |
 | `_prompts/knowledge/API编码适配规范.md` | Encoder 写出 | 失败经 `EncodeFailure`；JSON 形状由已注册 Encoder 决定 |
 
