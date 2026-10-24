@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"path"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -104,7 +105,12 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 		c.Next()
 
 		// —— 出站快照 + 采样判定后成对落盘 ——
-		defer func() { _ = recover() }()
+		// 出站段 panic 不上抛（响应已写出），但必须留痕，否则对应请求的 access 日志会无声缺失
+		defer func() {
+			if p := recover(); p != nil {
+				Error(ctx, "access 出站落盘 panic", "method", method, "path", reqPath, "panic", p, "stack", string(debug.Stack()))
+			}
+		}()
 
 		route := c.FullPath()
 		if route == "" {

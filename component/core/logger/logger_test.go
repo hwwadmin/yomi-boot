@@ -315,6 +315,50 @@ func TestMiddleware_SampleDropsOK(t *testing.T) {
 	}
 }
 
+// TestMiddleware_OutboundPanicLogged 验证出站落盘段 panic 被兜底记录且不影响响应
+func TestMiddleware_OutboundPanicLogged(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dir := t.TempDir()
+	cfg := Config{
+		Dir:          dir,
+		Level:        "info",
+		ConsoleLevel: "error",
+		Rotation:     testRotation(),
+		Access: AccessConfig{
+			SkipPaths:  []string{},
+			SampleRate: 0.5,
+		},
+	}
+	closeFn, err := InitLogger("test-svc", "test", cfg)
+	if err != nil {
+		t.Fatalf("InitLogger: %v", err)
+	}
+	defer func() { _ = closeFn() }()
+
+	// 让采样判定在出站段 panic，模拟落盘代码自身的 bug
+	prev := accessRandFloat64
+	accessRandFloat64 = func() float64 { panic("sample boom") }
+	defer func() { accessRandFloat64 = prev }()
+
+	r := gin.New()
+	r.Use(Middleware(cfg.Access))
+	r.GET("/ok", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	r.ServeHTTP(w, req)
+	_ = Sync()
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("出站段 panic 不应影响响应: status=%d", w.Code)
+	}
+	errorPath := filepath.Join(dir, "error", "error.log")
+	assertFileContains(t, errorPath, "access 出站落盘 panic")
+	assertFileContains(t, errorPath, "sample boom")
+}
+
 // TestMiddleware_BodyOmittedBinary 验证二进制 body 被省略
 func TestMiddleware_BodyOmittedBinary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
