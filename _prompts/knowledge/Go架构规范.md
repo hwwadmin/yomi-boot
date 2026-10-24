@@ -200,7 +200,7 @@ services/{domain}/
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
 | `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
-| `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Executor`、`Manager`、Context 事务传递）、`db/dbtest` |
+| `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Runner`/`Executor` 契约、`LocalRunner` 实现、Context 事务传递）、`db/dbtest` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
 | `event` | 可选 Outbox/Inbox 事件组件（`outbox_enabled` / `inbox_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
 | `router` | `Registrar` 接口与路由注册 |

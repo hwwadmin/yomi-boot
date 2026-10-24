@@ -42,7 +42,7 @@ func (p *Tx) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	if dbPlugin.DB() == nil {
 		return plugin.ErrDisabled
 	}
-	p.executor = tx.NewManager(dbPlugin.DB())
+	p.executor = tx.NewLocalRunner(dbPlugin.DB())
 	return nil
 }
 

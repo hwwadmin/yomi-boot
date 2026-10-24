@@ -3,7 +3,7 @@
 //
 // 子包一览：
 //   - gitee.com/hq_project/yomi-boot/component/common/db/orm：GORM 持久化基类（BaseModel、BaseRepository、分页、LIKE 与 SQL 标识符校验）
-//   - gitee.com/hq_project/yomi-boot/component/common/db/tx：本地事务管理器与 Context 事务传递
+//   - gitee.com/hq_project/yomi-boot/component/common/db/tx：本地事务执行器与 Context 事务传递
 //   - gitee.com/hq_project/yomi-boot/component/common/db/dbtest：基于 go-mysql-mocker 的测试辅助
 //
 // 业务代码按需 import 子包：Model 内嵌 orm.BaseModel，Repository 内嵌 orm.BaseRepository 并通过 tx.Exec

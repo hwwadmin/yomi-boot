@@ -32,7 +32,7 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 约束 domain/repo 分层职责与 Entity 建模口径 |
 | `_prompts/knowledge/Go架构规范.md` | 项目架构 | 约束 repository 层在整体项目结构中的位置 |
-| `_prompts/knowledge/Go事务规范.md` | 事务控制 | 约束 `tx.Executor` 接口、`tx.Manager` 实现、Context 事务传递与 repository 事务感知实现 |
+| `_prompts/knowledge/Go事务规范.md` | 事务控制 | 约束 `tx.Runner`/`tx.Executor` 契约、`tx.LocalRunner` 实现、Context 事务传递与 repository 事务感知实现 |
 | `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | 约束 gorm 作为默认 SQL 访问库的选型理由 |
 | `_prompts/knowledge/数据库表设计规范.md` | 表设计规范 | 约束表命名、字段、索引与 DDL 设计，Go Model 须与其保持一致 |
 | `_prompts/knowledge/Go注释规范.md` | 注释规范 | 约束 Model 和 Repository 的注释口径 |
@@ -394,7 +394,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 - Repository 不自行管理事务，事务边界由 usecase 通过 `tx.Runner.Run` 控制。
 - Repository 方法签名中**不出现 `*gorm.DB` 参数**，事务通过 Context 隐式传递。
 
-详细的事务管理器实现、usecase 中使用事务的示例以及分布式事务方案，请直接参考 [Go事务规范](./Go事务规范.md)。
+详细的事务执行器实现、usecase 中使用事务的示例以及分布式事务方案，请直接参考 [Go事务规范](./Go事务规范.md)。
 
 ---
 

@@ -1,4 +1,4 @@
-// 本地事务管理器的单元测试
+// 本地事务执行器的单元测试
 //
 // @author zwei
 
@@ -12,8 +12,8 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// TestManager_Run_CommitAndRollback 验证事务提交与回滚行为
-func TestManager_Run_CommitAndRollback(t *testing.T) {
+// TestLocalRunner_Run_CommitAndRollback 验证事务提交与回滚行为
+func TestLocalRunner_Run_CommitAndRollback(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
@@ -21,10 +21,10 @@ func TestManager_Run_CommitAndRollback(t *testing.T) {
 		C int64 `gorm:"column:c"`
 	}
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 	ctx := context.Background()
 
-	err := manager.Run(ctx, func(txCtx context.Context) error {
+	err := runner.Run(ctx, func(txCtx context.Context) error {
 		return Exec(txCtx, gormDB).Create(&txTestModel{ID: 1, Name: "committed"}).Error
 	})
 	if err != nil {
@@ -39,7 +39,7 @@ func TestManager_Run_CommitAndRollback(t *testing.T) {
 		t.Fatalf("提交后期望 1 条记录，实际 %d", committed.C)
 	}
 
-	rollbackErr := manager.Run(ctx, func(txCtx context.Context) error {
+	rollbackErr := runner.Run(ctx, func(txCtx context.Context) error {
 		if err := Exec(txCtx, gormDB).Create(&txTestModel{ID: 2, Name: "rolled-back"}).Error; err != nil {
 			return err
 		}
@@ -58,19 +58,19 @@ func TestManager_Run_CommitAndRollback(t *testing.T) {
 	}
 }
 
-// TestManager_Run_NestedCommit 验证嵌套 Run 复用同一事务，内外层写入随外层一并提交
-func TestManager_Run_NestedCommit(t *testing.T) {
+// TestLocalRunner_Run_NestedCommit 验证嵌套 Run 复用同一事务，内外层写入随外层一并提交
+func TestLocalRunner_Run_NestedCommit(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 	ctx := context.Background()
 
-	err := manager.Run(ctx, func(outerCtx context.Context) error {
+	err := runner.Run(ctx, func(outerCtx context.Context) error {
 		if err := Exec(outerCtx, gormDB).Create(&txTestModel{ID: 11, Name: "outer"}).Error; err != nil {
 			return err
 		}
-		return manager.Run(outerCtx, func(innerCtx context.Context) error {
+		return runner.Run(outerCtx, func(innerCtx context.Context) error {
 			return Exec(innerCtx, gormDB).Create(&txTestModel{ID: 12, Name: "inner"}).Error
 		})
 	})
@@ -87,19 +87,19 @@ func TestManager_Run_NestedCommit(t *testing.T) {
 	}
 }
 
-// TestManager_Run_NestedRollback 验证嵌套 Run 不新开事务：外层回滚时内层写入一并回滚
-func TestManager_Run_NestedRollback(t *testing.T) {
+// TestLocalRunner_Run_NestedRollback 验证嵌套 Run 不新开事务：外层回滚时内层写入一并回滚
+func TestLocalRunner_Run_NestedRollback(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 	ctx := context.Background()
 
-	err := manager.Run(ctx, func(outerCtx context.Context) error {
+	err := runner.Run(ctx, func(outerCtx context.Context) error {
 		if err := Exec(outerCtx, gormDB).Create(&txTestModel{ID: 21, Name: "outer"}).Error; err != nil {
 			return err
 		}
-		if err := manager.Run(outerCtx, func(innerCtx context.Context) error {
+		if err := runner.Run(outerCtx, func(innerCtx context.Context) error {
 			return Exec(innerCtx, gormDB).Create(&txTestModel{ID: 22, Name: "inner"}).Error
 		}); err != nil {
 			return err
@@ -124,9 +124,9 @@ func TestExec_AppliesCallerCtxInsideTx(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 
-	err := manager.Run(context.Background(), func(txCtx context.Context) error {
+	err := runner.Run(context.Background(), func(txCtx context.Context) error {
 		canceled, cancel := context.WithCancel(txCtx)
 		cancel()
 		return Exec(canceled, gormDB).Create(&txTestModel{ID: 31, Name: "canceled"}).Error
@@ -144,19 +144,19 @@ func TestExec_AppliesCallerCtxInsideTx(t *testing.T) {
 	}
 }
 
-// TestManager_RunAutonomous_OuterRollbackKeepsWrite 验证自治事务独立提交：外层回滚不撤销自治写入
-func TestManager_RunAutonomous_OuterRollbackKeepsWrite(t *testing.T) {
+// TestLocalRunner_RunAutonomous_OuterRollbackKeepsWrite 验证自治事务独立提交：外层回滚不撤销自治写入
+func TestLocalRunner_RunAutonomous_OuterRollbackKeepsWrite(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 	ctx := context.Background()
 
-	err := manager.Run(ctx, func(txCtx context.Context) error {
+	err := runner.Run(ctx, func(txCtx context.Context) error {
 		if err := Exec(txCtx, gormDB).Create(&txTestModel{ID: 41, Name: "outer"}).Error; err != nil {
 			return err
 		}
-		if err := manager.RunAutonomous(txCtx, 0, func(actx context.Context) error {
+		if err := runner.RunAutonomous(txCtx, 0, func(actx context.Context) error {
 			return Exec(actx, gormDB).Create(&txTestModel{ID: 42, Name: "autonomous"}).Error
 		}); err != nil {
 			return err
@@ -176,17 +176,17 @@ func TestManager_RunAutonomous_OuterRollbackKeepsWrite(t *testing.T) {
 	}
 }
 
-// TestManager_RunAutonomous_IgnoresCanceledCtx 验证自治事务不随调用方取消：取消后仍提交
-func TestManager_RunAutonomous_IgnoresCanceledCtx(t *testing.T) {
+// TestLocalRunner_RunAutonomous_IgnoresCanceledCtx 验证自治事务不随调用方取消：取消后仍提交
+func TestLocalRunner_RunAutonomous_IgnoresCanceledCtx(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 
-	err := manager.Run(context.Background(), func(txCtx context.Context) error {
+	err := runner.Run(context.Background(), func(txCtx context.Context) error {
 		canceled, cancel := context.WithCancel(txCtx)
 		cancel()
-		return manager.RunAutonomous(canceled, 0, func(actx context.Context) error {
+		return runner.RunAutonomous(canceled, 0, func(actx context.Context) error {
 			return Exec(actx, gormDB).Create(&txTestModel{ID: 51, Name: "autonomous"}).Error
 		})
 	})
@@ -203,24 +203,24 @@ func TestManager_RunAutonomous_IgnoresCanceledCtx(t *testing.T) {
 	}
 }
 
-// TestManager_RunAutonomous_RejectsTransactionRoot 验证用事务对象构造的 Manager 拒绝自治事务
-func TestManager_RunAutonomous_RejectsTransactionRoot(t *testing.T) {
+// TestLocalRunner_RunAutonomous_RejectsTransactionRoot 验证用事务对象构造的 LocalRunner 拒绝自治事务
+func TestLocalRunner_RunAutonomous_RejectsTransactionRoot(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanup()
 
-	manager := NewManager(gormDB)
+	runner := NewLocalRunner(gormDB)
 
-	err := manager.Run(context.Background(), func(txCtx context.Context) error {
+	err := runner.Run(context.Background(), func(txCtx context.Context) error {
 		gtx, ok := FromContext(txCtx, gormDB)
 		if !ok {
 			t.Fatal("期望上下文中存在事务")
 		}
-		return NewManager(gtx).RunAutonomous(txCtx, 0, func(context.Context) error {
+		return NewLocalRunner(gtx).RunAutonomous(txCtx, 0, func(context.Context) error {
 			return nil
 		})
 	})
 	if err == nil {
-		t.Fatal("用事务对象构造的 Manager 应拒绝自治事务")
+		t.Fatal("用事务对象构造的 LocalRunner 应拒绝自治事务")
 	}
 }
 
@@ -231,9 +231,9 @@ func TestExec_ScopesTransactionByRoot(t *testing.T) {
 	gormB, cleanupB := dbtest.New(t, dbtest.WithTables(txTestModel{}))
 	defer cleanupB()
 
-	managerA := NewManager(gormA)
+	runnerA := NewLocalRunner(gormA)
 
-	err := managerA.Run(context.Background(), func(txCtx context.Context) error {
+	err := runnerA.Run(context.Background(), func(txCtx context.Context) error {
 		if _, ok := FromContext(txCtx, gormB); ok {
 			t.Fatal("B 库不应读到 A 库的事务")
 		}
@@ -265,7 +265,7 @@ func TestExec_OutsideTxWritesOnRoot(t *testing.T) {
 	}
 }
 
-// txTestModel 事务管理器单测用 GORM 模型
+// txTestModel 本地事务执行器单测用 GORM 模型
 type txTestModel struct {
 	ID   int64  `gorm:"column:id;primaryKey"`
 	Name string `gorm:"column:name"`

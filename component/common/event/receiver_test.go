@@ -156,7 +156,7 @@ func TestReceiverMovesToInboxDlqAfterRetryExhausted(t *testing.T) {
 	receiver := NewReceiver(
 		repo.NewInboxRepo(gormDB),
 		repo.NewInboxDlqRepo(gormDB),
-		tx.NewManager(gormDB),
+		tx.NewLocalRunner(gormDB),
 		factory,
 		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 2},
 		gen,

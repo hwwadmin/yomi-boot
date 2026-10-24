@@ -45,7 +45,7 @@ func NewTxRunner(root *gorm.DB, dbType enums.DbType, barrierTableName string) *T
 		barrierTableName = DefaultBarrierTableName
 	}
 	dtmcli.SetBarrierTableName(barrierTableName)
-	return &TxRunner{root: root, runner: tx.NewManager(root), dtmDBType: toDBType(dbType)}
+	return &TxRunner{root: root, runner: tx.NewLocalRunner(root), dtmDBType: toDBType(dbType)}
 }
 
 // Run 在普通事务或 DTM Barrier 事务中执行 fn

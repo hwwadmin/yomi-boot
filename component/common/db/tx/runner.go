@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Runner 在事务边界内执行闭包；本地 Manager 与 dtm.TxRunner 均满足
+// Runner 在事务边界内执行闭包；本地 LocalRunner 与 dtm.TxRunner 均满足
 type Runner interface {
 	// Run 在事务中执行 fn；已处于同一数据源事务中时复用外层事务
 	Run(ctx context.Context, fn func(ctx context.Context) error) error
