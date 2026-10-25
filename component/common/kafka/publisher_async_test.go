@@ -266,3 +266,86 @@ func TestClonePublishRequest(t *testing.T) {
 		t.Fatalf("cloned header = %q", cloned.Headers[0].Value)
 	}
 }
+
+// TestAsyncPublisher_SyncMethodsDelegate 验证同步方法直接委托底层生产者
+func TestAsyncPublisher_SyncMethodsDelegate(t *testing.T) {
+	rec := &recordingPublisher{}
+	p := newAsyncPublisher(rec, &enqueuedWorker{}, time.Second)
+
+	if err := p.Publish(context.Background(), PublishRequest{Topic: "t", Value: []byte("v")}); err != nil {
+		t.Fatalf("Publish 委派失败: %v", err)
+	}
+	if rec.publishCalls != 1 {
+		t.Fatalf("Publish 应委托同步生产者，实际调用 %d 次", rec.publishCalls)
+	}
+	if err := p.PublishBatch(context.Background(), []PublishRequest{{Topic: "t", Value: []byte("v")}}); err != nil {
+		t.Fatalf("PublishBatch 委派失败: %v", err)
+	}
+	if err := p.PublishJSON(context.Background(), "t", "k", map[string]string{"a": "1"}); err != nil {
+		t.Fatalf("PublishJSON 委派失败: %v", err)
+	}
+}
+
+// TestAsyncPublisher_PublishBatchAsync 验证批量异步入队的校验与成功路径
+func TestAsyncPublisher_PublishBatchAsync(t *testing.T) {
+	t.Run("空批次直接返回", func(t *testing.T) {
+		p := newAsyncPublisher(&recordingPublisher{}, &enqueuedWorker{}, time.Second)
+		if err := p.PublishBatchAsync(context.Background(), nil); err != nil {
+			t.Fatalf("空批次不应报错: %v", err)
+		}
+	})
+
+	t.Run("批量校验失败", func(t *testing.T) {
+		p := newAsyncPublisher(&recordingPublisher{}, &enqueuedWorker{}, time.Second)
+		err := p.PublishBatchAsync(context.Background(), []PublishRequest{
+			{Topic: "t", Value: []byte("v")},
+			{Topic: "", Value: []byte("v")},
+		})
+		if err == nil {
+			t.Fatal("含非法请求应返回错误")
+		}
+	})
+
+	t.Run("入队成功", func(t *testing.T) {
+		p := newAsyncPublisher(&recordingPublisher{}, &enqueuedWorker{}, time.Second)
+		if err := p.PublishBatchAsync(context.Background(), []PublishRequest{
+			{Topic: "t", Value: []byte("v"), Headers: []Header{{Key: "h", Value: []byte("v")}}},
+		}); err != nil {
+			t.Fatalf("批量异步入队失败: %v", err)
+		}
+	})
+}
+
+// TestAsyncPublisher_PublishJSONAsyncMarshalFailure 验证不可序列化对象返回错误
+func TestAsyncPublisher_PublishJSONAsyncMarshalFailure(t *testing.T) {
+	p := newAsyncPublisher(&recordingPublisher{}, &enqueuedWorker{}, time.Second)
+	if err := p.PublishJSONAsync(context.Background(), "t", "k", map[string]any{"ch": make(chan int)}); err == nil {
+		t.Fatal("不可序列化对象应返回错误")
+	}
+}
+
+// TestAsyncPublisher_CloseDrainsWorker 验证关闭时先排空工作池再释放底层生产者
+func TestAsyncPublisher_CloseDrainsWorker(t *testing.T) {
+	p := newAsyncPublisher(&recordingPublisher{}, &enqueuedWorker{}, time.Second)
+	if err := p.Close(); err != nil {
+		t.Fatalf("关闭失败: %v", err)
+	}
+
+	// 无工作池时仅释放底层生产者
+	p2 := newAsyncPublisher(&recordingPublisher{}, nil, time.Second)
+	if err := p2.Close(); err != nil {
+		t.Fatalf("无工作池关闭失败: %v", err)
+	}
+}
+
+// TestAsyncPublisher_EnqueueOrSyncNilWorker 验证无工作池时异步方法退化为同步发送
+func TestAsyncPublisher_EnqueueOrSyncNilWorker(t *testing.T) {
+	rec := &recordingPublisher{}
+	p := newAsyncPublisher(rec, nil, time.Second)
+	if err := p.PublishAsync(context.Background(), PublishRequest{Topic: "t", Value: []byte("v")}); err != nil {
+		t.Fatalf("无工作池应同步发送: %v", err)
+	}
+	if rec.publishCalls != 1 {
+		t.Fatalf("应委托同步生产者，实际调用 %d 次", rec.publishCalls)
+	}
+}
