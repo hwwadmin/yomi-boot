@@ -219,7 +219,7 @@ func TestConsumer_Dead(t *testing.T) {
 
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		msgs, err := client.XRange(ctx, "orders.dead", "-", "+").Result()
+		msgs, err := client.XRange(ctx, "orders_dead", "-", "+").Result()
 		if err == nil && len(msgs) >= 1 {
 			msg := msgs[0]
 			if got, _ := msg.Values["_original_id"].(string); got != "biz-keep" {
@@ -514,6 +514,40 @@ func TestConsumer_StartSucceedsWhenGroupExists(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Start with existing group: %v", err)
+	}
+}
+
+func TestConsumer_RunPanicExitsWithoutDeadlock(t *testing.T) {
+	t.Parallel()
+
+	// 以 nil client 构造 run 体内 panic（该路径现实中不可达，仅用于固化 defer 顺序约束）：
+	// panic 发生时 ctx 尚未取消，若 wg.Wait 先于 cancel 执行将永久阻塞、done 永不关闭
+	c := &consumer{
+		cfg: resolvedGroupConfig{
+			streamKey:     "panic",
+			group:         "g-panic",
+			consumer:      "w1",
+			count:         1,
+			block:         10 * time.Millisecond,
+			claimMinIdle:  time.Millisecond,
+			claimInterval: 10 * time.Millisecond,
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() { _ = recover() }() // run 体内的 panic 预期穿透 defer 栈向外传播，测试侧接住
+		_ = c.run(ctx, func(_ context.Context, _ Entry) HandleResult { return HandleAck })
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("run panic deadlocked: wg.Wait blocked before cancel")
 	}
 }
 

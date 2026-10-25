@@ -18,6 +18,8 @@ type Store interface {
 	ListByUserID(ctx context.Context, storePrefix string, userID int64) ([]*UserTokenSession, error)
 	// Delete 删除令牌会话
 	Delete(ctx context.Context, storePrefix string, token string) error
+	// DeleteByTokenHash 删除指定存储哈希对应的令牌会话；tokenHash 为 ListByUserID 返回的存储哈希值
+	DeleteByTokenHash(ctx context.Context, storePrefix string, tokenHash string) error
 	// DeleteByUserID 删除指定用户的全部令牌会话
 	DeleteByUserID(ctx context.Context, storePrefix string, userID int64) error
 }

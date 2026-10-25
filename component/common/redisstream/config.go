@@ -43,7 +43,7 @@ type PublishWorkerConfig struct {
 
 // Config 表示 Redis Stream 能力配置
 type Config struct {
-	KeyPrefix       string              // KeyPrefix 拼在逻辑 stream 名之前（直接拼接）；非空时建议以 ':' 结尾，如 "rs:" → "rs:orders"
+	KeyPrefix       string              // KeyPrefix 拼在逻辑 stream 名之前（直接拼接）；非空时建议以 ':' 结尾，如 "rs:" → "rs:orders"。生产环境应配置以满足《Redis设计规范》§3.2 的分层命名（如 "yomi:rs:"），未配置时 key 为裸逻辑名
 	DefaultMaxLen   *int64              // DefaultMaxLen 发布时默认近似裁剪长度；nil 用默认，0 表示不裁剪
 	BlockMS         int                 // BlockMS 是 XREADGROUP 阻塞毫秒，0 表示使用默认值
 	Count           int64               // Count 是单次拉取条数，0 表示使用默认值

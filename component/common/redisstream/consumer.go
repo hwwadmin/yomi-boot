@@ -279,7 +279,7 @@ func (m *ConsumerManager) resolveGroupConfig(cfg GroupConfig) (resolvedGroupConf
 
 	deadStream := strings.TrimSpace(cfg.DeadStream)
 	if deadStream == "" {
-		deadStream = stream + ".dead"
+		deadStream = stream + "_dead"
 	}
 
 	return resolvedGroupConfig{
@@ -321,7 +321,6 @@ type consumer struct {
 // processMu 仅串行化 Handler 调用；XACK/dead 等 Redis 收尾在锁外执行，避免故障退避拖死 claim。
 func (c *consumer) run(ctx context.Context, handler Handler) error {
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	var processMu sync.Mutex
 	var wg sync.WaitGroup
@@ -339,7 +338,11 @@ func (c *consumer) run(ctx context.Context, handler Handler) error {
 		}()
 		c.claimLoop(ctx, handler, &processMu)
 	}()
+
+	// defer 后注册先执行：任何退出路径（含 panic）先 cancel 让 claim 协程可退出，再 wg.Wait 等待，
+	// 避免 panic 时 ctx 未取消导致 wg.Wait 永久阻塞、done 永不关闭
 	defer wg.Wait()
+	defer cancel()
 
 	delay := jitterDelay(consumerRetryInitialDelay)
 	for {

@@ -215,7 +215,7 @@ func TestService_IssueSingleLoginConcurrent(t *testing.T) {
 	}
 }
 
-// TestRedisStore_ListByUserIDFillsToken 验证按用户查询令牌时 UserTokenSession.Token 填充存储哈希值
+// TestRedisStore_ListByUserIDFillsToken 验证按用户查询令牌时 UserTokenSession.TokenHash 填充存储哈希值
 func TestRedisStore_ListByUserIDFillsToken(t *testing.T) {
 	store, _, cleanup := newTestRedisStore(t)
 	defer cleanup()
@@ -240,8 +240,8 @@ func TestRedisStore_ListByUserIDFillsToken(t *testing.T) {
 	if len(tokens) != 1 {
 		t.Fatalf("期望 1 条令牌记录，实际 %d", len(tokens))
 	}
-	if tokens[0].Token != store.hashToken(plainToken) {
-		t.Fatalf("Token 应填充存储哈希值，实际 %q", tokens[0].Token)
+	if tokens[0].TokenHash != store.hashToken(plainToken) {
+		t.Fatalf("TokenHash 应填充存储哈希值，实际 %q", tokens[0].TokenHash)
 	}
 	if tokens[0].Session == nil || tokens[0].Session.UserID != userID {
 		t.Fatalf("Session 不符合预期: %+v", tokens[0].Session)
@@ -268,4 +268,96 @@ func TestService_ValidateZeroExpireAt(t *testing.T) {
 	if !errors.Is(err, ErrTokenInvalid) {
 		t.Fatalf("期望 ErrTokenInvalid，实际 %v", err)
 	}
+}
+
+// TestService_RevokeByTokenHash 验证 ListByUserID 返回的 TokenHash 配合 RevokeByTokenHash 能撤销对应明文令牌
+func TestService_RevokeByTokenHash(t *testing.T) {
+	service, cleanup := newTestService(t, true)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := int64(7007)
+
+	plainToken, err := service.Issue(ctx, &TokenSession{UserID: userID})
+	if err != nil {
+		t.Fatalf("Issue 失败: %v", err)
+	}
+	if _, err := service.Validate(ctx, plainToken); err != nil {
+		t.Fatalf("签发的令牌应有效: %v", err)
+	}
+
+	tokens, err := service.ListByUserID(ctx, userID)
+	if err != nil {
+		t.Fatalf("ListByUserID 失败: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("期望 1 条令牌记录，实际 %d", len(tokens))
+	}
+
+	if err := service.RevokeByTokenHash(ctx, tokens[0].TokenHash); err != nil {
+		t.Fatalf("RevokeByTokenHash 失败: %v", err)
+	}
+	if _, err := service.Validate(ctx, plainToken); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("按存储哈希撤销后原令牌应失效: %v", err)
+	}
+}
+
+// TestService_RevokeByTokenHashEmpty 验证空存储哈希被拒绝
+func TestService_RevokeByTokenHashEmpty(t *testing.T) {
+	service, cleanup := newTestService(t, true)
+	defer cleanup()
+
+	if err := service.RevokeByTokenHash(context.Background(), "  "); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("空存储哈希应返回 ErrTokenInvalid，实际 %v", err)
+	}
+}
+
+// TestNewServiceFailFast 验证构造函数对 nil 依赖启动期 fail-fast
+func TestNewServiceFailFast(t *testing.T) {
+	store, client, cleanup := newTestRedisStore(t)
+	defer cleanup()
+
+	lockFactory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory 失败: %v", err)
+	}
+
+	cfg := Config{TokenTTLMinutes: 30, StorePrefix: "yomi:test:token"}
+
+	expectPanic := func(name string, fn func()) {
+		t.Helper()
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatalf("%s 应在构造期 panic", name)
+			}
+		}()
+		fn()
+	}
+
+	expectPanic("generator 为 nil", func() {
+		NewService(nil, store, cfg, lockFactory)
+	})
+	expectPanic("store 为 nil", func() {
+		NewService(NewUUIDGenerator(), nil, cfg, lockFactory)
+	})
+	expectPanic("单点登录模式下 distLockFactory 为 nil", func() {
+		NewService(NewUUIDGenerator(), store, cfg, nil)
+	})
+
+	// 多端登录模式不使用锁工厂，允许 nil
+	cfgMulti := cfg
+	cfgMulti.AllowMultiLogin = true
+	if NewService(NewUUIDGenerator(), store, cfgMulti, nil) == nil {
+		t.Fatal("多端登录模式下应允许 nil 锁工厂")
+	}
+}
+
+// TestNewRedisStoreNilFailFast 验证 nil Redis 服务在构造期 panic
+func TestNewRedisStoreNilFailFast(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("redisService 为 nil 应在构造期 panic")
+		}
+	}()
+	NewRedisStore(nil)
 }

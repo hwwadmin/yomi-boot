@@ -7,6 +7,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/distlock"
@@ -25,6 +26,8 @@ type TokenService interface {
 	Validate(ctx context.Context, token string) (*TokenSession, error)
 	// Revoke 使指定令牌立即失效
 	Revoke(ctx context.Context, token string) error
+	// RevokeByTokenHash 撤销 ListByUserID 返回的指定存储哈希对应的令牌；入参是 TokenHash，不是明文令牌
+	RevokeByTokenHash(ctx context.Context, tokenHash string) error
 	// RevokeByUserID 使指定用户的全部令牌立即失效
 	RevokeByUserID(ctx context.Context, userID int64) error
 }
@@ -42,13 +45,23 @@ type Service struct {
 
 var _ TokenService = (*Service)(nil)
 
-// NewService 创建令牌基础服务
+// NewService 创建令牌基础服务；generator、store 为 nil，或单点登录模式下 distLockFactory 为 nil 时 panic
 func NewService(
 	generator Generator,
 	store Store,
 	authConfig Config,
 	distLockFactory distlock.DistLockFactory,
 ) *Service {
+	if generator == nil {
+		panic("令牌生成器未初始化: generator 为 nil")
+	}
+	if store == nil {
+		panic("令牌存储未初始化: store 为 nil")
+	}
+	if !authConfig.AllowMultiLogin && distLockFactory == nil {
+		panic("单点登录模式需要分布式锁工厂: distLockFactory 为 nil")
+	}
+
 	return &Service{
 		generator:       generator,
 		store:           store,
@@ -77,9 +90,6 @@ func (s *Service) Issue(ctx context.Context, session *TokenSession) (string, err
 	}
 	if s.authConfig.AllowMultiLogin {
 		return s.issueToken(ctx, session)
-	}
-	if s.distLockFactory == nil {
-		return "", errors.New("单点登录模式需要分布式锁工厂")
 	}
 
 	lock := s.distLockFactory.GetLock(
@@ -149,7 +159,7 @@ func (s *Service) Validate(ctx context.Context, token string) (*TokenSession, er
 	return session, nil
 }
 
-// ListByUserID 根据用户ID读取全部有效令牌及其会话快照
+// ListByUserID 根据用户ID读取全部有效令牌及其会话快照；返回的 TokenHash 可配合 RevokeByTokenHash 撤销对应会话
 func (s *Service) ListByUserID(ctx context.Context, userID int64) ([]*UserTokenSession, error) {
 	if userID <= 0 {
 		return nil, errors.Sentinel(sharederr.ErrInvalidInput)
@@ -170,7 +180,7 @@ func (s *Service) ListByUserID(ctx context.Context, userID int64) ([]*UserTokenS
 			rightIssuedAt = tokens[j].Session.IssuedAt
 		}
 		if leftIssuedAt.Equal(rightIssuedAt) {
-			return tokens[i].Token < tokens[j].Token
+			return tokens[i].TokenHash < tokens[j].TokenHash
 		}
 
 		return leftIssuedAt.After(rightIssuedAt)
@@ -186,6 +196,15 @@ func (s *Service) Revoke(ctx context.Context, token string) error {
 	}
 
 	return s.store.Delete(ctx, s.authConfig.StorePrefix, token)
+}
+
+// RevokeByTokenHash 撤销指定存储哈希对应的令牌；tokenHash 为 ListByUserID 返回的 TokenHash 值，不是明文令牌
+func (s *Service) RevokeByTokenHash(ctx context.Context, tokenHash string) error {
+	if strings.TrimSpace(tokenHash) == "" {
+		return errors.Sentinel(ErrTokenInvalid)
+	}
+
+	return s.store.DeleteByTokenHash(ctx, s.authConfig.StorePrefix, tokenHash)
 }
 
 // RevokeByUserID 使指定用户的全部令牌立即失效

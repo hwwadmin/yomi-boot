@@ -26,8 +26,8 @@ type TokenSession struct {
 
 // UserTokenSession 表示用户维度查询出的令牌及其会话快照
 type UserTokenSession struct {
-	Token   string        `json:"token"`
-	Session *TokenSession `json:"session"`
+	TokenHash string        `json:"token_hash"` // TokenHash 是令牌的 SHA-256 存储哈希值，不是明文令牌，不能用于登录或 Service.Revoke，只能配合 RevokeByTokenHash 撤销对应会话
+	Session   *TokenSession `json:"session"`    // Session 是该令牌对应的会话快照
 }
 
 // MarshalJSON 序列化令牌会话快照，Context 输出为独立副本

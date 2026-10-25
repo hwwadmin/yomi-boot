@@ -58,7 +58,7 @@ type GroupConfig struct {
 	Block         time.Duration // Block 是 XREADGROUP 阻塞时长，0 使用全局默认
 	ClaimMinIdle  time.Duration // ClaimMinIdle 是 PEL 认领最小空闲，0 使用全局默认；过小会加大多实例重复投递概率
 	ClaimInterval time.Duration // ClaimInterval 是 PEL 回收周期，0 使用全局默认
-	DeadStream    string        // DeadStream 是死信 stream 逻辑名，空则 "{Stream}.dead"
+	DeadStream    string        // DeadStream 是死信 stream 逻辑名，空则 "{Stream}_dead"
 }
 
 // RuntimeConfig 表示组件运行时默认参数（由 Config 转换）

@@ -81,8 +81,11 @@ type RedisStore struct {
 	redisService yomiredis.RedisService // redisService 是 Redis 读写服务
 }
 
-// NewRedisStore 创建基于 Redis 的令牌会话存储
+// NewRedisStore 创建基于 Redis 的令牌会话存储；redisService 为 nil 时 panic
 func NewRedisStore(redisService yomiredis.RedisService) *RedisStore {
+	if redisService == nil {
+		panic("令牌 Redis 服务未初始化: redisService 为 nil")
+	}
 	return &RedisStore{redisService: redisService}
 }
 
@@ -184,8 +187,8 @@ func (s *RedisStore) ListByUserID(ctx context.Context, storePrefix string, userI
 		}
 
 		result = append(result, &UserTokenSession{
-			Token:   storageToken,
-			Session: session,
+			TokenHash: storageToken,
+			Session:   session,
 		})
 	}
 
@@ -204,7 +207,17 @@ func (s *RedisStore) ListByUserID(ctx context.Context, storePrefix string, userI
 
 // Delete 删除 Redis 中的令牌会话
 func (s *RedisStore) Delete(ctx context.Context, storePrefix string, token string) error {
-	key, err := s.tokenKey(storePrefix, token)
+	return s.deleteByTokenHash(ctx, storePrefix, s.hashToken(token))
+}
+
+// DeleteByTokenHash 删除 Redis 中指定存储哈希对应的令牌会话；tokenHash 为 ListByUserID 返回的存储哈希值
+func (s *RedisStore) DeleteByTokenHash(ctx context.Context, storePrefix string, tokenHash string) error {
+	return s.deleteByTokenHash(ctx, storePrefix, tokenHash)
+}
+
+// deleteByTokenHash 按存储哈希删除令牌会话，并清理用户索引中的引用
+func (s *RedisStore) deleteByTokenHash(ctx context.Context, storePrefix string, tokenHash string) error {
+	key, err := s.storageKey(storePrefix, tokenHash)
 	if err != nil {
 		return err
 	}
@@ -213,13 +226,11 @@ func (s *RedisStore) Delete(ctx context.Context, storePrefix string, token strin
 		return err
 	}
 
-	tokenValue := strings.TrimSpace(token)
-	storageToken := s.hashToken(tokenValue)
 	if _, err := s.redisService.OpsScript4Eval(
 		ctx,
 		luaDeleteTokenSession,
 		[]string{key},
-		storageToken,
+		strings.TrimSpace(tokenHash),
 		prefix,
 	); err != nil {
 		return errors.Wrap(err, "删除令牌会话失败")
