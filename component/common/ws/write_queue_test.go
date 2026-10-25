@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+
+	"github.com/coder/websocket"
 )
 
 // TestSendQueueBoundedBlocksUntilSlot 有界队列满时 Send 阻塞，消费后恢复
@@ -184,4 +186,47 @@ func TestMaxFramePayloadRoundTripWithCompress(t *testing.T) {
 	case <-time.After(testWait):
 		t.Fatal("等待压缩分片合帧超时")
 	}
+}
+
+// TestWriteTimeoutClosesStalledConn 对端不读导致写出卡住时，WriteTimeout 到点强制拆线
+func TestWriteTimeoutClosesStalledConn(t *testing.T) {
+	t.Log("[用例] WriteTimeout=100ms，对端升级后不读，写出阻塞应超时拆线")
+
+	idCh := make(chan string, 1)
+	srv, url := startTestServer(t, ServerConfig{
+		Addr:              "127.0.0.1:0",
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		QueueGCInterval:   Duration(0),
+		WriteTimeout:      100 * time.Millisecond,
+		Handler:           &captureIDHandler{idCh: idCh},
+	})
+
+	// 裸客户端只升级不读：服务端写出塞满内核缓冲后卡死，只有 WriteTimeout 能兜底
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	raw, _, err := websocket.Dial(ctx, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.CloseNow() })
+	waitUntil(t, testWait, func() bool { return srv.Len() == 1 }, "等待登记超时")
+	var connID string
+	select {
+	case connID = <-idCh:
+	case <-time.After(testWait):
+		t.Fatal("等待 ConnID 超时")
+	}
+
+	// 无界队列连发 16MiB，确保越过对端接收缓冲与内核发送缓冲后真实停滞
+	const total = 16 << 20
+	const chunk = 256 << 10
+	payload := make([]byte, chunk)
+	for sent := 0; sent < total; sent += chunk {
+		if err := srv.Send(connID, MsgBinary, payload); err != nil {
+			t.Fatalf("入队失败 sent=%d: %v", sent, err)
+		}
+	}
+	waitUntil(t, testWait, func() bool { return srv.Len() == 0 }, "写超时后连接应被拆除")
 }

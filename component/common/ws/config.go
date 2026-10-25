@@ -73,6 +73,9 @@ type ServerConfig struct {
 	// WriteMaxPayloadSize 单条逻辑消息可写上限（字节）
 	// 默认：0 → DefaultWriteMaxPayloadSize（256KiB）
 	WriteMaxPayloadSize int
+	// WriteTimeout 单条消息写出超时（整条含分片），超时强制拆线
+	// 默认：0（不超时，写出卡住交由心跳/寿命兜底）
+	WriteTimeout time.Duration
 	// HandshakeTimeout 握手超时
 	// 默认：0 → DefaultHandshakeTimeout（5s）
 	HandshakeTimeout time.Duration
@@ -145,6 +148,9 @@ func (c ServerConfig) Validate() error {
 	}
 	if err := validatePayloadSize(c.ReadMaxPayloadSize, "ReadMaxPayloadSize"); err != nil {
 		return err
+	}
+	if c.WriteTimeout < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "WriteTimeout 不能为负数")
 	}
 	if err := validateMaxFramePayloadSize(c.MaxFramePayloadSize, c.ResolvedWriteMaxPayloadSize()); err != nil {
 		return err
@@ -226,6 +232,9 @@ type ClientConfig struct {
 	// WriteMaxPayloadSize 单条逻辑消息可写上限（字节）
 	// 默认：0 → DefaultWriteMaxPayloadSize（256KiB）
 	WriteMaxPayloadSize int
+	// WriteTimeout 单条消息写出超时（整条含分片），超时强制拆线
+	// 默认：0（不超时，写出卡住交由心跳/寿命兜底）
+	WriteTimeout time.Duration
 	// HandshakeTimeout 拨号与升级握手超时
 	// 默认：0 → DefaultHandshakeTimeout（5s）
 	HandshakeTimeout time.Duration
@@ -273,6 +282,9 @@ func (c ClientConfig) Validate() error {
 	}
 	if err := validatePayloadSize(c.ReadMaxPayloadSize, "ReadMaxPayloadSize"); err != nil {
 		return err
+	}
+	if c.WriteTimeout < 0 {
+		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "WriteTimeout 不能为负数")
 	}
 	if err := validateMaxFramePayloadSize(c.MaxFramePayloadSize, c.ResolvedWriteMaxPayloadSize()); err != nil {
 		return err

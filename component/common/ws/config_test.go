@@ -199,3 +199,16 @@ func TestResolveHandlerPropagatesName(t *testing.T) {
 		t.Fatalf("Client DefaultHandler Name=%q ok=%v", dc.Name, ok)
 	}
 }
+
+// TestWriteTimeoutValidate 负 WriteTimeout 应拒绝；0 合法（不超时）
+func TestWriteTimeoutValidate(t *testing.T) {
+	if err := (ServerConfig{Addr: ":1", WriteTimeout: -1}).Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("负 WriteTimeout 应得 ErrInvalidArgument，实际 %v", err)
+	}
+	if err := (ClientConfig{WriteTimeout: -1}).Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("负 WriteTimeout 应得 ErrInvalidArgument，实际 %v", err)
+	}
+	if err := (ServerConfig{Addr: ":1", WriteTimeout: 0}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

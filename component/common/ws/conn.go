@@ -20,13 +20,14 @@ import (
 
 // connImpl 是一条 WebSocket 连接的内部实现
 type connImpl struct {
-	raw      *websocket.Conn // raw 是底层连接
-	session  *session        // session 是业务可用的连接级存储
-	remote   net.Addr        // remote 是对端地址
-	local    net.Addr        // local 是本地地址
-	writeMax int             // writeMax 是单条可写上限
-	maxFrame int             // maxFrame 是出站分片目标帧载荷；0 关闭
-	connID   string          // connID 仅服务端在登记后赋值
+	raw          *websocket.Conn // raw 是底层连接
+	session      *session        // session 是业务可用的连接级存储
+	remote       net.Addr        // remote 是对端地址
+	local        net.Addr        // local 是本地地址
+	writeMax     int             // writeMax 是单条可写上限
+	writeTimeout time.Duration   // writeTimeout 单条消息写出超时；0 不超时
+	maxFrame     int             // maxFrame 是出站分片目标帧载荷；0 关闭
+	connID       string          // connID 仅服务端在登记后赋值
 
 	sendQ *writeQueue // sendQ 是发送队列；业务与 Ping 经此串行写出
 
@@ -83,8 +84,9 @@ type connParams struct {
 	local         net.Addr
 	writeMax      int
 	readMax       int
-	maxFrame      int // maxFrame 出站分片目标帧载荷；0 关闭
-	sendQueueSize int // sendQueueSize 是发送队列容量；0 表示无界
+	writeTimeout  time.Duration // writeTimeout 单条消息写出超时；0 不超时
+	maxFrame      int           // maxFrame 出站分片目标帧载荷；0 关闭
+	sendQueueSize int           // sendQueueSize 是发送队列容量；0 表示无界
 }
 
 // newConn 包装底层连接并启动写循环
@@ -97,14 +99,15 @@ func newConn(p connParams) *connImpl {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &connImpl{
-		raw:         p.raw,
-		session:     newSession(),
-		remote:      p.remote,
-		local:       p.local,
-		writeMax:    p.writeMax,
-		maxFrame:    p.maxFrame,
-		serveCtx:    ctx,
-		serveCancel: cancel,
+		raw:          p.raw,
+		session:      newSession(),
+		remote:       p.remote,
+		local:        p.local,
+		writeMax:     p.writeMax,
+		writeTimeout: p.writeTimeout,
+		maxFrame:     p.maxFrame,
+		serveCtx:     ctx,
+		serveCancel:  cancel,
 	}
 	c.sendQ = newWriteQueue(c, p.sendQueueSize)
 	go c.writeLoop()

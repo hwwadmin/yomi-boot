@@ -17,7 +17,7 @@
 // SendQueueSize：0=无界；>0=有界（满则阻塞）。关闭或重连拆旧时丢弃未写出队列。
 // Server 已关 → ErrClosed；Client 未连/已关 → ErrNotConnected。
 // Broadcast 并行入队，已拆连接跳过；有界满队时调用方仍可能被慢连接堵住。
-// 通道健康只看心跳；写出卡住不因此拆线。
+// 通道健康只看心跳；写出卡住默认不因此拆线，WriteTimeout>0 时整条消息（含分片）限时写出，超时强制拆线。
 // QueueGCInterval：nil→30s；显式 0→关闭。Close 会停巡检，丢弃实例前应 Close。
 //
 // # 协议分片

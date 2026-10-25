@@ -50,6 +50,7 @@ type server struct {
 	maxConnections        int64                    // maxConnections 在线上限；0 表示不限制
 	heartbeat             heartbeatSettings        // heartbeat 已 resolve 的心跳
 	writeMax              int                      // writeMax 单条可写上限
+	writeTimeout          time.Duration            // writeTimeout 单条消息写出超时；0 不超时
 	readMax               int                      // readMax 单条可读上限
 	maxFrame              int                      // maxFrame 出站分片目标帧载荷；0 关闭
 	sendQueueSize         int                      // sendQueueSize 每连接发送队列容量；0 无界
@@ -89,6 +90,7 @@ func NewServer(cfg ServerConfig) (Server, error) {
 		maxConnections:        int64(cfg.MaxConnections),
 		heartbeat:             heartbeatFromResolved(interval, timeout),
 		writeMax:              cfg.ResolvedWriteMaxPayloadSize(),
+		writeTimeout:          cfg.WriteTimeout,
 		readMax:               cfg.ResolvedReadMaxPayloadSize(),
 		maxFrame:              cfg.MaxFramePayloadSize,
 		sendQueueSize:         cfg.SendQueueSize,
@@ -194,6 +196,7 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		remote:        parseNetAddr(r.RemoteAddr),
 		local:         local,
 		writeMax:      s.writeMax,
+		writeTimeout:  s.writeTimeout,
 		readMax:       s.readMax,
 		maxFrame:      s.maxFrame,
 		sendQueueSize: s.sendQueueSize,

@@ -223,7 +223,16 @@ func (c *connImpl) writeLoop() {
 	}
 }
 
+// wrapWriteErr 包装写失败；命中写超时的单独点名，便于区分写出卡死与一般写错误
+func wrapWriteErr(err error, msg string) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return errors.Wrap(err, "%s（超过 WriteTimeout）", msg)
+	}
+	return errors.Wrap(err, "%s", msg)
+}
+
 // writeMessageDirect 由写循环调用，直接写底层（不再入队）。
+// writeTimeout>0 时单条消息（含分片整体）限时写出，超时由底层强制拆线；
 // maxFrame>0 且明文超长时经 Writer 做协议分片；压缩开启时帧长尽力而为。
 func (c *connImpl) writeMessageDirect(typ MsgType, data []byte) error {
 	if c == nil || c.raw == nil {
@@ -239,17 +248,22 @@ func (c *connImpl) writeMessageDirect(typ MsgType, data []byte) error {
 		return errors.Wrap(errors.Sentinel(ErrInvalidArgument), "不支持的 MsgType")
 	}
 	ctx := context.Background()
+	var cancel context.CancelFunc
+	if c.writeTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, c.writeTimeout)
+		defer cancel()
+	}
 	maxFrame := c.maxFrame
 	if maxFrame <= 0 || len(data) <= maxFrame {
 		if err := c.raw.Write(ctx, wtyp, data); err != nil {
-			return errors.Wrap(err, "ws 写入消息失败")
+			return wrapWriteErr(err, "ws 写入消息失败")
 		}
 		return nil
 	}
 
 	w, err := c.raw.Writer(ctx, wtyp)
 	if err != nil {
-		return errors.Wrap(err, "ws 获取分片 Writer 失败")
+		return wrapWriteErr(err, "ws 获取分片 Writer 失败")
 	}
 	for offset := 0; offset < len(data); {
 		end := offset + maxFrame
@@ -258,12 +272,12 @@ func (c *connImpl) writeMessageDirect(typ MsgType, data []byte) error {
 		}
 		if _, err := w.Write(data[offset:end]); err != nil {
 			_ = w.Close()
-			return errors.Wrap(err, "ws 写入分片失败")
+			return wrapWriteErr(err, "ws 写入分片失败")
 		}
 		offset = end
 	}
 	if err := w.Close(); err != nil {
-		return errors.Wrap(err, "ws 结束分片消息失败")
+		return wrapWriteErr(err, "ws 结束分片消息失败")
 	}
 	return nil
 }
