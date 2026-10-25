@@ -13,9 +13,25 @@
 // CreateCollection 已存在返回 ErrAlreadyExists。HasCollection 不存在返回 false, nil。
 // milvus 建集时索引或 load 失败会删掉刚建的集合，避免半就绪；读写前会对未 load 的集合补索引并 load。
 // ReplaceCollection 用完整快照覆盖；过程允许脏读；milvus 先写新点再删旧点，失败时旧数据仍在（可能夹杂已写入的新点）；空切片保留空集合。
-// Search 的 Hit.Score 越大越相似（L2 已映射）；不同 Metric 的 Score 不可横比。
 // ListIDs 按元数据等值 AND 列出主键，只返回 ID；用于按业务键枚举/清理，不读向量。
 // Close 由业务在进程退出时调用，plugin.PluginSlot 不会自动关闭。
+//
+// # 检索模式
+//
+// Search 的 SearchQuery.Text 决定检索模式：
+//
+//   - Text 为空：纯向量检索，Score 越大越相似（L2 已映射）；不同 Metric 的 Score 不可横比
+//   - Text 非空：向量 + BM25 混合检索，两路结果以 RRF（k=60）融合，
+//     Score 是融合排名分（量级约 0 ~ 2/61，两路都命中的头部最大），与纯向量 Score 不可横比
+//
+// BM25 词法命中针对 Record.Text 原文；Text 为空的记录只参与向量一路。
+// 混合检索中两路各自最多取 TopK 条参与融合，Filter 对两路同时生效。
+//
+// milvus 侧混合检索要求 Milvus 2.5+（BM25 全文检索与 jieba 分词器）；
+// 集合 schema 自带 text / sparse 字段与 BM25 Function，旧版本创建的集合不含这些字段，
+// 写入与混合检索会得到引擎错误，需 DropCollection 后重建。
+// memory 侧自带 BM25（ASCII 词 + CJK 单字与二元词组切词，参数 k1=1.2、b=0.75，语料统计按过滤后候选集计算），
+// 排序与 milvus 的 jieba 分词实现存在合理差异，契约只保证"词法命中提升排名"一致。
 //
 // @author zwei
 package vectordb

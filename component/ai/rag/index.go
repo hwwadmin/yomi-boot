@@ -115,8 +115,10 @@ func (e *Engine) indexGroup(ctx context.Context, collection string, group docGro
 	for _, p := range group.docs {
 		for i, content := range p.chunks {
 			records = append(records, vectordb.Record{
-				ID:       chunkID(p.doc.ID, i),
-				Vector:   toFloat32(vectors[offset+i]),
+				ID:     chunkID(p.doc.ID, i),
+				Vector: toFloat32(vectors[offset+i]),
+				// 块原文写入 Text，供混合检索的 BM25 一路命中
+				Text:     content,
 				Metadata: chunkMetadata(p.doc, i, len(p.chunks), p.version, content),
 			})
 		}

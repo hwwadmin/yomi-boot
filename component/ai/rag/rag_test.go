@@ -201,7 +201,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 	if err != nil || len(chunks) != 1 || chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("自定义元数据过滤: %+v err=%v", chunks, err)
 	}
-	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.5})
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.02})
 	if err != nil || len(chunks) != 1 || chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("阈值过滤: %+v err=%v", chunks, err)
 	}
@@ -230,18 +230,18 @@ func TestMultipleCollections(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	sales, err := e.Retrieve(ctx, "kb_sales", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.5})
+	sales, err := e.Retrieve(ctx, "kb_sales", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02})
 	if err != nil || len(sales) != 0 {
 		t.Fatalf("销售库不应命中人事文档: %+v err=%v", sales, err)
 	}
-	hr, err := e.Retrieve(ctx, "kb_hr", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.5})
+	hr, err := e.Retrieve(ctx, "kb_hr", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02})
 	if err != nil || len(hr) != 1 || hr[0].DocumentID != "hr-1" {
 		t.Fatalf("人事库命中: %+v err=%v", hr, err)
 	}
 	if err := e.DeleteDocument(ctx, "kb_sales", "sales-1"); err != nil {
 		t.Fatal(err)
 	}
-	hr, err = e.Retrieve(ctx, "kb_hr", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.5})
+	hr, err = e.Retrieve(ctx, "kb_hr", RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02})
 	if err != nil || len(hr) != 1 {
 		t.Fatalf("删除销售库文档不应影响人事库: %+v err=%v", hr, err)
 	}
@@ -1027,5 +1027,99 @@ func TestEngineConcurrentRetrieve(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Fatal(err)
+	}
+}
+
+// captureSearchStore 捕获 Search 入参，用于验证检索策略传递
+type captureSearchStore struct {
+	vectordb.Store
+	captured *vectordb.SearchQuery
+}
+
+// Search 记录入参后透传
+func (s captureSearchStore) Search(ctx context.Context, collection string, q vectordb.SearchQuery) ([]vectordb.Hit, error) {
+	*s.captured = q
+	return s.Store.Search(ctx, collection, q)
+}
+
+// TestRetrieveStrategyPlumbing 覆盖检索策略传递：默认与 hybrid 带 BM25 文本，vector 不带
+func TestRetrieveStrategyPlumbing(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t, testDimension)
+	emb := &fakeEmbedder{dim: testDimension}
+	captured := &vectordb.SearchQuery{}
+	e, err := New(Config{Embedder: emb, Store: captureSearchStore{Store: store, captured: captured}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
+		{ID: "doc", Content: "苹果是一种水果。"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	// 默认策略是 hybrid：查询原文应作为 BM25 检索文本传给向量库
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Text != "苹果" {
+		t.Fatalf("默认 hybrid 未传递检索文本: %+v", *captured)
+	}
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
+		Query: "苹果", Strategy: StrategyHybrid, TopK: 5,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Text != "苹果" {
+		t.Fatalf("hybrid 未传递检索文本: %+v", *captured)
+	}
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
+		Query: "苹果", Strategy: StrategyVector, TopK: 5,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Text != "" {
+		t.Fatalf("vector 不应传递检索文本: %+v", *captured)
+	}
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
+		Query: "苹果", Strategy: "bogus", TopK: 5,
+	}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("非法策略: %v", err)
+	}
+}
+
+// TestRetrieveHybridLexicalBoost 覆盖混合检索词法命中提升排名
+func TestRetrieveHybridLexicalBoost(t *testing.T) {
+	t.Parallel()
+	e, _, _ := newTestEngine(t)
+	ctx := context.Background()
+	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
+		// fakeEmbedder 把 苹果/香蕉 映到不同维度；doc-z 含查询词但按 ID 排在 doc-a 之后
+		{ID: "doc-a", Content: "香蕉。配送范围说明。"},
+		{ID: "doc-z", Content: "苹果。退款政策说明。"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	// 查询"如何退款"的向量与两文档正交（落第三维），纯向量两文档并列 0 分按 ID 升序；
+	// 混合检索下 doc-z 靠 BM25 词法命中跃居第一
+	chunks, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "如何退款", TopK: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 2 || chunks[0].DocumentID != "doc-z" {
+		t.Fatalf("词法命中应排第一: %+v", chunks)
+	}
+	if chunks[0].Score <= chunks[1].Score {
+		t.Fatalf("混合排序错误: %+v", chunks)
+	}
+	// 纯向量策略不启用 BM25：两文档并列 0 分，按 ID 升序 doc-a 在前
+	chunks, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
+		Query: "如何退款", Strategy: StrategyVector, TopK: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 2 || chunks[0].DocumentID != "doc-a" || chunks[0].Score != 0 || chunks[1].Score != 0 {
+		t.Fatalf("纯向量应为无区分的正交得分: %+v", chunks)
 	}
 }

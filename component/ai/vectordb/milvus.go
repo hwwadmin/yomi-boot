@@ -25,6 +25,8 @@ const (
 	fieldID       = "id"
 	fieldVector   = "vector"
 	fieldMetadata = "metadata"
+	fieldText     = "text"
+	fieldSparse   = "sparse"
 )
 
 var _ Store = (*milvusStore)(nil)
@@ -258,7 +260,7 @@ func (s *milvusStore) Get(ctx context.Context, collection string, ids []string) 
 	rs, err := retryOnRateLimitVal(ctx, func() (milvusclient.ResultSet, error) {
 		return s.cli.Query(ctx, milvusclient.NewQueryOption(n).
 			WithIDs(column.NewColumnVarChar(fieldID, trimmed)).
-			WithOutputFields(fieldID, fieldVector, fieldMetadata).
+			WithOutputFields(fieldID, fieldVector, fieldText, fieldMetadata).
 			WithConsistencyLevel(entity.ClStrong))
 	})
 	if err != nil {
@@ -396,7 +398,7 @@ func (s *milvusStore) DeleteByFilter(ctx context.Context, collection string, fil
 	return s.flush(ctx, n)
 }
 
-// Search 向量检索
+// Search 向量检索；Text 非空时走 HybridSearch 以 RRF 融合 BM25
 func (s *milvusStore) Search(ctx context.Context, collection string, q SearchQuery) ([]Hit, error) {
 	ctx, cancel, err := s.begin(ctx)
 	if err != nil {
@@ -420,15 +422,21 @@ func (s *milvusStore) Search(ctx context.Context, collection string, q SearchQue
 	if err := s.ensureReady(ctx, n); err != nil {
 		return nil, err
 	}
+	expr := ""
+	if len(q.Filter) > 0 {
+		expr, err = metadataFilterExpr(q.Filter)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if q.Text != "" {
+		return s.hybridSearch(ctx, n, q, expr)
+	}
 	opt := milvusclient.NewSearchOption(n, q.TopK, []entity.Vector{entity.FloatVector(q.Vector)}).
 		WithANNSField(fieldVector).
 		WithOutputFields(fieldID, fieldMetadata).
 		WithConsistencyLevel(entity.ClStrong)
-	if len(q.Filter) > 0 {
-		expr, err := metadataFilterExpr(q.Filter)
-		if err != nil {
-			return nil, err
-		}
+	if expr != "" {
 		opt = opt.WithFilter(expr)
 	}
 	sets, err := retryOnRateLimitVal(ctx, func() ([]milvusclient.ResultSet, error) {
@@ -441,6 +449,30 @@ func (s *milvusStore) Search(ctx context.Context, collection string, q SearchQue
 		return []Hit{}, nil
 	}
 	return resultSetToHits(&sets[0], s.metric)
+}
+
+// hybridSearch 向量与 BM25 两路检索并 RRF 融合；混合分是融合排名分，不做 Metric 映射
+func (s *milvusStore) hybridSearch(ctx context.Context, n string, q SearchQuery, expr string) ([]Hit, error) {
+	dense := milvusclient.NewAnnRequest(fieldVector, q.TopK, entity.FloatVector(q.Vector))
+	lexical := milvusclient.NewAnnRequest(fieldSparse, q.TopK, entity.Text(q.Text))
+	if expr != "" {
+		dense = dense.WithFilter(expr)
+		lexical = lexical.WithFilter(expr)
+	}
+	opt := milvusclient.NewHybridSearchOption(n, q.TopK, dense, lexical).
+		WithReranker(milvusclient.NewRRFReranker()).
+		WithOutputFields(fieldID, fieldMetadata).
+		WithConsistencyLevel(entity.ClStrong)
+	sets, err := retryOnRateLimitVal(ctx, func() ([]milvusclient.ResultSet, error) {
+		return s.cli.HybridSearch(ctx, opt)
+	})
+	if err != nil {
+		return nil, mapMilvusErr(err)
+	}
+	if len(sets) == 0 {
+		return []Hit{}, nil
+	}
+	return hitsWithScore(&sets[0], nil)
 }
 
 // Close 关闭 gRPC 客户端
@@ -492,7 +524,16 @@ func (s *milvusStore) createReady(ctx context.Context, name string) error {
 	schema := entity.NewSchema().
 		WithField(entity.NewField().WithName(fieldID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(int64(maxIDLen)).WithIsPrimaryKey(true)).
 		WithField(entity.NewField().WithName(fieldVector).WithDataType(entity.FieldTypeFloatVector).WithDim(int64(s.dim))).
-		WithField(entity.NewField().WithName(fieldMetadata).WithDataType(entity.FieldTypeJSON))
+		WithField(entity.NewField().WithName(fieldMetadata).WithDataType(entity.FieldTypeJSON)).
+		WithField(entity.NewField().WithName(fieldText).WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(int64(maxTextLen)).
+			WithEnableAnalyzer(true).
+			WithAnalyzerParams(map[string]any{"tokenizer": "jieba"})).
+		WithField(entity.NewField().WithName(fieldSparse).WithDataType(entity.FieldTypeSparseVector)).
+		WithFunction(entity.NewFunction().WithName("text_bm25").
+			WithType(entity.FunctionTypeBM25).
+			WithInputFields(fieldText).
+			WithOutputFields(fieldSparse))
 	// 建集本身失败时不主动 Drop：无法区分是否由并发创建者成功创建，避免误删
 	if err := retryOnRateLimit(ctx, func() error {
 		return s.cli.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(name, schema))
@@ -527,13 +568,20 @@ func (s *milvusStore) ensureReady(ctx context.Context, name string) error {
 	return s.load(ctx, name)
 }
 
-// createIndex 按 Store 锁定的索引类型建索引；已存在视为成功
+// createIndex 建稠密向量索引与 BM25 稀疏索引；已存在视为成功
 func (s *milvusStore) createIndex(ctx context.Context, name string) error {
-	idx := s.newVectorIndex()
+	if err := s.createFieldIndex(ctx, name, fieldVector, s.newVectorIndex()); err != nil {
+		return err
+	}
+	return s.createFieldIndex(ctx, name, fieldSparse, index.NewSparseInvertedIndex(entity.BM25, 0))
+}
+
+// createFieldIndex 对单字段建索引并等待完成；已存在视为成功
+func (s *milvusStore) createFieldIndex(ctx context.Context, name, field string, idx index.Index) error {
 	var task *milvusclient.CreateIndexTask
 	err := retryOnRateLimit(ctx, func() error {
 		var err error
-		task, err = s.cli.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, fieldVector, idx))
+		task, err = s.cli.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, field, idx))
 		return err
 	})
 	if err != nil {
@@ -631,10 +679,12 @@ func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []
 		batch := records[start:end]
 		ids := make([]string, len(batch))
 		vecs := make([][]float32, len(batch))
+		texts := make([]string, len(batch))
 		metas := make([][]byte, len(batch))
 		for i := range batch {
 			ids[i] = strings.TrimSpace(batch[i].ID)
 			vecs[i] = batch[i].Vector
+			texts[i] = batch[i].Text
 			raw, err := marshalMetadata(batch[i].Metadata)
 			if err != nil {
 				return errors.Sentinel(ErrInvalidArgument)
@@ -645,6 +695,7 @@ func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []
 			_, err := s.cli.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(name).
 				WithVarcharColumn(fieldID, ids).
 				WithFloatVectorColumn(fieldVector, s.dim, vecs).
+				WithVarcharColumn(fieldText, texts).
 				WithColumns(column.NewColumnJSONBytes(fieldMetadata, metas)))
 			return err
 		}); err != nil {
@@ -769,8 +820,13 @@ func idsFromResultSet(rs *milvusclient.ResultSet) ([]string, error) {
 	return out, nil
 }
 
-// resultSetToHits 将检索结果转为 Hit
+// resultSetToHits 将稠密检索结果转为 Hit；按 Metric 映射原始分
 func resultSetToHits(rs *milvusclient.ResultSet, metric Metric) ([]Hit, error) {
+	return hitsWithScore(rs, func(raw float32) float32 { return engineScoreToHit(metric, raw) })
+}
+
+// hitsWithScore 将检索结果转为 Hit；conv 为空时原始分直接作为 Score（混合检索的 RRF 融合分）
+func hitsWithScore(rs *milvusclient.ResultSet, conv func(float32) float32) ([]Hit, error) {
 	if rs == nil || rs.Len() == 0 {
 		return []Hit{}, nil
 	}
@@ -783,7 +839,10 @@ func resultSetToHits(rs *milvusclient.ResultSet, metric Metric) ([]Hit, error) {
 	for i, id := range ids {
 		score := float32(0)
 		if i < len(rs.Scores) {
-			score = engineScoreToHit(metric, rs.Scores[i])
+			score = rs.Scores[i]
+			if conv != nil {
+				score = conv(score)
+			}
 		}
 		md, err := metadataAt(metaCol, i)
 		if err != nil {
@@ -804,6 +863,7 @@ func resultSetToRecords(rs *milvusclient.ResultSet) ([]Record, error) {
 		return nil, err
 	}
 	vecCol := rs.GetColumn(fieldVector)
+	textCol := rs.GetColumn(fieldText)
 	metaCol := rs.GetColumn(fieldMetadata)
 	out := make([]Record, 0, len(ids))
 	for i, id := range ids {
@@ -811,13 +871,29 @@ func resultSetToRecords(rs *milvusclient.ResultSet) ([]Record, error) {
 		if err != nil {
 			return nil, err
 		}
+		text, err := textAt(textCol, i)
+		if err != nil {
+			return nil, err
+		}
 		md, err := metadataAt(metaCol, i)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, Record{ID: id, Vector: vec, Metadata: md})
+		out = append(out, Record{ID: id, Vector: vec, Text: text, Metadata: md})
 	}
 	return out, nil
+}
+
+// textAt 读取第 i 条 BM25 原文；列缺失返回空串
+func textAt(col column.Column, i int) (string, error) {
+	if col == nil {
+		return "", nil
+	}
+	s, err := col.GetAsString(i)
+	if err != nil {
+		return "", wrapSentinel(ErrUnavailable, err)
+	}
+	return s, nil
 }
 
 // vectorAt 读取第 i 条向量

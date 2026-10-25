@@ -27,7 +27,8 @@ type Store interface {
 	Delete(ctx context.Context, collection string, ids []string) error
 	// DeleteByFilter 按元数据等值 AND 删除；filter 至少 1 个键；集合不存在返回 ErrNotFound
 	DeleteByFilter(ctx context.Context, collection string, filter map[string]string) error
-	// Search 向量检索；无命中返回空切片；集合不存在返回 ErrNotFound；Hit 不含 Vector
+	// Search 向量检索；Text 为空走纯向量，非空走向量 + BM25 混合检索（RRF 融合）；
+	// 无命中返回空切片；集合不存在返回 ErrNotFound；Hit 不含 Vector
 	Search(ctx context.Context, collection string, q SearchQuery) ([]Hit, error)
 
 	// Close 释放底层资源；可重复调用
@@ -38,12 +39,14 @@ type Store interface {
 type Record struct {
 	ID       string            // ID 是主键；trim 后非空，最长 maxIDLen 字节
 	Vector   []float32         // Vector 长度必须等于 Config.Dimension
+	Text     string            // Text 可选；BM25 词法检索的原文，空串表示该条不参与词法命中；最长 maxTextLen 字节
 	Metadata map[string]string // Metadata 可选；键 trim 后不得为空
 }
 
 // SearchQuery 向量检索入参
 type SearchQuery struct {
 	Vector []float32         // Vector 长度必须等于 Config.Dimension
+	Text   string            // Text 可选；非空时启用向量 + BM25 混合检索，BM25 命中 Record.Text；最长 maxTextLen 字节
 	TopK   int               // TopK 必须 > 0 且不超过 MaxTopK
 	Filter map[string]string // Filter 可选；nil/空表示不过滤；全键等值 AND
 }
@@ -51,6 +54,6 @@ type SearchQuery struct {
 // Hit 一条检索命中；Score 越大越相似（L2 已映射）
 type Hit struct {
 	ID       string            // ID 是主键
-	Score    float32           // Score 越大越相似；不同 Metric 不可横比
+	Score    float32           // Score 越大越相似；纯向量与混合检索的 Score 不可横比（混合为 RRF 融合分）
 	Metadata map[string]string // Metadata 为写入时的标量副本
 }

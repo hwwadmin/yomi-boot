@@ -30,6 +30,10 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 	if query == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
+	strategy, err := normalizeRetrievalStrategy(req.Strategy)
+	if err != nil {
+		return nil, err
+	}
 	if req.TopK <= 0 || req.TopK > vectordb.MaxTopK {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
@@ -51,8 +55,14 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 	if err != nil {
 		return nil, err
 	}
+	// hybrid 把查询原文同时交给 BM25 一路；vector 只走向量
+	searchText := ""
+	if strategy == StrategyHybrid {
+		searchText = query
+	}
 	hits, err := e.store.Search(ctx, collection, vectordb.SearchQuery{
 		Vector: toFloat32(vectors[0]),
+		Text:   searchText,
 		TopK:   req.TopK,
 		Filter: req.Filter,
 	})
@@ -104,6 +114,19 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 type chunkState struct {
 	total   int
 	version string
+}
+
+// normalizeRetrievalStrategy 空策略回退 hybrid，并校验白名单
+func normalizeRetrievalStrategy(strategy RetrievalStrategy) (RetrievalStrategy, error) {
+	if strategy == "" {
+		return StrategyHybrid, nil
+	}
+	switch strategy {
+	case StrategyHybrid, StrategyVector:
+		return strategy, nil
+	default:
+		return "", errors.Sentinel(ErrInvalidArgument)
+	}
 }
 
 // currentChunkStates 读取命中文档当前版本与块总数；辅助查询失败时降级为不过滤

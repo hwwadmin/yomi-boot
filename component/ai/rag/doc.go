@@ -35,7 +35,7 @@
 //
 // # 运行期参数
 //
-//   - 集合名、IndexRequest.Chunker、RetrieveRequest.TopK/MinScore/Filter 都按调用传入
+//   - 集合名、IndexRequest.Chunker、RetrieveRequest.Strategy/TopK/MinScore/Filter 都按调用传入
 //   - RetrieveRequest.TopK 必填；MinScore 为 0 表示不设阈值
 //   - Engine 不内置超时，使用调用方 ctx 控制
 //   - 向量维度在首次向量化后锁定；Embedder 输出变化返回 ErrDimensionMismatch
@@ -44,6 +44,7 @@
 // # 写入
 //
 //   - 块主键为 "文档ID#序号"；内容与切分信息写入保留元数据键，文档自定义元数据原样合并
+//   - 块原文同时写入向量库 Text 字段，供混合检索的 BM25 一路命中；不额外占向量维度
 //   - 每个块写入文档当前版本（保留键 rag_version）与块总数（rag_chunk_count），供检索侧过滤旧块
 //   - 同一文档重复 Index 会覆盖同序号块，并在写入成功后删除该文档中不属于本次新块集合的旧块
 //   - Index 按块预算分组写入，避免一次请求把全部向量与记录同时放在内存；中途失败时已写入的组保留，重试即可
@@ -53,11 +54,23 @@
 //   - 不同文档、不同集合可并发；条带碰撞会短暂串行
 //   - 保留元数据键见 MetadataKeyDocumentID 等常量，Document.Metadata 不得使用
 //
+// # 检索策略
+//
+// RetrieveRequest.Strategy 选择检索策略，空则 hybrid：
+//
+//   - hybrid（默认）：向量 + BM25 混合检索，查询原文同时交给向量库的词法一路，
+//     两路结果以 RRF（k=60）融合；Score 是融合排名分（量级约 0 ~ 2/61），
+//     MinScore 阈值须按融合分口径设置，与 vector 的 Score 不可横比
+//   - vector：纯向量检索，Score 是相似度（越大越相似，L2 已映射）
+//
+// 词法能力由 vectordb 提供：milvus 用原生 BM25 全文检索（要求 Milvus 2.5+，
+// 旧版本创建的集合需重建后才能混合检索），memory 自带 BM25 实现。
+//
 // # 检索与删除
 //
 //   - Retrieve：集合不存在或为空时返回空切片与 nil，不视为错误；缺少 rag_content 的命中会被忽略
 //   - Retrieve 会读取命中文档当前版本与块总数，丢弃版本不一致或索引超出总数的旧块；辅助查询失败时降级为不过滤并告警
-//   - Score 越大越相似；不同 Metric 的 Score 不可横比
+//   - Score 越大越相似；不同 Metric 与不同 Strategy 的 Score 不可横比
 //   - DeleteDocument：删除文档全部块；集合不存在时返回 nil
 //
 // # 错误

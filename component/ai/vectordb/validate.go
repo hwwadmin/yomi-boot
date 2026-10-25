@@ -47,6 +47,9 @@ func validateRecords(records []Record, dim int) error {
 		if len(records[i].Vector) != dim {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
+		if len(records[i].Text) > maxTextLen {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
 		trimmedKeys := make(map[string]struct{}, len(records[i].Metadata))
 		for k := range records[i].Metadata {
 			key := strings.TrimSpace(k)
@@ -95,6 +98,9 @@ func validateFilter(filter map[string]string, requireNonEmpty bool) error {
 // validateSearchQuery 校验检索入参
 func validateSearchQuery(q SearchQuery, dim int) error {
 	if len(q.Vector) != dim {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if len(q.Text) > maxTextLen {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	if q.TopK <= 0 || q.TopK > MaxTopK {

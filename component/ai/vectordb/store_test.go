@@ -360,6 +360,27 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 		}
 	})
 
+	t.Run("hybrid search", func(t *testing.T) {
+		if err := store.Upsert(ctx, name, []Record{
+			{ID: "hx", Vector: vec(0), Text: "退款政策与流程", Metadata: map[string]string{"doc_id": "dhx"}},
+			{ID: "hy", Vector: vec(0), Text: "配送范围与时效", Metadata: map[string]string{"doc_id": "dhy"}},
+			{ID: "hz", Vector: vec(0)},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// 向量完全相同（正交于查询向量），排名差异只可能来自 BM25 词法命中
+		hits, err := store.Search(ctx, name, SearchQuery{Vector: vec(1), Text: "如何退款", TopK: 3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hits) == 0 || hits[0].ID != "hx" {
+			t.Fatalf("词法命中应排第一: %+v", hits)
+		}
+		if hits[0].Score <= 0 || hits[0].Score > 1.0 {
+			t.Fatalf("RRF 融合分超界: %+v", hits)
+		}
+	})
+
 	t.Run("search dropped", func(t *testing.T) {
 		if err := store.DropCollection(ctx, name); err != nil {
 			t.Fatal(err)

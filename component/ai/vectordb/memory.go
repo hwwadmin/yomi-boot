@@ -20,6 +20,7 @@ var _ Store = (*memoryStore)(nil)
 type memRow struct {
 	id       string
 	vector   []float32
+	text     string
 	metadata map[string]string
 }
 
@@ -323,7 +324,7 @@ func (s *memoryStore) DeleteByFilter(ctx context.Context, collection string, fil
 	return nil
 }
 
-// Search 暴力扫描 TopK
+// Search 暴力扫描 TopK；Text 非空时走向量 + BM25 混合并以 RRF 融合
 func (s *memoryStore) Search(ctx context.Context, collection string, q SearchQuery) ([]Hit, error) {
 	ctx, cancel, err := s.begin(ctx)
 	if err != nil {
@@ -346,11 +347,7 @@ func (s *memoryStore) Search(ctx context.Context, collection string, q SearchQue
 	if !ok {
 		return nil, errors.Sentinel(ErrNotFound)
 	}
-	type scored struct {
-		row   memRow
-		score float32
-	}
-	cands := make([]scored, 0, len(coll))
+	rows := make([]memRow, 0, len(coll))
 	nchk := 0
 	for _, row := range coll {
 		nchk++
@@ -362,22 +359,78 @@ func (s *memoryStore) Search(ctx context.Context, collection string, q SearchQue
 		if !matchFilter(row.metadata, q.Filter) {
 			continue
 		}
-		cands = append(cands, scored{row: row, score: similarityScore(s.metric, q.Vector, row.vector)})
+		rows = append(rows, row)
 	}
-	sort.SliceStable(cands, func(i, j int) bool {
-		if cands[i].score == cands[j].score {
-			return cands[i].row.id < cands[j].row.id
-		}
-		return cands[i].score > cands[j].score
-	})
-	if q.TopK < len(cands) {
-		cands = cands[:q.TopK]
-	}
-	out := make([]Hit, 0, len(cands))
-	for _, c := range cands {
-		out = append(out, Hit{ID: c.row.id, Score: c.score, Metadata: copyMetadata(c.row.metadata)})
+	var out []Hit
+	if q.Text == "" {
+		out = s.denseHits(rows, q)
+	} else {
+		out = s.hybridHits(rows, q)
 	}
 	return out, nil
+}
+
+// denseHits 纯向量排序并截断 TopK
+func (s *memoryStore) denseHits(rows []memRow, q SearchQuery) []Hit {
+	dense := make([]rankedID, 0, len(rows))
+	for _, row := range rows {
+		dense = append(dense, rankedID{id: row.id, score: float64(similarityScore(s.metric, q.Vector, row.vector))})
+	}
+	rankDescending(dense)
+	if q.TopK < len(dense) {
+		dense = dense[:q.TopK]
+	}
+	return hitsByID(rows, dense)
+}
+
+// hybridHits 向量与 BM25 两路排名后 RRF 融合；BM25 路只保留有词法命中的条目
+func (s *memoryStore) hybridHits(rows []memRow, q SearchQuery) []Hit {
+	dense := make([]rankedID, 0, len(rows))
+	for _, row := range rows {
+		dense = append(dense, rankedID{id: row.id, score: float64(similarityScore(s.metric, q.Vector, row.vector))})
+	}
+	rankDescending(dense)
+	if q.TopK < len(dense) {
+		dense = dense[:q.TopK]
+	}
+	texts := make([]string, len(rows))
+	for i, row := range rows {
+		texts[i] = row.text
+	}
+	scorer := newBM25Scorer(texts)
+	queryTokens := tokenizeText(q.Text)
+	lexical := make([]rankedID, 0, len(rows))
+	for i, row := range rows {
+		if score := scorer.score(i, queryTokens); score > 0 {
+			lexical = append(lexical, rankedID{id: row.id, score: score})
+		}
+	}
+	rankDescending(lexical)
+	if q.TopK < len(lexical) {
+		lexical = lexical[:q.TopK]
+	}
+	fused := rrfFuse([][]rankedID{dense, lexical})
+	if q.TopK < len(fused) {
+		fused = fused[:q.TopK]
+	}
+	return hitsByID(rows, fused)
+}
+
+// hitsByID 按排名条目构造命中；score 为各排名条目的分值
+func hitsByID(rows []memRow, ranked []rankedID) []Hit {
+	byID := make(map[string]memRow, len(rows))
+	for _, row := range rows {
+		byID[row.id] = row
+	}
+	out := make([]Hit, 0, len(ranked))
+	for _, item := range ranked {
+		row, ok := byID[item.id]
+		if !ok {
+			continue
+		}
+		out = append(out, Hit{ID: item.id, Score: float32(item.score), Metadata: copyMetadata(row.metadata)})
+	}
+	return out
 }
 
 // Close 关闭内存 Store
@@ -421,6 +474,7 @@ func toMemRow(r Record) memRow {
 	return memRow{
 		id:       id,
 		vector:   copyVector(r.Vector),
+		text:     r.Text,
 		metadata: copyMetadata(r.Metadata),
 	}
 }
@@ -430,6 +484,7 @@ func (r memRow) toRecord() Record {
 	return Record{
 		ID:       r.id,
 		Vector:   copyVector(r.vector),
+		Text:     r.text,
 		Metadata: copyMetadata(r.metadata),
 	}
 }
