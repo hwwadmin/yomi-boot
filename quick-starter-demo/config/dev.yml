@@ -282,6 +282,7 @@ consul:
   service_address: 127.0.0.1:8080
   check_address: http://127.0.0.1:8080/health
   discovery_cache_seconds: 30
+  discovery_stale_if_error_seconds: 300
   discovery_url_scheme: http://
   http_timeout_seconds: 10
   deregister_enabled: true

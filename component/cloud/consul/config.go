@@ -16,6 +16,8 @@ import (
 const (
 	// defaultDiscoveryCacheSeconds 是服务发现缓存的默认秒数
 	defaultDiscoveryCacheSeconds = 30
+	// defaultDiscoveryStaleIfErrorSeconds 是发现失败时陈旧实例列表兜底窗口的默认秒数
+	defaultDiscoveryStaleIfErrorSeconds = 300
 	// defaultHTTPTimeoutSeconds 是 Consul Agent HTTP 客户端默认超时秒数
 	defaultHTTPTimeoutSeconds = 10
 	// defaultDeregisterAfterSeconds 是健康检查连续失败后的默认注销秒数（30 分钟）
@@ -32,6 +34,9 @@ type Config struct {
 	DiscoveryCacheSeconds int    // DiscoveryCacheSeconds 是服务发现缓存秒数
 	DiscoveryURLScheme    string // DiscoveryURLScheme 服务发现 URL 协议前缀，如 http:// / https://，留空则不拼接
 	HTTPTimeoutSeconds    int    // HTTPTimeoutSeconds 是访问 Consul Agent 的 HTTP 超时秒数，未配置默认 10
+	// DiscoveryStaleIfErrorSeconds 是发现失败时允许返回陈旧实例列表的兜底秒数（自缓存过期起算），
+	// 未配置默认 300，显式 0 表示关闭兜底
+	DiscoveryStaleIfErrorSeconds *int
 	// DeregisterEnabled 是否在健康检查连续失败后自动注销，未配置默认 true
 	DeregisterEnabled *bool
 	// DeregisterAfterSeconds 是健康检查连续失败后的注销秒数，未配置默认 1800（30 分钟），最小 60
@@ -48,6 +53,9 @@ func (c Config) Validate() error {
 	}
 	if c.DiscoveryCacheSeconds < 0 {
 		return errors.New("discovery_cache_seconds 不能为负数")
+	}
+	if c.DiscoveryStaleIfErrorSeconds != nil && *c.DiscoveryStaleIfErrorSeconds < 0 {
+		return errors.New("discovery_stale_if_error_seconds 不能为负数")
 	}
 	if c.HTTPTimeoutSeconds < 0 {
 		return errors.New("http_timeout_seconds 不能为负数")
@@ -78,6 +86,18 @@ func (c Config) DiscoveryCacheDuration() time.Duration {
 		return defaultDiscoveryCacheSeconds * time.Second
 	}
 	return time.Duration(c.DiscoveryCacheSeconds) * time.Second
+}
+
+// DiscoveryStaleIfErrorOrDefault 返回发现失败时的陈旧兜底窗口；
+// 未配置默认 300 秒，显式 0（或负数已被 Validate 拒绝）表示关闭兜底
+func (c Config) DiscoveryStaleIfErrorOrDefault() time.Duration {
+	if c.DiscoveryStaleIfErrorSeconds == nil {
+		return defaultDiscoveryStaleIfErrorSeconds * time.Second
+	}
+	if *c.DiscoveryStaleIfErrorSeconds <= 0 {
+		return 0
+	}
+	return time.Duration(*c.DiscoveryStaleIfErrorSeconds) * time.Second
 }
 
 // HTTPTimeoutOrDefault 返回访问 Consul Agent 的 HTTP 超时，未配置或为 0 时默认 10 秒

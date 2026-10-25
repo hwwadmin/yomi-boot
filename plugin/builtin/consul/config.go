@@ -20,6 +20,8 @@ type BootConfig struct {
 	DiscoveryCacheSeconds int    `mapstructure:"discovery_cache_seconds"` // DiscoveryCacheSeconds 是服务发现缓存秒数
 	DiscoveryURLScheme    string `mapstructure:"discovery_url_scheme"`    // DiscoveryURLScheme 服务发现 URL 协议前缀，如 http:// / https://，留空则不拼接
 	HTTPTimeoutSeconds    int    `mapstructure:"http_timeout_seconds"`    // HTTPTimeoutSeconds 是访问 Consul Agent 的 HTTP 超时秒数，未配置默认 10
+	// DiscoveryStaleIfErrorSeconds 是发现失败时允许返回陈旧实例列表的兜底秒数（自缓存过期起算），未配置默认 300，显式 0 表示关闭
+	DiscoveryStaleIfErrorSeconds *int `mapstructure:"discovery_stale_if_error_seconds"`
 	// DeregisterEnabled 是否在健康检查连续失败后自动注销，未配置默认 true
 	DeregisterEnabled *bool `mapstructure:"deregister_enabled"`
 	// DeregisterAfterSeconds 是健康检查连续失败后的注销秒数，未配置默认 1800（30 分钟），最小 60
@@ -34,16 +36,17 @@ func (c BootConfig) EnabledOrDefault() bool {
 // ToConfig 转换为运行时配置
 func (c BootConfig) ToConfig() consul.Config {
 	return consul.Config{
-		Addr:                   c.Addr,
-		ServiceName:            c.ServiceName,
-		ServiceID:              c.ServiceID,
-		ServiceAddress:         c.ServiceAddress,
-		CheckAddress:           c.CheckAddress,
-		DiscoveryCacheSeconds:  c.DiscoveryCacheSeconds,
-		DiscoveryURLScheme:     c.DiscoveryURLScheme,
-		HTTPTimeoutSeconds:     c.HTTPTimeoutSeconds,
-		DeregisterEnabled:      c.DeregisterEnabled,
-		DeregisterAfterSeconds: c.DeregisterAfterSeconds,
+		Addr:                         c.Addr,
+		ServiceName:                  c.ServiceName,
+		ServiceID:                    c.ServiceID,
+		ServiceAddress:               c.ServiceAddress,
+		CheckAddress:                 c.CheckAddress,
+		DiscoveryCacheSeconds:        c.DiscoveryCacheSeconds,
+		DiscoveryStaleIfErrorSeconds: c.DiscoveryStaleIfErrorSeconds,
+		DiscoveryURLScheme:           c.DiscoveryURLScheme,
+		HTTPTimeoutSeconds:           c.HTTPTimeoutSeconds,
+		DeregisterEnabled:            c.DeregisterEnabled,
+		DeregisterAfterSeconds:       c.DeregisterAfterSeconds,
 	}
 }
 

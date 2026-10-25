@@ -267,3 +267,37 @@ func TestParseConsulCheckURL(t *testing.T) {
 		})
 	}
 }
+
+// TestDiscoveryStaleIfErrorOrDefault 验证陈旧兜底窗口的三态默认值
+func TestDiscoveryStaleIfErrorOrDefault(t *testing.T) {
+	t.Parallel()
+
+	if got := (Config{}).DiscoveryStaleIfErrorOrDefault(); got != 300*time.Second {
+		t.Fatalf("未配置默认 300s，实际 %s", got)
+	}
+	zero := 0
+	if got := (Config{DiscoveryStaleIfErrorSeconds: &zero}).DiscoveryStaleIfErrorOrDefault(); got != 0 {
+		t.Fatalf("显式 0 应关闭兜底，实际 %s", got)
+	}
+	custom := 42
+	if got := (Config{DiscoveryStaleIfErrorSeconds: &custom}).DiscoveryStaleIfErrorOrDefault(); got != 42*time.Second {
+		t.Fatalf("显式 42 期望 42s，实际 %s", got)
+	}
+}
+
+// TestConfigValidateStaleIfError 验证陈旧兜底窗口的负数校验
+func TestConfigValidateStaleIfError(t *testing.T) {
+	t.Parallel()
+
+	negative := -1
+	cfg := Config{
+		Addr:                         "127.0.0.1:8500",
+		ServiceID:                    "svc-1",
+		ServiceAddress:               "10.0.0.1:8080",
+		CheckAddress:                 "http://10.0.0.1:8080/health",
+		DiscoveryStaleIfErrorSeconds: &negative,
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "discovery_stale_if_error_seconds") {
+		t.Fatalf("负数应校验失败，实际 %v", err)
+	}
+}
