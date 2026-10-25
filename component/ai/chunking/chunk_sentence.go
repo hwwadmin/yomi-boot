@@ -2,7 +2,7 @@
 //
 // @author zwei
 
-package rag
+package chunking
 
 import "gitee.com/hq_project/yomi-boot/component/core/errors"
 
@@ -13,21 +13,21 @@ var sentenceSeparators = []string{
 	". ", "! ", "? ", "; ", ": ",
 }
 
-// sentenceSplitter 按句子边界切分后装箱
-type sentenceSplitter struct {
+// sentenceChunker 按句子边界切分后装箱
+type sentenceChunker struct {
 	chunkSize    int
 	chunkOverlap int
 	separators   []string
 }
 
-var _ Splitter = (*sentenceSplitter)(nil)
+var _ Chunker = (*sentenceChunker)(nil)
 
-// Split 按句子边界切分并装箱
-func (s *sentenceSplitter) Split(text string) ([]string, error) {
+// Chunk 按句子边界切分并装箱
+func (s *sentenceChunker) Chunk(text string) ([]string, error) {
 	src := normalizeText(text)
 	if src == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	segments := splitSegments(src, s.separators, s.chunkSize, s.chunkOverlap)
+	segments := chunkSegments(src, s.separators, s.chunkSize, s.chunkOverlap)
 	return packSegments(segments, s.chunkSize, s.chunkOverlap), nil
 }

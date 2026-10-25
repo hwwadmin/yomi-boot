@@ -2,7 +2,7 @@
 //
 // @author zwei
 
-package rag
+package chunking
 
 import (
 	"strings"
@@ -19,27 +19,27 @@ var defaultSeparators = []string{
 	"，", ", ", " ",
 }
 
-// recursiveSplitter 按分隔符优先级递归切分
-type recursiveSplitter struct {
+// recursiveChunker 按分隔符优先级递归切分
+type recursiveChunker struct {
 	chunkSize    int
 	chunkOverlap int
 	separators   []string
 }
 
-var _ Splitter = (*recursiveSplitter)(nil)
+var _ Chunker = (*recursiveChunker)(nil)
 
-// Split 按分隔符优先级递归切分并装箱
-func (s *recursiveSplitter) Split(text string) ([]string, error) {
+// Chunk 按分隔符优先级递归切分并装箱
+func (s *recursiveChunker) Chunk(text string) ([]string, error) {
 	src := normalizeText(text)
 	if src == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	segments := splitSegments(src, s.separators, s.chunkSize, s.chunkOverlap)
+	segments := chunkSegments(src, s.separators, s.chunkSize, s.chunkOverlap)
 	return packSegments(segments, s.chunkSize, s.chunkOverlap), nil
 }
 
-// splitSegments 递归按分隔符切出不超过 max 的原子段
-func splitSegments(text string, seps []string, max, overlap int) []string {
+// chunkSegments 递归按分隔符切出不超过 max 的原子段
+func chunkSegments(text string, seps []string, max, overlap int) []string {
 	if text == "" {
 		return nil
 	}
@@ -70,15 +70,15 @@ func splitSegments(text string, seps []string, max, overlap int) []string {
 				out = append(out, part)
 				continue
 			}
-			out = append(out, splitSegments(part, seps[i+1:], max, overlap)...)
+			out = append(out, chunkSegments(part, seps[i+1:], max, overlap)...)
 		}
 		return out
 	}
-	return hardSplit(text, max, overlap)
+	return hardChunk(text, max, overlap)
 }
 
-// hardSplit 无分隔符时按 rune 硬切；窗口间自带 overlap 个 rune 的重叠
-func hardSplit(text string, max, overlap int) []string {
+// hardChunk 无分隔符时按 rune 硬切；窗口间自带 overlap 个 rune 的重叠
+func hardChunk(text string, max, overlap int) []string {
 	runes := []rune(text)
 	step := max - overlap
 	if step <= 0 {

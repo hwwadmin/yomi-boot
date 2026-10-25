@@ -2,7 +2,7 @@
 //
 // @author zwei
 
-package rag
+package chunking
 
 import (
 	"strings"
@@ -11,22 +11,22 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// markdownSplitter 按 Markdown 标题分节，超长小节再递归切分
-type markdownSplitter struct {
+// markdownChunker 按 Markdown 标题分节，超长小节再递归切分
+type markdownChunker struct {
 	chunkSize       int
 	chunkOverlap    int
 	maxHeadingLevel int
 }
 
-var _ Splitter = (*markdownSplitter)(nil)
+var _ Chunker = (*markdownChunker)(nil)
 
-// Split 按标题分节；每节独立成块，超长节再按分隔符递归切分
-func (s *markdownSplitter) Split(text string) ([]string, error) {
+// Chunk 按标题分节；每节独立成块，超长节再按分隔符递归切分
+func (s *markdownChunker) Chunk(text string) ([]string, error) {
 	src := normalizeText(text)
 	if src == "" {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
-	sections := splitMarkdownSections(src, s.maxHeadingLevel)
+	sections := markdownSections(src, s.maxHeadingLevel)
 	out := make([]string, 0, len(sections))
 	for _, section := range sections {
 		section = strings.TrimSpace(section)
@@ -37,14 +37,14 @@ func (s *markdownSplitter) Split(text string) ([]string, error) {
 			out = append(out, section)
 			continue
 		}
-		segments := splitSegments(section, defaultSeparators, s.chunkSize, s.chunkOverlap)
+		segments := chunkSegments(section, defaultSeparators, s.chunkSize, s.chunkOverlap)
 		out = append(out, packSegments(segments, s.chunkSize, s.chunkOverlap)...)
 	}
 	return out, nil
 }
 
-// splitMarkdownSections 按标题行分节；围栏代码块内的 # 不视为标题
-func splitMarkdownSections(text string, maxHeadingLevel int) []string {
+// markdownSections 按标题行分节；围栏代码块内的 # 不视为标题
+func markdownSections(text string, maxHeadingLevel int) []string {
 	lines := strings.Split(text, "\n")
 	sections := make([]string, 0, 4)
 	current := make([]string, 0, len(lines))

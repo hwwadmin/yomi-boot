@@ -1,4 +1,4 @@
-// Package rag 提供基于 ai/embedding 与 ai/vectordb 的检索增强数据能力。
+// Package rag 提供基于 ai/chunking、ai/embedding 与 ai/vectordb 的检索增强数据能力。
 //
 // 覆盖切块、向量化、写入、检索与删除，不包含大模型问答。
 // Config 只保留 Embedder 与 Store；集合名与其余运行期参数都按调用传入，
@@ -9,13 +9,13 @@
 // # 基本用法
 //
 //	engine, err := rag.New(rag.Config{Embedder: emb, Store: store})
-//	splitter, err := rag.NewSplitter(rag.SplitConfig{
-//	    Strategy: rag.StrategyMarkdown,
-//	    Markdown: rag.MarkdownConfig{ChunkSize: 800, MaxHeadingLevel: 3},
+//	chunker, err := chunking.New(chunking.Config{
+//	    Strategy: chunking.StrategyMarkdown,
+//	    Markdown: chunking.MarkdownConfig{ChunkSize: 800, MaxHeadingLevel: 3},
 //	})
 //	_, err = engine.Index(ctx, "kb_sales", rag.IndexRequest{
 //	    Documents: []rag.Document{{ID: "doc-1", Content: text, Source: "manual.md"}},
-//	    Splitter:  splitter,
+//	    Chunker:  chunker,
 //	})
 //	chunks, err := engine.Retrieve(ctx, "kb_sales", rag.RetrieveRequest{Query: "如何退款", TopK: 5})
 //	err = engine.DeleteDocument(ctx, "kb_sales", "doc-1")
@@ -26,22 +26,16 @@
 // DeleteDocument 在集合不存在时返回 nil。不同业务共用同一个 Engine 时，用不同集合名隔离数据即可；
 // 所有集合共用同一 Store 的向量维度与 Metric。
 //
-// # 切块策略
+// # 切块
 //
-// Splitter 是切块策略门面，内置四种策略，各自使用独立的配置类型：
-//
-//   - recursive（默认）：RecursiveConfig，块长、重叠与分隔符优先级
-//   - fixed：FixedConfig，块长与重叠
-//   - sentence：SentenceConfig，块长、重叠与句末分隔符
-//   - markdown：MarkdownConfig，块长、重叠与最大标题层级
-//
-// SplitConfig 只有 Strategy 对应的子配置生效，其余子配置忽略。
-// 通过 IndexRequest.Splitter 按需指定；为空则使用内置默认 recursive（800 字 / 100 重叠）。
-// 可用 NewSplitter / SplitText 直接构造使用。块长按 rune 计，单块不得超过 8192 字。
+// 通过 IndexRequest.Chunker 指定切块策略，为空则使用内置默认 recursive（800 字 / 100 重叠）。
+// 内置策略 recursive / fixed / sentence / markdown 及其配置见 component/ai/chunking；
+// 也可实现 chunking.Chunker 注入自定义策略，Engine 对其输出兜底校验，违反契约返回 ErrInvalidArgument。
+// 块长按 rune 计，单块不得超过 chunking.MaxChunkSize 字。
 //
 // # 运行期参数
 //
-//   - 集合名、IndexRequest.Splitter、RetrieveRequest.TopK/MinScore/Filter 都按调用传入
+//   - 集合名、IndexRequest.Chunker、RetrieveRequest.TopK/MinScore/Filter 都按调用传入
 //   - RetrieveRequest.TopK 必填；MinScore 为 0 表示不设阈值
 //   - Engine 不内置超时，使用调用方 ctx 控制
 //   - 向量维度在首次向量化后锁定；Embedder 输出变化返回 ErrDimensionMismatch
@@ -69,7 +63,8 @@
 // # 错误
 //
 // 包内哨兵：ErrInvalidArgument / ErrDimensionMismatch / ErrBadResponse。
-// embedding / vectordb 的错误原样透传，可用 errors.Is 判断其哨兵。
+// embedding / vectordb / chunking 的错误原样透传，可用 errors.Is 判断其哨兵；
+// 自定义 Chunker 违反切块契约时以 ErrInvalidArgument 上报，errors.Is 亦可匹配 chunking.ErrInvalidArgument。
 //
 // Engine 构造后不可变，可并发调用；请勿复制 Engine 值。
 //

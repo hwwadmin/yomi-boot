@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
@@ -39,21 +40,22 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 	if err != nil {
 		return nil, err
 	}
-	splitter := req.Splitter
-	if splitter == nil {
-		splitter = e.defaultSplitter
+	chunker := req.Chunker
+	if chunker == nil {
+		chunker = e.defaultChunker
 	}
 	// 先完成切分与边界校验，避免非法请求创建空集合
 	prepared := make([]preparedDocument, 0, len(docs))
 	for _, doc := range docs {
-		chunks, err := splitter.Split(doc.Content)
+		chunks, err := chunker.Chunk(doc.Content)
 		if err != nil {
 			return nil, err
 		}
-		// 内置策略已保证块非空且不超长；这里兜底自定义 Splitter，接口契约要求 Engine 返回 ErrInvalidArgument
-		chunks, err = normalizeChunks(chunks)
+		// 内置策略已保证块非空且不超长；这里兜底自定义 Chunker，
+		// 契约要求 Engine 返回 ErrInvalidArgument（errors.Is 亦可匹配 chunking.ErrInvalidArgument）
+		chunks, err = chunking.NormalizeChunks(chunks)
 		if err != nil {
-			return nil, err
+			return nil, wrapSentinel(ErrInvalidArgument, err)
 		}
 		if len(chunks) > maxChunksPerDoc {
 			return nil, errors.Sentinel(ErrInvalidArgument)

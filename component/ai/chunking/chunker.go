@@ -2,7 +2,7 @@
 //
 // @author zwei
 
-package rag
+package chunking
 
 import (
 	"strings"
@@ -11,31 +11,31 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// Splitter 文本切块策略门面；实现须并发安全
-type Splitter interface {
-	// Split 将文本切成块
+// Chunker 文本切块策略门面；实现须并发安全
+type Chunker interface {
+	// Chunk 将文本切成块
 	//
-	// 输入 trim 后非空时必须返回至少 1 个非空块；单块不得超过 maxChunkSize 个字符，
-	// 否则 Engine 返回 ErrInvalidArgument。空文本返回 ErrInvalidArgument。
-	Split(text string) ([]string, error)
+	// 输入 trim 后非空时必须返回至少 1 个非空块；单块不得超过 MaxChunkSize 个字符，
+	// 否则返回 ErrInvalidArgument。空文本返回 ErrInvalidArgument。
+	Chunk(text string) ([]string, error)
 }
 
-// SplitStrategy 切块策略标识；空则 recursive
-type SplitStrategy string
+// Strategy 切块策略标识；空则 recursive
+type Strategy string
 
 const (
 	// StrategyRecursive 按分隔符优先级递归切分；默认策略
-	StrategyRecursive SplitStrategy = "recursive"
+	StrategyRecursive Strategy = "recursive"
 	// StrategyFixed 按固定字符窗口切分，可能截断词语
-	StrategyFixed SplitStrategy = "fixed"
+	StrategyFixed Strategy = "fixed"
 	// StrategySentence 按段落与句末分隔符切分后装箱
-	StrategySentence SplitStrategy = "sentence"
+	StrategySentence Strategy = "sentence"
 	// StrategyMarkdown 按 Markdown 标题分节，超长小节再递归切分
-	StrategyMarkdown SplitStrategy = "markdown"
+	StrategyMarkdown Strategy = "markdown"
 )
 
-// NewSplitter 校验配置并按 Strategy 构造 Splitter；只有对应策略的子配置生效
-func NewSplitter(cfg SplitConfig) (Splitter, error) {
+// New 校验配置并按 Strategy 构造 Chunker；只有对应策略的子配置生效
+func New(cfg Config) (Chunker, error) {
 	strategy, err := normalizeStrategy(cfg.Strategy)
 	if err != nil {
 		return nil, err
@@ -46,13 +46,13 @@ func NewSplitter(cfg SplitConfig) (Splitter, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &fixedSplitter{chunkSize: fixed.ChunkSize, chunkOverlap: fixed.ChunkOverlap}, nil
+		return &fixedChunker{chunkSize: fixed.ChunkSize, chunkOverlap: fixed.ChunkOverlap}, nil
 	case StrategySentence:
 		sentence, err := normalizeSentenceConfig(cfg.Sentence)
 		if err != nil {
 			return nil, err
 		}
-		return &sentenceSplitter{
+		return &sentenceChunker{
 			chunkSize:    sentence.ChunkSize,
 			chunkOverlap: sentence.ChunkOverlap,
 			separators:   sentence.Separators,
@@ -62,7 +62,7 @@ func NewSplitter(cfg SplitConfig) (Splitter, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &markdownSplitter{
+		return &markdownChunker{
 			chunkSize:       markdown.ChunkSize,
 			chunkOverlap:    markdown.ChunkOverlap,
 			maxHeadingLevel: markdown.MaxHeadingLevel,
@@ -72,7 +72,7 @@ func NewSplitter(cfg SplitConfig) (Splitter, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &recursiveSplitter{
+		return &recursiveChunker{
 			chunkSize:    recursive.ChunkSize,
 			chunkOverlap: recursive.ChunkOverlap,
 			separators:   recursive.Separators,
@@ -80,17 +80,37 @@ func NewSplitter(cfg SplitConfig) (Splitter, error) {
 	}
 }
 
-// SplitText 按配置切分文本；等价于 NewSplitter 后调用 Split
-func SplitText(text string, cfg SplitConfig) ([]string, error) {
-	splitter, err := NewSplitter(cfg)
+// ChunkText 按配置切分文本；等价于 New 后调用 Chunk
+func ChunkText(text string, cfg Config) ([]string, error) {
+	chunker, err := New(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return splitter.Split(text)
+	return chunker.Chunk(text)
+}
+
+// NormalizeChunks 修剪切块输出并校验 Chunker 契约：丢弃空白块，
+// 单块超过 MaxChunkSize 或修剪后为空返回 ErrInvalidArgument；供自定义 Chunker 的调用方兜底校验
+func NormalizeChunks(chunks []string) ([]string, error) {
+	out := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		s := strings.TrimSpace(chunk)
+		if s == "" {
+			continue
+		}
+		if utf8.RuneCountInString(s) > MaxChunkSize {
+			return nil, errors.Sentinel(ErrInvalidArgument)
+		}
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil, errors.Sentinel(ErrInvalidArgument)
+	}
+	return out, nil
 }
 
 // normalizeStrategy 空策略回退 recursive，并校验白名单
-func normalizeStrategy(strategy SplitStrategy) (SplitStrategy, error) {
+func normalizeStrategy(strategy Strategy) (Strategy, error) {
 	if strategy == "" {
 		return StrategyRecursive, nil
 	}
@@ -107,7 +127,7 @@ func normalizeChunkConfig(chunkSize, chunkOverlap int) (int, int, error) {
 	if chunkSize == 0 {
 		chunkSize = defaultChunkSize
 	}
-	if chunkSize < 0 || chunkSize > maxChunkSize {
+	if chunkSize < 0 || chunkSize > MaxChunkSize {
 		return 0, 0, errors.Sentinel(ErrInvalidArgument)
 	}
 	if chunkOverlap < 0 {
@@ -196,23 +216,4 @@ func normalizeText(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	return strings.TrimSpace(text)
-}
-
-// normalizeChunks 修剪切块输出，丢弃空白块并校验单块上限
-func normalizeChunks(chunks []string) ([]string, error) {
-	out := make([]string, 0, len(chunks))
-	for _, chunk := range chunks {
-		s := strings.TrimSpace(chunk)
-		if s == "" {
-			continue
-		}
-		if utf8.RuneCountInString(s) > maxChunkSize {
-			return nil, errors.Sentinel(ErrInvalidArgument)
-		}
-		out = append(out, s)
-	}
-	if len(out) == 0 {
-		return nil, errors.Sentinel(ErrInvalidArgument)
-	}
-	return out, nil
 }

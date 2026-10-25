@@ -4,6 +4,8 @@
 
 package rag
 
+import "gitee.com/hq_project/yomi-boot/component/ai/chunking"
+
 // 保留元数据键；由本包写入，Document.Metadata 不得使用
 const (
 	// MetadataKeyDocumentID 文档 ID
@@ -41,8 +43,8 @@ type Chunk struct {
 
 // IndexRequest 文档入库入参
 type IndexRequest struct {
-	Documents []Document // Documents 至少 1 条；同一请求内 ID 不得重复
-	Splitter  Splitter   // Splitter 可选；空则使用内置默认 recursive（800 字 / 100 重叠）
+	Documents []Document       // Documents 至少 1 条；同一请求内 ID 不得重复
+	Chunker   chunking.Chunker // Chunker 可选；空则使用内置默认 recursive（800 字 / 100 重叠）
 }
 
 // IndexResult 文档入库结果

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -24,11 +25,11 @@ const indexLockStripes = 64
 
 // Engine 检索增强引擎；同一实例可并发服务多个集合；构造后不可变，请勿复制值
 type Engine struct {
-	embedder        embedding.Client
-	store           vectordb.Store
-	defaultSplitter Splitter
-	dimension       atomic.Int64
-	indexLocks      [indexLockStripes]sync.Mutex
+	embedder       embedding.Client
+	store          vectordb.Store
+	defaultChunker chunking.Chunker
+	dimension      atomic.Int64
+	indexLocks     [indexLockStripes]sync.Mutex
 }
 
 // EnsureCollection 确保集合存在；已存在时返回 nil

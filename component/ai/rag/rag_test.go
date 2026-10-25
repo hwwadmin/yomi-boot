@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -97,15 +98,15 @@ func (s ctxErrStore) Get(ctx context.Context, collection string, ids []string) (
 	return nil, context.Canceled
 }
 
-// stubSplitter 返回固定块，用于验证自定义策略注入
-type stubSplitter struct {
+// stubChunker 返回固定块，用于验证自定义策略注入
+type stubChunker struct {
 	chunks []string
 	err    error
 	calls  int
 }
 
-// Split 实现 Splitter
-func (s *stubSplitter) Split(text string) ([]string, error) {
+// Chunk 实现 Chunker
+func (s *stubChunker) Chunk(text string) ([]string, error) {
 	s.calls++
 	return s.chunks, s.err
 }
@@ -274,8 +275,8 @@ func TestRetrieveEmptyCollection(t *testing.T) {
 func TestIndexReplacesStaleChunks(t *testing.T) {
 	t.Parallel()
 	e, _, store := newTestEngine(t)
-	splitter, err := NewSplitter(SplitConfig{
-		Recursive: RecursiveConfig{ChunkSize: 6, ChunkOverlap: 1},
+	chunker, err := chunking.New(chunking.Config{
+		Recursive: chunking.RecursiveConfig{ChunkSize: 6, ChunkOverlap: 1},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -283,7 +284,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	ctx := context.Background()
 	res, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。苹果。苹果。苹果。"}},
-		Splitter:  splitter,
+		Chunker:   chunker,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +295,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	oldCount := res.Chunks
 	res, err = e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。"}},
-		Splitter:  splitter,
+		Chunker:   chunker,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -562,12 +563,8 @@ func TestNewMinimal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recursive, ok := e.defaultSplitter.(*recursiveSplitter)
-	if !ok {
-		t.Fatalf("默认切块策略 = %T", e.defaultSplitter)
-	}
-	if recursive.chunkSize != defaultChunkSize || recursive.chunkOverlap != defaultChunkOverlap {
-		t.Fatalf("默认切块参数: %+v", recursive)
+	if e.defaultChunker == nil {
+		t.Fatal("默认切块器为空")
 	}
 	if e.dimension.Load() != 0 {
 		t.Fatalf("维度应延迟锁定: %d", e.dimension.Load())
@@ -741,7 +738,7 @@ func TestIndexBatchEmbed(t *testing.T) {
 	}
 	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
-		Splitter:  &stubSplitter{chunks: chunks},
+		Chunker:   &stubChunker{chunks: chunks},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -776,14 +773,14 @@ func TestRetrieveSkipsForeignChunks(t *testing.T) {
 	}
 }
 
-// TestIndexCustomSplitter 覆盖按请求注入自定义切块策略
-func TestIndexCustomSplitter(t *testing.T) {
+// TestIndexCustomChunker 覆盖按请求注入自定义切块策略
+func TestIndexCustomChunker(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
-	custom := &stubSplitter{chunks: []string{"自定义块一", "自定义块二"}}
+	custom := &stubChunker{chunks: []string{"自定义块一", "自定义块二"}}
 	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
-		Splitter:  custom,
+		Chunker:   custom,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -800,25 +797,25 @@ func TestIndexCustomSplitter(t *testing.T) {
 	}
 }
 
-// TestIndexCustomSplitterInvalid 覆盖自定义切块输出校验
-func TestIndexCustomSplitterInvalid(t *testing.T) {
+// TestIndexCustomChunkerInvalid 覆盖自定义切块输出校验
+func TestIndexCustomChunkerInvalid(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name     string
-		splitter *stubSplitter
-		want     error
+		name    string
+		chunker *stubChunker
+		want    error
 	}{
-		{"empty", &stubSplitter{}, ErrInvalidArgument},
-		{"blank", &stubSplitter{chunks: []string{"  "}}, ErrInvalidArgument},
-		{"too large", &stubSplitter{chunks: []string{strings.Repeat("a", maxChunkSize+1)}}, ErrInvalidArgument},
-		{"split error", &stubSplitter{err: embedding.ErrRateLimited}, embedding.ErrRateLimited},
+		{"empty", &stubChunker{}, ErrInvalidArgument},
+		{"blank", &stubChunker{chunks: []string{"  "}}, ErrInvalidArgument},
+		{"too large", &stubChunker{chunks: []string{strings.Repeat("a", chunking.MaxChunkSize+1)}}, ErrInvalidArgument},
+		{"split error", &stubChunker{err: embedding.ErrRateLimited}, embedding.ErrRateLimited},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e, _, _ := newTestEngine(t)
 			_, err := e.Index(context.Background(), testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "原始文本"}},
-				Splitter:  tc.splitter,
+				Chunker:   tc.chunker,
 			})
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("期望 %v，实际 %v", tc.want, err)
@@ -862,18 +859,18 @@ func TestIndexUpsertFailureKeepsOldVersionIntact(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	large := &stubSplitter{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
+	large := &stubChunker{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "large"}},
-		Splitter:  large,
+		Chunker:   large,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	small := &stubSplitter{chunks: []string{"b0"}}
+	small := &stubChunker{chunks: []string{"b0"}}
 	flaky.upsertFailures = 1
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Splitter:  small,
+		Chunker:   small,
 	}); err == nil {
 		t.Fatal("期望写入失败")
 	}
@@ -886,7 +883,7 @@ func TestIndexUpsertFailureKeepsOldVersionIntact(t *testing.T) {
 	// 重试后只保留新版本
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Splitter:  small,
+		Chunker:   small,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -906,18 +903,18 @@ func TestIndexDeleteFailureSelfHeals(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	large := &stubSplitter{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
+	large := &stubChunker{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "large"}},
-		Splitter:  large,
+		Chunker:   large,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	small := &stubSplitter{chunks: []string{"b0"}}
+	small := &stubChunker{chunks: []string{"b0"}}
 	flaky.deleteFailures = 1
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Splitter:  small,
+		Chunker:   small,
 	}); err == nil {
 		t.Fatal("期望旧块清理失败")
 	}
@@ -930,7 +927,7 @@ func TestIndexDeleteFailureSelfHeals(t *testing.T) {
 	// 重试会重新枚举该文档的块并清理旧尾块
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Splitter:  small,
+		Chunker:   small,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -954,14 +951,14 @@ func TestConcurrentSameDocumentIndexKeepsConsistentChunks(t *testing.T) {
 			defer wg.Done()
 			_, _ = e.Index(ctx, testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "large"}},
-				Splitter:  &stubSplitter{chunks: large},
+				Chunker:   &stubChunker{chunks: large},
 			})
 		}()
 		go func() {
 			defer wg.Done()
 			_, _ = e.Index(ctx, testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "small"}},
-				Splitter:  &stubSplitter{chunks: small},
+				Chunker:   &stubChunker{chunks: small},
 			})
 		}()
 	}
