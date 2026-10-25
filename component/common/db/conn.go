@@ -32,11 +32,14 @@ type Conn struct {
 	once     sync.Once
 }
 
-// Open 根据配置初始化数据源；ctx 约束启动预热，调用方应确保 cfg 已通过 Validate。
+// Open 校验配置并初始化数据源，配置非法时返回错误；ctx 约束启动预热。
 // 当 min_idle_conns>0 时会预热并启动保活，返回的 Conn 在 Close 时先停保活再关池。
 func Open(ctx context.Context, cfg Config) (*Conn, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, errors.Wrap(err, "db 配置校验失败")
 	}
 	return open(ctx, cfg)
 }
@@ -155,10 +158,35 @@ func buildDSN(cfg Config) (string, error) {
 	case enums.MySQL:
 		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database, withMySQLDefaults(cfg.Params)), nil
 	case enums.Postgres:
-		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s %s", cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.Params), nil
+		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s %s",
+			escapeDSNValue(cfg.Host), cfg.Port, escapeDSNValue(cfg.User), escapeDSNValue(cfg.Password), escapeDSNValue(cfg.Database), cfg.Params), nil
 	default:
 		return "", errors.Newf("不支持的数据库类型: %s", cfg.Type)
 	}
+}
+
+// escapeDSNValue 转义 Postgres keyword/value 连接串的单个值：
+// 不含空白字符时原样输出（引号等在未加引号的值里是普通字符）；
+// 含空白字符时用单引号包裹，并转义内部的 ' 与 \，避免值被静默切分或错位
+func escapeDSNValue(value string) string {
+	if !strings.ContainsAny(value, " \t\n\v\f\r") {
+		return value
+	}
+	var builder strings.Builder
+	builder.Grow(len(value) + 2)
+	builder.WriteByte('\'')
+	for _, r := range value {
+		switch r {
+		case '\'':
+			builder.WriteString("\\'")
+		case '\\':
+			builder.WriteString("\\\\")
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	builder.WriteByte('\'')
+	return builder.String()
 }
 
 // withMySQLDefaults 为 MySQL 参数补齐 parseTime=true 与 loc=Local（未显式配置时），

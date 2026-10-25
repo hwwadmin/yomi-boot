@@ -12,6 +12,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5"
 )
 
 // TestWithMySQLDefaults 验证 MySQL 参数默认值补齐与显式配置保留
@@ -72,5 +73,27 @@ func TestBuildDSN_MySQLDefaultsRecognized(t *testing.T) {
 	}
 	if strings.Contains(pgDSN, "parseTime") || strings.Contains(pgDSN, "loc=") {
 		t.Fatalf("Postgres DSN 不应包含 MySQL 参数: %q", pgDSN)
+	}
+}
+
+// TestBuildDSN_PostgresEscapesSpecialValues 验证 Postgres 值转义后可被驱动解析还原（W-2 回归）
+func TestBuildDSN_PostgresEscapesSpecialValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Type: enums.Postgres, Host: "127.0.0.1", Port: 5432,
+		User: "u", Password: "ab cd'ef\\gh", Database: "my db",
+		Params: "sslmode=disable",
+	}
+	dsn, err := buildDSN(cfg)
+	if err != nil {
+		t.Fatalf("buildDSN 失败: %v", err)
+	}
+	parsed, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("驱动无法解析 Postgres DSN %q: %v", dsn, err)
+	}
+	if parsed.Host != cfg.Host || parsed.User != cfg.User || parsed.Password != cfg.Password || parsed.Database != cfg.Database {
+		t.Fatalf("转义还原不一致: host=%q user=%q password=%q database=%q", parsed.Host, parsed.User, parsed.Password, parsed.Database)
 	}
 }

@@ -5,11 +5,14 @@
 package db
 
 import (
+	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
+	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
 )
 
 // TestConn_CloseIdempotent 验证 Conn.Close 可重复调用，且关闭后不再持有 GORM 句柄
@@ -66,6 +69,17 @@ func TestConn_CloseConcurrentWithGORM(t *testing.T) {
 	wg.Wait()
 	if conn.GORM() != nil {
 		t.Fatal("关闭后 GORM 应返回 nil")
+	}
+}
+
+// TestOpen_RejectsInvalidConfig 验证 Open 自校验配置，非法配置不进入连接流程（W-3 回归）
+func TestOpen_RejectsInvalidConfig(t *testing.T) {
+	cfg := Config{
+		Type: enums.MySQL, Port: 3306, User: "u", Database: "d",
+		MaxOpenConns: 1, MaxIdleConns: 1, ConnMaxLifetimeMinutes: 1, ConnMaxIdleTimeMinutes: 1,
+	}
+	if _, err := Open(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "host") {
+		t.Fatalf("host 为空时 Open 应返回校验错误，实际: %v", err)
 	}
 }
 

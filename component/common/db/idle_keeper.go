@@ -120,6 +120,7 @@ func startIdleKeeper(sqlDB *sql.DB, minIdle, maxIdle int, interval time.Duration
 	return k
 }
 
+// loop 按巡检间隔维持最小空闲连接，收到停止信号后退出
 func (k *idleKeeper) loop(ctx context.Context) {
 	defer close(k.done)
 	ticker := time.NewTicker(k.interval)
