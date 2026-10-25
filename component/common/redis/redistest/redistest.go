@@ -21,3 +21,11 @@ func NewClient(t testing.TB) (*redisv9.Client, func()) {
 	}
 	return client, cleanup
 }
+
+// NewServer 启动内存 Redis 并返回地址与清理函数，供需要自行构建客户端的使用方使用
+func NewServer(t testing.TB) (addr string, cleanup func()) {
+	t.Helper()
+
+	mr := miniredis.RunT(t)
+	return mr.Addr(), func() { mr.Close() }
+}

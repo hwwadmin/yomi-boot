@@ -39,3 +39,12 @@ func TestConfigValidate_RejectsNegativeCommandTimeout(t *testing.T) {
 		t.Fatal("期望 command_timeout_ms 为负数时校验失败")
 	}
 }
+
+// TestConfigValidate_MissingAddr 验证空地址被拒绝
+func TestConfigValidate_MissingAddr(t *testing.T) {
+	for _, addr := range []string{"", "   "} {
+		if err := (Config{Addr: addr}).Validate(); err == nil {
+			t.Fatalf("addr=%q 应返回错误", addr)
+		}
+	}
+}
