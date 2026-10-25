@@ -80,20 +80,36 @@ func TestBuildDSN_MySQLDefaultsRecognized(t *testing.T) {
 func TestBuildDSN_PostgresEscapesSpecialValues(t *testing.T) {
 	t.Parallel()
 
-	cfg := Config{
-		Type: enums.Postgres, Host: "127.0.0.1", Port: 5432,
-		User: "u", Password: "ab cd'ef\\gh", Database: "my db",
-		Params: "sslmode=disable",
+	cases := []struct {
+		name     string
+		password string
+		database string
+	}{
+		{name: "空白加引号与转义混排", password: "ab cd'ef\\gh", database: "my db"},
+		{name: "无空白的反斜杠引号", password: `p\ss'wd`, database: "d"},
+		{name: "无空白的连续反斜杠", password: `p\\wd`, database: "d"},
+		{name: "裸引号", password: "p'wd", database: "d"},
+		{name: "纯反斜杠", password: `p\wd`, database: "d"},
 	}
-	dsn, err := buildDSN(cfg)
-	if err != nil {
-		t.Fatalf("buildDSN 失败: %v", err)
-	}
-	parsed, err := pgx.ParseConfig(dsn)
-	if err != nil {
-		t.Fatalf("驱动无法解析 Postgres DSN %q: %v", dsn, err)
-	}
-	if parsed.Host != cfg.Host || parsed.User != cfg.User || parsed.Password != cfg.Password || parsed.Database != cfg.Database {
-		t.Fatalf("转义还原不一致: host=%q user=%q password=%q database=%q", parsed.Host, parsed.User, parsed.Password, parsed.Database)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := Config{
+				Type: enums.Postgres, Host: "127.0.0.1", Port: 5432,
+				User: "u", Password: tc.password, Database: tc.database,
+				Params: "sslmode=disable",
+			}
+			dsn, err := buildDSN(cfg)
+			if err != nil {
+				t.Fatalf("buildDSN 失败: %v", err)
+			}
+			parsed, err := pgx.ParseConfig(dsn)
+			if err != nil {
+				t.Fatalf("驱动无法解析 Postgres DSN %q: %v", dsn, err)
+			}
+			if parsed.Host != cfg.Host || parsed.User != cfg.User || parsed.Password != cfg.Password || parsed.Database != cfg.Database {
+				t.Fatalf("转义还原不一致: host=%q user=%q password=%q database=%q", parsed.Host, parsed.User, parsed.Password, parsed.Database)
+			}
+		})
 	}
 }

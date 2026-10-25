@@ -165,16 +165,12 @@ func buildDSN(cfg Config) (string, error) {
 	}
 }
 
-// escapeDSNValue 转义 Postgres keyword/value 连接串的单个值：
-// 不含空白字符时原样输出（引号等在未加引号的值里是普通字符）；
-// 含空白字符时用单引号包裹，并转义内部的 ' 与 \，避免值被静默切分或错位
+// escapeDSNValue 转义 Postgres keyword/value 连接串的单个值。
+// 驱动对值内的 \ 与 ' 一律按转义序列解出（无论是否加引号），
+// 故先无条件转义 \→\\ 与 '→\'；含空白字符的值再用单引号包裹，避免被当作分隔符切分
 func escapeDSNValue(value string) string {
-	if !strings.ContainsAny(value, " \t\n\v\f\r") {
-		return value
-	}
 	var builder strings.Builder
-	builder.Grow(len(value) + 2)
-	builder.WriteByte('\'')
+	builder.Grow(len(value))
 	for _, r := range value {
 		switch r {
 		case '\'':
@@ -185,8 +181,16 @@ func escapeDSNValue(value string) string {
 			builder.WriteRune(r)
 		}
 	}
-	builder.WriteByte('\'')
-	return builder.String()
+	escaped := builder.String()
+	if !strings.ContainsAny(escaped, " \t\n\v\f\r") {
+		return escaped
+	}
+	var quoted strings.Builder
+	quoted.Grow(len(escaped) + 2)
+	quoted.WriteByte('\'')
+	quoted.WriteString(escaped)
+	quoted.WriteByte('\'')
+	return quoted.String()
 }
 
 // withMySQLDefaults 为 MySQL 参数补齐 parseTime=true 与 loc=Local（未显式配置时），
