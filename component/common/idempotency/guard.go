@@ -112,8 +112,9 @@ func Execute[T any](
 //   - MySQL REPEATABLE READ 下，并发方在己方事务快照建立后才提交完成记录时，冲突回退的
 //     反查不可见，最终返回 ErrDuplicateWithoutRecord（fail-closed，下次请求回放自愈）。
 //
-// DTM 分支回调（barrier ctx）不适用本守卫：分支提交 ≠ 全局提交，分支幂等由 sys_barrier
-// 承担，barrier ctx 的 InTx 为 false，会被下方校验以 ErrNotInTx 拒绝。
+// DTM 分支回调（barrier ctx）下本入口会被以 ErrNotInTx 拒绝（barrier 的 InTx 为 false）：
+// 分支幂等由 sys_barrier 承担。Execute 在分支回调内随分支事务提交属既有模式，
+// 但分支提交 ≠ 全局提交，幂等键不得跨全局事务复用。
 //
 // 传入的 ctx 未绑定同源事务时返回 ErrNotInTx fail-fast：无外层事务时用 Execute，
 // 它有自己的提交点，能提供缓存快路径。
