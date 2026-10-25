@@ -95,3 +95,43 @@ func TestMiddlewareStrategyEndToEnd(t *testing.T) {
 		t.Fatalf("query phone 策略不符: %q", query)
 	}
 }
+
+// TestMiddlewareTruncatedBodyWithRules 验证截断+规则命中时正文整段丢弃：
+// 截断残片不是合法 JSON、按字段脱敏必然失效，敏感字段不得以任何形态落记录
+func TestMiddlewareTruncatedBodyWithRules(t *testing.T) {
+	mask, err := masking.New(masking.Config{Rules: []masking.RuleConfig{
+		{Keys: []string{"password"}, Strategy: masking.StrategyRedact},
+		{Keys: []string{"phone"}, Strategy: masking.StrategyPhone},
+	}})
+	if err != nil {
+		t.Fatalf("masking.New: %v", err)
+	}
+
+	rec := &recorderService{}
+	tiny := 24
+	cfg := Config{
+		MiddlewareEnabled:   true,
+		RecordRequestBody:   true,
+		RecordResponseBody:  true,
+		MaskSensitive:       true,
+		MaxRequestBodySize:  &tiny,
+		MaxResponseBodySize: &tiny,
+	}
+	engine := newTestEngine(t, cfg, rec, mask)
+	engine.POST("/biz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"phone": "13812345678", "pad": strings.Repeat("x", 64)})
+	})
+
+	body := `{"password":"p@ss-raw","phone":"13812345678","pad":"` + strings.Repeat("x", 64) + `"}`
+	req := authenticatedRequest(http.MethodPost, "/biz", body)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	record := waitForRecords(t, rec, 1)[0]
+	if !record.RequestBodyTruncated || record.RequestBody != "" {
+		t.Fatalf("截断请求体应整段丢弃: %q truncated=%v", record.RequestBody, record.RequestBodyTruncated)
+	}
+	if !record.ResponseBodyTruncated || record.ResponseBody != "" {
+		t.Fatalf("截断响应体应整段丢弃: %q truncated=%v", record.ResponseBody, record.ResponseBodyTruncated)
+	}
+}

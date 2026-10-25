@@ -26,18 +26,28 @@ func TestNewValidate(t *testing.T) {
 		cfg  Config
 		want string
 	}{
-		{name: "非法 match", cfg: Config{Match: "regex", Rules: []RuleConfig{{Keys: []string{"password"}, Strategy: StrategyRedact}}},
-			want: "match 仅支持"},
+		{
+			name: "非法 match", cfg: Config{Match: "regex", Rules: []RuleConfig{{Keys: []string{"password"}, Strategy: StrategyRedact}}},
+			want: "match 仅支持",
+		},
 		{name: "策略为空", cfg: Config{Rules: []RuleConfig{{Keys: []string{"password"}}}}, want: "strategy 不能为空"},
 		{name: "keys 为空", cfg: Config{Rules: []RuleConfig{{Keys: []string{"  "}, Strategy: StrategyRedact}}}, want: "keys 不能为空"},
-		{name: "keep 参数为负", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: StrategyKeepEdges, KeepHead: -1}}},
-			want: "不能为负"},
-		{name: "非 keep_edges 配 keep 参数", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: StrategyPhone, KeepHead: 3}}},
-			want: "仅 keep_edges"},
-		{name: "keep_edges 零参数", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: StrategyKeepEdges}}},
-			want: "keep_head+keep_tail 须 > 0"},
-		{name: "未注册策略", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: "no_such_strategy"}}},
-			want: "未注册的策略"},
+		{
+			name: "keep 参数为负", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: StrategyKeepEdges, KeepHead: -1}}},
+			want: "不能为负",
+		},
+		{
+			name: "非 keep_edges 配 keep 参数", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: StrategyPhone, KeepHead: 3}}},
+			want: "仅 keep_edges",
+		},
+		{
+			name: "keep_edges 零参数", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: StrategyKeepEdges}}},
+			want: "keep_head+keep_tail 须 > 0",
+		},
+		{
+			name: "未注册策略", cfg: Config{Rules: []RuleConfig{{Keys: []string{"order"}, Strategy: "no_such_strategy"}}},
+			want: "未注册的策略",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -304,8 +314,8 @@ func TestMaskKV(t *testing.T) {
 	}
 
 	odd := svc.MaskKV("password", "p@ss", "extra")
-	if len(odd) != 3 || odd[1] != "p@ss" {
-		t.Fatalf("奇数个应原样返回: %v", odd)
+	if len(odd) != 3 || odd[1] != DefaultPlaceholder || odd[2] != "extra" {
+		t.Fatalf("奇数个应仍处理完整对、末尾落单 key 原样: %v", odd)
 	}
 }
 

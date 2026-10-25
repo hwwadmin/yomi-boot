@@ -241,7 +241,8 @@ func TestMiddlewareWithoutMasking(t *testing.T) {
 	}
 }
 
-// TestMiddlewareTruncationFlags 验证请求与响应体超限截断标记
+// TestMiddlewareTruncationFlags 验证请求与响应体超限截断：仅保留标记，正文不落记录
+// （截断残片无法按字段脱敏，为避免敏感字段原文落盘整段丢弃）
 func TestMiddlewareTruncationFlags(t *testing.T) {
 	rec := &recorderService{}
 	four := 4
@@ -261,11 +262,11 @@ func TestMiddlewareTruncationFlags(t *testing.T) {
 
 	records := waitForRecords(t, rec, 1)
 	record := records[0]
-	if !record.RequestBodyTruncated || !strings.HasSuffix(record.RequestBody, truncatedSuffix) {
-		t.Fatalf("请求体应截断: %q %v", record.RequestBody, record.RequestBodyTruncated)
+	if !record.RequestBodyTruncated || record.RequestBody != "" {
+		t.Fatalf("截断请求体应仅留标记不落正文: %q %v", record.RequestBody, record.RequestBodyTruncated)
 	}
-	if !record.ResponseBodyTruncated || !strings.HasPrefix(record.ResponseBody, "1234") {
-		t.Fatalf("响应体应截断: %q %v", record.ResponseBody, record.ResponseBodyTruncated)
+	if !record.ResponseBodyTruncated || record.ResponseBody != "" {
+		t.Fatalf("截断响应体应仅留标记不落正文: %q %v", record.ResponseBody, record.ResponseBodyTruncated)
 	}
 }
 

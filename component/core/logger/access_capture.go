@@ -8,6 +8,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/utils/httputil"
+	"gitee.com/hq_project/yomi-boot/component/core/utils/utf8util"
 
 	"github.com/gin-gonic/gin"
 )
@@ -74,9 +75,9 @@ func captureRequestBody(r *http.Request, cfg AccessConfig, mask *masking.Service
 		return out
 	}
 	if int64(len(recorded)) > int64(maxSize) {
+		// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文
 		out.Truncated = true
 		out.OmittedReason = omitBodyTooLarge
-		out.Value = mask.MaskJSON(string(recorded[:maxSize])) + truncatedPlaceholder
 		return out
 	}
 	out.Value = mask.MaskJSON(string(recorded))
@@ -103,7 +104,7 @@ func omitReasonByContentType(ct string) string {
 	}
 }
 
-// collectHeaders 采集 HTTP Header，敏感键脱敏，超长值截断
+// collectHeaders 采集 HTTP Header，敏感键脱敏，超长值按 UTF-8 边界截断
 func collectHeaders(h http.Header, cfg AccessConfig, mask *masking.Service) map[string]string {
 	if len(h) == 0 {
 		return nil
@@ -117,7 +118,8 @@ func collectHeaders(h http.Header, cfg AccessConfig, mask *masking.Service) map[
 		if mask.ShouldMask(key) {
 			val = mask.Mask(key, val)
 		} else if cfg.MaxFieldBytes > 0 && len(val) > cfg.MaxFieldBytes {
-			val = val[:cfg.MaxFieldBytes] + truncatedPlaceholder
+			cut, _ := utf8util.Cut([]byte(val), cfg.MaxFieldBytes)
+			val = string(cut) + truncatedPlaceholder
 		}
 		out[strings.ToLower(key)] = val
 	}
@@ -186,9 +188,9 @@ func (w *accessBodyWriter) captureResult(cfg AccessConfig, mask *masking.Service
 	raw := w.body.String()
 	out.Bytes = int64(len(raw))
 	if w.truncated {
+		// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文
 		out.Truncated = true
 		out.OmittedReason = omitBodyTooLarge
-		out.Value = mask.MaskJSON(raw) + truncatedPlaceholder
 		return out
 	}
 	out.Value = mask.MaskJSON(raw)

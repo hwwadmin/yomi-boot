@@ -157,15 +157,17 @@ func (s *Service) MaskHeaderMap(headers map[string]string) map[string]string {
 	return out
 }
 
-// MaskKV 对成对 key-value 脱敏（zap 风格日志字段）；奇数个原样返回。
+// MaskKV 对成对 key-value 脱敏（zap 风格日志字段）；奇数个视为调用方笔误，
+// 仍处理前面的完整对，仅末尾落单的 key 原样保留。
 // 未命中键的值若为 header map / map / JSON 字符串会递归处理。
 func (s *Service) MaskKV(keysAndValues ...any) []any {
-	if !s.Active() || len(keysAndValues) == 0 || len(keysAndValues)%2 != 0 {
+	if !s.Active() || len(keysAndValues) == 0 {
 		return keysAndValues
 	}
+	pairEnd := len(keysAndValues) - len(keysAndValues)%2
 	out := make([]any, len(keysAndValues))
 	copy(out, keysAndValues)
-	for i := 0; i < len(out); i += 2 {
+	for i := 0; i < pairEnd; i += 2 {
 		key, ok := out[i].(string)
 		if !ok {
 			key = fmt.Sprint(out[i])

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
@@ -409,6 +410,91 @@ func TestMiddleware_BodyOmittedBinary(t *testing.T) {
 	}
 	if strings.Contains(line, "fake-bytes") {
 		t.Fatalf("binary body should not be logged: %s", line)
+	}
+}
+
+// TestMiddleware_BodyTooLargeNotLogged 验证超限截断的 body 不落正文：
+// 截断残片无法按字段脱敏，access 日志只保留 body_omitted_reason 与字节数
+func TestMiddleware_BodyTooLargeNotLogged(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dir := t.TempDir()
+	cfg := Config{
+		Dir:           dir,
+		Level:         "info",
+		ConsoleLevel:  "error",
+		MaskSensitive: true,
+		Rotation:      testRotation(),
+		Access: AccessConfig{
+			SkipPaths:    []string{},
+			RecordBody:   true,
+			MaxBodyBytes: 16,
+		},
+	}
+	maskSvc, err := masking.New(masking.Config{Rules: []masking.RuleConfig{
+		{Keys: []string{"password"}, Strategy: masking.StrategyRedact},
+	}})
+	if err != nil {
+		t.Fatalf("masking.New: %v", err)
+	}
+	closeFn, err := InitLogger("test-svc", "test", cfg, maskSvc)
+	if err != nil {
+		t.Fatalf("InitLogger: %v", err)
+	}
+	defer func() { _ = closeFn() }()
+
+	r := gin.New()
+	r.Use(Middleware(cfg.Access))
+	r.POST("/api/big-req", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	r.POST("/api/big-resp", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"password": "resp-secret", "pad": strings.Repeat("x", 64)})
+	})
+
+	bigReq := `{"password":"super-secret-value","pad":"` + strings.Repeat("x", 64) + `"}`
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/big-req", strings.NewReader(bigReq)))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/big-resp", strings.NewReader(`{"password":"x"}`)))
+	_ = Sync()
+
+	accessPath := filepath.Join(dir, "access", "access.log")
+	b, err := os.ReadFile(accessPath)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	content := string(b)
+	if strings.Contains(content, "super-secret-value") || strings.Contains(content, "resp-secret") {
+		t.Fatalf("截断正文不应落盘: %s", content)
+	}
+	// 请求体截断（第一条 inbound）与响应体截断（第二条 outbound）各产生一条省略原因
+	if got := strings.Count(content, `"body_omitted_reason":"body_too_large"`); got != 2 {
+		t.Fatalf("应恰有两条 body_too_large，实际 %d: %s", got, content)
+	}
+	// 未超限的请求体仍正常脱敏落盘（JSON 行内引号转义为 \"）
+	if !strings.Contains(content, `\"password\":\"***\"`) {
+		t.Fatalf("未超限请求体应正常脱敏: %s", content)
+	}
+}
+
+// TestCollectHeaders_UTF8Truncate 验证超长 header 值按 UTF-8 边界截断，不切碎多字节字符
+func TestCollectHeaders_UTF8Truncate(t *testing.T) {
+	cfg := AccessConfig{MaxFieldBytes: 10}
+	h := http.Header{}
+	h.Set("X-Long-CN", strings.Repeat("中", 10)) // 30 字节，10 字节处落在第 4 个"中"的中间
+	h.Set("X-Long-ASCII", strings.Repeat("a", 30))
+
+	// mask 传 nil：mask_sensitive=false 时生产即此形态，顺带覆盖 nil 安全
+	out := collectHeaders(h, cfg, nil)
+
+	got := out["x-long-cn"]
+	body := strings.TrimSuffix(got, truncatedPlaceholder)
+	if !strings.HasSuffix(got, truncatedPlaceholder) || !utf8.ValidString(body) {
+		t.Fatalf("中文截断应回退到 UTF-8 边界并以占位符结尾: %q", got)
+	}
+	if body != strings.Repeat("中", 3) {
+		t.Fatalf("应保留 3 个完整字符（9 字节），实际 %d 字节: %q", len(body), body)
+	}
+
+	gotASCII := out["x-long-ascii"]
+	if gotASCII != strings.Repeat("a", 10)+truncatedPlaceholder {
+		t.Fatalf("ASCII 截断应精确到上限: %q", gotASCII)
 	}
 }
 

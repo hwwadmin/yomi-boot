@@ -51,7 +51,12 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 		var requestBodyTruncated bool
 		if m.cfg.RecordRequestBody {
 			requestBody, requestBodyTruncated = readRequestBodyForRecord(c.Request, m.cfg.MaxRequestBodySizeOrDefault())
-			requestBody = m.mask.MaskJSON(requestBody)
+			// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文
+			if requestBodyTruncated {
+				requestBody = ""
+			} else {
+				requestBody = m.mask.MaskJSON(requestBody)
+			}
 		}
 
 		blw := newBodyRecordWriter(c.Writer, m.cfg.MaxResponseBodySizeOrDefault())
@@ -128,9 +133,9 @@ func (m *HttpRecordMiddleware) buildRecord(
 		record.ClientType = session.ClientType
 	}
 
-	if m.cfg.RecordResponseBody {
-		responseBody := blw.recordedBody()
-		record.ResponseBody = m.mask.MaskJSON(responseBody)
+	// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文
+	if m.cfg.RecordResponseBody && !blw.truncated {
+		record.ResponseBody = m.mask.MaskJSON(blw.recordedBody())
 	}
 
 	if record.ResponseBody != "" {
