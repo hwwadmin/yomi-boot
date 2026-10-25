@@ -9,10 +9,41 @@ import (
 	"testing"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/component/cloud/consul"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"github.com/dtm-labs/client/dtmcli"
 )
+
+// newFakeConsulAgent 返回伪装 Consul Agent 健康查询的 httptest 服务，固定返回 entriesJSON
+func newFakeConsulAgent(t *testing.T, entriesJSON string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Consul-Index", "1")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(entriesJSON))
+	}))
+}
+
+// newResolveClient 构造带 consul 客户端且解析结果带 http 协议的 DTM 客户端
+func newResolveClient(t *testing.T, agentURL string, discoveryURLScheme string) *Client {
+	t.Helper()
+	cfg := consul.Config{
+		Addr:               agentURL,
+		ServiceID:          "dtm-test",
+		ServiceAddress:     "127.0.0.1:18080",
+		CheckAddress:       "http://127.0.0.1:18080/health",
+		DiscoveryURLScheme: discoveryURLScheme,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("consul 配置非法: %v", err)
+	}
+	consulClient, err := consul.NewClient(cfg)
+	if err != nil {
+		t.Fatalf("创建 consul 客户端失败: %v", err)
+	}
+	return NewClient(consulClient, "http://127.0.0.1:36789")
+}
 
 // newBlockingGidServer 返回一个收到请求后一直等到客户端断开的 /newGid 服务
 func newBlockingGidServer(t *testing.T) *httptest.Server {
@@ -155,6 +186,64 @@ func TestAddSagaStepDisabled(t *testing.T) {
 	}
 }
 
+// TestAddSagaStepResolvesAndAppends 验证通过 consul 解析健康实例后成功追加分支
+func TestAddSagaStepResolvesAndAppends(t *testing.T) {
+	// Service.Address 为空时回退 Node.Address
+	agent := newFakeConsulAgent(t,
+		`[{"Node":{"Address":"10.0.0.1"},"Service":{"Address":"","Port":8080}}]`)
+	defer agent.Close()
+
+	client := newResolveClient(t, agent.URL, "http://")
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := client.AddSagaStep(context.Background(), saga, "svc", "/action", "/compensate",
+		map[string]string{"name": "x"})
+	if err != nil {
+		t.Fatalf("AddSagaStep 失败: %v", err)
+	}
+	if len(saga.Steps) != 1 || len(saga.Payloads) != 1 {
+		t.Fatalf("应追加 1 个分支，steps=%d payloads=%d", len(saga.Steps), len(saga.Payloads))
+	}
+	if got := saga.Steps[0]["action"]; got != "http://10.0.0.1:8080/action" {
+		t.Fatalf("action 地址期望 http://10.0.0.1:8080/action，实际 %s", got)
+	}
+	if got := saga.Steps[0]["compensate"]; got != "http://10.0.0.1:8080/compensate" {
+		t.Fatalf("compensate 地址期望 http://10.0.0.1:8080/compensate，实际 %s", got)
+	}
+}
+
+// TestAddSagaStepRejectsUnresolvableService 验证服务无健康实例时返回错误且不追加分支
+func TestAddSagaStepRejectsUnresolvableService(t *testing.T) {
+	agent := newFakeConsulAgent(t, `[]`)
+	defer agent.Close()
+
+	client := newResolveClient(t, agent.URL, "http://")
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := client.AddSagaStep(context.Background(), saga, "svc", "/action", "/compensate", nil)
+	if err == nil {
+		t.Fatal("无健康实例应返回错误")
+	}
+	if len(saga.Steps) != 0 || len(saga.Payloads) != 0 {
+		t.Fatalf("解析失败不应追加分支，steps=%d payloads=%d", len(saga.Steps), len(saga.Payloads))
+	}
+}
+
+// TestAddSagaStepRejectsSchemelessResolve 验证未配置协议前缀时解析出的地址被拒绝
+func TestAddSagaStepRejectsSchemelessResolve(t *testing.T) {
+	agent := newFakeConsulAgent(t,
+		`[{"Node":{"Address":"10.0.0.1"},"Service":{"Address":"","Port":8080}}]`)
+	defer agent.Close()
+
+	client := newResolveClient(t, agent.URL, "")
+	saga := dtmcli.NewSaga("http://127.0.0.1:36789", "g-1")
+	err := client.AddSagaStep(context.Background(), saga, "svc", "/action", "/compensate", nil)
+	if err == nil || !strings.Contains(err.Error(), "action") {
+		t.Fatalf("无协议地址应被 action 校验拒绝，实际: %v", err)
+	}
+	if len(saga.Steps) != 0 || len(saga.Payloads) != 0 {
+		t.Fatalf("校验失败不应追加分支，steps=%d payloads=%d", len(saga.Steps), len(saga.Payloads))
+	}
+}
+
 // TestGenGidPreservesContextError 验证调用方超时同时保留哨兵与 context 错误身份
 func TestGenGidPreservesContextError(t *testing.T) {
 	srv := newBlockingGidServer(t)
@@ -170,6 +259,56 @@ func TestGenGidPreservesContextError(t *testing.T) {
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("应保留 context.DeadlineExceeded 身份，实际: %v", err)
+	}
+}
+
+// TestGenGidEmptyGid 验证服务端返回空 gid 时返回可读错误
+func TestGenGidEmptyGid(t *testing.T) {
+	srv := newJSONGidServer(t, http.StatusOK, `{"gid":""}`)
+	defer srv.Close()
+
+	_, err := NewClient(nil, srv.URL).NewSaga(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "empty gid") {
+		t.Fatalf("空 gid 应返回可读错误，实际: %v", err)
+	}
+	if !errors.Is(err, ErrGenGidFailed) {
+		t.Fatalf("应保留 ErrGenGidFailed 身份，实际: %v", err)
+	}
+}
+
+// TestNewSagaNilContext 验证 ctx 为 nil 时退回 Background 不报错
+func TestNewSagaNilContext(t *testing.T) {
+	srv := newJSONGidServer(t, http.StatusOK, `{"gid":"g-nil"}`)
+	defer srv.Close()
+
+	saga, err := NewClient(nil, srv.URL).NewSaga(nil)
+	if err != nil || saga == nil {
+		t.Fatalf("nil ctx 应正常创建 Saga，saga=%v err=%v", saga, err)
+	}
+}
+
+// TestTruncateBody 验证错误响应体的截断边界
+func TestTruncateBody(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "短文本原样", in: "short", want: "short"},
+		{name: "去除首尾空白", in: "  padded  ", want: "padded"},
+		{name: "恰好上限不截断", in: strings.Repeat("汉", maxErrorBodyRunes), want: strings.Repeat("汉", maxErrorBodyRunes)},
+		{name: "超限按 rune 截断", in: strings.Repeat("汉", maxErrorBodyRunes+50),
+			want: strings.Repeat("汉", maxErrorBodyRunes) + "..."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := truncateBody(tc.in); got != tc.want {
+				t.Fatalf("truncateBody 长度期望 %d，实际 %d", len([]rune(tc.want)), len([]rune(got)))
+			}
+		})
 	}
 }
 

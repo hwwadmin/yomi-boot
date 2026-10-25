@@ -65,6 +65,16 @@ func TestTxRunner_RunRollbackOnError(t *testing.T) {
 	}
 }
 
+// TestNewTxRunner_RejectsNilRoot 验证 nil 数据源在构造期被拒绝
+func TestNewTxRunner_RejectsNilRoot(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("nil root 期望 panic")
+		}
+	}()
+	NewTxRunner(nil, enums.MySQL, "")
+}
+
 // TestNewTxRunner_RejectsInvalidBarrierTable 验证非法 Barrier 表名在构造期被拒绝
 func TestNewTxRunner_RejectsInvalidBarrierTable(t *testing.T) {
 	defer func() {

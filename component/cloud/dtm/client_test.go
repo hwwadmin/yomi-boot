@@ -63,6 +63,17 @@ func TestNewClientTimeout(t *testing.T) {
 	}
 }
 
+// TestClientNilGuards 验证 nil 客户端的防御
+func TestClientNilGuards(t *testing.T) {
+	var client *Client
+	if client.Enabled() {
+		t.Fatal("nil Client 应为未启用")
+	}
+	if got := client.effectiveTimeout(); got != DefaultTimeout {
+		t.Fatalf("nil Client 超时应回退默认值，实际 %s", got)
+	}
+}
+
 // TestClientZeroValueDisabled 验证零值 Client 不会被误用为已启用
 func TestClientZeroValueDisabled(t *testing.T) {
 	var client Client
