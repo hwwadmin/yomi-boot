@@ -82,6 +82,24 @@ func New(t testing.TB, opts ...Option) (*gorm.DB, func()) {
 	return gormDB, cleanup
 }
 
+// StartInfo 启动内存 MySQL 并返回监听端口、数据库名与关闭函数，
+// 供需要原始连接信息的使用方（如 db.Open 集成测试）自行建立连接
+func StartInfo(t testing.TB, opts ...Option) (port int, dbName string, shutdown func()) {
+	t.Helper()
+
+	cfg := &config{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	builder, dbName := newBuilder(cfg)
+	_, _, shutdown, err := builder.Build()
+	if err != nil {
+		t.Fatalf("dbtest: 启动 mock MySQL 失败: %v", err)
+	}
+	return builder.GetPort(), dbName, shutdown
+}
+
 // NewSQL 启动内存 MySQL 并返回 database/sql、GORM 客户端与清理函数
 func NewSQL(t testing.TB, opts ...Option) (*sql.DB, *gorm.DB, func()) {
 	t.Helper()

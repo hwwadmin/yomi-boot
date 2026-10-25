@@ -10,6 +10,8 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+
+	"gorm.io/gorm"
 )
 
 // TestLocalRunner_Run_CommitAndRollback 验证事务提交与回滚行为
@@ -274,4 +276,44 @@ type txTestModel struct {
 // TableName 返回事务单测表名
 func (txTestModel) TableName() string {
 	return "tx_test_model"
+}
+
+// TestLocalRunner_InTx 验证事务绑定标记在事务内外的报告结果
+func TestLocalRunner_InTx(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(txTestModel{}))
+	defer cleanup()
+
+	runner := NewLocalRunner(gormDB)
+	ctx := context.Background()
+	if runner.InTx(ctx) {
+		t.Fatal("事务外 InTx 应返回 false")
+	}
+	err := runner.Run(ctx, func(txCtx context.Context) error {
+		if !runner.InTx(txCtx) {
+			t.Fatal("事务回调内 InTx 应返回 true")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("执行事务失败: %v", err)
+	}
+}
+
+// TestNewLocalRunner_PanicsOnNil 验证 root 为 nil 时 Fail Fast
+func TestNewLocalRunner_PanicsOnNil(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("root 为 nil 应 panic")
+		}
+	}()
+	NewLocalRunner(nil)
+}
+
+// TestLocalRunner_RunAutonomous_NilStatement 验证未绑定连接池时自治事务报错
+func TestLocalRunner_RunAutonomous_NilStatement(t *testing.T) {
+	runner := &LocalRunner{root: &gorm.DB{}}
+	err := runner.RunAutonomous(context.Background(), 0, func(context.Context) error { return nil })
+	if err == nil {
+		t.Fatal("未绑定连接池应返回错误")
+	}
 }
