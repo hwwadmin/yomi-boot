@@ -6,6 +6,11 @@
 //   - DB 查证：锁内查 sys_biz，已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈
 //   - 事务抢占：INSERT 以「冲突即空操作」语义抢占处理权，执行业务并标记完成后提交，再回写缓存
 //
+// 双入口按事务形态区分：
+//   - Execute：调用方 ctx 未绑定事务（最外层形态），事务提交后回写缓存快路径
+//   - ExecuteInTx：调用方 ctx 已绑定同源事务（嵌套复用形态），抢占与完成标记跟随外层事务，
+//     不写缓存——嵌套形态没有提交点，回写会跑在真实提交之前，外层回滚会留下假成功缓存
+//
 // 缓存回写失败只告警不影响业务结果，后续重复请求回源 DB 自愈。
 //
 // @author zwei
@@ -31,6 +36,9 @@ const (
 	defaultCacheTTL          = 5 * time.Minute     // defaultCacheTTL 是幂等结果在 Redis 中的默认过期时间
 	resultKeyPrefix          = "sysbiz:result:"    // resultKeyPrefix 是结果缓存 Key 前缀
 	idempotencyLockKeyPrefix = "idempotency:lock:" // idempotencyLockKeyPrefix 是幂等分布式锁 Key 前缀
+	// claimMaxAttempts 是处理权抢占的总尝试次数上限：冲突且反查无记录时重抢一次，
+	// 吸收「冲突的抢占行刚被回滚」的时序（嵌套形态下真实可见）
+	claimMaxAttempts = 2
 )
 
 // Guard 业务幂等守卫
@@ -76,13 +84,13 @@ type snapshot[T any] struct {
 	data   []byte
 }
 
-// Execute 执行幂等保护，编排顺序：Redis 快路径 → 分布式锁 → 锁内 double-check →
+// Execute 执行幂等保护（最外层事务形态），编排顺序：Redis 快路径 → 分布式锁 → 锁内 double-check →
 // DB 查证回放 → 事务抢占执行 → 回写缓存
 //
 // T 必须与 fn 的返回类型一致且可 JSON 往返，DB/Redis 重放时会反序列化到同一类型。
 // txRunner 由调用方注入，且必须是本次调用的最外层事务边界：传入的 ctx 已绑定同源事务时
-// 返回 ErrNestedTx fail-fast——嵌套复用形态没有本函数的提交点，「事务提交后才写缓存」
-// 的时序承诺无法兑现。
+// 返回 ErrNestedTx fail-fast——最外层形态的时序承诺（事务提交后才写缓存、抢占行对其他连接
+// 可见）只有自己的提交点才能兑现；已处于事务内时改用 ExecuteInTx。
 func Execute[T any](
 	g *Guard,
 	txRunner tx.Runner,
@@ -90,15 +98,57 @@ func Execute[T any](
 	key Key,
 	fn func(ctx context.Context) (T, error),
 ) (T, error) {
+	return execute[T](g, txRunner, ctx, key, fn, false)
+}
+
+// ExecuteInTx 执行幂等保护（嵌套复用形态）：调用方 ctx 已绑定同源事务时使用，
+// 抢占、业务与完成标记全部跟随外层事务提交，本函数没有自己的提交点。
+//
+// 与 Execute 的编排完全一致，唯一差异是不写结果缓存：嵌套形态「Run 返回 ≠ 提交」，
+// 回写缓存会跑在真实提交之前，外层回滚后会留下宣告成功而实际回滚的假成功缓存；
+// 快路径由后续请求 DB 查证回放并自愈重建。语义边界（相对 Execute 的让步，均随外层事务）：
+//   - 外层回滚则幂等记录随之消失，重试重新执行业务——与 Execute 失败重试的语义一致；
+//     fn 的非事务性副作用（RPC、发消息）同样会重复，这不是嵌套形态引入的风险。
+//   - MySQL REPEATABLE READ 下，并发方在己方事务快照建立后才提交完成记录时，冲突回退的
+//     反查不可见，最终返回 ErrDuplicateWithoutRecord（fail-closed，下次请求回放自愈）。
+//
+// DTM 分支回调（barrier ctx）不适用本守卫：分支提交 ≠ 全局提交，分支幂等由 sys_barrier
+// 承担，barrier ctx 的 InTx 为 false，会被下方校验以 ErrNotInTx 拒绝。
+//
+// 传入的 ctx 未绑定同源事务时返回 ErrNotInTx fail-fast：无外层事务时用 Execute，
+// 它有自己的提交点，能提供缓存快路径。
+func ExecuteInTx[T any](
+	g *Guard,
+	txRunner tx.Runner,
+	ctx context.Context,
+	key Key,
+	fn func(ctx context.Context) (T, error),
+) (T, error) {
+	return execute[T](g, txRunner, ctx, key, fn, true)
+}
+
+// execute 是 Execute / ExecuteInTx 的共享编排；nested 标记嵌套复用形态（跟随外层事务、不写缓存）
+func execute[T any](
+	g *Guard,
+	txRunner tx.Runner,
+	ctx context.Context,
+	key Key,
+	fn func(ctx context.Context) (T, error),
+	nested bool,
+) (T, error) {
 	var zero T
 
 	// 校验事务运行器（参数校验）与幂等键
 	if txRunner == nil {
 		return zero, errors.Sentinel(ErrGuardNotReady)
 	}
-	// 嵌套复用形态下本函数没有提交点，缓存回写会跑在真实提交之前，直接拒绝
-	if txRunner.InTx(ctx) {
+	// 两个入口按事务形态 fail-fast，防误用：Execute 拒绝嵌套（没有提交点），
+	// ExecuteInTx 拒绝裸 ctx（没有外层事务可跟随）
+	if !nested && txRunner.InTx(ctx) {
 		return zero, errors.Sentinel(ErrNestedTx)
+	}
+	if nested && !txRunner.InTx(ctx) {
+		return zero, errors.Sentinel(ErrNotInTx)
 	}
 	if key.BizID == "" || key.BizSubID == "" || key.OperationType == "" {
 		return zero, errors.Sentinel(ErrKeyInvalid)
@@ -126,18 +176,22 @@ func Execute[T any](
 			return nil
 		}
 
-		// Step 4: DB 查证——已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈快路径
+		// Step 4: DB 查证——已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈快路径；
+		// 嵌套形态不回写：反查到的可能是本事务未提交的行，回写会跑在真实提交之前
 		snap, err := findCompletedSnapshot[T](g, runCtx, key)
 		if err != nil {
 			return err
 		}
 		if snap != nil {
 			result = snap.result
-			writeCache(g, runCtx, rk, snap.data)
+			if !nested {
+				writeCache(g, runCtx, rk, snap.data)
+			}
 			return nil
 		}
 
-		// Step 5: 事务内抢占处理权、执行业务并标记完成，任一环节失败整体回滚
+		// Step 5: 事务内抢占处理权、执行业务并标记完成，任一环节失败回滚事务
+		// （嵌套形态复用外层事务，回滚由最外层执行）
 		if err := txRunner.Run(runCtx, func(txCtx context.Context) error {
 			var innerErr error
 			snap, innerErr = runBusinessOnce[T](g, txCtx, key, fn)
@@ -147,8 +201,11 @@ func Execute[T any](
 		}
 		result = snap.result
 
-		// Step 6: 事务已提交，回写缓存供后续重复请求读取
-		writeCache(g, runCtx, rk, snap.data)
+		// Step 6: 非嵌套形态事务已提交，回写缓存供后续重复请求读取；
+		// 嵌套形态没有提交点，不回写（防外层回滚后留下假成功缓存）
+		if !nested {
+			writeCache(g, runCtx, rk, snap.data)
+		}
 		return nil
 	})
 	if err != nil {
@@ -160,7 +217,8 @@ func Execute[T any](
 // runBusinessOnce 在事务内执行一次业务：INSERT 抢占 → fn → MarkCompleted
 //
 // INSERT 冲突说明处理权已被他人拿走（DB 查证与抢占之间的窗口、锁丢失等），
-// 从 DB 回放历史快照兜底。
+// 从 DB 回放历史快照兜底；反查无记录说明抢占行刚被回滚（嵌套形态下真实可见），
+// 有限重试抢占（上限 claimMaxAttempts）——全程 fail-closed，绝不重复执行业务。
 func runBusinessOnce[T any](
 	g *Guard,
 	ctx context.Context,
@@ -187,15 +245,20 @@ func runBusinessOnce[T any](
 	if err != nil {
 		return nil, err
 	}
-	if !claimed {
-		snap, err := findCompletedSnapshot[T](g, ctx, key)
-		if err != nil {
-			return nil, err
+	for attempt := 1; !claimed; attempt++ {
+		snap, findErr := findCompletedSnapshot[T](g, ctx, key)
+		if findErr != nil {
+			return nil, findErr
 		}
-		if snap == nil {
+		if snap != nil {
+			return snap, nil
+		}
+		if attempt >= claimMaxAttempts {
 			return nil, errors.Sentinel(ErrDuplicateWithoutRecord)
 		}
-		return snap, nil
+		if claimed, err = g.repo.TryInsert(ctx, row); err != nil {
+			return nil, err
+		}
 	}
 
 	// 当前请求获得处理权，执行业务函数
