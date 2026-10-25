@@ -80,7 +80,7 @@ func (d *DlqHandler) ResetRetryCountInTimeRange(ctx context.Context, from, to ti
 	if err != nil {
 		return 0, err
 	}
-	logger.Info(ctx, "DLQ 重试计数已人工重置",
+	logger.Info(ctx, "[消息队列事件]DLQ 重试计数已人工重置",
 		"serviceName", d.cfg.ServiceName,
 		"from", from,
 		"to", to,
@@ -132,13 +132,13 @@ func (d *DlqHandler) processOne(ctx context.Context, dlq model.SysEventOutboxDlq
 	now := time.Now()
 	if outbox.ID == 0 {
 		if err := d.dlqRepo.Delete(ctx, dlq.ID); err != nil {
-			logger.Error(ctx, "DLQ 清理孤立记录失败", "dlqId", dlq.ID, "error", err)
+			logger.Error(ctx, "[消息队列事件]DLQ 清理孤立记录失败", "dlqId", dlq.ID, "error", err)
 		}
 		return
 	}
 	if outbox.Status == model.OutboxStatusSentSuccess {
 		if err := d.dlqRepo.Delete(ctx, dlq.ID); err != nil {
-			logger.Error(ctx, "DLQ 清理已成功事件记录失败",
+			logger.Error(ctx, "[消息队列事件]DLQ 清理已成功事件记录失败",
 				"eventId", outbox.EventID, "topic", outbox.Topic, "error", err)
 		}
 		return
@@ -154,7 +154,7 @@ func (d *DlqHandler) processOne(ctx context.Context, dlq model.SysEventOutboxDlq
 		Payload: outbox.Payload,
 	}
 	if err := d.kafkaPublisher.PublishJSON(ctx, outbox.Topic, outbox.EventID, evt); err != nil {
-		logger.Error(ctx, "DLQ 消息队列事件推送失败",
+		logger.Error(ctx, "[消息队列事件]DLQ 消息推送失败",
 			"eventId", outbox.EventID, "eventOutboxId", dlq.EventOutboxID, "topic", outbox.Topic, "error", err)
 		dlq.RetryCount++
 		dlq.RetryLastTime = &now
@@ -162,7 +162,7 @@ func (d *DlqHandler) processOne(ctx context.Context, dlq model.SysEventOutboxDlq
 		dlq.RetryAfterTime = &retryAfter
 		if dlq.RetryCount >= d.cfg.OutboxDlqMaxRetry {
 			dlq.ErrorMsg = dlqExhaustedErrorMsg(dlq.ErrorMsg)
-			logger.Error(ctx, "DLQ 消息重试次数已超限，已停止重试",
+			logger.Error(ctx, "[消息队列事件]DLQ 消息重试次数已超限，已停止重试",
 				"eventId", outbox.EventID,
 				"eventOutboxId", dlq.EventOutboxID,
 				"topic", outbox.Topic,
@@ -171,18 +171,18 @@ func (d *DlqHandler) processOne(ctx context.Context, dlq model.SysEventOutboxDlq
 				"error", err)
 		}
 		if updateErr := d.dlqRepo.Update(ctx, &dlq); updateErr != nil {
-			logger.Error(ctx, "DLQ 重试计数更新失败",
+			logger.Error(ctx, "[消息队列事件]DLQ 重试计数更新失败",
 				"eventId", outbox.EventID, "error", updateErr)
 		}
 		return
 	}
 
-	logger.Info(ctx, "DLQ 消息队列事件推送成功", "eventId", outbox.EventID, "topic", outbox.Topic)
+	logger.Info(ctx, "[消息队列事件]DLQ 消息推送成功", "eventId", outbox.EventID, "topic", outbox.Topic)
 	if err := d.dlqRepo.DeleteWithOutboxSuccess(ctx, &outbox, &dlq, now, d.outboxRepo); err != nil {
-		logger.Error(ctx, "DLQ 消息已发送成功但状态回写失败",
+		logger.Error(ctx, "[消息队列事件]DLQ 消息已发送成功但状态回写失败",
 			"eventId", outbox.EventID, "topic", outbox.Topic, "error", err)
 		if !d.markSentSuccessAndClearDlqWithRetry(ctx, &outbox, &dlq, now) {
-			logger.Error(ctx, "DLQ 消息已发送成功但状态或 DLQ 清理仍未完成，请尽快人工核查，避免重复发送",
+			logger.Error(ctx, "[消息队列事件]DLQ 消息已发送成功但状态或 DLQ 清理仍未完成，请尽快人工核查，避免重复发送",
 				"eventId", outbox.EventID, "topic", outbox.Topic)
 		}
 	}
@@ -202,7 +202,7 @@ func (d *DlqHandler) markSentSuccessAndClearDlqWithRetry(
 		if err == nil {
 			return true
 		}
-		logger.Error(ctx, "DLQ 消息发送成功后的状态回写补偿失败",
+		logger.Error(ctx, "[消息队列事件]DLQ 消息发送成功后的状态回写补偿失败",
 			"retry", retry, "eventId", outbox.EventID, "topic", outbox.Topic, "error", err)
 		if retry < sentSuccessPersistRetryTimes {
 			time.Sleep(sentSuccessPersistRetryInterval)

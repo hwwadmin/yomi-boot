@@ -68,6 +68,6 @@ func (p *Publisher) Publish(ctx context.Context, evt Event) error {
 		return err
 	}
 
-	logger.Info(ctx, "消息队列事件发布持久化成功", "eventId", evt.EventID, "topic", evt.Topic)
+	logger.Info(ctx, "[消息队列事件]发布持久化成功", "eventId", evt.EventID, "topic", evt.Topic)
 	return nil
 }

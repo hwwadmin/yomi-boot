@@ -76,7 +76,7 @@ const inboxDlqErrorMsgLimit = 4000
 func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yomikafka.ConsumeHandler {
 	if fn == nil {
 		return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
-			logger.Warn(ctx, "消息队列事件 action 未配置")
+			logger.Warn(ctx, "[消息队列事件]action 未配置")
 			return yomikafka.Retry()
 		}
 	}
@@ -85,7 +85,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 	retryTracker := newMessageRetryTracker()
 	return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		if len(msg.Value) == 0 {
-			logger.Warn(ctx, "消息队列事件为空，已被抛弃")
+			logger.Warn(ctx, "[消息队列事件]消息为空，已被抛弃")
 			return yomikafka.AckDrop()
 		}
 
@@ -99,24 +99,24 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 		lock := r.lockFactory.GetLock(r.cfg.LockKey(evt.EventID), distlock.WithWatchdog(true))
 		held, err := lock.TryLock(ctx)
 		if err != nil {
-			logger.Error(ctx, "消息队列事件消费锁获取失败",
+			logger.Error(ctx, "[消息队列事件]消费锁获取失败",
 				"eventId", evt.EventID, "topic", evt.Topic, "error", err)
 			return yomikafka.Retry()
 		}
 		if !held {
 			exists, existErr := r.inboxRepo.Exists(ctx, r.cfg.ServiceName, evt.EventID)
 			if existErr != nil {
-				logger.Error(ctx, "消息队列事件重复校验失败",
+				logger.Error(ctx, "[消息队列事件]重复校验失败",
 					"eventId", evt.EventID, "topic", evt.Topic, "error", existErr)
 				return yomikafka.Retry()
 			}
 			if exists {
 				retryTracker.reset(retryKey)
-				logger.Warn(ctx, "消息队列事件重复且已入 inbox",
+				logger.Warn(ctx, "[消息队列事件]重复且已入 inbox",
 					"eventId", evt.EventID, "topic", evt.Topic)
 				return yomikafka.AckOK()
 			}
-			logger.Warn(ctx, "消息队列事件正在处理中，暂不 ack",
+			logger.Warn(ctx, "[消息队列事件]正在处理中，暂不 ack",
 				"eventId", evt.EventID, "topic", evt.Topic)
 			return yomikafka.Retry()
 		}
@@ -126,7 +126,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 			unlockCtx, cancel := appctx.BackgroundWithTimeout(consumeLockUnlockTimeout)
 			defer cancel()
 			if unlockErr := lock.Unlock(unlockCtx); unlockErr != nil && !errors.Is(unlockErr, distlock.ErrLockNotHeld) {
-				logger.Error(ctx, "消息队列事件消费锁释放失败",
+				logger.Error(ctx, "[消息队列事件]消费锁释放失败",
 					"eventId", evt.EventID, "topic", evt.Topic, "error", unlockErr)
 			}
 		}()
@@ -169,7 +169,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 			return nil
 		})
 		if txErr != nil {
-			logger.Error(ctx, "消息队列事件接收失败",
+			logger.Error(ctx, "[消息队列事件]接收失败",
 				"eventId", evt.EventID, "topic", evt.Topic, "error", txErr)
 			// 停机/锁丢失/下游超时属于可恢复的上下文错误，不参与死信计数
 			if !trackRetries ||
@@ -182,13 +182,13 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 				return yomikafka.Retry()
 			}
 			if dlqErr := r.moveToInboxDlq(ctx, evt, txErr, retryCount); dlqErr != nil {
-				logger.Error(ctx, "消息队列事件转入收件箱死信失败",
+				logger.Error(ctx, "[消息队列事件]转入收件箱死信失败",
 					"eventId", evt.EventID, "topic", evt.Topic,
 					"retryCount", retryCount, "error", dlqErr)
 				return yomikafka.Retry()
 			}
 			retryTracker.reset(retryKey)
-			logger.Error(ctx, "消息队列事件重试次数已超限，已转入收件箱死信",
+			logger.Error(ctx, "[消息队列事件]重试次数已超限，已转入收件箱死信",
 				"eventId", evt.EventID, "topic", evt.Topic,
 				"retryCount", retryCount, "error", txErr)
 			return yomikafka.AckOK()
@@ -197,11 +197,11 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 		switch result {
 		case receiveSuccess:
 			retryTracker.reset(retryKey)
-			logger.Info(ctx, "消息队列事件接收成功", "eventId", evt.EventID, "topic", evt.Topic)
+			logger.Info(ctx, "[消息队列事件]接收成功", "eventId", evt.EventID, "topic", evt.Topic)
 			return yomikafka.AckOK()
 		case receiveDuplicate:
 			retryTracker.reset(retryKey)
-			logger.Warn(ctx, "消息队列事件重复", "eventId", evt.EventID, "topic", evt.Topic)
+			logger.Warn(ctx, "[消息队列事件]重复", "eventId", evt.EventID, "topic", evt.Topic)
 			return yomikafka.AckOK()
 		default:
 			return yomikafka.Retry()

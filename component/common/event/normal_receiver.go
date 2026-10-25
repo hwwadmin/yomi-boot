@@ -23,14 +23,14 @@ func NewNormalReceiver() *NormalReceiver {
 func (r *NormalReceiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yomikafka.ConsumeHandler {
 	if fn == nil {
 		return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
-			logger.Warn(ctx, "消息队列事件 action 未配置")
+			logger.Warn(ctx, "[消息队列事件]action 未配置")
 			return yomikafka.AckDrop()
 		}
 	}
 
 	return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		if len(msg.Value) == 0 {
-			logger.Warn(ctx, "消息队列事件为空，已被抛弃")
+			logger.Warn(ctx, "[消息队列事件]消息为空，已被抛弃")
 			return yomikafka.AckDrop()
 		}
 
@@ -39,12 +39,12 @@ func (r *NormalReceiver) WrapHandler(fn func(ctx context.Context, evt Event) err
 			return yomikafka.AckDrop()
 		}
 		if evt.EventID != "" {
-			logger.Warn(ctx, "NormalReceiver 检测到带 eventId 的事件，如需业务幂等保障请改用 Receiver",
+			logger.Warn(ctx, "[消息队列事件]NormalReceiver 检测到带 eventId 的事件，如需业务幂等保障请改用 Receiver",
 				"eventId", evt.EventID, "topic", evt.Topic)
 		}
 
 		if err := fn(ctx, evt); err != nil {
-			logger.Error(ctx, "消息队列事件消费异常", "message", string(msg.Value), "error", err)
+			logger.Error(ctx, "[消息队列事件]消费异常", "message", string(msg.Value), "error", err)
 		}
 		return yomikafka.AckOK()
 	}

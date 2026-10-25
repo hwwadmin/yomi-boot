@@ -74,13 +74,13 @@ func (d *InboxDlqHandler) processDlq(ctx context.Context) error {
 func (d *InboxDlqHandler) processOne(ctx context.Context, row *model.SysEventInboxDlq) {
 	exists, err := d.inboxRepo.Exists(ctx, row.ServiceName, row.EventID)
 	if err != nil {
-		logger.Error(ctx, "收件箱死信重投前查询消费状态失败",
+		logger.Error(ctx, "[消息队列事件]收件箱死信重投前查询消费状态失败",
 			"eventId", row.EventID, "topic", row.Topic, "error", err)
 		return
 	}
 	if exists {
 		if err := d.dlqRepo.Delete(ctx, row.ID); err != nil {
-			logger.Error(ctx, "收件箱死信已消费但清理失败",
+			logger.Error(ctx, "[消息队列事件]收件箱死信已消费但清理失败",
 				"eventId", row.EventID, "topic", row.Topic, "error", err)
 		}
 		return
@@ -95,20 +95,20 @@ func (d *InboxDlqHandler) processOne(ctx context.Context, row *model.SysEventInb
 		now := time.Now()
 		retryCount := row.RetryCount + 1
 		afterTime := now.Add(d.cfg.InboxDlqFrequency)
-		logger.Error(ctx, "收件箱死信重新投递失败",
+		logger.Error(ctx, "[消息队列事件]收件箱死信重新投递失败",
 			"eventId", row.EventID, "topic", row.Topic,
 			"retryCount", retryCount, "error", err)
 		if updateErr := d.dlqRepo.UpdateRetry(ctx, row.ID, retryCount, now, afterTime); updateErr != nil {
-			logger.Error(ctx, "收件箱死信重投次数更新失败",
+			logger.Error(ctx, "[消息队列事件]收件箱死信重投次数更新失败",
 				"eventId", row.EventID, "topic", row.Topic, "error", updateErr)
 		}
 		return
 	}
 
 	if err := d.dlqRepo.Delete(ctx, row.ID); err != nil {
-		logger.Error(ctx, "收件箱死信重新投递成功但清理失败",
+		logger.Error(ctx, "[消息队列事件]收件箱死信重新投递成功但清理失败",
 			"eventId", row.EventID, "topic", row.Topic, "error", err)
 		return
 	}
-	logger.Info(ctx, "收件箱死信已重新投递", "eventId", row.EventID, "topic", row.Topic)
+	logger.Info(ctx, "[消息队列事件]收件箱死信已重新投递", "eventId", row.EventID, "topic", row.Topic)
 }

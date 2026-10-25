@@ -23,6 +23,10 @@ import (
 const (
 	sentSuccessPersistRetryTimes    = 3
 	sentSuccessPersistRetryInterval = 200 * time.Millisecond
+
+	// persistGraceTimeout 是取消后仍需完成的写库兜底超时，发送成功回写与批量恢复 PENDING 共用；
+	// 超时未完成即放弃，事件留在 FETCHED 由超时回收补发，符合 at-least-once
+	persistGraceTimeout = 10 * time.Second
 )
 
 // Processor 发件箱发送处理器
@@ -119,7 +123,7 @@ func (p *Processor) Offer(ctx context.Context, row model.SysEventOutbox) {
 			p.restoreFetchedEvent(ctx, row, err)
 			return
 		}
-		logger.Error(ctx, "消息队列事件提交发送线程池失败",
+		logger.Error(ctx, "[消息队列事件]提交发送线程池失败",
 			"eventId", row.EventID, "topic", row.Topic, "error", err)
 	}
 }
@@ -140,7 +144,7 @@ func (p *Processor) OfferBatch(ctx context.Context, rows []model.SysEventOutbox)
 				}
 				continue
 			}
-			logger.Error(ctx, "消息队列事件提交发送线程池失败",
+			logger.Error(ctx, "[消息队列事件]提交发送线程池失败",
 				"eventId", rows[i].EventID, "topic", rows[i].Topic, "error", err)
 		}
 	}
@@ -178,7 +182,7 @@ func (p *Processor) push(ctx context.Context, row model.SysEventOutbox) error {
 	}
 	sentTime := time.Now()
 	if err := p.kafkaPublisher.PublishJSON(ctx, row.Topic, row.EventID, evt); err != nil {
-		logger.Error(ctx, "消息队列事件推送失败",
+		logger.Error(ctx, "[消息队列事件]推送失败",
 			"eventId", row.EventID, "topic", row.Topic, "error", err)
 		if txErr := p.txExecutor.Run(ctx, func(txCtx context.Context) error {
 			updated, updateErr := p.outboxRepo.MarkSentFail(txCtx, row.ID)
@@ -186,34 +190,35 @@ func (p *Processor) push(ctx context.Context, row model.SysEventOutbox) error {
 				return updateErr
 			}
 			if !updated {
-				logger.Warn(txCtx, "消息队列事件推送失败但状态已变化，跳过 DLQ",
+				logger.Warn(txCtx, "[消息队列事件]推送失败但状态已变化，跳过 DLQ",
 					"eventId", row.EventID, "topic", row.Topic)
 				return nil
 			}
 			row.Status = model.OutboxStatusSentFail
 			return p.dlq.Enqueue(txCtx, row, err)
 		}); txErr != nil {
-			logger.Error(ctx, "消息队列事件写入 DLQ 失败",
+			logger.Error(ctx, "[消息队列事件]写入 DLQ 失败",
 				"eventId", row.EventID, "topic", row.Topic, "error", txErr)
 			return txErr
 		}
 		return err
 	}
 
-	logger.Info(ctx, "消息队列事件推送成功", "eventId", row.EventID, "topic", row.Topic)
+	logger.Info(ctx, "[消息队列事件]推送成功", "eventId", row.EventID, "topic", row.Topic)
 	row.Status = model.OutboxStatusSentSuccess
 	row.SentTime = &sentTime
-	persistCtx := context.WithoutCancel(ctx)
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), persistGraceTimeout)
+	defer cancel()
 	updated, updateErr := p.outboxRepo.MarkSentSuccess(persistCtx, row.ID, sentTime)
 	if updateErr != nil {
-		logger.Error(ctx, "消息队列事件发送成功但状态回写失败",
+		logger.Error(ctx, "[消息队列事件]发送成功但状态回写失败",
 			"eventId", row.EventID, "topic", row.Topic, "error", updateErr)
 		if !p.markSentSuccessWithRetry(persistCtx, &row, sentTime) {
-			logger.Error(ctx, "消息队列事件已发送成功但状态仍未回写成功，请尽快人工核查，避免超时回收后重复发送",
+			logger.Error(ctx, "[消息队列事件]已发送成功但状态仍未回写成功，请尽快人工核查，避免超时回收后重复发送",
 				"eventId", row.EventID, "topic", row.Topic)
 		}
 	} else if !updated {
-		logger.Warn(ctx, "消息队列事件发送成功但状态已非 FETCHED，跳过状态回写",
+		logger.Warn(ctx, "[消息队列事件]发送成功但状态已非 FETCHED，跳过状态回写",
 			"eventId", row.EventID, "topic", row.Topic)
 	}
 	return nil
@@ -233,11 +238,12 @@ func (p *Processor) restoreFetchedEvents(ctx context.Context, rows []model.SysEv
 	for i := range rows {
 		ids = append(ids, rows[i].ID)
 	}
-	logger.Error(ctx, "消息队列事件提交发送线程池失败，准备批量恢复为 PENDING",
+	logger.Error(ctx, "[消息队列事件]提交发送线程池失败，准备批量恢复为 PENDING",
 		"count", len(ids), "error", cause, "sample", buildOutboxSample(rows))
-	restoreCtx := context.WithoutCancel(ctx)
+	restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), persistGraceTimeout)
+	defer cancel()
 	if err := p.outboxRepo.RestorePendingBatch(restoreCtx, ids); err != nil {
-		logger.Error(ctx, "消息队列事件批量恢复 PENDING 失败，将依赖 FETCHED 超时回收",
+		logger.Error(ctx, "[消息队列事件]批量恢复 PENDING 失败，将依赖 FETCHED 超时回收",
 			"count", len(ids), "error", err)
 	}
 }
@@ -252,11 +258,11 @@ func (p *Processor) markSentSuccessWithRetry(ctx context.Context, row *model.Sys
 			if updated {
 				return true
 			}
-			logger.Warn(ctx, "消息队列事件发送成功但状态已非 FETCHED，跳过状态回写",
+			logger.Warn(ctx, "[消息队列事件]发送成功但状态已非 FETCHED，跳过状态回写",
 				"eventId", row.EventID, "topic", row.Topic)
 			return true
 		}
-		logger.Error(ctx, "消息队列事件发送成功状态回写失败",
+		logger.Error(ctx, "[消息队列事件]发送成功状态回写失败",
 			"retry", retry, "eventId", row.EventID, "topic", row.Topic, "error", updateErr)
 		if retry < sentSuccessPersistRetryTimes {
 			time.Sleep(sentSuccessPersistRetryInterval)
