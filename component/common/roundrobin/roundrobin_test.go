@@ -6,6 +6,7 @@ package roundrobin
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -82,6 +83,7 @@ func TestSimple(t *testing.T) {
 }
 
 // TestRun_executesTask 校验 Run 在超时前至少成功执行一次 task
+// TestRun_executesTask 校验 Run 在首轮即执行 task，且取消后及时退出（信号等待，避免负载敏感的固定超时）
 func TestRun_executesTask(t *testing.T) {
 	client, cleanup := redistest.NewClient(t)
 	defer cleanup()
@@ -91,20 +93,33 @@ func TestRun_executesTask(t *testing.T) {
 		t.Fatalf("NewFactory: %v", err)
 	}
 
-	var runs atomic.Int32
-	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+	ran := make(chan struct{})
+	var once sync.Once
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := Simple("test-run", 50*time.Millisecond)
-	err = Run(ctx, cfg, func(context.Context) error {
-		runs.Add(1)
-		return nil
-	}, factory)
-	if err != context.DeadlineExceeded && err != context.Canceled {
-		t.Fatalf("Run: %v", err)
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, Simple("test-run", 50*time.Millisecond), func(context.Context) error {
+			once.Do(func() { close(ran) })
+			return nil
+		}, factory)
+	}()
+
+	select {
+	case <-ran:
+	case <-time.After(5 * time.Second):
+		t.Fatal("task did not run within 5s")
 	}
-	if runs.Load() == 0 {
-		t.Fatal("task did not run")
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop after cancel")
 	}
 }
 
