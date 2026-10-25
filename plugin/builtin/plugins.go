@@ -33,7 +33,7 @@ import (
 // # 启动顺序（不可随意调整）
 //
 //  1. app         — 始终启动；提供 AppCtx 并按 app.timezone 锁定进程时区
-//  2. masking     — 始终启动；按 masking 段构造统一脱敏服务并注入全局默认实例（空规则即全透传）
+//  2. masking     — 始终启动；按 masking 段构造统一脱敏服务并注入全局默认实例（空规则即全透传）；Ready 时输出策略注册清单
 //  3. logger      — 始终启动（依赖 app、masking 插件；log.mask_sensitive=false 时不脱敏）
 //  4. pprof       — pprof.enabled=true 时启动（默认 false）
 //  5. db          — db.enabled=true 时启动（提供 DB 与 DbType）

@@ -2,8 +2,10 @@ package maskingplugin
 
 import (
 	"context"
+	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
@@ -14,10 +16,12 @@ const Name = "masking"
 type Masking struct {
 	plugin.Base
 
-	service *masking.Service
+	service   *masking.Service
+	ruleCount int
 }
 
 var _ plugin.Plugin = (*Masking)(nil)
+var _ plugin.ReadyHook = (*Masking)(nil)
 
 // NewMasking 创建统一脱敏服务生命周期插件
 func NewMasking() *Masking {
@@ -42,7 +46,20 @@ func (p *Masking) Init(_ context.Context, slot *plugin.PluginSlot) error {
 		return err
 	}
 	p.service = svc
+	p.ruleCount = len(bootCfg.Rules)
 	masking.SetDefault(svc)
+	return nil
+}
+
+// OnReady 在日志枢纽就绪后输出策略注册清单。
+// 本插件 Init 先于 logger 插件执行，注册又发生在 boot.Run 之前，
+// 因此注册清单统一在 Ready 阶段落日志（控制台 + info 文件）。
+func (p *Masking) OnReady(context.Context) error {
+	logger.InfoWithoutCtx("masking 脱敏策略注册清单",
+		"strategies", strings.Join(masking.RegisteredStrategies(), ","),
+		"custom", strings.Join(masking.CustomStrategyNames(), ","),
+		"rules", p.ruleCount,
+	)
 	return nil
 }
 

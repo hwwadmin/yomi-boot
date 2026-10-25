@@ -56,14 +56,36 @@ func lookupStrategy(name string) (Strategy, bool) {
 	return fn, ok
 }
 
-// availableStrategyNames 返回全部可用策略名（内建解析 + 已注册），用于错误提示
-func availableStrategyNames() []string {
+// RegisteredStrategies 返回全部已注册策略名（内置 + 业务自定义），升序
+func RegisteredStrategies() []string {
 	registryMu.RLock()
-	names := make([]string, 0, len(registry)+len(reservedStrategyNames))
+	defer registryMu.RUnlock()
+	names := make([]string, 0, len(registry))
 	for name := range registry {
 		names = append(names, name)
 	}
-	registryMu.RUnlock()
+	sort.Strings(names)
+	return names
+}
+
+// CustomStrategyNames 返回业务自行注册的策略名（不含内置策略），升序
+func CustomStrategyNames() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	names := make([]string, 0, len(registry))
+	for name := range registry {
+		if _, builtin := builtinStrategies[name]; builtin {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// availableStrategyNames 返回规则可引用的全部策略名（注册表 + 引擎内建），用于错误提示
+func availableStrategyNames() []string {
+	names := RegisteredStrategies()
 	for name := range reservedStrategyNames {
 		names = append(names, name)
 	}

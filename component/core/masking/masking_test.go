@@ -162,6 +162,37 @@ func TestCustomStrategy(t *testing.T) {
 	}
 }
 
+// TestRegistryListing 验证注册表清单查询：内置与自定义的区分
+func TestRegistryListing(t *testing.T) {
+	for _, name := range []string{StrategyPhone, StrategyIDCard, StrategyBankCard, StrategyEmail, StrategyName} {
+		if !contains(RegisteredStrategies(), name) {
+			t.Fatalf("RegisteredStrategies 应含内置策略 %s", name)
+		}
+	}
+	if contains(CustomStrategyNames(), StrategyPhone) {
+		t.Fatal("CustomStrategyNames 不应含内置策略")
+	}
+	// TestCustomStrategy 已注册 test_plate / test_echo
+	for _, name := range []string{"test_plate", "test_echo"} {
+		if !contains(RegisteredStrategies(), name) || !contains(CustomStrategyNames(), name) {
+			t.Fatalf("注册清单应含自定义策略 %s", name)
+		}
+	}
+	if contains(RegisteredStrategies(), StrategyRedact) {
+		t.Fatal("RegisteredStrategies 不应含引擎内建解析的保留名")
+	}
+}
+
+// contains 判断切片是否含目标元素
+func contains(names []string, target string) bool {
+	for _, name := range names {
+		if name == target {
+			return true
+		}
+	}
+	return false
+}
+
 // TestMustRegisterStrategyPanics 验证注册表的非法入参
 func TestMustRegisterStrategyPanics(t *testing.T) {
 	cases := []struct {

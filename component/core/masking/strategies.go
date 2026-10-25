@@ -2,15 +2,20 @@ package masking
 
 import "strings"
 
-// 内置脱敏策略：形状不符时返回 ok=false，由引擎降级为 placeholder；
-// 所有策略只处理非空字符串（空串由引擎先行短路）。
+// builtinStrategies 内置脱敏策略（注册表预置条目）；形状不符时返回 ok=false，
+// 由引擎降级为 placeholder；所有策略只处理非空字符串（空串由引擎先行短路）。
+var builtinStrategies = map[string]Strategy{
+	StrategyPhone:    maskPhone,
+	StrategyIDCard:   maskIDCard,
+	StrategyBankCard: maskBankCard,
+	StrategyEmail:    maskEmail,
+	StrategyName:     maskName,
+}
 
 func init() {
-	MustRegisterStrategy(StrategyPhone, maskPhone)
-	MustRegisterStrategy(StrategyIDCard, maskIDCard)
-	MustRegisterStrategy(StrategyBankCard, maskBankCard)
-	MustRegisterStrategy(StrategyEmail, maskEmail)
-	MustRegisterStrategy(StrategyName, maskName)
+	for name, fn := range builtinStrategies {
+		MustRegisterStrategy(name, fn)
+	}
 }
 
 // maskPhone 大陆手机号：前 3 后 4，如 138****5678；形状要求 11 位数字
