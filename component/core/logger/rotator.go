@@ -200,7 +200,15 @@ func (r *FileRotator) rotateLocked(today string) error {
 			return errors.Wrap(err, "滚动日志 rename 失败")
 		}
 		if r.compress {
-			go compressHistoryFile(historyPath)
+			// 本包自带的 goroutine 不得因 panic 打崩进程；日志走 Stderr，避免再经写日志路径递归
+			go func() {
+				defer func() {
+					if rec := recover(); rec != nil {
+						_, _ = fmt.Fprintf(os.Stderr, "日志压缩 goroutine panic: %v\n", rec)
+					}
+				}()
+				compressHistoryFile(historyPath)
+			}()
 		}
 	}
 
@@ -224,6 +232,11 @@ func (r *FileRotator) rotateLocked(today string) error {
 // scheduleCleanup 异步执行历史清理；已有清理在跑则跳过，避免叠跑
 func (r *FileRotator) scheduleCleanup() {
 	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "日志清理 goroutine panic: %v\n", rec)
+			}
+		}()
 		if !r.cleanupMu.TryLock() {
 			return
 		}

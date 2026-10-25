@@ -123,6 +123,12 @@ func startIdleKeeper(sqlDB *sql.DB, minIdle, maxIdle int, interval time.Duration
 // loop 按巡检间隔维持最小空闲连接，收到停止信号后退出
 func (k *idleKeeper) loop(ctx context.Context) {
 	defer close(k.done)
+	// panic 兜底：保活协程崩溃不得打崩进程；done 仍会关闭，Stop 不会卡住
+	defer func() {
+		if r := recover(); r != nil {
+			logger.ErrorWithoutCtx("数据库空闲连接保活 goroutine panic", "panic", r)
+		}
+	}()
 	ticker := time.NewTicker(k.interval)
 	defer ticker.Stop()
 	for {

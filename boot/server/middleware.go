@@ -35,8 +35,8 @@ func DefaultMiddlewares(slot *plugin.PluginSlot) []gin.HandlerFunc {
 		traceid.Middleware(),
 		httprecord.Middleware(httprecordplugin.From(slot).Service(), httpRecordCfg, appctxplugin.From(slot).AppCtx(), maskingplugin.From(slot).Service()),
 		logger.Middleware(logCfg.Access),
-		httpguard.Middleware(httpCfg),
 		gin.Recovery(),
+		httpguard.Middleware(httpCfg),
 		token.Middleware(tokenplugin.From(slot).Service(), tokenCfg),
 	}
 }

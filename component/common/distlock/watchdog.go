@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/core/appctx"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // watchdogInterval 返回看门狗续期间隔，默认 TTL/3
@@ -85,6 +86,19 @@ func (l *redsyncLock) markLostLocked() {
 // runWatchdog 周期性续期，连续失败或达到 MaxHoldDuration 时标记丢失
 func (l *redsyncLock) runWatchdog() {
 	defer close(l.watchdogDone)
+	// panic 兜底：续期已无法继续，必须标记锁丢失并 cancel HeldContext，
+	// 避免业务在无感知下持有一把注定过期的锁（done 仍会关闭，Unlock 不会卡住）
+	defer func() {
+		if r := recover(); r != nil {
+			logger.ErrorWithoutCtx("distlock 看门狗 goroutine panic，标记锁丢失",
+				"key", l.key, "panic", r)
+			l.mu.Lock()
+			if l.mutex != nil {
+				l.markLostLocked()
+			}
+			l.mu.Unlock()
+		}
+	}()
 
 	consecutiveFailures := 0
 	if stop, next := l.tryWatchdogExtend(consecutiveFailures); stop {

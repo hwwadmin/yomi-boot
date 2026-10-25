@@ -36,6 +36,11 @@ func Start(ctx context.Context, cfg Config, task Task, factory distlock.DistLock
 	}
 	ctx = appctx.OrBackground(ctx)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(ctx, fmt.Sprintf("RoundRobin[%s] runLoop panic.", cfg.Name), "panic", r)
+			}
+		}()
 		_ = runLoop(ctx, cfg, task, factory)
 	}()
 	return nil

@@ -197,6 +197,11 @@ func (w *channelWorker) shutdown() {
 
 // watchParentCtx 监听 parentCtx 取消并触发自动停机
 func (w *channelWorker) watchParentCtx() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WarnWithoutCtx(fmt.Sprintf("worker.%s.watch_parent_ctx.panic", w.cfg.Name), "panic", r)
+		}
+	}()
 	<-w.parentCtx.Done()
 	w.shutdown()
 }
