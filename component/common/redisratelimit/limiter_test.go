@@ -43,6 +43,37 @@ func TestNewNoop(t *testing.T) {
 	}
 }
 
+// TestNew_InvalidConfig 验证非法配置创建时 panic
+func TestNew_InvalidConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"非法故障策略", Config{KeyPrefix: "yomi:rl", RedisErrorPolicy: "failopen"}},
+		{"非法 Key 前缀", Config{KeyPrefix: "YOMI"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("非法配置应 panic")
+				}
+			}()
+			New(&stubRedis{}, c.cfg)
+		})
+	}
+}
+
+// TestNew_DefaultConfig 验证零值与空白配置按默认值正常构造
+func TestNew_DefaultConfig(t *testing.T) {
+	if New(&stubRedis{}, Config{}) == nil {
+		t.Fatal("零值配置应正常构造")
+	}
+	if New(&stubRedis{}, Config{KeyPrefix: "  ", RedisErrorPolicy: "  "}) == nil {
+		t.Fatal("空白配置应按默认值正常构造")
+	}
+}
+
 // TestAllow_RateLimited 验证触发限流返回 ErrRateLimited
 func TestAllow_RateLimited(t *testing.T) {
 	stub := &stubRedis{allowed: false}

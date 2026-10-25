@@ -18,12 +18,13 @@ func TestSendQueueBoundedBlocksUntilSlot(t *testing.T) {
 	t.Log("[用例] SendQueueSize=1，第二条 Send 应阻塞至有槽")
 
 	srv, url := startTestServer(t, ServerConfig{
-		Addr:             "127.0.0.1:0",
-		SendQueueSize:    1,
-		HeartbeatTimeout: Duration(0),
-		MaxConnLifetime:  Duration(0),
-		QueueGCInterval:  Duration(0),
-		Handler:          NopServerHandler{},
+		Addr:              "127.0.0.1:0",
+		SendQueueSize:     1,
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		QueueGCInterval:   Duration(0),
+		Handler:           NopServerHandler{},
 	})
 	cli := connectTestClient(t, url, ClientConfig{
 		SendQueueSize:     1,
@@ -68,11 +69,12 @@ func TestSendQueueBoundedBlocksUntilSlot(t *testing.T) {
 // TestServerBroadcastSkipsDeadConn Broadcast 不因单连接已拆而失败
 func TestServerBroadcastSkipsDeadConn(t *testing.T) {
 	srv, url := startTestServer(t, ServerConfig{
-		Addr:             "127.0.0.1:0",
-		HeartbeatTimeout: Duration(0),
-		MaxConnLifetime:  Duration(0),
-		QueueGCInterval:  Duration(0),
-		Handler:          NopServerHandler{},
+		Addr:              "127.0.0.1:0",
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		QueueGCInterval:   Duration(0),
+		Handler:           NopServerHandler{},
 	})
 	cli := connectTestClient(t, url, ClientConfig{
 		HeartbeatInterval: Duration(0),
@@ -110,6 +112,7 @@ func TestMaxFramePayloadRoundTrip(t *testing.T) {
 		Addr:                "127.0.0.1:0",
 		WriteMaxPayloadSize: 256,
 		MaxFramePayloadSize: maxFrame,
+		HeartbeatInterval:   Duration(0),
 		HeartbeatTimeout:    Duration(0),
 		MaxConnLifetime:     Duration(0),
 		QueueGCInterval:     Duration(0),
@@ -152,6 +155,7 @@ func TestMaxFramePayloadRoundTripWithCompress(t *testing.T) {
 		CompressEnabled:     true,
 		WriteMaxPayloadSize: 1024,
 		MaxFramePayloadSize: maxFrame,
+		HeartbeatInterval:   Duration(0),
 		HeartbeatTimeout:    Duration(0),
 		MaxConnLifetime:     Duration(0),
 		QueueGCInterval:     Duration(0),

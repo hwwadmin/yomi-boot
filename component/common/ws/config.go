@@ -21,8 +21,8 @@ const (
 	// MaxWriteMaxPayloadSize 允许配置的单条可写/可读上限（8MiB）
 	MaxWriteMaxPayloadSize = 8 * 1024 * 1024
 
-	// DefaultServerHeartbeatInterval 服务端默认心跳 Ping 间隔（0 = 不主动发 Ping）
-	DefaultServerHeartbeatInterval = time.Duration(0)
+	// DefaultServerHeartbeatInterval 服务端默认心跳 Ping 间隔
+	DefaultServerHeartbeatInterval = 10 * time.Second
 
 	// DefaultClientHeartbeatInterval 客户端默认心跳 Ping 间隔
 	DefaultClientHeartbeatInterval = 10 * time.Second
@@ -82,7 +82,7 @@ type ServerConfig struct {
 	MaxFramePayloadSize int
 
 	// HeartbeatInterval 主动 Ping 间隔
-	// 默认：nil → DefaultServerHeartbeatInterval（0，不发 Ping）；显式 0 同样不发 Ping
+	// 默认：nil → DefaultServerHeartbeatInterval（10s）；显式 0 表示不发 Ping
 	HeartbeatInterval *time.Duration
 	// HeartbeatTimeout 读空闲超时，超时踢连接
 	// 默认：nil → DefaultHeartbeatTimeout（30s）；显式 0 表示不超时踢

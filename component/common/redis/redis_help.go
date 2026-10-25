@@ -51,7 +51,7 @@ type RedisService interface {
 	OpsSet4Remove(ctx context.Context, key string, members ...string) error
 	// OpsScript4Eval 执行 Lua 脚本，keys 与 args 分别映射为 KEYS 与 ARGV
 	OpsScript4Eval(ctx context.Context, script string, keys []string, args ...any) (any, error)
-	// OpsRateLimit4Allow 滑动窗口限流：尝试消耗 n 次配额；allowed=false 且 err=nil 表示超限
+	// OpsRateLimit4Allow 滑动窗口限流：尝试消耗 n 次配额；allowed=false 且 err=nil 表示超限；n 超过单次上限时返回错误
 	OpsRateLimit4Allow(ctx context.Context, key string, limit, n int64, window time.Duration) (allowed bool, err error)
 	// OpsSet4Members 读取 Redis Set 中的全部成员
 	OpsSet4Members(ctx context.Context, key string) ([]string, error)
@@ -328,8 +328,12 @@ func (h *RedisHelper) OpsScript4Eval(ctx context.Context, script string, keys []
 	return result, nil
 }
 
+// maxRateLimitN 单次限流调用允许消耗的最大配额数：脚本按 n 次循环 ZADD，Redis 执行 Lua 期间单线程阻塞，
+// 对 n 设上界防止调用方误传超大值（如单位混淆、计算错误）拖垮整个实例；单次需要更多配额时应拆分调用
+const maxRateLimitN = 1000
+
 // OpsRateLimit4Allow 滑动窗口限流：尝试消耗 n 次配额
-// allowed=true 表示放行；allowed=false 且 err=nil 表示超限；Redis/脚本故障时返回 err
+// allowed=true 表示放行；allowed=false 且 err=nil 表示超限；Redis/脚本故障时返回 err；n 超过 maxRateLimitN 返回错误
 func (h *RedisHelper) OpsRateLimit4Allow(ctx context.Context, key string, limit, n int64, window time.Duration) (bool, error) {
 	if h == nil || h.client == nil {
 		return false, errors.New("RedisHelper 未初始化")
@@ -343,6 +347,9 @@ func (h *RedisHelper) OpsRateLimit4Allow(ctx context.Context, key string, limit,
 	}
 	if n <= 0 {
 		return false, errors.New("限流 n 必须大于 0")
+	}
+	if n > maxRateLimitN {
+		return false, errors.Newf("限流 n 超过单次上限 %d", maxRateLimitN)
 	}
 	if window <= 0 {
 		return false, errors.New("限流 window 必须大于 0")

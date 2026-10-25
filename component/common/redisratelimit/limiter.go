@@ -21,7 +21,7 @@ var ErrRateLimited = errors.NewNoStack("RATE_LIMITED")
 type LimitService interface {
 	// Allow 尝试消耗 1 次配额；超限返回 ErrRateLimited
 	Allow(ctx context.Context, key string, rule Rule) error
-	// AllowN 尝试消耗 n 次配额；超限返回 ErrRateLimited
+	// AllowN 尝试消耗 n 次配额；超限返回 ErrRateLimited；n 的单次上限由 redis 原语层校验，超过时返回错误
 	AllowN(ctx context.Context, key string, n int64, rule Rule) error
 }
 
@@ -35,10 +35,13 @@ type limiter struct {
 // noopLimiter 未启用时的空实现，Allow/AllowN 恒成功
 type noopLimiter struct{}
 
-// New 创建限流服务
+// New 创建限流服务；RedisService 为 nil 或配置非法时 panic
 func New(redisService yomiredis.RedisService, cfg Config) LimitService {
 	if redisService == nil {
 		panic("redisratelimit: RedisService 不能为 nil")
+	}
+	if err := cfg.Validate(); err != nil {
+		panic("redisratelimit: " + err.Error())
 	}
 	return &limiter{
 		redis:    redisService,

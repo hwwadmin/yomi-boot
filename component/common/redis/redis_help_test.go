@@ -178,6 +178,25 @@ func TestRedisHelper_CommandTimeout(t *testing.T) {
 	}
 }
 
+// TestRedisHelper_OpsRateLimit4Allow_MaxN 验证单次消耗 n 超上限报错、恰好等于上限正常放行
+func TestRedisHelper_OpsRateLimit4Allow_MaxN(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	helper := NewRedisHelper(client)
+	ctx := context.Background()
+	key := "yomi:test:rl:maxn"
+
+	if _, err := helper.OpsRateLimit4Allow(ctx, key, 100, maxRateLimitN+1, time.Minute); err == nil {
+		t.Fatal("n 超过单次上限应返回错误")
+	}
+
+	allowed, err := helper.OpsRateLimit4Allow(ctx, key, maxRateLimitN*2, maxRateLimitN, time.Minute)
+	if err != nil || !allowed {
+		t.Fatalf("n 恰好等于上限应放行，实际 %v,%v", allowed, err)
+	}
+}
+
 // startHangingRedisServer 启动只接受连接、不应答任何指令的 TCP 服务，用于验证指令超时
 func startHangingRedisServer(t *testing.T) (addr string, stop func()) {
 	t.Helper()

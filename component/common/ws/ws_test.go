@@ -523,10 +523,11 @@ func TestServerSendAfterClose(t *testing.T) {
 func TestSessionEmptyOnConnect(t *testing.T) {
 	h := &sessionProbeHandler{ready: make(chan int, 1)}
 	_, url := startTestServer(t, ServerConfig{
-		Addr:             "127.0.0.1:0",
-		HeartbeatTimeout: Duration(0),
-		MaxConnLifetime:  Duration(0),
-		Handler:          h,
+		Addr:              "127.0.0.1:0",
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		Handler:           h,
 	})
 	_ = connectTestClient(t, url, ClientConfig{
 		HeartbeatInterval: Duration(0),
@@ -549,11 +550,12 @@ func TestMaxConnectionsRejectsExtra(t *testing.T) {
 
 	extraH := newDisconnectClientHandler()
 	srv, url := startTestServer(t, ServerConfig{
-		Addr:             "127.0.0.1:0",
-		MaxConnections:   1,
-		HeartbeatTimeout: Duration(0),
-		MaxConnLifetime:  Duration(0),
-		Handler:          NopServerHandler{},
+		Addr:              "127.0.0.1:0",
+		MaxConnections:    1,
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		Handler:           NopServerHandler{},
 	})
 	first := connectTestClient(t, url, ClientConfig{
 		HeartbeatInterval: Duration(0),
@@ -587,10 +589,11 @@ func TestServerSendByConnID(t *testing.T) {
 		idCh:                 idCh,
 	}
 	srv, url := startTestServer(t, ServerConfig{
-		Addr:             "127.0.0.1:0",
-		HeartbeatTimeout: Duration(0),
-		MaxConnLifetime:  Duration(0),
-		Handler:          h,
+		Addr:              "127.0.0.1:0",
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		Handler:           h,
 	})
 	_ = connectTestClient(t, url, ClientConfig{
 		HeartbeatInterval: Duration(0),
@@ -647,10 +650,11 @@ func (h *captureIDHandler) OnConnect(ctx SessionContext) {
 func TestOnDisconnectPanicStillTearsDown(t *testing.T) {
 	hit := make(chan struct{}, 1)
 	srv, url := startTestServer(t, ServerConfig{
-		Addr:             "127.0.0.1:0",
-		HeartbeatTimeout: Duration(0),
-		MaxConnLifetime:  Duration(0),
-		Handler:          &panicOnDisconnectHandler{hit: hit},
+		Addr:              "127.0.0.1:0",
+		HeartbeatInterval: Duration(0),
+		HeartbeatTimeout:  Duration(0),
+		MaxConnLifetime:   Duration(0),
+		Handler:           &panicOnDisconnectHandler{hit: hit},
 	})
 	cli := connectTestClient(t, url, ClientConfig{
 		HeartbeatInterval: Duration(0),
