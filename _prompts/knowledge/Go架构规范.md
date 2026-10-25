@@ -252,7 +252,7 @@ services/{domain}/
 | `component/ai/retrieval` | 通用检索门面：查询向量化 + 检索策略 hybrid（默认，向量 + BM25 混合）/ vector（RRF 融合）+ 阈值过滤；`New`/`MustNew`；组合 `component/ai/embedding` + `component/ai/vectordb`，不认识业务元数据语义；独立哨兵 `AI_RETRIEVAL_*`；不进插件链、不读 YAML、不做限流 |
 | `component/ai/rag` | 检索增强数据门面：切块 / 向量化 / 入库 / 删除，检索经 `component/ai/retrieval`（hybrid 默认 / vector）并叠加文档域过滤（缺内容命中忽略、旧块版本过滤）；切块策略与自定义 `Chunker` 来自 `component/ai/chunking`；基于 `component/ai/embedding` + `component/ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进插件链、不读 YAML、不做限流 |
 | `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；Search 按 `SearchQuery.Text` 切换纯向量 / 向量+BM25 混合检索（RRF 融合；milvus 原生全文检索要求 2.5+，memory 自带 BM25）；不进插件链、不读 YAML |
-| `component/ai/rerank` | 通用精重排门面：按查询对候选文本打分重排，Engine 统一入参校验、契约兜底、降序稳定排序与 TopN 截断；实现经 `Reranker` 注入，空则内置 PassThrough（保序返回 TOP-N）；`New`/`MustNew`；单次候选上限 `MaxDocs`；独立哨兵 `AI_RERANK_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
+| `component/ai/rerank` | 通用精重排门面契约：`Reranker` 接口 + 请求/结果类型，无 Engine 中间层、不含模型接入；业务实现接口接入自有模型，`ValidateRequest` / `RankScores` 供实现复用（契约的可执行形式），内置 PassThrough（保序返回 TOP-N）占位；单次候选上限 `MaxDocs`；独立哨兵 `AI_RERANK_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
 
 **平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/` 下，按数据库分 `mysql/` 与 `pgsql/` 两个目录，同名文件字段口径一致，修改时须同步两份）：
@@ -608,7 +608,7 @@ kafka: ...
 | 通用向量 / BM25 检索 | `component/ai/retrieval`（`New`/`MustNew`；hybrid 默认 / vector；对任意 vectordb 集合做通用检索，不认识业务元数据；不读 YAML） |
 | RAG 入库 / 检索 / 删除 | `component/ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；切块经 `component/ai/chunking`，可注入自定义 `Chunker`；检索经 `component/ai/retrieval` 并叠加旧块过滤；基于 `component/ai/embedding` + `component/ai/vectordb`；不含问答；不读 YAML） |
 | 向量写入 / ANN 检索 / 动态索引 | `component/ai/vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
-| 精重排 Rerank | `component/ai/rerank`（`New`/`MustNew`；实现经 `Reranker` 注入，空则 PassThrough 保序 TOP-N；与 ai 其他组件零依赖；不读 YAML） |
+| 精重排 Rerank | `component/ai/rerank`（实现 `Reranker` 接口接入自有模型，`ValidateRequest` / `RankScores` 供实现复用；PassThrough 保序 TOP-N 占位；与 ai 其他组件零依赖；不读 YAML） |
 | 雪花 ID | `snowflake` |
 | 错误码 / 信封 DTO | `errors`、`shared/error`、`shared/dto` |
 | 集成测试 HTTP 调用 | `testclient` |
