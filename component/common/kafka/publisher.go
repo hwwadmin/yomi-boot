@@ -22,11 +22,11 @@ type PublisherService interface {
 	PublishBatch(ctx context.Context, reqs []PublishRequest) error
 	// PublishJSON 将对象序列化为 JSON 后发布到指定主题
 	PublishJSON(ctx context.Context, topic string, key string, value any) error
-	// PublishAsync 异步入队发布；成功表示任务已进入工作池，不代表 Kafka 已确认
+	// PublishAsync 异步入队发布；入队等待受 submit_timeout_seconds 约束，等待超时或工作池不可用时降级为同步发送；成功仅表示任务已入队，不代表 Kafka 已确认
 	PublishAsync(ctx context.Context, req PublishRequest) error
-	// PublishBatchAsync 异步入队批量发布
+	// PublishBatchAsync 异步入队批量发布；入队与降级策略同 PublishAsync
 	PublishBatchAsync(ctx context.Context, reqs []PublishRequest) error
-	// PublishJSONAsync 序列化 JSON 后异步入队发布
+	// PublishJSONAsync 序列化 JSON 后异步入队发布；入队与降级策略同 PublishAsync
 	PublishJSONAsync(ctx context.Context, topic string, key string, value any) error
 	// Close 释放生产者连接
 	Close() error

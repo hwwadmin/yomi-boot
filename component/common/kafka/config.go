@@ -11,7 +11,7 @@ import (
 type PublishWorkerConfig struct {
 	WorkNum              int // WorkNum 是并发 worker 数，0 表示使用默认值
 	Size                 int // Size 是任务队列容量，0 表示使用默认值
-	SubmitTimeoutSeconds int // SubmitTimeoutSeconds 是入队等待超时秒数，0 表示使用 worker 默认值
+	SubmitTimeoutSeconds int // SubmitTimeoutSeconds 是入队等待超时秒数（队列满时最多等待该时长再降级同步发送），0 表示使用 worker 默认值
 }
 
 // ConnectionConfig 表示 Kafka 连接与安全配置

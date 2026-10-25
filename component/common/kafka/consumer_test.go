@@ -219,3 +219,40 @@ func TestEffectiveMaxHandlerRetries(t *testing.T) {
 		}
 	})
 }
+
+// TestBuildReaderConfigMinMaxBytes 验证最小拉取字节数大于最大时返回错误，而不是让 kafka-go panic
+func TestBuildReaderConfigMinMaxBytes(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := ConsumerConfig{Topics: []string{"orders"}, GroupID: "order-group"}
+
+	t.Run("manager defaults invalid", func(t *testing.T) {
+		t.Parallel()
+		runtimeCfg := consumerRuntime{minBytes: 10485760, maxBytes: 1048576}
+		if _, err := buildReaderConfig(runtimeCfg, baseCfg); err == nil {
+			t.Fatal("管理器默认 min_bytes > max_bytes 应校验失败")
+		}
+	})
+
+	t.Run("consumer override conflicts with manager default", func(t *testing.T) {
+		t.Parallel()
+		runtimeCfg := consumerRuntime{minBytes: 100, maxBytes: 10e6}
+		cfg := baseCfg
+		cfg.MaxBytes = 50
+		if _, err := buildReaderConfig(runtimeCfg, cfg); err == nil {
+			t.Fatal("单次 max_bytes 小于管理器 min_bytes 应校验失败")
+		}
+	})
+
+	t.Run("valid combination", func(t *testing.T) {
+		t.Parallel()
+		runtimeCfg := consumerRuntime{minBytes: 1, maxBytes: 10e6}
+		readerCfg, err := buildReaderConfig(runtimeCfg, baseCfg)
+		if err != nil {
+			t.Fatalf("合法组合应通过校验: %v", err)
+		}
+		if readerCfg.MinBytes != 1 || readerCfg.MaxBytes != 10e6 {
+			t.Fatalf("MinBytes/MaxBytes = %d/%d, want 1/10000000", readerCfg.MinBytes, readerCfg.MaxBytes)
+		}
+	})
+}

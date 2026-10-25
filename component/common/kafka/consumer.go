@@ -525,6 +525,12 @@ func buildReaderConfig(runtimeCfg consumerRuntime, cfg ConsumerConfig) (kafkago.
 		Dialer:      runtimeCfg.dialer,
 	}
 
+	// kafka-go NewReader 对最小拉取字节数大于最大值的组合直接 panic，须在校验层拦截
+	if readerCfg.MinBytes > readerCfg.MaxBytes {
+		return kafkago.ReaderConfig{}, errors.Newf("min_bytes(%d) 不能大于 max_bytes(%d)",
+			readerCfg.MinBytes, readerCfg.MaxBytes)
+	}
+
 	return readerCfg, nil
 }
 

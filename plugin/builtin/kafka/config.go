@@ -13,7 +13,7 @@ const SectionKey = "kafka"
 type PublishWorkerBootConfig struct {
 	WorkNum              int `mapstructure:"work_num"`               // WorkNum 是并发 worker 数，0 表示使用默认值
 	Size                 int `mapstructure:"size"`                   // Size 是任务队列容量，0 表示使用默认值
-	SubmitTimeoutSeconds int `mapstructure:"submit_timeout_seconds"` // SubmitTimeoutSeconds 是入队等待超时秒数，0 表示使用 worker 默认值
+	SubmitTimeoutSeconds int `mapstructure:"submit_timeout_seconds"` // SubmitTimeoutSeconds 是入队等待超时秒数（队列满时最多等待该时长再降级同步发送），0 表示使用 worker 默认值
 }
 
 // BootConfig 表示 kafka 配置段的 YAML 绑定
