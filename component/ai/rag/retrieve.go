@@ -1,4 +1,4 @@
-// 检索。
+// 域检索外壳：委托通用检索门面并叠加文档域过滤。
 //
 // @author zwei
 
@@ -6,85 +6,39 @@ package rag
 
 import (
 	"context"
-	"math"
 	"strconv"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
 // Retrieve 在指定集合中检索最相关的块；集合不存在或为空时返回空切片与 nil
-func (e *Engine) Retrieve(ctx context.Context, collection string, req RetrieveRequest) ([]Chunk, error) {
+//
+// 通用检索（入参校验、查询向量化、策略路由、阈值过滤）由 ai/retrieval 门面执行，
+// 检索入参非法错误透传其哨兵；本方法在其上叠加文档域过滤：
+// 缺少块文本的命中忽略、更新窗口内的旧块丢弃。
+func (e *Engine) Retrieve(ctx context.Context, collection string, req retrieval.RetrieveRequest) ([]Chunk, error) {
 	name, err := normalizeCollection(collection)
 	if err != nil {
 		return nil, err
 	}
-	return e.retrieve(orBackground(ctx), name, req)
-}
-
-// retrieve 执行检索
-func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRequest) ([]Chunk, error) {
-	query := strings.TrimSpace(req.Query)
-	if query == "" {
-		return nil, errors.Sentinel(ErrInvalidArgument)
-	}
-	strategy, err := normalizeRetrievalStrategy(req.Strategy)
+	ctx = orBackground(ctx)
+	hits, err := e.retriever.Retrieve(ctx, name, req)
 	if err != nil {
-		return nil, err
-	}
-	if req.TopK <= 0 || req.TopK > vectordb.MaxTopK {
-		return nil, errors.Sentinel(ErrInvalidArgument)
-	}
-	if math.IsNaN(float64(req.MinScore)) || math.IsInf(float64(req.MinScore), 0) {
-		return nil, errors.Sentinel(ErrInvalidArgument)
-	}
-	if err := validateFilter(req.Filter); err != nil {
-		return nil, err
-	}
-	// 集合不存在时不消耗向量化调用，严格按契约返回空结果
-	has, err := e.store.HasCollection(ctx, collection)
-	if err != nil {
-		return nil, err
-	}
-	if !has {
-		return []Chunk{}, nil
-	}
-	vectors, _, err := e.embed(ctx, []string{query})
-	if err != nil {
-		return nil, err
-	}
-	// hybrid 把查询原文同时交给 BM25 一路；vector 只走向量
-	searchText := ""
-	if strategy == StrategyHybrid {
-		searchText = query
-	}
-	hits, err := e.store.Search(ctx, collection, vectordb.SearchQuery{
-		Vector: toFloat32(vectors[0]),
-		Text:   searchText,
-		TopK:   req.TopK,
-		Filter: req.Filter,
-	})
-	if err != nil {
-		// 集合尚未建立等同于空检索
-		if errors.Is(err, vectordb.ErrNotFound) {
-			return []Chunk{}, nil
-		}
 		return nil, err
 	}
 	candidates := make([]vectordb.Hit, 0, len(hits))
 	for _, hit := range hits {
-		if req.MinScore != 0 && hit.Score < req.MinScore {
-			continue
-		}
 		if strings.TrimSpace(hit.Metadata[MetadataKeyContent]) == "" {
 			continue
 		}
 		candidates = append(candidates, hit)
 	}
 	// 读取命中文档当前版本与块总数，过滤更新窗口内尚未删除的旧块
-	states, err := e.currentChunkStates(ctx, collection, candidates)
+	states, err := e.currentChunkStates(ctx, name, candidates)
 	if err != nil {
 		if errors.Is(err, vectordb.ErrNotFound) {
 			return []Chunk{}, nil
@@ -114,19 +68,6 @@ func (e *Engine) retrieve(ctx context.Context, collection string, req RetrieveRe
 type chunkState struct {
 	total   int
 	version string
-}
-
-// normalizeRetrievalStrategy 空策略回退 hybrid，并校验白名单
-func normalizeRetrievalStrategy(strategy RetrievalStrategy) (RetrievalStrategy, error) {
-	if strategy == "" {
-		return StrategyHybrid, nil
-	}
-	switch strategy {
-	case StrategyHybrid, StrategyVector:
-		return strategy, nil
-	default:
-		return "", errors.Sentinel(ErrInvalidArgument)
-	}
 }
 
 // currentChunkStates 读取命中文档当前版本与块总数；辅助查询失败时降级为不过滤

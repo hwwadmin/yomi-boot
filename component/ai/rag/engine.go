@@ -13,6 +13,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
+	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
@@ -28,6 +29,7 @@ type Engine struct {
 	embedder       embedding.Client
 	store          vectordb.Store
 	defaultChunker chunking.Chunker
+	retriever      retrieval.Retriever
 	dimension      atomic.Int64
 	indexLocks     [indexLockStripes]sync.Mutex
 }

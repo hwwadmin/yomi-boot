@@ -51,11 +51,11 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 		if err != nil {
 			return nil, err
 		}
-		// 内置策略已保证块非空且不超长；这里兜底自定义 Chunker，
-		// 契约要求 Engine 返回 ErrInvalidArgument（errors.Is 亦可匹配 chunking.ErrInvalidArgument）
+		// 内置 Chunker 已保证块非空且不超长；这里兜底自定义 Chunker 的输出，
+		// 违反切块契约的错误原样透传
 		chunks, err = chunking.NormalizeChunks(chunks)
 		if err != nil {
-			return nil, wrapSentinel(ErrInvalidArgument, err)
+			return nil, err
 		}
 		if len(chunks) > maxChunksPerDoc {
 			return nil, errors.Sentinel(ErrInvalidArgument)

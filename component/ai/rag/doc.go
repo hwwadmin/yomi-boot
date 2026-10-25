@@ -17,7 +17,7 @@
 //	    Documents: []rag.Document{{ID: "doc-1", Content: text, Source: "manual.md"}},
 //	    Chunker:  chunker,
 //	})
-//	chunks, err := engine.Retrieve(ctx, "kb_sales", rag.RetrieveRequest{Query: "如何退款", TopK: 5})
+//	chunks, err := engine.Retrieve(ctx, "kb_sales", retrieval.RetrieveRequest{Query: "如何退款", TopK: 5})
 //	err = engine.DeleteDocument(ctx, "kb_sales", "doc-1")
 //
 // # 多集合
@@ -56,28 +56,31 @@
 //
 // # 检索策略
 //
-// RetrieveRequest.Strategy 选择检索策略，空则 hybrid：
+// 检索由 component/ai/retrieval 门面执行，rag.Retrieve 直接接受 retrieval.RetrieveRequest：
 //
-//   - hybrid（默认）：向量 + BM25 混合检索，查询原文同时交给向量库的词法一路，
-//     两路结果以 RRF（k=60）融合；Score 是融合排名分（量级约 0 ~ 2/61），
+//   - hybrid（默认）：向量 + BM25 混合检索，两路结果以 RRF 融合；Score 是融合排名分，
 //     MinScore 阈值须按融合分口径设置，与 vector 的 Score 不可横比
 //   - vector：纯向量检索，Score 是相似度（越大越相似，L2 已映射）
 //
-// 词法能力由 vectordb 提供：milvus 用原生 BM25 全文检索（要求 Milvus 2.5+，
-// 旧版本创建的集合需重建后才能混合检索），memory 自带 BM25 实现。
+// 策略口径与词法能力（milvus 要求 Milvus 2.5+、旧集合须重建；memory 自带 BM25）见
+// component/ai/retrieval 与 component/ai/vectordb 文档。
 //
 // # 检索与删除
 //
 //   - Retrieve：集合不存在或为空时返回空切片与 nil，不视为错误；缺少 rag_content 的命中会被忽略
-//   - Retrieve 会读取命中文档当前版本与块总数，丢弃版本不一致或索引超出总数的旧块；辅助查询失败时降级为不过滤并告警
+//   - Retrieve 在通用检索之上叠加文档域过滤：读取命中文档当前版本与块总数，
+//     丢弃版本不一致或索引超出总数的旧块；辅助查询失败时降级为不过滤并告警。
+//     直接使用 ai/retrieval 检索本包写入的集合不会做旧块过滤
 //   - Score 越大越相似；不同 Metric 与不同 Strategy 的 Score 不可横比
 //   - DeleteDocument：删除文档全部块；集合不存在时返回 nil
 //
 // # 错误
 //
 // 包内哨兵：ErrInvalidArgument / ErrDimensionMismatch / ErrBadResponse。
-// embedding / vectordb / chunking 的错误原样透传，可用 errors.Is 判断其哨兵；
-// 自定义 Chunker 违反切块契约时以 ErrInvalidArgument 上报，errors.Is 亦可匹配 chunking.ErrInvalidArgument。
+// embedding / vectordb / chunking / retrieval 的错误原样透传，可用 errors.Is 判断其哨兵；
+// 自定义 Chunker 违反切块契约即透传 chunking.ErrInvalidArgument；
+// 检索入参非法透传 retrieval.ErrInvalidArgument，查询向量维度不符由 vectordb 校验上报
+// （检索路径不做写侧的维度锁定）。
 //
 // Engine 构造后不可变，可并发调用；请勿复制 Engine 值。
 //
