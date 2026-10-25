@@ -21,11 +21,11 @@ const defaultCommandTimeout = time.Duration(DefaultCommandTimeoutMs) * time.Mill
 
 // RedisService 表示 Redis 常用读写能力接口
 type RedisService interface {
-	// OpsStr4Set 写入 Redis String 值，并按需设置过期时间
+	// OpsStr4Set 写入 Redis String 值，并按需设置过期时间；TTL 小于 0 时返回错误
 	OpsStr4Set(ctx context.Context, key string, value string, ttl time.Duration) error
 	// OpsStr4SetNoTTL 写入 Redis String 值，不设置过期时间
 	OpsStr4SetNoTTL(ctx context.Context, key string, value string) error
-	// OpsStr4SetJSON 将对象序列化为 JSON 后写入 Redis String
+	// OpsStr4SetJSON 将对象序列化为 JSON 后写入 Redis String；TTL 小于 0 时返回错误
 	OpsStr4SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error
 	// OpsStr4SetJSONNoTTL 将对象序列化为 JSON 后写入 Redis String，不设置过期时间
 	OpsStr4SetJSONNoTTL(ctx context.Context, key string, value any) error
@@ -33,7 +33,7 @@ type RedisService interface {
 	OpsStr4Get(ctx context.Context, key string) (value string, exists bool, err error)
 	// OpsStr4GetJSON 读取 Redis String 中的 JSON 值并反序列化到目标对象
 	OpsStr4GetJSON(ctx context.Context, key string, target any) (exists bool, err error)
-	// OpsHash4Set 写入 Redis Hash 字段，并按需设置过期时间
+	// OpsHash4Set 写入 Redis Hash 字段，并按需设置过期时间；TTL 小于 0 时返回错误
 	OpsHash4Set(ctx context.Context, key string, fields map[string]any, ttl time.Duration) error
 	// OpsHash4Get 读取 Redis Hash 的单个字段值
 	OpsHash4Get(ctx context.Context, key string, field string) (value string, exists bool, err error)
@@ -43,7 +43,7 @@ type RedisService interface {
 	OpsKey4Delete(ctx context.Context, keys ...string) error
 	// OpsKey4Exists 判断指定 Key 是否存在
 	OpsKey4Exists(ctx context.Context, key string) (bool, error)
-	// OpsKey4Expire 为指定 Key 设置新的过期时间
+	// OpsKey4Expire 为指定 Key 设置新的过期时间；TTL 小于等于 0 时返回错误
 	OpsKey4Expire(ctx context.Context, key string, ttl time.Duration) (applied bool, err error)
 	// OpsSet4Add 向 Redis Set 写入一个或多个成员
 	OpsSet4Add(ctx context.Context, key string, members ...string) error
@@ -102,8 +102,12 @@ func (h *RedisHelper) commandContext(ctx context.Context) (context.Context, cont
 	return appctx.WithTimeout(ctx, timeout)
 }
 
-// OpsStr4Set 写入 Redis String 值，并按需设置过期时间
+// OpsStr4Set 写入 Redis String 值，并按需设置过期时间；TTL 小于 0 时返回错误
 func (h *RedisHelper) OpsStr4Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+	if ttl < 0 {
+		return errors.Newf("TTL 不能小于 0: %v", ttl)
+	}
+
 	ctx, cancel := h.commandContext(ctx)
 	defer cancel()
 
@@ -119,7 +123,7 @@ func (h *RedisHelper) OpsStr4SetNoTTL(ctx context.Context, key string, value str
 	return h.OpsStr4Set(ctx, key, value, 0)
 }
 
-// OpsStr4SetJSON 将对象序列化为 JSON 后写入 Redis String
+// OpsStr4SetJSON 将对象序列化为 JSON 后写入 Redis String；TTL 小于 0 时返回错误
 func (h *RedisHelper) OpsStr4SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -173,8 +177,11 @@ func (h *RedisHelper) OpsStr4GetJSON(ctx context.Context, key string, target any
 	return true, nil
 }
 
-// OpsHash4Set 写入 Redis Hash 字段，并按需设置过期时间
+// OpsHash4Set 写入 Redis Hash 字段，并按需设置过期时间；TTL 小于 0 时返回错误
 func (h *RedisHelper) OpsHash4Set(ctx context.Context, key string, fields map[string]any, ttl time.Duration) error {
+	if ttl < 0 {
+		return errors.Newf("TTL 不能小于 0: %v", ttl)
+	}
 	if len(fields) == 0 {
 		return nil
 	}
@@ -258,9 +265,13 @@ func (h *RedisHelper) OpsKey4Exists(ctx context.Context, key string) (bool, erro
 	return count > 0, nil
 }
 
-// OpsKey4Expire 为指定 Key 设置新的过期时间
+// OpsKey4Expire 为指定 Key 设置新的过期时间；TTL 小于等于 0 时返回错误
 // key 不存在时返回 applied=false
 func (h *RedisHelper) OpsKey4Expire(ctx context.Context, key string, ttl time.Duration) (applied bool, err error) {
+	if ttl <= 0 {
+		return false, errors.Newf("TTL 必须大于 0: %v", ttl)
+	}
+
 	ctx, cancel := h.commandContext(ctx)
 	defer cancel()
 

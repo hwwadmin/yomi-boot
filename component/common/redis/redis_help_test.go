@@ -83,6 +83,62 @@ func TestRedisHelper_OpsSet4AddAndMembers(t *testing.T) {
 	}
 }
 
+// TestRedisHelper_RejectsNegativeTTL 验证负 TTL 被拒绝且不写入数据
+func TestRedisHelper_RejectsNegativeTTL(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	helper := NewRedisHelper(client)
+	ctx := context.Background()
+
+	if err := helper.OpsStr4Set(ctx, "yomi:test:negttl:str", "v", -time.Second); err == nil {
+		t.Fatal("OpsStr4Set 期望负 TTL 返回错误")
+	}
+	if err := helper.OpsStr4SetJSON(ctx, "yomi:test:negttl:json", map[string]string{"a": "1"}, -time.Second); err == nil {
+		t.Fatal("OpsStr4SetJSON 期望负 TTL 返回错误")
+	}
+	if err := helper.OpsHash4Set(ctx, "yomi:test:negttl:hash", map[string]any{"f": "v"}, -time.Second); err == nil {
+		t.Fatal("OpsHash4Set 期望负 TTL 返回错误")
+	}
+
+	exists, err := helper.OpsKey4Exists(ctx, "yomi:test:negttl:str")
+	if err != nil || exists {
+		t.Fatalf("负 TTL 的 String 键不应写入，实际 exists=%v err=%v", exists, err)
+	}
+	exists, err = helper.OpsKey4Exists(ctx, "yomi:test:negttl:hash")
+	if err != nil || exists {
+		t.Fatalf("负 TTL 的 Hash 键不应写入，实际 exists=%v err=%v", exists, err)
+	}
+}
+
+// TestRedisHelper_RejectsNonPositiveExpireTTL 验证非正 TTL 的 Expire 被拒绝且不删键
+func TestRedisHelper_RejectsNonPositiveExpireTTL(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	helper := NewRedisHelper(client)
+	ctx := context.Background()
+	key := "yomi:test:expire:guard"
+
+	if err := helper.OpsStr4Set(ctx, key, "v", time.Hour); err != nil {
+		t.Fatalf("准备数据失败: %v", err)
+	}
+
+	applied, err := helper.OpsKey4Expire(ctx, key, 0)
+	if err == nil || applied {
+		t.Fatalf("OpsKey4Expire 期望 ttl=0 返回错误,applied=false，实际 %v,%v", applied, err)
+	}
+	applied, err = helper.OpsKey4Expire(ctx, key, -time.Second)
+	if err == nil || applied {
+		t.Fatalf("OpsKey4Expire 期望负 TTL 返回错误,applied=false，实际 %v,%v", applied, err)
+	}
+
+	exists, err := helper.OpsKey4Exists(ctx, key)
+	if err != nil || !exists {
+		t.Fatalf("非正 TTL 不应删键，实际 exists=%v err=%v", exists, err)
+	}
+}
+
 // TestNewRedisHelper_NilClientPanics 验证未初始化客户端时构造助手会 panic
 func TestNewRedisHelper_NilClientPanics(t *testing.T) {
 	defer func() {
