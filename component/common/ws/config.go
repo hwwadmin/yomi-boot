@@ -42,6 +42,12 @@ const (
 	// DefaultHandshakeTimeout 默认握手超时（读入站请求头 + 升级写出）
 	DefaultHandshakeTimeout = 5 * time.Second
 
+	// DefaultWriteTimeout 单条消息默认写出超时；超时强制拆线，防止慢客户端卡死写循环
+	DefaultWriteTimeout = 10 * time.Second
+
+	// DefaultSendQueueSize 每连接发送队列默认容量（条数）；有界队列防慢客户端撑爆内存
+	DefaultSendQueueSize = 256
+
 	// DefaultQueueGCInterval 默认孤儿发送队列巡检间隔
 	DefaultQueueGCInterval = 30 * time.Second
 )
@@ -74,7 +80,7 @@ type ServerConfig struct {
 	// 默认：0 → DefaultWriteMaxPayloadSize（256KiB）
 	WriteMaxPayloadSize int
 	// WriteTimeout 单条消息写出超时（整条含分片），超时强制拆线
-	// 默认：0（不超时，写出卡住交由心跳/寿命兜底）
+	// 默认：0 → DefaultWriteTimeout（10s）
 	WriteTimeout time.Duration
 	// HandshakeTimeout 握手超时
 	// 默认：0 → DefaultHandshakeTimeout（5s）
@@ -102,8 +108,8 @@ type ServerConfig struct {
 	// 默认：0（不限制）
 	MaxConnections int
 
-	// SendQueueSize 每连接发送队列容量；满则阻塞入队
-	// 默认：0（无界）
+	// SendQueueSize 每连接发送队列容量（条数）；满则阻塞入队
+	// 默认：0 → DefaultSendQueueSize（256）；写超时保证写循环限期排空或拆线，有界队列封顶单连接内存
 	SendQueueSize int
 	// QueueGCInterval 孤儿发送队列巡检间隔
 	// 默认：nil → DefaultQueueGCInterval（30s）；显式 0 表示关闭巡检
@@ -193,6 +199,16 @@ func (c ServerConfig) ResolvedHandshakeTimeout() time.Duration {
 	return resolveHandshakeTimeout(c.HandshakeTimeout)
 }
 
+// ResolvedWriteTimeout 返回生效的单条消息写出超时
+func (c ServerConfig) ResolvedWriteTimeout() time.Duration {
+	return resolveWriteTimeout(c.WriteTimeout)
+}
+
+// ResolvedSendQueueSize 返回生效的发送队列容量
+func (c ServerConfig) ResolvedSendQueueSize() int {
+	return resolveSendQueueSize(c.SendQueueSize)
+}
+
 // ResolvedHeartbeat 返回生效的心跳间隔与超时
 func (c ServerConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
 	return resolveServerHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
@@ -233,7 +249,7 @@ type ClientConfig struct {
 	// 默认：0 → DefaultWriteMaxPayloadSize（256KiB）
 	WriteMaxPayloadSize int
 	// WriteTimeout 单条消息写出超时（整条含分片），超时强制拆线
-	// 默认：0（不超时，写出卡住交由心跳/寿命兜底）
+	// 默认：0 → DefaultWriteTimeout（10s）
 	WriteTimeout time.Duration
 	// HandshakeTimeout 拨号与升级握手超时
 	// 默认：0 → DefaultHandshakeTimeout（5s）
@@ -250,8 +266,8 @@ type ClientConfig struct {
 	// 默认：nil → DefaultHeartbeatTimeout（30s）；显式 0 表示不超时踢
 	HeartbeatTimeout *time.Duration
 
-	// SendQueueSize 发送队列容量；满则阻塞入队
-	// 默认：0（无界）
+	// SendQueueSize 发送队列容量（条数）；满则阻塞入队
+	// 默认：0 → DefaultSendQueueSize（256）
 	SendQueueSize int
 	// QueueGCInterval 孤儿发送队列巡检间隔
 	// 默认：nil → DefaultQueueGCInterval（30s）；显式 0 表示关闭巡检
@@ -316,6 +332,16 @@ func (c ClientConfig) ResolvedHandshakeTimeout() time.Duration {
 	return resolveHandshakeTimeout(c.HandshakeTimeout)
 }
 
+// ResolvedWriteTimeout 返回生效的单条消息写出超时
+func (c ClientConfig) ResolvedWriteTimeout() time.Duration {
+	return resolveWriteTimeout(c.WriteTimeout)
+}
+
+// ResolvedSendQueueSize 返回生效的发送队列容量
+func (c ClientConfig) ResolvedSendQueueSize() int {
+	return resolveSendQueueSize(c.SendQueueSize)
+}
+
 // ResolvedHeartbeat 返回生效的心跳间隔与超时
 func (c ClientConfig) ResolvedHeartbeat() (interval, timeout time.Duration) {
 	return resolveClientHeartbeat(c.HeartbeatInterval, c.HeartbeatTimeout)
@@ -378,6 +404,22 @@ func resolveHandshakeTimeout(d time.Duration) time.Duration {
 		return DefaultHandshakeTimeout
 	}
 	return d
+}
+
+// resolveWriteTimeout 将 0/未设置解析为 DefaultWriteTimeout
+func resolveWriteTimeout(d time.Duration) time.Duration {
+	if d <= 0 {
+		return DefaultWriteTimeout
+	}
+	return d
+}
+
+// resolveSendQueueSize 将 0/未设置解析为 DefaultSendQueueSize
+func resolveSendQueueSize(n int) int {
+	if n <= 0 {
+		return DefaultSendQueueSize
+	}
+	return n
 }
 
 // resolveServerHeartbeat 解析服务端心跳：nil→默认常量；显式 0 保留为关闭

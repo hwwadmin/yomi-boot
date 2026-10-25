@@ -25,7 +25,7 @@ type connImpl struct {
 	remote       net.Addr        // remote 是对端地址
 	local        net.Addr        // local 是本地地址
 	writeMax     int             // writeMax 是单条可写上限
-	writeTimeout time.Duration   // writeTimeout 单条消息写出超时；0 不超时
+	writeTimeout time.Duration   // writeTimeout 单条消息写出超时（已 resolve 默认 10s）
 	maxFrame     int             // maxFrame 是出站分片目标帧载荷；0 关闭
 	connID       string          // connID 仅服务端在登记后赋值
 
@@ -84,9 +84,9 @@ type connParams struct {
 	local         net.Addr
 	writeMax      int
 	readMax       int
-	writeTimeout  time.Duration // writeTimeout 单条消息写出超时；0 不超时
+	writeTimeout  time.Duration // writeTimeout 单条消息写出超时（已 resolve 默认 10s）
 	maxFrame      int           // maxFrame 出站分片目标帧载荷；0 关闭
-	sendQueueSize int           // sendQueueSize 是发送队列容量；0 表示无界
+	sendQueueSize int           // sendQueueSize 是发送队列容量（已 resolve 默认 256 条）
 }
 
 // newConn 包装底层连接并启动写循环

@@ -50,10 +50,10 @@ type server struct {
 	maxConnections        int64                    // maxConnections 在线上限；0 表示不限制
 	heartbeat             heartbeatSettings        // heartbeat 已 resolve 的心跳
 	writeMax              int                      // writeMax 单条可写上限
-	writeTimeout          time.Duration            // writeTimeout 单条消息写出超时；0 不超时
+	writeTimeout          time.Duration            // writeTimeout 单条消息写出超时（已 resolve 默认 10s）
 	readMax               int                      // readMax 单条可读上限
 	maxFrame              int                      // maxFrame 出站分片目标帧载荷；0 关闭
-	sendQueueSize         int                      // sendQueueSize 每连接发送队列容量；0 无界
+	sendQueueSize         int                      // sendQueueSize 每连接发送队列容量（已 resolve 默认 256 条）
 	queueGCInterval       time.Duration            // queueGCInterval 巡检间隔；0 关闭巡检
 	compress              bool                     // compress 是否启用压缩
 	originPatterns        []string                 // originPatterns 允许的 Origin；空则跳过校验
@@ -90,10 +90,10 @@ func NewServer(cfg ServerConfig) (Server, error) {
 		maxConnections:        int64(cfg.MaxConnections),
 		heartbeat:             heartbeatFromResolved(interval, timeout),
 		writeMax:              cfg.ResolvedWriteMaxPayloadSize(),
-		writeTimeout:          cfg.WriteTimeout,
+		writeTimeout:          cfg.ResolvedWriteTimeout(),
 		readMax:               cfg.ResolvedReadMaxPayloadSize(),
 		maxFrame:              cfg.MaxFramePayloadSize,
-		sendQueueSize:         cfg.SendQueueSize,
+		sendQueueSize:         cfg.ResolvedSendQueueSize(),
 		queueGCInterval:       cfg.ResolvedQueueGCInterval(),
 		compress:              cfg.CompressEnabled,
 		originPatterns:        append([]string(nil), cfg.OriginPatterns...),

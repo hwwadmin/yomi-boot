@@ -4,6 +4,7 @@
 package ws
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -211,4 +212,69 @@ func TestWriteTimeoutValidate(t *testing.T) {
 	if err := (ServerConfig{Addr: ":1", WriteTimeout: 0}).Validate(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestWriteTimeoutAndQueueDefaults 验证写超时与发送队列的高可用默认值解析
+func TestWriteTimeoutAndQueueDefaults(t *testing.T) {
+	serverCfg := ServerConfig{Addr: ":1"}
+	if err := serverCfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := serverCfg.ResolvedWriteTimeout(); got != DefaultWriteTimeout {
+		t.Fatalf("Server WriteTimeout=%v want %v", got, DefaultWriteTimeout)
+	}
+	if got := serverCfg.ResolvedSendQueueSize(); got != DefaultSendQueueSize {
+		t.Fatalf("Server SendQueueSize=%d want %d", got, DefaultSendQueueSize)
+	}
+
+	clientCfg := ClientConfig{}
+	if err := clientCfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := clientCfg.ResolvedWriteTimeout(); got != DefaultWriteTimeout {
+		t.Fatalf("Client WriteTimeout=%v want %v", got, DefaultWriteTimeout)
+	}
+	if got := clientCfg.ResolvedSendQueueSize(); got != DefaultSendQueueSize {
+		t.Fatalf("Client SendQueueSize=%d want %d", got, DefaultSendQueueSize)
+	}
+
+	// 显式配置优先于默认值
+	explicitServer := ServerConfig{Addr: ":1", WriteTimeout: 30 * time.Second, SendQueueSize: 1024}
+	if got := explicitServer.ResolvedWriteTimeout(); got != 30*time.Second {
+		t.Fatalf("显式 WriteTimeout=%v want 30s", got)
+	}
+	if got := explicitServer.ResolvedSendQueueSize(); got != 1024 {
+		t.Fatalf("显式 SendQueueSize=%d want 1024", got)
+	}
+}
+
+// TestNewServerClientApplyDefaults 验证构造器落地解析后的默认值
+func TestNewServerClientApplyDefaults(t *testing.T) {
+	srv, err := NewServer(ServerConfig{Addr: "127.0.0.1:0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ok := srv.(*server)
+	if !ok {
+		t.Fatalf("unexpected server type %T", srv)
+	}
+	if s.writeTimeout != DefaultWriteTimeout || s.sendQueueSize != DefaultSendQueueSize {
+		t.Fatalf("server 未落地默认值: writeTimeout=%v sendQueueSize=%d", s.writeTimeout, s.sendQueueSize)
+	}
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("close server: %v", err)
+	}
+
+	cl, err := NewClient(ClientConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, ok := cl.(*client)
+	if !ok {
+		t.Fatalf("unexpected client type %T", cl)
+	}
+	if c.writeTimeout != DefaultWriteTimeout || c.sendQueueSize != DefaultSendQueueSize {
+		t.Fatalf("client 未落地默认值: writeTimeout=%v sendQueueSize=%d", c.writeTimeout, c.sendQueueSize)
+	}
+	_ = c.Close(CloseNormalClosure, "test done")
 }

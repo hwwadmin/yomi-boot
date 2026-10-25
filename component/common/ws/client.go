@@ -57,10 +57,10 @@ func NewClient(cfg ClientConfig) (Client, error) {
 		handler:         cfg.resolveHandler(),
 		heartbeat:       heartbeatFromResolved(interval, timeout),
 		writeMax:        cfg.ResolvedWriteMaxPayloadSize(),
-		writeTimeout:    cfg.WriteTimeout,
+		writeTimeout:    cfg.ResolvedWriteTimeout(),
 		readMax:         cfg.ResolvedReadMaxPayloadSize(),
 		maxFrame:        cfg.MaxFramePayloadSize,
-		sendQueueSize:   cfg.SendQueueSize,
+		sendQueueSize:   cfg.ResolvedSendQueueSize(),
 		queueGCInterval: cfg.ResolvedQueueGCInterval(),
 	}, nil
 }
