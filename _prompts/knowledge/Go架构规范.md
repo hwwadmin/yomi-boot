@@ -97,7 +97,7 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
-- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
+- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、chunking、retrieval、rag、vectordb、rerank。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链与每个插件的初始化状态，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单放 `plugin/builtin` 根包（根包可 import 全部子包，`plugin/builtin/{lib}` 子包不得 import 根包，否则成环）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
@@ -183,7 +183,7 @@ services/{domain}/
 | `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`masking`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
-| `component/ai/` | `llm`、`embedding`、`jev`、`rag`、`vectordb` |
+| `component/ai/` | `llm`、`embedding`、`jev`、`chunking`、`retrieval`、`rag`、`vectordb`、`rerank` |
 
 依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`，`plugin/builtin` 根包可 import 全部子包（子包不得 import 根包）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/builtin` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段与访问器。
 
@@ -252,6 +252,7 @@ services/{domain}/
 | `component/ai/retrieval` | 通用检索门面：查询向量化 + 检索策略 hybrid（默认，向量 + BM25 混合）/ vector（RRF 融合）+ 阈值过滤；`New`/`MustNew`；组合 `component/ai/embedding` + `component/ai/vectordb`，不认识业务元数据语义；独立哨兵 `AI_RETRIEVAL_*`；不进插件链、不读 YAML、不做限流 |
 | `component/ai/rag` | 检索增强数据门面：切块 / 向量化 / 入库 / 删除，检索经 `component/ai/retrieval`（hybrid 默认 / vector）并叠加文档域过滤（缺内容命中忽略、旧块版本过滤）；切块策略与自定义 `Chunker` 来自 `component/ai/chunking`；基于 `component/ai/embedding` + `component/ai/vectordb`；同一 Engine 可服务多个集合，集合名按调用传入；独立哨兵 `AI_RAG_*`；不含问答；不进插件链、不读 YAML、不做限流 |
 | `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Dimension 与 Metric 锁在 Store；动态 Create/Drop/Replace 集合；Search 按 `SearchQuery.Text` 切换纯向量 / 向量+BM25 混合检索（RRF 融合；milvus 原生全文检索要求 2.5+，memory 自带 BM25）；不进插件链、不读 YAML |
+| `component/ai/rerank` | 通用精重排门面：按查询对候选文本打分重排，Engine 统一入参校验、契约兜底、降序稳定排序与 TopN 截断；实现经 `Reranker` 注入，空则内置 PassThrough（保序返回 TOP-N）；`New`/`MustNew`；单次候选上限 `MaxDocs`；独立哨兵 `AI_RERANK_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
 
 **平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/` 下，按数据库分 `mysql/` 与 `pgsql/` 两个目录，同名文件字段口径一致，修改时须同步两份）：
@@ -607,6 +608,7 @@ kafka: ...
 | 通用向量 / BM25 检索 | `component/ai/retrieval`（`New`/`MustNew`；hybrid 默认 / vector；对任意 vectordb 集合做通用检索，不认识业务元数据；不读 YAML） |
 | RAG 入库 / 检索 / 删除 | `component/ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；切块经 `component/ai/chunking`，可注入自定义 `Chunker`；检索经 `component/ai/retrieval` 并叠加旧块过滤；基于 `component/ai/embedding` + `component/ai/vectordb`；不含问答；不读 YAML） |
 | 向量写入 / ANN 检索 / 动态索引 | `component/ai/vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
+| 精重排 Rerank | `component/ai/rerank`（`New`/`MustNew`；实现经 `Reranker` 注入，空则 PassThrough 保序 TOP-N；与 ai 其他组件零依赖；不读 YAML） |
 | 雪花 ID | `snowflake` |
 | 错误码 / 信封 DTO | `errors`、`shared/error`、`shared/dto` |
 | 集成测试 HTTP 调用 | `testclient` |
