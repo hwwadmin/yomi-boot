@@ -42,8 +42,14 @@ func TestConfig_Normalize_RequiresRotation(t *testing.T) {
 	if err := cfg.Normalize(); err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}
-	if cfg.Dir != "logs" || cfg.Level != "info" || cfg.ConsoleLevel != "debug" {
+	if cfg.Dir != "logs" || cfg.Level != "info" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
+	}
+	if !cfg.ConsoleEnabledOrDefault() || !cfg.AsyncEnabledOrDefault() {
+		t.Fatal("console/async should default enabled")
+	}
+	if cfg.AsyncQueueSize != 4096 {
+		t.Fatalf("async_queue_size default want 4096, got %d", cfg.AsyncQueueSize)
 	}
 	if !cfg.Access.EnabledOrDefault() {
 		t.Fatal("access should default enabled")
@@ -88,10 +94,9 @@ func TestConfig_Normalize_ReservedFields(t *testing.T) {
 func TestFileSplit_ELKFieldsAndStaticFields(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Config{
-		Dir:          dir,
-		Level:        "info",
-		ConsoleLevel: "error",
-		Rotation:     testRotation(),
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
 		Fields: map[string]string{
 			"country_code": "pk",
 			"instance_id":  "i-test",
@@ -141,7 +146,6 @@ func TestMiddleware_InboundOutboundPair(t *testing.T) {
 	cfg := Config{
 		Dir:           dir,
 		Level:         "info",
-		ConsoleLevel:  "error",
 		Rotation:      testRotation(),
 		MaskSensitive: true,
 		Access: AccessConfig{
@@ -237,10 +241,9 @@ func TestMiddleware_ErrorAlwaysLogged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
-		Dir:          dir,
-		Level:        "info",
-		ConsoleLevel: "error",
-		Rotation:     testRotation(),
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
 			SampleRate: 0.0001,
@@ -286,10 +289,9 @@ func TestMiddleware_SampleDropsOK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
-		Dir:          dir,
-		Level:        "info",
-		ConsoleLevel: "error",
-		Rotation:     testRotation(),
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
 			SampleRate: 0.1,
@@ -328,10 +330,9 @@ func TestMiddleware_OutboundPanicLogged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
-		Dir:          dir,
-		Level:        "info",
-		ConsoleLevel: "error",
-		Rotation:     testRotation(),
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
 			SampleRate: 0.5,
@@ -372,10 +373,9 @@ func TestMiddleware_BodyOmittedBinary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	dir := t.TempDir()
 	cfg := Config{
-		Dir:          dir,
-		Level:        "info",
-		ConsoleLevel: "error",
-		Rotation:     testRotation(),
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
 		Access: AccessConfig{
 			SkipPaths:  []string{},
 			RecordBody: true,
@@ -421,7 +421,6 @@ func TestMiddleware_BodyTooLargeNotLogged(t *testing.T) {
 	cfg := Config{
 		Dir:           dir,
 		Level:         "info",
-		ConsoleLevel:  "error",
 		MaskSensitive: true,
 		Rotation:      testRotation(),
 		Access: AccessConfig{

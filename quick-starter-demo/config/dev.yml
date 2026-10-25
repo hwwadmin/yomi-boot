@@ -61,10 +61,12 @@ masking:
       strategy: plate           # 自定义策略，见 main.go 的 MustRegisterStrategy
 
 log:
-  dir: logs            # 日志根目录，其下自动创建 access/info/error/debug
-  level: info          # 文件日志最低级别
-  console_level: debug # 控制台最低级别
-  mask_sensitive: true # 日志是否经统一脱敏服务（规则见 masking 段），默认 true
+  dir: logs              # 日志根目录，其下自动创建 access/info/error/debug
+  level: info            # 文件与控制台日志最低级别
+  console_enabled: true  # 是否输出控制台日志，默认 true
+  async_enabled: true    # 是否异步写入（队列满丢弃并向 stderr 限频告警），默认 true
+  async_queue_size: 4096 # 异步队列容量（每输出目标条数），0 默认 4096
+  mask_sensitive: true   # 日志是否经统一脱敏服务（规则见 masking 段），默认 true
   rotation:                 # 滚动与保留，必须显式配置
     max_size_mb: 100
     retention_days: 7

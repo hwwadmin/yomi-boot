@@ -70,13 +70,31 @@ func (c AccessConfig) SampleRateOrDefault() float64 {
 //
 // 日志时间统一使用进程时区（启动时由 app.timezone 锁定，默认 UTC）；原 log.timezone 已移除。
 type Config struct {
-	Dir           string            // 日志根目录（其下 access/info/error/debug）
-	Level         string            // 文件最低级别
-	ConsoleLevel  string            // 控制台最低级别
-	Fields        map[string]string // 静态标签，自动注入每条日志
-	MaskSensitive bool              // MaskSensitive 是否用注入的脱敏服务处理日志；false 时不调用脱敏组件（组件内聚判定）
-	Rotation      RotationConfig    // 滚动与保留（必填）
-	Access        AccessConfig      // 文件 access 中间件
+	Dir            string            // 日志根目录（其下 access/info/error/debug）
+	Level          string            // 文件与控制台最低级别
+	ConsoleEnabled *bool             // 是否输出控制台日志；nil 默认 true
+	AsyncEnabled   *bool             // 是否异步写入；nil 默认 true，false 时退化为同步直写
+	AsyncQueueSize int               // 异步队列容量（每输出目标条数）；0 默认 4096
+	Fields         map[string]string // 静态标签，自动注入每条日志
+	MaskSensitive  bool              // MaskSensitive 是否用注入的脱敏服务处理日志；false 时不调用脱敏组件（组件内聚判定）
+	Rotation       RotationConfig    // 滚动与保留（必填）
+	Access         AccessConfig      // 文件 access 中间件
+}
+
+// ConsoleEnabledOrDefault 是否输出控制台日志，未配置默认 true
+func (c Config) ConsoleEnabledOrDefault() bool {
+	if c.ConsoleEnabled == nil {
+		return true
+	}
+	return *c.ConsoleEnabled
+}
+
+// AsyncEnabledOrDefault 是否异步写入，未配置默认 true
+func (c Config) AsyncEnabledOrDefault() bool {
+	if c.AsyncEnabled == nil {
+		return true
+	}
+	return *c.AsyncEnabled
 }
 
 // Normalize 填充安全默认值并校验硬性约束
@@ -90,8 +108,11 @@ func (c *Config) Normalize() error {
 	if strings.TrimSpace(c.Level) == "" {
 		c.Level = "info"
 	}
-	if strings.TrimSpace(c.ConsoleLevel) == "" {
-		c.ConsoleLevel = "debug"
+	if c.AsyncQueueSize < 0 {
+		return errors.New("async_queue_size 不能为负数")
+	}
+	if c.AsyncQueueSize == 0 {
+		c.AsyncQueueSize = defaultAsyncQueueSize
 	}
 
 	if c.Rotation.MaxSizeMB <= 0 || c.Rotation.RetentionDays <= 0 || c.Rotation.MaxBackups <= 0 {

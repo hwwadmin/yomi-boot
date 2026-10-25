@@ -25,18 +25,49 @@ const (
 // callerSkip 日志调用者跳过层级，补偿 component/core/logger、log.go 中 write/get 等包装层
 const callerSkip = 2
 
-// logHub 持有分流后的 zap logger 与资源清理函数
+// logHub 持有分流后的 zap logger 与异步 sink / 文件滚动器
 type logHub struct {
-	access  *zap.Logger
-	info    *zap.Logger
-	errorL  *zap.Logger
-	debug   *zap.Logger
-	maskSvc *masking.Service
-	closers []io.Closer
-	cfg     Config
+	access   *zap.Logger
+	info     *zap.Logger
+	errorL   *zap.Logger
+	debug    *zap.Logger
+	maskSvc  *masking.Service
+	rotators []*FileRotator // rotators 是全部文件滚动器，停机时 flush 后 sync+close
+	sinks    []*asyncSink   // sinks 是全部异步 sink，停机时统一 flush/stop
+	cfg      Config
 }
 
 var defaultHub atomic.Pointer[logHub]
+
+// Flush 将各异步 sink 中在途日志落盘；timeout 为总预算，
+// 单个 sink 超时返回错误但不影响其余 sink。异步关闭时为无操作。
+func Flush(timeout time.Duration) error {
+	hub := defaultHub.Load()
+	if hub == nil {
+		return nil
+	}
+	return hub.Flush(timeout)
+}
+
+// Flush 按总预算逐个刷新 sink；超时的 sink 记入错误
+func (h *logHub) Flush(timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = defaultFlushTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	var errs []error
+	for _, s := range h.sinks {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			errs = append(errs, errors.Newf("logger: sink[%s] flush 预算耗尽", s.name))
+			continue
+		}
+		if err := s.Flush(remaining); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
 
 // Sync 将缓冲日志刷入各输出目标，应在进程退出前调用（通常配合 defer）
 func Sync() error {
@@ -44,16 +75,14 @@ func Sync() error {
 	if hub == nil {
 		return nil
 	}
+	flushErr := hub.Flush(defaultFlushTimeout)
 	var errs []error
-	for _, l := range []*zap.Logger{hub.access, hub.info, hub.errorL, hub.debug} {
-		if l == nil {
-			continue
-		}
-		if err := ignoreSyncError(l.Sync()); err != nil {
+	for _, r := range hub.rotators {
+		if err := ignoreSyncError(r.Sync()); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	return errors.Join(errs...)
+	return errors.Join(append([]error{flushErr}, errs...)...)
 }
 
 // InitLogger 读取配置并初始化控制台 + 四文件日志路由，返回资源清理函数。
@@ -76,11 +105,11 @@ func InitLogger(serviceName, env string, logCfg Config, maskSvc *masking.Service
 	cleanup := func() error {
 		syncErr := Sync()
 		var closeErrs []error
-		for _, c := range hub.closers {
-			if c == nil {
-				continue
-			}
-			if err := c.Close(); err != nil {
+		for _, s := range hub.sinks {
+			s.Stop()
+		}
+		for _, r := range hub.rotators {
+			if err := r.Close(); err != nil {
 				closeErrs = append(closeErrs, err)
 			}
 		}
@@ -91,9 +120,21 @@ func InitLogger(serviceName, env string, logCfg Config, maskSvc *masking.Service
 
 // newLogHub 构建控制台 + 四文件分流的日志枢纽
 func newLogHub(serviceName, env string, cfg Config, maskSvc *masking.Service) (*logHub, error) {
-	consoleLevel := parseLevel(cfg.ConsoleLevel, zapcore.DebugLevel)
 	fileLevel := parseLevel(cfg.Level, zapcore.InfoLevel)
-	consoleCore := newConsoleCore(&colorConsoleWriter{w: os.Stdout}, consoleLevel)
+
+	hub := &logHub{cfg: cfg, maskSvc: maskSvc}
+	queueSize := cfg.AsyncQueueSize
+
+	// 控制台关闭时不构建 consoleCore，所有 Tee 仅挂文件 core；
+	// 控制台等级跟随 level，debug 日志仅 level=debug 时上控制台
+	var consoleCore zapcore.Core
+	if cfg.ConsoleEnabledOrDefault() {
+		var consoleWriter io.Writer = &colorConsoleWriter{w: os.Stdout}
+		if cfg.AsyncEnabledOrDefault() {
+			consoleWriter = hub.addSink("console", consoleWriter, queueSize)
+		}
+		consoleCore = newConsoleCore(consoleWriter, levelEnablerFrom(fileLevel))
+	}
 
 	commonFields := []zap.Field{
 		zap.String("service", serviceName),
@@ -120,70 +161,88 @@ func newLogHub(serviceName, env string, cfg Config, maskSvc *masking.Service) (*
 		})
 	}
 
-	hub := &logHub{cfg: cfg, maskSvc: maskSvc}
-
 	accessRot, err := makeRot(LogTypeAccess)
 	if err != nil {
 		return nil, errors.Wrap(err, "初始化 access 日志失败")
 	}
+	hub.rotators = append(hub.rotators, accessRot)
 	infoRot, err := makeRot(LogTypeInfo)
 	if err != nil {
-		_ = accessRot.Close()
+		hub.abort()
 		return nil, errors.Wrap(err, "初始化 info 日志失败")
 	}
+	hub.rotators = append(hub.rotators, infoRot)
 	errorRot, err := makeRot(LogTypeError)
 	if err != nil {
-		_ = accessRot.Close()
-		_ = infoRot.Close()
+		hub.abort()
 		return nil, errors.Wrap(err, "初始化 error 日志失败")
 	}
-	hub.closers = append(hub.closers, accessRot, infoRot, errorRot)
+	hub.rotators = append(hub.rotators, errorRot)
+
+	// wrapSink 按异步开关包装文件目标；异步关闭时直连（同步直写语义）
+	wrapSink := func(logType string, rot *FileRotator) io.Writer {
+		if !cfg.AsyncEnabledOrDefault() {
+			return rot
+		}
+		return hub.addSink(logType, rot, queueSize)
+	}
 
 	accessCores := []zapcore.Core{
-		newJSONFileCore(accessRot, exactLevel(zapcore.InfoLevel), LogTypeAccess),
+		newJSONFileCore(wrapSink(LogTypeAccess, accessRot), exactLevel(zapcore.InfoLevel), LogTypeAccess),
 	}
-	if cfg.Access.ToConsole {
+	if cfg.Access.ToConsole && consoleCore != nil {
 		accessCores = append(accessCores, consoleCore)
 	}
 	hub.access = zap.New(zapcore.NewTee(accessCores...), zap.AddCaller(), zap.AddCallerSkip(callerSkip)).With(commonFields...)
 
 	infoFileEnabler := andLevel(infoOrWarnLevel(), levelEnablerFrom(fileLevel))
-	hub.info = zap.New(
-		zapcore.NewTee(consoleCore, newJSONFileCore(infoRot, infoFileEnabler, LogTypeInfo)),
-		zap.AddCaller(),
-		zap.AddCallerSkip(callerSkip),
-	).With(commonFields...)
+	infoCores := []zapcore.Core{newJSONFileCore(wrapSink(LogTypeInfo, infoRot), infoFileEnabler, LogTypeInfo)}
+	if consoleCore != nil {
+		infoCores = append(infoCores, consoleCore)
+	}
+	hub.info = zap.New(zapcore.NewTee(infoCores...), zap.AddCaller(), zap.AddCallerSkip(callerSkip)).With(commonFields...)
 
-	hub.errorL = zap.New(
-		zapcore.NewTee(consoleCore, newJSONFileCore(errorRot, errorAndAbove(), LogTypeError)),
-		zap.AddCaller(),
-		zap.AddCallerSkip(callerSkip),
-	).With(commonFields...)
+	errorCores := []zapcore.Core{newJSONFileCore(wrapSink(LogTypeError, errorRot), errorAndAbove(), LogTypeError)}
+	if consoleCore != nil {
+		errorCores = append(errorCores, consoleCore)
+	}
+	hub.errorL = zap.New(zapcore.NewTee(errorCores...), zap.AddCaller(), zap.AddCallerSkip(callerSkip)).With(commonFields...)
 
 	if fileLevel <= zapcore.DebugLevel {
 		debugRot, err := makeRot(LogTypeDebug)
 		if err != nil {
+			hub.abort()
 			return nil, errors.Wrap(err, "初始化 debug 日志失败")
 		}
-		hub.closers = append(hub.closers, debugRot)
-		hub.debug = zap.New(
-			zapcore.NewTee(
-				consoleCore,
-				newJSONFileCore(debugRot, exactLevel(zapcore.DebugLevel), LogTypeDebug),
-			),
-			zap.AddCaller(),
-			zap.AddCallerSkip(callerSkip),
-		).With(commonFields...)
+		hub.rotators = append(hub.rotators, debugRot)
+		debugCores := []zapcore.Core{newJSONFileCore(wrapSink(LogTypeDebug, debugRot), exactLevel(zapcore.DebugLevel), LogTypeDebug)}
+		if consoleCore != nil {
+			debugCores = append(debugCores, consoleCore)
+		}
+		hub.debug = zap.New(zapcore.NewTee(debugCores...), zap.AddCaller(), zap.AddCallerSkip(callerSkip)).With(commonFields...)
 	} else {
-		// 文件不写 debug；控制台仍可按 console_level 输出 debug
-		hub.debug = zap.New(
-			newConsoleCore(&colorConsoleWriter{w: os.Stdout}, andLevel(consoleLevel, exactLevel(zapcore.DebugLevel))),
-			zap.AddCaller(),
-			zap.AddCallerSkip(callerSkip),
-		).With(commonFields...)
+		// level 高于 debug 时 debug 日志无处输出；保留空 logger 维持调用方 nil 安全
+		hub.debug = zap.New(zapcore.NewTee(), zap.AddCaller(), zap.AddCallerSkip(callerSkip)).With(commonFields...)
 	}
 
 	return hub, nil
+}
+
+// addSink 为目标创建异步 sink 并登记，供 flush/stop 统一管理
+func (h *logHub) addSink(name string, dst io.Writer, queueSize int) io.Writer {
+	sink := newAsyncSink(name, dst, queueSize)
+	h.sinks = append(h.sinks, sink)
+	return sink
+}
+
+// abort 构建失败路径：停止已创建的 sink 并关闭已创建的滚动器
+func (h *logHub) abort() {
+	for _, s := range h.sinks {
+		s.Stop()
+	}
+	for _, r := range h.rotators {
+		_ = r.Close()
+	}
 }
 
 // newConsoleCore 创建控制台彩色文本输出 core
