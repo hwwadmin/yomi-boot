@@ -11,6 +11,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
 	"gitee.com/hq_project/yomi-boot/plugin"
 	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	maskingplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/masking"
 )
 
 const Name = "logger"
@@ -29,14 +30,14 @@ func NewLogger() *Logger {
 	return &Logger{Base: plugin.NewBase(Name)}
 }
 
-// Init 读取 log 配置并初始化日志枢纽
+// Init 读取 log 配置并初始化日志枢纽；脱敏服务无条件注入，是否调用由组件按 mask_sensitive 判定
 func (p *Logger) Init(_ context.Context, slot *plugin.PluginSlot) error {
 	app := appctxplugin.From(slot).AppCtx()
 	if app == nil {
 		return errors.New("logger: 需要 app 插件")
 	}
 	bootCfg := config.MustSection[BootConfig](slot.Config, SectionKey)
-	closeFn, err := logger.InitLogger(app.Name(), app.Env(), bootCfg.ToConfig())
+	closeFn, err := logger.InitLogger(app.Name(), app.Env(), bootCfg.ToConfig(), maskingplugin.From(slot).Service())
 	if err != nil {
 		return err
 	}

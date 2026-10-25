@@ -32,7 +32,7 @@ type BootConfig struct {
 	MaxResponseBodySize *int               `mapstructure:"max_response_body_size"` // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 4096，0 表示不截断
 	RecordRequestBody   bool               `mapstructure:"record_request_body"`    // RecordRequestBody 是否记录请求体
 	RecordResponseBody  bool               `mapstructure:"record_response_body"`   // RecordResponseBody 是否记录响应体
-	MaskSensitive       bool               `mapstructure:"mask_sensitive"`         // MaskSensitive 是否对敏感字段脱敏
+	MaskSensitive       *bool              `mapstructure:"mask_sensitive"`         // MaskSensitive 记录内容是否经统一脱敏服务；nil 默认 true，规则见 masking 段
 	Memory              MemoryBootConfig   `mapstructure:"memory"`                 // Memory 是内存队列配置（provider=memory）
 	Consumer            ConsumerBootConfig `mapstructure:"consumer"`               // Consumer 是消费者配置
 }
@@ -40,6 +40,14 @@ type BootConfig struct {
 // EnabledOrDefault 返回是否启用 HTTP 访问记录，未配置默认 false
 func (c BootConfig) EnabledOrDefault() bool {
 	return c.Enabled != nil && *c.Enabled
+}
+
+// MaskSensitiveOrDefault 返回记录内容是否脱敏，未配置默认 true
+func (c BootConfig) MaskSensitiveOrDefault() bool {
+	if c.MaskSensitive == nil {
+		return true
+	}
+	return *c.MaskSensitive
 }
 
 // ToConfig 转换为运行时配置
@@ -54,7 +62,7 @@ func (c BootConfig) ToConfig() httprecord.Config {
 		MaxResponseBodySize: c.MaxResponseBodySize,
 		RecordRequestBody:   c.RecordRequestBody,
 		RecordResponseBody:  c.RecordResponseBody,
-		MaskSensitive:       c.MaskSensitive,
+		MaskSensitive:       c.MaskSensitiveOrDefault(),
 		Memory: httprecord.MemoryConfig{
 			QueueSize: c.Memory.QueueSize,
 			Workers:   c.Memory.Workers,

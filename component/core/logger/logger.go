@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -26,13 +27,13 @@ const callerSkip = 2
 
 // logHub 持有分流后的 zap logger 与资源清理函数
 type logHub struct {
-	access    *zap.Logger
-	info      *zap.Logger
-	errorL    *zap.Logger
-	debug     *zap.Logger
-	sensitive *Sensitive
-	closers   []io.Closer
-	cfg       Config
+	access  *zap.Logger
+	info    *zap.Logger
+	errorL  *zap.Logger
+	debug   *zap.Logger
+	maskSvc *masking.Service
+	closers []io.Closer
+	cfg     Config
 }
 
 var defaultHub atomic.Pointer[logHub]
@@ -55,13 +56,18 @@ func Sync() error {
 	return errors.Join(errs...)
 }
 
-// InitLogger 读取配置并初始化控制台 + 四文件日志路由，返回资源清理函数
-func InitLogger(serviceName, env string, logCfg Config) (func() error, error) {
+// InitLogger 读取配置并初始化控制台 + 四文件日志路由，返回资源清理函数。
+// maskSvc 是注入的统一脱敏服务；是否调用由 cfg.MaskSensitive 在组件内聚判定。
+func InitLogger(serviceName, env string, logCfg Config, maskSvc *masking.Service) (func() error, error) {
 	if err := logCfg.Normalize(); err != nil {
 		return nil, errors.Wrap(err, "日志配置校验失败")
 	}
+	// 脱敏开关内聚在组件：关闭时不持有脱敏服务，日志全部原文直出
+	if !logCfg.MaskSensitive {
+		maskSvc = nil
+	}
 
-	hub, err := newLogHub(serviceName, env, logCfg)
+	hub, err := newLogHub(serviceName, env, logCfg, maskSvc)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +90,7 @@ func InitLogger(serviceName, env string, logCfg Config) (func() error, error) {
 }
 
 // newLogHub 构建控制台 + 四文件分流的日志枢纽
-func newLogHub(serviceName, env string, cfg Config) (*logHub, error) {
+func newLogHub(serviceName, env string, cfg Config, maskSvc *masking.Service) (*logHub, error) {
 	consoleLevel := parseLevel(cfg.ConsoleLevel, zapcore.DebugLevel)
 	fileLevel := parseLevel(cfg.Level, zapcore.InfoLevel)
 	consoleCore := newConsoleCore(&colorConsoleWriter{w: os.Stdout}, consoleLevel)
@@ -114,12 +120,7 @@ func newLogHub(serviceName, env string, cfg Config) (*logHub, error) {
 		})
 	}
 
-	hub := &logHub{cfg: cfg}
-	sens, err := NewSensitive(cfg.SensitiveMatch, cfg.SensitiveKeys)
-	if err != nil {
-		return nil, errors.Wrap(err, "初始化 sensitive 失败")
-	}
-	hub.sensitive = sens
+	hub := &logHub{cfg: cfg, maskSvc: maskSvc}
 
 	accessRot, err := makeRot(LogTypeAccess)
 	if err != nil {
@@ -312,11 +313,11 @@ func CurrentAccessConfig() AccessConfig {
 	return hub.cfg.Access
 }
 
-// currentSensitive 返回当前文件日志 sensitive 处理器；未初始化时透传（空 keys）
-func currentSensitive() *Sensitive {
+// currentMasking 返回当前文件日志的脱敏服务；未注入时为 nil（方法 nil 安全，等价透传）
+func currentMasking() *masking.Service {
 	hub := defaultHub.Load()
-	if hub == nil || hub.sensitive == nil {
-		return emptySensitive()
+	if hub == nil {
+		return nil
 	}
-	return hub.sensitive
+	return hub.maskSvc
 }

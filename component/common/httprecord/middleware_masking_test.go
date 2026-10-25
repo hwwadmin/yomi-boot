@@ -1,4 +1,4 @@
-// HTTP 访问记录脱敏链路的单元测试
+// HTTP 访问记录脱敏链路的单元测试：经注入的统一脱敏服务按 masking 规则处理
 //
 // @author zwei
 package httprecord
@@ -6,83 +6,24 @@ package httprecord
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
+
+	"github.com/gin-gonic/gin"
 )
 
-// TestIsSensitiveHeader 验证敏感请求头判定不区分大小写与空白
-func TestIsSensitiveHeader(t *testing.T) {
-	for _, key := range []string{"Authorization", "authorization", " AUTHORIZATION ", "Cookie", "SET-COOKIE"} {
-		if !isSensitiveHeader(key) {
-			t.Fatalf("请求头 %q 应判定为敏感", key)
-		}
+// TestCollectRequestHeadersWithMasking 验证请求头收集按注入服务脱敏
+func TestCollectRequestHeadersWithMasking(t *testing.T) {
+	mask, err := masking.New(masking.Config{Rules: []masking.RuleConfig{
+		{Keys: []string{"authorization"}, Strategy: masking.StrategyRedact},
+	}})
+	if err != nil {
+		t.Fatalf("masking.New: %v", err)
 	}
-	for _, key := range []string{"Content-Type", "X-Request-Id", ""} {
-		if isSensitiveHeader(key) {
-			t.Fatalf("请求头 %q 不应判定为敏感", key)
-		}
-	}
-}
 
-// TestIsSensitiveBodyKey 验证敏感 JSON 字段判定不区分大小写与空白
-func TestIsSensitiveBodyKey(t *testing.T) {
-	for _, key := range []string{"password", "Password", " PASSWORD ", "token", "access_token", "Refresh_Token", "oldPassword"} {
-		if !isSensitiveBodyKey(key) {
-			t.Fatalf("字段 %q 应判定为敏感", key)
-		}
-	}
-	for _, key := range []string{"username", "name", ""} {
-		if isSensitiveBodyKey(key) {
-			t.Fatalf("字段 %q 不应判定为敏感", key)
-		}
-	}
-}
-
-// TestMaskJSONString 验证 JSON 字符串脱敏的命中、嵌套、数组与非 JSON 透传
-func TestMaskJSONString(t *testing.T) {
-	t.Run("非 JSON 原样返回", func(t *testing.T) {
-		raw := "not a json"
-		if got := maskJSONString(raw); got != raw {
-			t.Fatalf("非 JSON 应原样返回，实际 %q", got)
-		}
-	})
-
-	t.Run("空串原样返回", func(t *testing.T) {
-		if got := maskJSONString("   "); got != "   " {
-			t.Fatalf("空串应原样返回，实际 %q", got)
-		}
-	})
-
-	t.Run("敏感字段脱敏且保留大数精度", func(t *testing.T) {
-		raw := `{"name":"u","password":"p@ss","nested":{"token":"tk","keep":1},"list":[{"access_token":"a"}],"big":12345678901234567890}`
-		got := maskJSONString(raw)
-		for _, want := range []string{`"password":"***"`, `"token":"***"`, `"access_token":"***"`, `"keep":1`, `12345678901234567890`} {
-			if !strings.Contains(got, want) {
-				t.Fatalf("脱敏结果缺少 %s: %s", want, got)
-			}
-		}
-		if strings.Contains(got, "p@ss") || strings.Contains(got, `"tk"`) {
-			t.Fatalf("敏感值未脱敏: %s", got)
-		}
-	})
-}
-
-// TestMaskQueryString 验证 query string 敏感参数脱敏与解析失败透传
-func TestMaskQueryString(t *testing.T) {
-	got := maskQueryString("access_token=secret&q=1&refresh_token=r")
-	if !strings.Contains(got, "q=1") {
-		t.Fatalf("普通参数应保留: %s", got)
-	}
-	if strings.Contains(got, "secret") || strings.Contains(got, "=r&") {
-		t.Fatalf("敏感参数未脱敏: %s", got)
-	}
-	if got := maskQueryString("%zz=broken"); got != "%zz=broken" {
-		t.Fatalf("解析失败应原样返回，实际 %q", got)
-	}
-}
-
-// TestCollectRequestHeaders 验证请求头收集与按需脱敏
-func TestCollectRequestHeaders(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/x", nil)
 	req.Header.Set("Authorization", "Bearer abc")
 	req.Header.Set("Content-Type", "application/json")
@@ -90,8 +31,8 @@ func TestCollectRequestHeaders(t *testing.T) {
 	req.Header.Add("X-Multi", "b")
 	req.Header["X-Empty"] = []string{}
 
-	masked := collectRequestHeaders(req, true)
-	if masked["Authorization"] != "***" {
+	masked := collectRequestHeaders(req, mask)
+	if masked["Authorization"] != masking.DefaultPlaceholder {
 		t.Fatalf("敏感头应脱敏: %v", masked["Authorization"])
 	}
 	if masked["Content-Type"] != "application/json" {
@@ -104,41 +45,53 @@ func TestCollectRequestHeaders(t *testing.T) {
 		t.Fatal("空值头应跳过")
 	}
 
-	raw := collectRequestHeaders(req, false)
+	var nilMask *masking.Service
+	raw := collectRequestHeaders(req, nilMask)
 	if raw["Authorization"] != "Bearer abc" {
-		t.Fatalf("不脱敏时应保留原值: %v", raw["Authorization"])
+		t.Fatalf("未注入服务时应保留原值: %v", raw["Authorization"])
 	}
-	if collectRequestHeaders(nil, true) != nil {
+	if collectRequestHeaders(nil, mask) != nil {
 		t.Fatal("nil 请求应返回 nil")
 	}
 }
 
-// TestNormalizePath 验证路径规范化
-func TestNormalizePath(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{in: "", want: "/"},
-		{in: "/", want: "/"},
-		{in: " /a/b ", want: "/a/b"},
-		{in: "/a//b", want: "/a/b"},
-		{in: "/a/b/", want: "/a/b"},
+// TestMiddlewareStrategyEndToEnd 验证请求体/响应体/query 按策略输出
+func TestMiddlewareStrategyEndToEnd(t *testing.T) {
+	mask, err := masking.New(masking.Config{Rules: []masking.RuleConfig{
+		{Keys: []string{"password"}, Strategy: masking.StrategyRedact},
+		{Keys: []string{"phone"}, Strategy: masking.StrategyPhone},
+	}})
+	if err != nil {
+		t.Fatalf("masking.New: %v", err)
 	}
-	for _, tc := range cases {
-		if got := normalizePath(tc.in); got != tc.want {
-			t.Fatalf("normalizePath(%q) 期望 %q，实际 %q", tc.in, tc.want, got)
-		}
-	}
-}
 
-// TestParseBizResponse 验证业务码解析（编码器已在 TestMain 注册）
-func TestParseBizResponse(t *testing.T) {
-	code, msg := parseBizResponse(`{"code":"OK","msg":"success"}`)
-	if code != "OK" || msg != "success" {
-		t.Fatalf("业务码解析不符: %q %q", code, msg)
+	rec := &recorderService{}
+	cfg := Config{MiddlewareEnabled: true, RecordRequestBody: true, RecordResponseBody: true, MaskSensitive: true}
+	engine := newTestEngine(t, cfg, rec, mask)
+	engine.POST("/biz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"phone": "13812345678"})
+	})
+
+	req := authenticatedRequest(http.MethodPost, "/biz?contact_phone=13987654321", `{"password":"p@ss","phone":"13812345678"}`)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	record := waitForRecords(t, rec, 1)[0]
+	if !strings.Contains(record.RequestBody, `"password":"***"`) || strings.Contains(record.RequestBody, "p@ss") {
+		t.Fatalf("请求体 redact 不符: %q", record.RequestBody)
 	}
-	if code, msg = parseBizResponse(`{"foo":1}`); code != "" || msg != "" {
-		t.Fatalf("非业务响应应返回空: %q %q", code, msg)
+	if !strings.Contains(record.RequestBody, `"phone":"138****5678"`) {
+		t.Fatalf("请求体 phone 策略不符: %q", record.RequestBody)
 	}
-	if code, msg = parseBizResponse("not-json"); code != "" || msg != "" {
-		t.Fatalf("非法 JSON 应返回空: %q %q", code, msg)
+	if !strings.Contains(record.ResponseBody, `"phone":"138****5678"`) {
+		t.Fatalf("响应体 phone 策略不符: %q", record.ResponseBody)
+	}
+	// Encode 会把 * 转义为 %2A，先解码再断言
+	query, err := url.QueryUnescape(record.Query)
+	if err != nil {
+		t.Fatalf("query 解码失败: %v", err)
+	}
+	if !strings.Contains(query, "139****4321") || strings.Contains(query, "13987654321") {
+		t.Fatalf("query phone 策略不符: %q", query)
 	}
 }

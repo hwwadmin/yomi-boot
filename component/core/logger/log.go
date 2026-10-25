@@ -54,14 +54,14 @@ func ErrorWithoutCtx(msg string, keysAndValues ...any) {
 
 // Access 写入 access 文件日志（不进入 info/error/debug 文件）
 func Access(ctx context.Context, msg string, keysAndValues ...any) {
-	keysAndValues = currentSensitive().ApplyKV(keysAndValues...)
+	keysAndValues = currentMasking().MaskKV(keysAndValues...)
 	fields := injectTraceFields(ctx, withoutMetaFields(kvToFields(keysAndValues...))...)
 	accessLogger().Info(msg, fields...)
 }
 
-// write 写入指定级别日志，自动注入 trace_id / span_id，并按 sensitive 脱敏业务字段
+// write 写入指定级别日志，自动注入 trace_id / span_id，并按注入的脱敏服务处理业务字段
 func write(ctx context.Context, level zapcore.Level, msg string, keysAndValues ...any) {
-	keysAndValues = currentSensitive().ApplyKV(keysAndValues...)
+	keysAndValues = currentMasking().MaskKV(keysAndValues...)
 	fields := injectTraceFields(ctx, withoutMetaFields(kvToFields(keysAndValues...))...)
 
 	switch level {

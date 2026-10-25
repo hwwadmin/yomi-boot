@@ -97,7 +97,7 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
-- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
+- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、rag、vectordb。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链与每个插件的初始化状态，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单放 `plugin/builtin` 根包（根包可 import 全部子包，`plugin/builtin/{lib}` 子包不得 import 根包，否则成环）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
@@ -177,10 +177,10 @@ services/{domain}/
 
 | 目录 | 包 |
 | ---- | -- |
-| `component/core/` | `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`traceid`、`utils` |
+| `component/core/` | `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`masking`、`response`、`router`、`shared`、`traceid`、`utils` |
 | `boot/` | `boot`（启动快捷入口与初始化）、`server`（HTTP 装配）、`lifecycle`、`banner` |
 | `plugin/` | `Plugin` 接口、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
-| `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
+| `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`masking`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
 | `component/ai/` | `llm`、`embedding`、`jev`、`rag`、`vectordb` |
@@ -194,7 +194,7 @@ services/{domain}/
 | `plugin` | 资源生命周期框架：`Plugin` 接口（`Init(ctx) error` / `Close(ctx) error`）、`Base`、`ErrDisabled`、`PluginSlot`（Config + 有序插件链，负责 Init / 失败回滚 / hook 收集 / 逆序 Close / 错误聚合）、`PluginOptions`（自定义插件 / 自定义配置段）；`ReadyHook` / `DrainHook` 可选阶段契约 |
 | `plugin/builtin`（根包） | 内置插件启动顺序（`DefaultPlugins()`）与默认配置段（`DefaultConfigs()`）；根包可 import 全部子包，子包不得 import 根包；`plugin` 根包不得 import 本包 |
 | `plugin/builtin/{lib}` | 各能力的内置生命周期插件实现与 YAML 绑定：`SectionKey`、`BootConfig`（`mapstructure`）、`ConfigSection()`、`ToConfig()`；插件导出具体类型、`Name` 常量、`From` 与组件访问器，自包含其创建的组件；`cors`/`router` 仅提供 YAML 绑定；`tx` 挂在 `plugin/builtin/db`；包名 `{lib}plugin` |
-| `component/core` | 内核（无业务状态、不管理外部资源）；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`response`、`router`、`shared`、`traceid`、`utils` |
+| `component/core` | 内核（无业务状态、不管理外部资源）；不得 import `boot`、`plugin` 或任何兄弟组件；提供 `appctx`、`bc`、`config`、`cors`、`errors`、`handler`、`httpguard`、`logger`、`masking`、`response`、`router`、`shared`、`traceid`、`utils` |
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`（实现 `tx.Runner`，由 `plugin/builtin/dtm` 在 db 可用时构造）、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
@@ -226,7 +226,7 @@ services/{domain}/
 | `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
 | `kafka` | 生产者 `NewPublisher` / `PublisherService`、消费者 `NewConsumerManager` / `ConsumerService`，两端独立构造、校验与关闭；`kafkatest` 提供独立测试入口 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
-| `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑 |
+| `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑；记录内容脱敏经注入的 `masking` 服务（`http_record.mask_sensitive` 控制，默认 true） |
 | `rpc` | HTTP RPC 读传输（EndpointResolver 端点解析 + POST JSON + 反序列化）；轻量重试（退避）+ 按 HTTP 状态码/尝试耗时熔断；不解析业务信封，不区分分页；跨域写走 DTM，不在此叠加写重试 |
 | `ws` | 独立端口 WebSocket（coder/websocket）：Config 配 Processor/可选 Handler；默认 Handler 消费消息；ConnID 仅服务端；心跳/寿命/`MaxConnections`；可选 `MaxFramePayloadSize` 协议分片；无 yml/默认插件；小文件可走 WS，大文件走 `oss` |
 | `distlock` | 基于 Redsync 的分布式锁、看门狗 |
@@ -240,7 +240,8 @@ services/{domain}/
 | `banner` | 启动横幅打印 |
 | `lifecycle` | HTTP 服务进程生命周期编排：`App`、`Run` / `RunContext`；只负责阶段顺序、信号与优雅停机，不感知具体组件 |
 | `cors` | 跨域中间件 |
-| `logger` | 日志初始化与配置；`MustInit` Fail Fast |
+| `logger` | 日志初始化与配置；`MustInit` Fail Fast；字段/正文脱敏经注入的 `masking` 服务（`log.mask_sensitive` 控制，默认 true） |
+| `masking` | 统一脱敏服务：字段名匹配（contains/exact）+ 策略应用（redact/keep_edges/phone/idcard/bankcard/email/name + 业务注册自定义），logger / httprecord / 业务出参共用；规则唯一来源是 `masking` 段配置，引擎零内置规则；安全不变量：命中即变、形状不符降级 placeholder；`masking.MustRegisterStrategy` 须在 boot.Run 前注册；YAML 绑定与插件在 `plugin/builtin/masking`，业务经 `maskingplugin.From(slot).Service()` 或 `masking.Current()` 调用 |
 | `config` | 配置加载抽象（Section/Registry/Config）、严格根 key、环境变量展开；`LoadConfig` / `MustLoadConfig` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |

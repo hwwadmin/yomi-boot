@@ -15,6 +15,7 @@ import (
 	corsplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/cors"
 	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	maskingplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/masking"
 	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"
 	tokenplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/token"
 
@@ -32,7 +33,7 @@ func DefaultMiddlewares(slot *plugin.PluginSlot) []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		cors.Middleware(corsCfg),
 		traceid.Middleware(),
-		httprecord.Middleware(httprecordplugin.From(slot).Service(), httpRecordCfg, appctxplugin.From(slot).AppCtx()),
+		httprecord.Middleware(httprecordplugin.From(slot).Service(), httpRecordCfg, appctxplugin.From(slot).AppCtx(), maskingplugin.From(slot).Service()),
 		logger.Middleware(logCfg.Access),
 		httpguard.Middleware(httpCfg),
 		gin.Recovery(),

@@ -33,16 +33,38 @@ http:
   # router_prefix: /api           # 路由组前缀，可选
   trusted_proxies: []             # 可信反向代理 IP/CIDR，空则仅信任 RemoteAddr
 
+# 统一脱敏服务：唯一规则源，logger / http_record / 业务出参共用
+# 引擎零内置规则，所有要脱敏的字段必须在此显式列出；rules 为空即全链路透传
+masking:
+  placeholder: "***"            # redact 策略占位符，默认 ***
+  match: contains               # 字段名匹配方式：contains（默认）/ exact
+  rules:
+    - keys: [password, passwd, token, access_token, refresh_token, secret, api_key]
+      strategy: redact          # 整值替换为 placeholder
+    - keys: [authorization, cookie] # 请求头同一规则源命中
+      strategy: redact
+    - keys: [phone, mobile]
+      strategy: phone           # 138****5678
+    - keys: [email]
+      strategy: email           # a***@example.com
+    - keys: [id_card]
+      strategy: idcard          # 前 6 后 4
+    - keys: [bank_card_no]
+      strategy: bankcard        # 仅留后 4 位
+    - keys: [real_name]
+      strategy: name            # 张**
+    - keys: [order_no]
+      strategy: keep_edges      # 留头尾，参数如下
+      keep_head: 3
+      keep_tail: 4
+    - keys: [plate_no]
+      strategy: plate           # 自定义策略，见 main.go 的 MustRegisterStrategy
+
 log:
   dir: logs            # 日志根目录，其下自动创建 access/info/error/debug
   level: info          # 文件日志最低级别
   console_level: debug # 控制台最低级别
-  sensitive_match: contains # 敏感字段匹配方式：contains / exact
-  sensitive_keys:           # 日志中需要脱敏的字段名
-    - password
-    - token
-    - secret
-    - access_key
+  mask_sensitive: true # 日志是否经统一脱敏服务（规则见 masking 段），默认 true
   rotation:                 # 滚动与保留，必须显式配置
     max_size_mb: 100
     retention_days: 7
@@ -210,7 +232,7 @@ http_record:
   max_response_body_size: 4096
   record_request_body: true
   record_response_body: true
-  mask_sensitive: true
+  mask_sensitive: true # 记录内容是否经统一脱敏服务（规则见 masking 段），默认 true
   memory: # provider=memory 时生效
     queue_size: 1024
     workers: 2

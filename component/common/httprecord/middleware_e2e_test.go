@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gitee.com/hq_project/yomi-boot/component/common/token"
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 )
 
@@ -68,11 +69,23 @@ func waitForRecords(t *testing.T, s *recorderService, n int) []*HttpRecord {
 	return nil
 }
 
-// newTestEngine 构建带记录中间件的 gin 引擎与收集服务
-func newTestEngine(t *testing.T, cfg Config, svc HttpRecordService) *gin.Engine {
+// newTestMaskService 构建覆盖脱敏场景的测试服务
+func newTestMaskService(t *testing.T) *masking.Service {
+	t.Helper()
+	svc, err := masking.New(masking.Config{Rules: []masking.RuleConfig{
+		{Keys: []string{"password", "token", "authorization"}, Strategy: masking.StrategyRedact},
+	}})
+	if err != nil {
+		t.Fatalf("masking.New: %v", err)
+	}
+	return svc
+}
+
+// newTestEngine 构建带记录中间件的 gin 引擎与收集服务；mask 为注入的脱敏服务，nil 表示不脱敏
+func newTestEngine(t *testing.T, cfg Config, svc HttpRecordService, mask *masking.Service) *gin.Engine {
 	t.Helper()
 	engine := gin.New()
-	engine.Use(Middleware(svc, cfg, stubApp{}))
+	engine.Use(Middleware(svc, cfg, stubApp{}, mask))
 	return engine
 }
 
@@ -100,7 +113,7 @@ func TestMiddlewareCapturesFullRecord(t *testing.T) {
 		MaskSensitive:      true,
 		SkipPaths:          []string{"/health"},
 	}
-	engine := newTestEngine(t, cfg, rec)
+	engine := newTestEngine(t, cfg, rec, newTestMaskService(t))
 	engine.POST("/api/v1/login/:id", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": "OK", "msg": "success", "token": "resp-secret"})
 	})
@@ -163,7 +176,7 @@ func TestMiddlewareSkipsDisabledAndSkipPaths(t *testing.T) {
 		MiddlewareEnabled: true,
 		SkipPaths:         []string{"/health"},
 	}
-	engine := newTestEngine(t, cfg, rec)
+	engine := newTestEngine(t, cfg, rec, nil)
 	engine.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
 	engine.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusOK) })
 
@@ -171,7 +184,7 @@ func TestMiddlewareSkipsDisabledAndSkipPaths(t *testing.T) {
 	disabledRec := &recorderService{}
 	disabledCfg := cfg
 	disabledCfg.MiddlewareEnabled = false
-	disabledEngine := newTestEngine(t, disabledCfg, disabledRec)
+	disabledEngine := newTestEngine(t, disabledCfg, disabledRec, nil)
 	disabledEngine.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health/", nil))
@@ -190,7 +203,8 @@ func TestMiddlewareSkipsDisabledAndSkipPaths(t *testing.T) {
 	waitForRecords(t, rec, 1)
 }
 
-// TestMiddlewareWithoutMasking 验证关闭脱敏时原样采集
+// TestMiddlewareWithoutMasking 验证 mask_sensitive 开关关闭时不调用脱敏组件
+// （即使注入了脱敏服务也原文直出：开关判定内聚在组件）
 func TestMiddlewareWithoutMasking(t *testing.T) {
 	rec := &recorderService{}
 	cfg := Config{
@@ -198,7 +212,7 @@ func TestMiddlewareWithoutMasking(t *testing.T) {
 		RecordRequestBody:  true,
 		RecordResponseBody: true,
 	}
-	engine := newTestEngine(t, cfg, rec)
+	engine := newTestEngine(t, cfg, rec, newTestMaskService(t))
 	engine.POST("/plain", func(c *gin.Context) {
 		c.String(http.StatusOK, "plain-body")
 	})
@@ -238,7 +252,7 @@ func TestMiddlewareTruncationFlags(t *testing.T) {
 		MaxRequestBodySize:  &four,
 		MaxResponseBodySize: &four,
 	}
-	engine := newTestEngine(t, cfg, rec)
+	engine := newTestEngine(t, cfg, rec, nil)
 	engine.POST("/big", func(c *gin.Context) {
 		_, _ = c.Writer.Write([]byte("1234567890"))
 	})
@@ -259,7 +273,7 @@ func TestMiddlewareTruncationFlags(t *testing.T) {
 func TestMiddlewareSafeInvokeRecoversPanic(t *testing.T) {
 	rec := &recorderService{panicOnHandle: true}
 	cfg := Config{MiddlewareEnabled: true}
-	engine := newTestEngine(t, cfg, rec)
+	engine := newTestEngine(t, cfg, rec, nil)
 	engine.GET("/boom", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	w := httptest.NewRecorder()
@@ -272,7 +286,7 @@ func TestMiddlewareSafeInvokeRecoversPanic(t *testing.T) {
 // TestMiddlewareNilService 验证未注入服务时请求正常完成
 func TestMiddlewareNilService(t *testing.T) {
 	cfg := Config{MiddlewareEnabled: true}
-	engine := newTestEngine(t, cfg, nil)
+	engine := newTestEngine(t, cfg, nil, nil)
 	engine.GET("/no-svc", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	w := httptest.NewRecorder()
@@ -289,5 +303,5 @@ func TestMiddlewareNilAppPanics(t *testing.T) {
 			t.Fatal("app 为 nil 应 panic")
 		}
 	}()
-	Middleware(nil, Config{}, nil)
+	Middleware(nil, Config{}, nil, nil)
 }

@@ -57,7 +57,7 @@ type Config struct {
 	MaxResponseBodySize *int           // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 4096，0 表示不截断
 	RecordRequestBody   bool           // RecordRequestBody 是否记录请求体
 	RecordResponseBody  bool           // RecordResponseBody 是否记录响应体
-	MaskSensitive       bool           // MaskSensitive 是否对敏感字段脱敏
+	MaskSensitive       bool           // MaskSensitive 是否用注入的脱敏服务处理记录内容；false 时不调用脱敏组件（组件内聚判定）
 	Memory              MemoryConfig   // Memory 是内存队列配置（provider=memory）
 	Consumer            ConsumerConfig // Consumer 是消费者配置
 }

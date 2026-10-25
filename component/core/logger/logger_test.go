@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 
 	"github.com/gin-gonic/gin"
@@ -96,7 +97,7 @@ func TestFileSplit_ELKFieldsAndStaticFields(t *testing.T) {
 			"empty_skip":   "",
 		},
 	}
-	closeFn, err := InitLogger("test-svc", "test", cfg)
+	closeFn, err := InitLogger("test-svc", "test", cfg, nil)
 	if err != nil {
 		t.Fatalf("InitLogger: %v", err)
 	}
@@ -141,13 +142,19 @@ func TestMiddleware_InboundOutboundPair(t *testing.T) {
 		Level:         "info",
 		ConsoleLevel:  "error",
 		Rotation:      testRotation(),
-		SensitiveKeys: []string{"authorization", "password"},
+		MaskSensitive: true,
 		Access: AccessConfig{
 			SkipPaths:  []string{},
 			RecordBody: true,
 		},
 	}
-	closeFn, err := InitLogger("test-svc", "test", cfg)
+	maskSvc, err := masking.New(masking.Config{Rules: []masking.RuleConfig{
+		{Keys: []string{"authorization", "password"}, Strategy: masking.StrategyRedact},
+	}})
+	if err != nil {
+		t.Fatalf("masking.New: %v", err)
+	}
+	closeFn, err := InitLogger("test-svc", "test", cfg, maskSvc)
 	if err != nil {
 		t.Fatalf("InitLogger: %v", err)
 	}
@@ -194,10 +201,10 @@ func TestMiddleware_InboundOutboundPair(t *testing.T) {
 	if !strings.Contains(lines[0], `"request_headers"`) {
 		t.Fatalf("inbound missing request_headers: %s", lines[0])
 	}
-	if !strings.Contains(lines[0], "[REDACTED]") {
+	if !strings.Contains(lines[0], `"***"`) {
 		t.Fatalf("inbound should redact authorization: %s", lines[0])
 	}
-	if !strings.Contains(lines[0], `"request_body"`) || !strings.Contains(lines[0], "[REDACTED]") {
+	if !strings.Contains(lines[0], `"request_body"`) || !strings.Contains(lines[0], `"***"`) {
 		t.Fatalf("inbound should have redacted request_body: %s", lines[0])
 	}
 	if !strings.Contains(lines[1], `"direction":"outbound"`) || !strings.Contains(lines[1], "http outbound") {
@@ -238,7 +245,7 @@ func TestMiddleware_ErrorAlwaysLogged(t *testing.T) {
 			SampleRate: 0.0001,
 		},
 	}
-	closeFn, err := InitLogger("test-svc", "test", cfg)
+	closeFn, err := InitLogger("test-svc", "test", cfg, nil)
 	if err != nil {
 		t.Fatalf("InitLogger: %v", err)
 	}
@@ -287,7 +294,7 @@ func TestMiddleware_SampleDropsOK(t *testing.T) {
 			SampleRate: 0.1,
 		},
 	}
-	closeFn, err := InitLogger("test-svc", "test", cfg)
+	closeFn, err := InitLogger("test-svc", "test", cfg, nil)
 	if err != nil {
 		t.Fatalf("InitLogger: %v", err)
 	}
@@ -329,7 +336,7 @@ func TestMiddleware_OutboundPanicLogged(t *testing.T) {
 			SampleRate: 0.5,
 		},
 	}
-	closeFn, err := InitLogger("test-svc", "test", cfg)
+	closeFn, err := InitLogger("test-svc", "test", cfg, nil)
 	if err != nil {
 		t.Fatalf("InitLogger: %v", err)
 	}
@@ -373,7 +380,7 @@ func TestMiddleware_BodyOmittedBinary(t *testing.T) {
 			RecordBody: true,
 		},
 	}
-	closeFn, err := InitLogger("test-svc", "test", cfg)
+	closeFn, err := InitLogger("test-svc", "test", cfg, nil)
 	if err != nil {
 		t.Fatalf("InitLogger: %v", err)
 	}

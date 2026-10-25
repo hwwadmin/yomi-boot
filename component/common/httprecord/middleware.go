@@ -6,10 +6,8 @@ package httprecord
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -17,6 +15,7 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/common/token"
 	"gitee.com/hq_project/yomi-boot/component/core/appctx"
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/response"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
@@ -29,28 +28,12 @@ import (
 // truncatedSuffix 是请求体或响应体超出采集限制时的截断标记
 const truncatedSuffix = "...[truncated]"
 
-// sensitiveHeaderKeys 是需要脱敏的请求头键名集合（不区分大小写）
-var sensitiveHeaderKeys = map[string]struct{}{
-	"authorization": {},
-	"cookie":        {},
-	"set-cookie":    {},
-}
-
-// sensitiveBodyKeys 是需要脱敏的 JSON 字段键名集合（不区分大小写）
-var sensitiveBodyKeys = map[string]struct{}{
-	"password":      {},
-	"oldpassword":   {},
-	"newpassword":   {},
-	"token":         {},
-	"access_token":  {},
-	"refresh_token": {},
-}
-
 // HttpRecordMiddleware 表示 HTTP 访问记录采集中间件实例
 type HttpRecordMiddleware struct {
-	svc HttpRecordService
-	cfg Config
-	app appctx.AppCtx
+	svc  HttpRecordService
+	cfg  Config
+	app  appctx.AppCtx
+	mask *masking.Service
 }
 
 // Handler 返回当前中间件实例对应的 gin 中间件处理器
@@ -68,9 +51,7 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 		var requestBodyTruncated bool
 		if m.cfg.RecordRequestBody {
 			requestBody, requestBodyTruncated = readRequestBodyForRecord(c.Request, m.cfg.MaxRequestBodySizeOrDefault())
-			if m.cfg.MaskSensitive && requestBody != "" {
-				requestBody = maskJSONString(requestBody)
-			}
+			requestBody = m.mask.MaskJSON(requestBody)
 		}
 
 		blw := newBodyRecordWriter(c.Writer, m.cfg.MaxResponseBodySizeOrDefault())
@@ -137,14 +118,10 @@ func (m *HttpRecordMiddleware) buildRecord(
 	}
 
 	if r.URL.RawQuery != "" {
-		query := r.URL.RawQuery
-		if m.cfg.MaskSensitive {
-			query = maskQueryString(query)
-		}
-		record.Query = query
+		record.Query = m.mask.MaskQuery(r.URL.RawQuery)
 	}
 
-	record.RequestHeaders = collectRequestHeaders(r, m.cfg.MaskSensitive)
+	record.RequestHeaders = collectRequestHeaders(r, m.mask)
 
 	if session, ok := token.SessionFromContext(r.Context()); ok && session != nil {
 		record.UserID = session.UserID
@@ -153,10 +130,7 @@ func (m *HttpRecordMiddleware) buildRecord(
 
 	if m.cfg.RecordResponseBody {
 		responseBody := blw.recordedBody()
-		if m.cfg.MaskSensitive && responseBody != "" {
-			responseBody = maskJSONString(responseBody)
-		}
-		record.ResponseBody = responseBody
+		record.ResponseBody = m.mask.MaskJSON(responseBody)
 	}
 
 	if record.ResponseBody != "" {
@@ -292,8 +266,8 @@ func (w *bodyRecordWriter) recordedBody() string {
 	return string(cut)
 }
 
-// collectRequestHeaders 收集请求头，并按需对敏感头脱敏
-func collectRequestHeaders(r *http.Request, maskSensitive bool) map[string]string {
+// collectRequestHeaders 收集请求头，敏感键经注入的脱敏服务处理
+func collectRequestHeaders(r *http.Request, mask *masking.Service) map[string]string {
 	if r == nil || len(r.Header) == 0 {
 		return nil
 	}
@@ -304,92 +278,12 @@ func collectRequestHeaders(r *http.Request, maskSensitive bool) map[string]strin
 			continue
 		}
 		value := strings.Join(values, ",")
-		if maskSensitive && isSensitiveHeader(key) {
-			value = "***"
+		if mask.ShouldMask(key) {
+			value = mask.Mask(key, value)
 		}
 		headers[key] = value
 	}
 	return headers
-}
-
-// isSensitiveHeader 判断请求头键名是否属于敏感字段
-func isSensitiveHeader(key string) bool {
-	_, ok := sensitiveHeaderKeys[strings.ToLower(strings.TrimSpace(key))]
-	return ok
-}
-
-// maskJSONString 对 JSON 字符串中的敏感字段进行脱敏
-func maskJSONString(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return raw
-	}
-
-	// UseNumber 避免大整数（如雪花 ID）经 float64 往返时精度丢失
-	decoder := json.NewDecoder(strings.NewReader(trimmed))
-	decoder.UseNumber()
-	var payload any
-	if err := decoder.Decode(&payload); err != nil {
-		return raw
-	}
-
-	masked := maskJSONValue(payload)
-	data, err := json.Marshal(masked)
-	if err != nil {
-		return raw
-	}
-	return string(data)
-}
-
-// maskJSONValue 递归脱敏 JSON 值中的敏感字段
-func maskJSONValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		masked := make(map[string]any, len(typed))
-		for key, item := range typed {
-			if isSensitiveBodyKey(key) {
-				masked[key] = "***"
-				continue
-			}
-			masked[key] = maskJSONValue(item)
-		}
-		return masked
-	case []any:
-		masked := make([]any, len(typed))
-		for i, item := range typed {
-			masked[i] = maskJSONValue(item)
-		}
-		return masked
-	default:
-		return value
-	}
-}
-
-// isSensitiveBodyKey 判断 JSON 字段键名是否属于敏感字段
-func isSensitiveBodyKey(key string) bool {
-	_, ok := sensitiveBodyKeys[strings.ToLower(strings.TrimSpace(key))]
-	return ok
-}
-
-// maskQueryString 对 query string 中的敏感参数进行脱敏
-func maskQueryString(rawQuery string) string {
-	values, err := url.ParseQuery(rawQuery)
-	if err != nil {
-		return rawQuery
-	}
-
-	for key, items := range values {
-		if !isSensitiveBodyKey(key) {
-			continue
-		}
-		masked := make([]string, len(items))
-		for i := range items {
-			masked[i] = "***"
-		}
-		values[key] = masked
-	}
-
-	return values.Encode()
 }
 
 // parseBizResponse 从响应 JSON 中解析业务 code 与 msg（经已注册 Encoder.Parse）
@@ -405,14 +299,20 @@ func parseBizResponse(body string) (code, msg string) {
 }
 
 // Middleware 返回基于 HttpRecordService 与配置注入的 gin 中间件（gin.HandlerFunc）
-// svc 为可选依赖（为 nil 时跳过记录处理），app 为必填依赖缺失时启动期 fail-fast
-func Middleware(svc HttpRecordService, cfg Config, app appctx.AppCtx) gin.HandlerFunc {
+// svc 为可选依赖（为 nil 时跳过记录处理），app 为必填依赖缺失时启动期 fail-fast，
+// mask 为注入的统一脱敏服务；是否调用脱敏由 cfg.MaskSensitive 在组件内聚判定
+func Middleware(svc HttpRecordService, cfg Config, app appctx.AppCtx, mask *masking.Service) gin.HandlerFunc {
 	if app == nil {
 		panic("httprecord: Middleware app 不能为 nil")
 	}
+	// 脱敏开关内聚在组件：关闭时不持有脱敏服务，各采集面全部原文直出
+	if !cfg.MaskSensitive {
+		mask = nil
+	}
 	return (&HttpRecordMiddleware{
-		svc: svc,
-		cfg: cfg,
-		app: app,
+		svc:  svc,
+		cfg:  cfg,
+		app:  app,
+		mask: mask,
 	}).Handler()
 }

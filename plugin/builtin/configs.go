@@ -14,6 +14,7 @@ import (
 	idempotencyplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/idempotency"
 	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	maskingplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/masking"
 	ossplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/oss"
 	pprofplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/pprof"
 	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
@@ -28,6 +29,7 @@ import (
 func DefaultConfigs() []config.Section {
 	return []config.Section{
 		appctxplugin.ConfigSection(),
+		maskingplugin.ConfigSection(),
 		routerplugin.ConfigSection(),
 		loggerplugin.ConfigSection(),
 		dbplugin.ConfigSection(),

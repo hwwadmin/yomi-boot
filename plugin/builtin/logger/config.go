@@ -31,25 +31,31 @@ type AccessBootConfig struct {
 
 // BootConfig 表示 log 配置段的 YAML 绑定
 type BootConfig struct {
-	Dir            string             `mapstructure:"dir"`             // 日志根目录（其下 access/info/error/debug）
-	Level          string             `mapstructure:"level"`           // 文件最低级别
-	ConsoleLevel   string             `mapstructure:"console_level"`   // 控制台最低级别
-	Fields         map[string]string  `mapstructure:"fields"`          // 静态标签，自动注入每条日志
-	SensitiveMatch string             `mapstructure:"sensitive_match"` // contains（默认）或 exact
-	SensitiveKeys  []string           `mapstructure:"sensitive_keys"`  // 敏感字段名；空=不脱敏
-	Rotation       RotationBootConfig `mapstructure:"rotation"`        // 滚动与保留（必填）
-	Access         AccessBootConfig   `mapstructure:"access"`          // 文件 access 中间件
+	Dir           string             `mapstructure:"dir"`            // 日志根目录（其下 access/info/error/debug）
+	Level         string             `mapstructure:"level"`          // 文件最低级别
+	ConsoleLevel  string             `mapstructure:"console_level"`  // 控制台最低级别
+	Fields        map[string]string  `mapstructure:"fields"`         // 静态标签，自动注入每条日志
+	MaskSensitive *bool              `mapstructure:"mask_sensitive"` // 日志是否经统一脱敏服务；nil 默认 true，规则见 masking 段
+	Rotation      RotationBootConfig `mapstructure:"rotation"`       // 滚动与保留（必填）
+	Access        AccessBootConfig   `mapstructure:"access"`         // 文件 access 中间件
+}
+
+// MaskSensitiveOrDefault 日志是否脱敏，未配置默认 true
+func (c BootConfig) MaskSensitiveOrDefault() bool {
+	if c.MaskSensitive == nil {
+		return true
+	}
+	return *c.MaskSensitive
 }
 
 // ToConfig 转换为运行时配置并填充默认值
 func (c BootConfig) ToConfig() logger.Config {
 	cfg := logger.Config{
-		Dir:            c.Dir,
-		Level:          c.Level,
-		ConsoleLevel:   c.ConsoleLevel,
-		Fields:         c.Fields,
-		SensitiveMatch: c.SensitiveMatch,
-		SensitiveKeys:  c.SensitiveKeys,
+		Dir:           c.Dir,
+		Level:         c.Level,
+		ConsoleLevel:  c.ConsoleLevel,
+		Fields:        c.Fields,
+		MaskSensitive: c.MaskSensitiveOrDefault(),
 		Rotation: logger.RotationConfig{
 			MaxSizeMB:     c.Rotation.MaxSizeMB,
 			RetentionDays: c.Rotation.RetentionDays,

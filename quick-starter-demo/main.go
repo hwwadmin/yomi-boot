@@ -14,12 +14,26 @@ package main
 
 import (
 	"gitee.com/hq_project/yomi-boot/boot"
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
 )
 
 // envPrefix 是传给 boot.Run 的环境变量前缀。
 const envPrefix = "YOMI_DEMO"
+
+// init 演示业务自定义脱敏策略：须在 boot.Run 之前注册，
+// masking 段即可按名引用（见 config/dev.yml 的 plate_no 规则）。
+func init() {
+	// plate 车牌策略：京A12345 → 京A***45；形状不符（非 7 字符）时交回引擎替换为 placeholder
+	masking.MustRegisterStrategy("plate", func(value string) (string, bool) {
+		runes := []rune(value)
+		if len(runes) != 7 {
+			return "", false
+		}
+		return string(runes[:2]) + "***" + string(runes[5:]), true
+	})
+}
 
 func main() {
 	boot.Run(envPrefix, wire)

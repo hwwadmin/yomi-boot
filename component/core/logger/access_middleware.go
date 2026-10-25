@@ -45,7 +45,7 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 			return
 		}
 
-		sens := currentSensitive()
+		mask := currentMasking()
 		ctx := requestContext(c)
 		requestID := traceid.FromContext(ctx)
 		if strings.TrimSpace(requestID) == "" {
@@ -57,15 +57,15 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 			method = c.Request.Method
 			ua = c.Request.UserAgent()
 			if c.Request.URL != nil {
-				query = sens.ApplyQuery(c.Request.URL.RawQuery)
+				query = mask.MaskQuery(c.Request.URL.RawQuery)
 			}
 		}
 		clientIP := ginutil.ClientIP(c)
 
-		reqBody := captureRequestBody(c.Request, cfg, sens)
+		reqBody := captureRequestBody(c.Request, cfg, mask)
 		var reqHeaders map[string]string
 		if c.Request != nil {
-			reqHeaders = collectHeaders(c.Request.Header, cfg, sens)
+			reqHeaders = collectHeaders(c.Request.Header, cfg, mask)
 		}
 
 		// —— 入站快照：先缓冲，不落盘 ——
@@ -128,8 +128,8 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 		if c.Writer != nil {
 			respCT = c.Writer.Header().Get("Content-Type")
 		}
-		respBody := blw.captureResult(cfg, sens, respCT)
-		respHeaders := collectHeaders(c.Writer.Header(), cfg, sens)
+		respBody := blw.captureResult(cfg, mask, respCT)
+		respHeaders := collectHeaders(c.Writer.Header(), cfg, mask)
 
 		outboundKV := []any{
 			"direction", DirectionOutbound,

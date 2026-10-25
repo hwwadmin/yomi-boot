@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"strings"
 
+	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/utils/httputil"
 
 	"github.com/gin-gonic/gin"
 )
 
-// body_omitted_reason / 截断占位（敏感占位见 sensitive.go）
+// body_omitted_reason / 截断占位（脱敏由注入的 masking 服务负责）
 const (
 	omitBinaryContent           = "binary_content"
 	omitImageContent            = "image_content"
@@ -33,7 +34,7 @@ type bodyCapture struct {
 }
 
 // captureRequestBody 读取并还原请求体，按 content-type 与配置决定是否省略
-func captureRequestBody(r *http.Request, cfg AccessConfig, sens *Sensitive) bodyCapture {
+func captureRequestBody(r *http.Request, cfg AccessConfig, mask *masking.Service) bodyCapture {
 	out := bodyCapture{}
 	if r == nil {
 		return out
@@ -75,10 +76,10 @@ func captureRequestBody(r *http.Request, cfg AccessConfig, sens *Sensitive) body
 	if int64(len(recorded)) > int64(maxSize) {
 		out.Truncated = true
 		out.OmittedReason = omitBodyTooLarge
-		out.Value = applyBodySensitive(string(recorded[:maxSize]), sens) + truncatedPlaceholder
+		out.Value = mask.MaskJSON(string(recorded[:maxSize])) + truncatedPlaceholder
 		return out
 	}
-	out.Value = applyBodySensitive(string(recorded), sens)
+	out.Value = mask.MaskJSON(string(recorded))
 	if out.Bytes <= 0 {
 		out.Bytes = int64(len(recorded))
 	}
@@ -102,21 +103,8 @@ func omitReasonByContentType(ct string) string {
 	}
 }
 
-// applyBodySensitive 对可解析 JSON 正文按 sensitive 脱敏，非 JSON 原样返回
-func applyBodySensitive(raw string, sens *Sensitive) string {
-	if sens == nil {
-		return raw
-	}
-	return sens.ApplyJSON(raw)
-}
-
-// looksLikeJSON 粗判字符串是否为 JSON 对象/数组
-func looksLikeJSON(s string) bool {
-	return strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[")
-}
-
 // collectHeaders 采集 HTTP Header，敏感键脱敏，超长值截断
-func collectHeaders(h http.Header, cfg AccessConfig, sens *Sensitive) map[string]string {
+func collectHeaders(h http.Header, cfg AccessConfig, mask *masking.Service) map[string]string {
 	if len(h) == 0 {
 		return nil
 	}
@@ -126,8 +114,8 @@ func collectHeaders(h http.Header, cfg AccessConfig, sens *Sensitive) map[string
 			continue
 		}
 		val := strings.Join(values, ",")
-		if sens != nil && sens.ShouldMask(key) {
-			val = sensitivePlaceholder
+		if mask.ShouldMask(key) {
+			val = mask.Mask(key, val)
 		} else if cfg.MaxFieldBytes > 0 && len(val) > cfg.MaxFieldBytes {
 			val = val[:cfg.MaxFieldBytes] + truncatedPlaceholder
 		}
@@ -181,7 +169,7 @@ func (w *accessBodyWriter) capture(b []byte) {
 }
 
 // captureResult 根据已采集缓冲与 content-type 生成 bodyCapture
-func (w *accessBodyWriter) captureResult(cfg AccessConfig, sens *Sensitive, contentType string) bodyCapture {
+func (w *accessBodyWriter) captureResult(cfg AccessConfig, mask *masking.Service, contentType string) bodyCapture {
 	out := bodyCapture{ContentType: contentType}
 	if !cfg.RecordBody {
 		out.OmittedReason = omitAccessBodyDisabled
@@ -200,9 +188,9 @@ func (w *accessBodyWriter) captureResult(cfg AccessConfig, sens *Sensitive, cont
 	if w.truncated {
 		out.Truncated = true
 		out.OmittedReason = omitBodyTooLarge
-		out.Value = applyBodySensitive(raw, sens) + truncatedPlaceholder
+		out.Value = mask.MaskJSON(raw) + truncatedPlaceholder
 		return out
 	}
-	out.Value = applyBodySensitive(raw, sens)
+	out.Value = mask.MaskJSON(raw)
 	return out
 }

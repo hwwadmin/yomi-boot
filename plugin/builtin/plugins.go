@@ -13,6 +13,7 @@ import (
 	idempotencyplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/idempotency"
 	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
 	loggerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/logger"
+	maskingplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/masking"
 	ossplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/oss"
 	pprofplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/pprof"
 	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
@@ -32,24 +33,25 @@ import (
 // # 启动顺序（不可随意调整）
 //
 //  1. app         — 始终启动；提供 AppCtx 并按 app.timezone 锁定进程时区
-//  2. logger      — 始终启动（依赖 app 插件）
-//  3. pprof       — pprof.enabled=true 时启动（默认 false）
-//  4. db          — db.enabled=true 时启动（提供 DB 与 DbType）
-//  5. redis       — redis.enabled=true 时启动（提供 Client / RedisService / DistLockFactory）
-//  6. redisratelimit — 始终启动（未启用时 Limiter 为 Noop；启用时依赖 redis 插件）
-//  7. kafka-publisher — kafka.publisher_enabled=true 时启动
-//  8. kafka-consumer  — kafka.consumer_enabled=true 时启动
-//  9. redisstream — redis_stream.enabled=true 时启动（依赖 redis 插件 Client）
-//  10. snowflake  — 始终启动
-//  11. oss        — oss.enabled=true 时启动
-//  12. tx         — db 插件已启用时启动
-//  13. consul     — consul.enabled=true 时启动（Ready 注册 / Drain 注销）
-//  14. dtm        — 始终构造客户端（注入 consul 插件 Client）；enabled 时探活；db 可用时构造 tx.Runner
-//  15. idempotency — stale_cleaner_enabled=true 时启动（依赖 app/db/redis 插件）
-//  16. token      — token.enabled=true 时启动服务；middleware 始终挂载，受 token.enabled 控制
-//  17. httprecord — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务；未启用时不创建服务（中间件短路）；默认关，文件 access 由 logger.Middleware 负责
-//  18. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 app/db/tx/redis/kafka/snowflake 插件）
-//  19. custom     — PluginOptions.AddCustomPlugin 注册的服务自定义插件
+//  2. masking     — 始终启动；按 masking 段构造统一脱敏服务并注入全局默认实例（空规则即全透传）
+//  3. logger      — 始终启动（依赖 app、masking 插件；log.mask_sensitive=false 时不脱敏）
+//  4. pprof       — pprof.enabled=true 时启动（默认 false）
+//  5. db          — db.enabled=true 时启动（提供 DB 与 DbType）
+//  6. redis       — redis.enabled=true 时启动（提供 Client / RedisService / DistLockFactory）
+//  7. redisratelimit — 始终启动（未启用时 Limiter 为 Noop；启用时依赖 redis 插件）
+//  8. kafka-publisher — kafka.publisher_enabled=true 时启动
+//  9. kafka-consumer  — kafka.consumer_enabled=true 时启动
+//  10. redisstream — redis_stream.enabled=true 时启动（依赖 redis 插件 Client）
+//  11. snowflake  — 始终启动
+//  12. oss        — oss.enabled=true 时启动
+//  13. tx         — db 插件已启用时启动
+//  14. consul     — consul.enabled=true 时启动（Ready 注册 / Drain 注销）
+//  15. dtm        — 始终构造客户端（注入 consul 插件 Client）；enabled 时探活；db 可用时构造 tx.Runner
+//  16. idempotency — stale_cleaner_enabled=true 时启动（依赖 app/db/redis 插件）
+//  17. token      — token.enabled=true 时启动服务；middleware 始终挂载，受 token.enabled 控制
+//  18. httprecord — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务；未启用时不创建服务（中间件短路）；默认关，文件 access 由 logger.Middleware 负责；脱敏经注入的 masking 服务（http_record.mask_sensitive 控制）
+//  19. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 app/db/tx/redis/kafka/snowflake 插件）
+//  20. custom     — PluginOptions.AddCustomPlugin 注册的服务自定义插件
 //
 // # 非插件（由 boot.MustInit 直接处理，不在此列表）
 //
@@ -63,6 +65,7 @@ import (
 func DefaultPlugins() []plugin.Plugin {
 	return []plugin.Plugin{
 		appctxplugin.NewAppCtx(),
+		maskingplugin.NewMasking(),
 		loggerplugin.NewLogger(),
 		pprofplugin.NewPprof(),
 		dbplugin.NewDB(),

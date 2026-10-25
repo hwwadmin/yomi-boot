@@ -70,14 +70,13 @@ func (c AccessConfig) SampleRateOrDefault() float64 {
 //
 // 日志时间统一使用进程时区（启动时由 app.timezone 锁定，默认 UTC）；原 log.timezone 已移除。
 type Config struct {
-	Dir            string            // 日志根目录（其下 access/info/error/debug）
-	Level          string            // 文件最低级别
-	ConsoleLevel   string            // 控制台最低级别
-	Fields         map[string]string // 静态标签，自动注入每条日志
-	SensitiveMatch string            // contains（默认）或 exact
-	SensitiveKeys  []string          // 敏感字段名；空=不脱敏
-	Rotation       RotationConfig    // 滚动与保留（必填）
-	Access         AccessConfig      // 文件 access 中间件
+	Dir           string            // 日志根目录（其下 access/info/error/debug）
+	Level         string            // 文件最低级别
+	ConsoleLevel  string            // 控制台最低级别
+	Fields        map[string]string // 静态标签，自动注入每条日志
+	MaskSensitive bool              // MaskSensitive 是否用注入的脱敏服务处理日志；false 时不调用脱敏组件（组件内聚判定）
+	Rotation      RotationConfig    // 滚动与保留（必填）
+	Access        AccessConfig      // 文件 access 中间件
 }
 
 // Normalize 填充安全默认值并校验硬性约束
@@ -117,23 +116,6 @@ func (c *Config) Normalize() error {
 	}
 	// 默认全量；0 或越界归一为 1，避免「0=不采」歧义
 	c.Access.SampleRate = c.Access.SampleRateOrDefault()
-
-	if strings.TrimSpace(c.SensitiveMatch) == "" {
-		c.SensitiveMatch = SensitiveMatchContains
-	}
-	c.SensitiveMatch = strings.ToLower(strings.TrimSpace(c.SensitiveMatch))
-	if c.SensitiveMatch != SensitiveMatchContains && c.SensitiveMatch != SensitiveMatchExact {
-		return errors.Newf("sensitive_match 仅支持 %s 或 %s", SensitiveMatchContains, SensitiveMatchExact)
-	}
-	cleanedKeys := make([]string, 0, len(c.SensitiveKeys))
-	for _, k := range c.SensitiveKeys {
-		k = strings.TrimSpace(k)
-		if k == "" {
-			continue
-		}
-		cleanedKeys = append(cleanedKeys, k)
-	}
-	c.SensitiveKeys = cleanedKeys
 	return nil
 }
 
