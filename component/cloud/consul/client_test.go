@@ -25,6 +25,40 @@ func TestNewClientAppliesHTTPTimeout(t *testing.T) {
 	}
 }
 
+// TestCacheTTLConfigured 验证发现缓存 TTL 的配置与默认值
+func TestCacheTTLConfigured(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewClient(Config{Addr: "127.0.0.1:8500", DiscoveryCacheSeconds: 5})
+	if err != nil {
+		t.Fatalf("创建客户端失败: %v", err)
+	}
+	if got := client.CacheTTL(); got != 5*time.Second {
+		t.Fatalf("CacheTTL 期望 5s，实际 %s", got)
+	}
+
+	fallback, err := NewClient(Config{Addr: "127.0.0.1:8500"})
+	if err != nil {
+		t.Fatalf("创建客户端失败: %v", err)
+	}
+	if got := fallback.CacheTTL(); got != 30*time.Second {
+		t.Fatalf("未配置时 CacheTTL 期望默认 30s，实际 %s", got)
+	}
+}
+
+// TestMustNewClient 验证 Fail Fast 构造的成功路径
+func TestMustNewClient(t *testing.T) {
+	t.Parallel()
+
+	client := MustNewClient(Config{Addr: "127.0.0.1:8500"})
+	if client == nil {
+		t.Fatal("MustNewClient 不应返回 nil")
+	}
+	if client.l1Cache == nil {
+		t.Fatal("MustNewClient 应初始化一级缓存")
+	}
+}
+
 // TestResolveHTTPBaseHonorsHTTPTimeout 验证 Agent 不可达时，发现请求在 HttpClient.Timeout 内失败返回
 func TestResolveHTTPBaseHonorsHTTPTimeout(t *testing.T) {
 	t.Parallel()
