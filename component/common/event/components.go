@@ -119,20 +119,22 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 
 // NewAndStart 创建并启动事件组件；任一步失败时在返回前释放已创建资源
 func NewAndStart(deps Deps, eventCfg Config) (c *Components, err error) {
-	c, err = NewComponents(deps, eventCfg)
+	comp, err := NewComponents(deps, eventCfg)
 	if err != nil {
 		return nil, err
 	}
+	// 延迟清理须用局部变量承接组件：失败路径 return nil, err 会把命名返回值 c 置空，
+	// 若 defer 直接调 c.Close() 将对 nil 组件解引用 panic
 	defer func() {
 		if err != nil {
-			_ = c.Close()
+			_ = comp.Close()
 		}
 	}()
-	err = c.Start(context.Background())
+	err = comp.Start(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	return c, nil
+	return comp, nil
 }
 
 // Start 启动事件后台任务（发件箱抓取/发送/超时回收/DLQ，收件箱死信重投，过期数据清理）。

@@ -186,3 +186,137 @@ func TestRetentionCleanerBatchLimit(t *testing.T) {
 		t.Fatalf("批数上限 2、批量 2 应删除 4 条，实际剩余 %d 条", count)
 	}
 }
+
+// TestValidateCleanupRuntime 验证清理运行时配置校验
+func TestValidateCleanupRuntime(t *testing.T) {
+	valid := cfg.CleanupRuntime{
+		Enabled:    true,
+		Retention:  30 * 24 * time.Hour,
+		Frequency:  time.Hour,
+		BatchSize:  100,
+		MaxBatches: 10,
+	}
+	if err := validateCleanupRuntime("outbox", valid); err != nil {
+		t.Fatalf("合法配置不应报错: %v", err)
+	}
+
+	cases := []struct {
+		name  string
+		mutte func(*cfg.CleanupRuntime)
+	}{
+		{name: "retention 为 0", mutte: func(c *cfg.CleanupRuntime) { c.Retention = 0 }},
+		{name: "frequency 过小", mutte: func(c *cfg.CleanupRuntime) { c.Frequency = time.Millisecond }},
+		{name: "batch_size 为 0", mutte: func(c *cfg.CleanupRuntime) { c.BatchSize = 0 }},
+		{name: "max_batches 为 0", mutte: func(c *cfg.CleanupRuntime) { c.MaxBatches = 0 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := valid
+			tc.mutte(&invalid)
+			if err := validateCleanupRuntime("outbox", invalid); err == nil {
+				t.Fatalf("%s 应返回错误", tc.name)
+			}
+		})
+	}
+}
+
+// TestCleanupRetentionDays 验证保留时长换算天数仅用于日志
+func TestCleanupRetentionDays(t *testing.T) {
+	cases := []struct {
+		retention time.Duration
+		want      int
+	}{
+		{retention: 0, want: 0},
+		{retention: -24 * time.Hour, want: 0},
+		{retention: 30 * 24 * time.Hour, want: 30},
+		{retention: 36 * time.Hour, want: 1},
+	}
+	for _, tc := range cases {
+		if got := cleanupRetentionDays(tc.retention); got != tc.want {
+			t.Fatalf("retention=%s 期望 %d 天，实际 %d", tc.retention, tc.want, got)
+		}
+	}
+}
+
+// TestRetentionCleanerStartValidation 验证启动时的依赖与配置校验
+func TestRetentionCleanerStartValidation(t *testing.T) {
+	ctx := context.Background()
+	enabled := cfg.CleanupRuntime{
+		Enabled:    true,
+		Retention:  30 * 24 * time.Hour,
+		Frequency:  time.Hour,
+		BatchSize:  100,
+		MaxBatches: 10,
+	}
+
+	t.Run("nil 接收器直接返回", func(t *testing.T) {
+		var cleaner *RetentionCleaner
+		if err := cleaner.Start(ctx, nil); err != nil {
+			t.Fatalf("nil 清理器应直接返回 nil，实际 %v", err)
+		}
+	})
+
+	t.Run("缺少分布式锁工厂", func(t *testing.T) {
+		cleaner := NewRetentionCleaner(cfg.Runtime{ServiceName: "svc"}, nil, nil)
+		if err := cleaner.Start(ctx, nil); err == nil {
+			t.Fatal("nil 分布式锁工厂应返回错误")
+		}
+	})
+
+	t.Run("未启用时跳过", func(t *testing.T) {
+		cleaner := NewRetentionCleaner(cfg.Runtime{ServiceName: "svc"}, nil, nil)
+		if err := cleaner.Start(ctx, nil); err == nil {
+			t.Fatal("nil 工厂应先于启用判断报错")
+		}
+	})
+
+	t.Run("发布侧缺仓储", func(t *testing.T) {
+		cleaner := NewRetentionCleaner(
+			cfg.Runtime{ServiceName: "svc", OutboxCleanup: enabled}, nil, nil,
+		)
+		if err := cleaner.Start(ctx, &stubDistLockFactory{}); err == nil {
+			t.Fatal("发件箱仓储缺失应返回错误")
+		}
+	})
+
+	t.Run("消费侧缺仓储", func(t *testing.T) {
+		cleaner := NewRetentionCleaner(
+			cfg.Runtime{ServiceName: "svc", InboxCleanup: enabled}, nil, nil,
+		)
+		if err := cleaner.Start(ctx, &stubDistLockFactory{}); err == nil {
+			t.Fatal("收件箱仓储缺失应返回错误")
+		}
+	})
+
+	t.Run("清理配置非法", func(t *testing.T) {
+		invalid := enabled
+		invalid.Retention = 0
+		cleaner := NewRetentionCleaner(
+			cfg.Runtime{ServiceName: "svc", OutboxCleanup: invalid}, nil, nil,
+		)
+		if err := cleaner.Start(ctx, &stubDistLockFactory{}); err == nil {
+			t.Fatal("清理配置非法应返回错误")
+		}
+	})
+}
+
+// TestRetentionCleanerCleanError 验证仓储故障时清理任务错误透传
+func TestRetentionCleanerCleanError(t *testing.T) {
+	cleaner := NewRetentionCleaner(
+		cfg.Runtime{
+			ServiceName: "svc",
+			OutboxCleanup: cfg.CleanupRuntime{
+				Enabled:    true,
+				Retention:  30 * 24 * time.Hour,
+				Frequency:  time.Hour,
+				BatchSize:  100,
+				MaxBatches: 10,
+			},
+		},
+		repo.NewOutboxRepo(newDeadDB(t)),
+		nil,
+	)
+	if err := cleaner.cleanOutbox(context.Background()); err == nil {
+		t.Fatal("数据库不可用时清理应返回错误")
+	}
+}

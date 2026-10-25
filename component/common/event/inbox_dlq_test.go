@@ -187,3 +187,68 @@ func TestInboxDlqHandlerSkipsConsumedEvent(t *testing.T) {
 		t.Fatalf("已消费事件的死信应删除，实际 %d 条", count)
 	}
 }
+
+// TestInboxDlqHandlerProcessDlq 验证从拉取到期死信到逐条重投的整体流程
+func TestInboxDlqHandlerProcessDlq(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventInbox{}, model.SysEventInboxDlq{}))
+	defer cleanup()
+
+	dlqRepo := repo.NewInboxDlqRepo(gormDB)
+	inboxRepo := repo.NewInboxRepo(gormDB)
+	unconsumed := &model.SysEventInboxDlq{ServiceName: "svc", EventID: "event-1", Topic: "topic", Payload: "payload-1"}
+	unconsumed.ID = 1
+	consumed := &model.SysEventInboxDlq{ServiceName: "svc", EventID: "event-2", Topic: "topic", Payload: "payload-2"}
+	consumed.ID = 2
+	inbox := &model.SysEventInbox{ServiceName: "svc", EventID: "event-2", Topic: "topic", Payload: "payload-2"}
+	inbox.ID = 3
+	for _, row := range []*model.SysEventInboxDlq{unconsumed, consumed} {
+		if err := gormDB.Create(row).Error; err != nil {
+			t.Fatalf("初始化死信失败: %v", err)
+		}
+	}
+	if err := gormDB.Create(inbox).Error; err != nil {
+		t.Fatalf("初始化收件箱失败: %v", err)
+	}
+
+	publisher := &stubPublisher{}
+	handler := NewInboxDlqHandler(
+		cfg.Runtime{ServiceName: "svc", InboxDlqFrequency: 30 * time.Second, InboxDlqSize: 100},
+		dlqRepo, inboxRepo, publisher,
+	)
+	if err := handler.processDlq(context.Background()); err != nil {
+		t.Fatalf("处理死信失败: %v", err)
+	}
+
+	if publisher.calls != 1 || publisher.key != "event-1" {
+		t.Fatalf("仅未消费事件应重投，实际调用 %+v", publisher)
+	}
+	var count int64
+	if err := gormDB.Model(&model.SysEventInboxDlq{}).Count(&count).Error; err != nil {
+		t.Fatalf("查询死信失败: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("重投与清理完成后死信应清空，实际 %d 条", count)
+	}
+}
+
+// TestInboxDlqHandlerStartValidation 验证启动时的依赖校验与降级分支
+func TestInboxDlqHandlerStartValidation(t *testing.T) {
+	t.Run("仓储缺失返回错误", func(t *testing.T) {
+		handler := NewInboxDlqHandler(cfg.Runtime{ServiceName: "svc"}, nil, nil, &stubPublisher{})
+		if err := handler.Start(context.Background(), &stubDistLockFactory{}); err == nil {
+			t.Fatal("收件箱死信仓储缺失应返回错误")
+		}
+	})
+
+	t.Run("发布者缺失降级不启动", func(t *testing.T) {
+		gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventInbox{}, model.SysEventInboxDlq{}))
+		defer cleanup()
+		handler := NewInboxDlqHandler(
+			cfg.Runtime{ServiceName: "svc", InboxDlqFrequency: time.Second},
+			repo.NewInboxDlqRepo(gormDB), repo.NewInboxRepo(gormDB), nil,
+		)
+		if err := handler.Start(context.Background(), &stubDistLockFactory{}); err != nil {
+			t.Fatalf("发布者缺失应降级为不启动，实际 %v", err)
+		}
+	})
+}

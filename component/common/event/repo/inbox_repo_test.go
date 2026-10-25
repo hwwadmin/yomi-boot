@@ -54,3 +54,34 @@ func TestInboxRepoListConsumedBefore(t *testing.T) {
 		t.Fatalf("limit<=0 应返回空，实际 ids=%v err=%v", got, err)
 	}
 }
+
+// TestInboxRepoInsertAndExists 验证插入与事件存在性判断
+func TestInboxRepoInsertAndExists(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventInbox{}))
+	defer cleanup()
+
+	r := repo.NewInboxRepo(gormDB)
+	row := model.SysEventInbox{ServiceName: "svc", EventID: "event-1", Topic: "topic"}
+	if err := r.Insert(context.Background(), &row); err != nil {
+		t.Fatalf("插入收件箱记录失败: %v", err)
+	}
+	if row.ID == 0 {
+		t.Fatalf("插入后主键应回填: %d", row.ID)
+	}
+
+	if exists, err := r.Exists(context.Background(), "svc", "event-1"); err != nil || !exists {
+		t.Fatalf("已插入事件应存在: exists=%v err=%v", exists, err)
+	}
+	if exists, err := r.Exists(context.Background(), "svc", "event-2"); err != nil || exists {
+		t.Fatalf("未插入事件不应存在: exists=%v err=%v", exists, err)
+	}
+	if exists, err := r.Exists(context.Background(), "other", "event-1"); err != nil || exists {
+		t.Fatalf("其他服务下事件不应存在: exists=%v err=%v", exists, err)
+	}
+	if exists, err := r.Exists(context.Background(), "", "event-1"); err != nil || exists {
+		t.Fatalf("空服务名应直接返回 false: exists=%v err=%v", exists, err)
+	}
+	if exists, err := r.Exists(context.Background(), "svc", ""); err != nil || exists {
+		t.Fatalf("空事件 ID 应直接返回 false: exists=%v err=%v", exists, err)
+	}
+}

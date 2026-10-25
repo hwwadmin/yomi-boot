@@ -92,3 +92,66 @@ func TestInboxDlqRepoFetchDue(t *testing.T) {
 		}
 	}
 }
+
+// TestInboxDlqRepoUpdateRetry 验证更新重投次数与重投时间字段
+func TestInboxDlqRepoUpdateRetry(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventInboxDlq{}))
+	defer cleanup()
+
+	r := repo.NewInboxDlqRepo(gormDB)
+	row := model.SysEventInboxDlq{ServiceName: "svc", EventID: "event-1", Topic: "topic"}
+	row.ID = 1
+	if err := r.Insert(context.Background(), &row); err != nil {
+		t.Fatalf("插入死信失败: %v", err)
+	}
+
+	lastTime := time.Now().Add(-time.Minute).Truncate(time.Second)
+	afterTime := time.Now().Add(10 * time.Minute).Truncate(time.Second)
+	if err := r.UpdateRetry(context.Background(), row.ID, 3, lastTime, afterTime); err != nil {
+		t.Fatalf("更新重投记录失败: %v", err)
+	}
+
+	var stored model.SysEventInboxDlq
+	if err := gormDB.First(&stored, row.ID).Error; err != nil {
+		t.Fatalf("查询死信失败: %v", err)
+	}
+	if stored.RetryCount != 3 {
+		t.Fatalf("重投次数期望 3，实际 %d", stored.RetryCount)
+	}
+	if stored.RetryLastTime == nil || !stored.RetryLastTime.Equal(lastTime) {
+		t.Fatalf("最后重投时间期望 %v，实际 %v", lastTime, stored.RetryLastTime)
+	}
+	if stored.RetryAfterTime == nil || !stored.RetryAfterTime.Equal(afterTime) {
+		t.Fatalf("下次可重投时间期望 %v，实际 %v", afterTime, stored.RetryAfterTime)
+	}
+}
+
+// TestInboxDlqRepoDelete 验证硬删除死信记录
+func TestInboxDlqRepoDelete(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventInboxDlq{}))
+	defer cleanup()
+
+	rows := []model.SysEventInboxDlq{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic"},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic"},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化死信失败: %v", err)
+	}
+
+	r := repo.NewInboxDlqRepo(gormDB)
+	if err := r.Delete(context.Background(), 1); err != nil {
+		t.Fatalf("删除死信失败: %v", err)
+	}
+
+	var all []model.SysEventInboxDlq
+	if err := gormDB.Unscoped().Find(&all).Error; err != nil {
+		t.Fatalf("查询死信失败: %v", err)
+	}
+	if len(all) != 1 || all[0].ID != 2 {
+		t.Fatalf("期望硬删除后仅剩 event-2，实际 %d 条", len(all))
+	}
+}

@@ -360,3 +360,157 @@ func TestOutboxRepoRestorePendingBatch(t *testing.T) {
 		t.Fatalf("已发送成功记录不应被恢复，实际 %s", stored[2].Status)
 	}
 }
+
+// TestOutboxRepoInsertAndFindByIDs 验证插入回填主键与按主键批量查询
+func TestOutboxRepoInsertAndFindByIDs(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	r := repo.NewOutboxRepo(gormDB)
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusPending},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusPending},
+	}
+	for i := range rows {
+		if err := r.Insert(context.Background(), &rows[i]); err != nil {
+			t.Fatalf("插入发件箱记录失败: %v", err)
+		}
+	}
+	if rows[0].ID == 0 || rows[1].ID == 0 {
+		t.Fatalf("插入后主键应回填: %d %d", rows[0].ID, rows[1].ID)
+	}
+
+	stored, err := r.FindByIDs(context.Background(), []int64{rows[0].ID, rows[1].ID, 9999})
+	if err != nil {
+		t.Fatalf("按主键查询失败: %v", err)
+	}
+	if len(stored) != 2 {
+		t.Fatalf("期望查回 2 条，实际 %d 条", len(stored))
+	}
+	if stored[0].EventID != "event-1" || stored[1].EventID != "event-2" {
+		t.Fatalf("返回记录与主键不符: %s %s", stored[0].EventID, stored[1].EventID)
+	}
+
+	empty, err := r.FindByIDs(context.Background(), nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("空 ID 列表应返回空且不报错: rows=%v err=%v", empty, err)
+	}
+}
+
+// TestOutboxRepoFetchPending 验证只返回本服务 PENDING 事件且按创建时间升序限量
+func TestOutboxRepoFetchPending(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	base := time.Now().Add(-time.Hour)
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusPending},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusFetched},
+		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusPending},
+		{ServiceName: "other", EventID: "event-4", Topic: "topic", Status: model.OutboxStatusPending},
+	}
+	createTimes := []time.Time{
+		base,
+		base.Add(-3 * time.Minute),
+		base.Add(-2 * time.Minute),
+		base.Add(-4 * time.Minute),
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+		rows[i].CreateTime = createTimes[i]
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	got, err := r.FetchPending(context.Background(), "svc", 10)
+	if err != nil {
+		t.Fatalf("查询待处理事件失败: %v", err)
+	}
+	if len(got) != 2 || got[0].EventID != "event-3" || got[1].EventID != "event-1" {
+		t.Fatalf("期望按创建时间升序返回 event-3/event-1，实际 %v", outboxEventIDs(got))
+	}
+
+	got, err = r.FetchPending(context.Background(), "svc", 1)
+	if err != nil {
+		t.Fatalf("限量查询待处理事件失败: %v", err)
+	}
+	if len(got) != 1 || got[0].EventID != "event-3" {
+		t.Fatalf("限量 1 条期望只返回 event-3，实际 %v", outboxEventIDs(got))
+	}
+}
+
+// TestOutboxRepoFetchFetchedTimeout 验证只返回本服务停留在 FETCHED 且已超时的记录
+func TestOutboxRepoFetchFetchedTimeout(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	oldTime := time.Now().Add(-10 * time.Minute)
+	freshTime := time.Now()
+	rows := []model.SysEventOutbox{
+		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldTime},
+		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &freshTime},
+		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusPending},
+		{ServiceName: "svc", EventID: "event-4", Topic: "topic", Status: model.OutboxStatusSentFail, FetchTime: &oldTime},
+		{ServiceName: "other", EventID: "event-5", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldTime},
+	}
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	if err := gormDB.Create(&rows).Error; err != nil {
+		t.Fatalf("初始化发件箱数据失败: %v", err)
+	}
+
+	r := repo.NewOutboxRepo(gormDB)
+	got, err := r.FetchFetchedTimeout(context.Background(), "svc", time.Now().Add(-5*time.Minute))
+	if err != nil {
+		t.Fatalf("查询 FETCHED 超时事件失败: %v", err)
+	}
+	if len(got) != 1 || got[0].EventID != "event-1" {
+		t.Fatalf("期望只返回 event-1，实际 %v", outboxEventIDs(got))
+	}
+}
+
+// TestOutboxRepoUpdate 验证全量更新按主键覆盖全部字段
+func TestOutboxRepoUpdate(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
+	defer cleanup()
+
+	r := repo.NewOutboxRepo(gormDB)
+	row := model.SysEventOutbox{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusPending}
+	if err := r.Insert(context.Background(), &row); err != nil {
+		t.Fatalf("插入发件箱记录失败: %v", err)
+	}
+
+	fetchTime := time.Now().Add(-time.Minute)
+	sentTime := time.Now()
+	row.Topic = "topic-2"
+	row.Payload = "payload"
+	row.Status = model.OutboxStatusSentFail
+	row.FetchTime = &fetchTime
+	row.SentTime = &sentTime
+	if err := r.Update(context.Background(), &row); err != nil {
+		t.Fatalf("全量更新失败: %v", err)
+	}
+
+	var stored model.SysEventOutbox
+	if err := gormDB.First(&stored, row.ID).Error; err != nil {
+		t.Fatalf("查询发件箱记录失败: %v", err)
+	}
+	if stored.Topic != "topic-2" || stored.Payload != "payload" || stored.Status != model.OutboxStatusSentFail {
+		t.Fatalf("全量更新字段未生效: %+v", stored)
+	}
+	if stored.FetchTime == nil || stored.SentTime == nil {
+		t.Fatalf("全量更新应覆盖时间字段: %+v", stored)
+	}
+}
+
+// outboxEventIDs 提取发件箱记录的 EventID 列表，便于断言输出
+func outboxEventIDs(rows []model.SysEventOutbox) []string {
+	ids := make([]string, 0, len(rows))
+	for i := range rows {
+		ids = append(ids, rows[i].EventID)
+	}
+	return ids
+}

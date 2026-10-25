@@ -131,3 +131,38 @@ func TestConfigValidateFrequencyMinimum(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateCleanupConfig 验证单组清理配置的合法域
+func TestValidateCleanupConfig(t *testing.T) {
+	const minFrequencyMS = 50
+	valid := []int{30, 3600000, 500, 20}
+	if err := validateCleanupConfig("outbox_cleanup", minFrequencyMS, valid[0], valid[1], valid[2], valid[3]); err != nil {
+		t.Fatalf("合法配置不应报错: %v", err)
+	}
+	// frequency_ms 为 0 表示未配置，允许
+	if err := validateCleanupConfig("outbox_cleanup", minFrequencyMS, 30, 0, 500, 20); err != nil {
+		t.Fatalf("未配置频率不应报错: %v", err)
+	}
+
+	cases := []struct {
+		name          string
+		retentionDays int
+		frequencyMS   int
+		batchSize     int
+		maxBatches    int
+	}{
+		{name: "negative retention", retentionDays: -1, frequencyMS: 3600000, batchSize: 500, maxBatches: 20},
+		{name: "negative frequency", retentionDays: 30, frequencyMS: -1, batchSize: 500, maxBatches: 20},
+		{name: "frequency below minimum", retentionDays: 30, frequencyMS: 10, batchSize: 500, maxBatches: 20},
+		{name: "negative batch size", retentionDays: 30, frequencyMS: 3600000, batchSize: -1, maxBatches: 20},
+		{name: "negative max batches", retentionDays: 30, frequencyMS: 3600000, batchSize: 500, maxBatches: -1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateCleanupConfig("outbox_cleanup", minFrequencyMS, tc.retentionDays, tc.frequencyMS, tc.batchSize, tc.maxBatches)
+			if err == nil {
+				t.Fatalf("%s 应返回错误", tc.name)
+			}
+		})
+	}
+}
