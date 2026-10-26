@@ -4,28 +4,17 @@
 
 package rag
 
-import (
-	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
-)
-
 // New 校验配置并构造 Engine；不访问网络、不创建集合
 func New(cfg Config) (*Engine, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	defaultChunker, err := chunking.New(chunking.Config{})
-	if err != nil {
-		return nil, err
-	}
-	retriever, err := retrieval.New(retrieval.Config{Embedder: cfg.Embedder, Store: cfg.Store})
-	if err != nil {
-		return nil, err
-	}
 	return &Engine{
-		embedder:       cfg.Embedder,
-		store:          cfg.Store,
-		defaultChunker: defaultChunker,
-		retriever:      retriever,
+		chunker:   cfg.Chunker,
+		embedder:  cfg.Embedder,
+		retriever: cfg.Retriever,
+		reranker:  cfg.Reranker,
+		generator: cfg.Generator,
+		store:     cfg.Store,
 	}, nil
 }

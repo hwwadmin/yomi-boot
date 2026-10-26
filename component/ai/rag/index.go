@@ -42,7 +42,7 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 	}
 	chunker := req.Chunker
 	if chunker == nil {
-		chunker = e.defaultChunker
+		chunker = e.chunker
 	}
 	// 先完成切分与边界校验，避免非法请求创建空集合
 	prepared := make([]preparedDocument, 0, len(docs))

@@ -13,6 +13,8 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
+	"gitee.com/hq_project/yomi-boot/component/ai/generation"
+	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
 	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -24,14 +26,16 @@ const embedBatchSize = 64
 // indexLockStripes 是 Index 写入阶段的锁条数；同一文档命中同一条带
 const indexLockStripes = 64
 
-// Engine 检索增强引擎；同一实例可并发服务多个集合；构造后不可变，请勿复制值
+// Engine 检索增强编排引擎；同一实例可并发服务多个集合；构造后不可变，请勿复制值
 type Engine struct {
-	embedder       embedding.Client
-	store          vectordb.Store
-	defaultChunker chunking.Chunker
-	retriever      retrieval.Retriever
-	dimension      atomic.Int64
-	indexLocks     [indexLockStripes]sync.Mutex
+	chunker    chunking.Chunker
+	embedder   embedding.Client
+	retriever  retrieval.Retriever
+	reranker   rerank.Reranker
+	generator  generation.Generator
+	store      vectordb.Store
+	dimension  atomic.Int64
+	indexLocks [indexLockStripes]sync.Mutex
 }
 
 // EnsureCollection 确保集合存在；已存在时返回 nil

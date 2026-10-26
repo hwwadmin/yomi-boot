@@ -1,42 +1,72 @@
-// Package rag 提供基于 ai/chunking、ai/embedding 与 ai/vectordb 的检索增强数据能力。
+// Package rag 提供两条标准化 RAG 流程的编排：文档入库与文档检索增强。
 //
-// 覆盖切块、向量化、写入、检索与删除，不包含大模型问答。
-// Config 只保留 Embedder 与 Store；集合名与其余运行期参数都按调用传入，
+// 本包只做流程编排，不实现任何流程节点：切块、向量化、检索、精重排与提示词拼接
+// 分别由 component/ai/chunking、ai/embedding、ai/retrieval、ai/rerank、ai/generation
+// 的门面负责，构造时经 Config 全部注入（全部必填）；本包在节点之间补齐文档域语义——
+// 写入侧的块主键、保留元数据键、文档版本与旧块清理，检索侧的旧块过滤。
+// 向量库 Store 是基础设施依赖（写入与域过滤辅助查询），不是流程节点。
 // 同一个 Engine 可并发服务多个集合（不同业务使用不同集合名即可）。
 // 配置只在 New / MustNew 传入；本包不读 YAML、不进插件链、不注册配置根段。
-// 本包不持有 Embedder / Store 的关闭权，进程退出时由调用方自行关闭。
+// 本包不持有各依赖的关闭权，进程退出时由调用方自行关闭。
 //
 // # 基本用法
 //
-//	engine, err := rag.New(rag.Config{Embedder: emb, Store: store})
+//	emb, err := embedding.New(embedding.Config{ /* ... */ })
+//	store, err := vectordb.New(vectordb.Config{ /* ... */ })
 //	chunker, err := chunking.New(chunking.Config{
 //	    Strategy: chunking.StrategyMarkdown,
 //	    Markdown: chunking.MarkdownConfig{ChunkSize: 800, MaxHeadingLevel: 3},
 //	})
+//	retriever, err := retrieval.New(retrieval.Config{Embedder: emb, Store: store})
+//	engine := rag.MustNew(rag.Config{
+//	    Chunker:   chunker,
+//	    Embedder:  emb,
+//	    Retriever: retriever,
+//	    Reranker:  rerank.NewPassThrough(), // 未接入重排模型时的占位
+//	    Generator: generation.NewBasic(),   // 未定制提示词模板时的占位
+//	    Store:     store,
+//	})
 //	_, err = engine.Index(ctx, "kb_sales", rag.IndexRequest{
 //	    Documents: []rag.Document{{ID: "doc-1", Content: text, Source: "manual.md"}},
-//	    Chunker:  chunker,
 //	})
-//	chunks, err := engine.Retrieve(ctx, "kb_sales", retrieval.RetrieveRequest{Query: "如何退款", TopK: 5})
+//	result, err := engine.Retrieve(ctx, "kb_sales", rag.RetrieveRequest{
+//	    RetrieveRequest: retrieval.RetrieveRequest{Query: "如何退款", TopK: 20},
+//	    RerankTopN:      5,
+//	})
+//	// result.Prompt 直接作为大模型输入；result.Chunks 供引用标注
 //	err = engine.DeleteDocument(ctx, "kb_sales", "doc-1")
+//
+// # 两条流程
+//
+//	路径① 文档入库：Document → Chunker 切块 → Embedder 向量化 → Store 写入；
+//	  本包负责块主键（"文档ID#序号"）、保留元数据键、文档版本与旧块清理、
+//	  条带锁与按块预算分组写入、向量维度锁定。
+//	路径② 文档检索增强：Query → Retriever 检索 → 文档域过滤 → Reranker 精重排
+//	  → Generator 拼接提示词；返回 Prompt（直接交大模型）与重排后的 Chunks。
+//
+// 装配约束：Retriever 须与 Store 基于同一向量库，其查询向量化须与 Embedder
+// 同模型同维度；不一致时写入与检索将互不相认或由 vectordb 校验报错。
 //
 // # 多集合
 //
-// 集合名每次调用传入；Index 对不存在的集合自动创建，Retrieve 在集合不存在时返回空切片，
-// DeleteDocument 在集合不存在时返回 nil。不同业务共用同一个 Engine 时，用不同集合名隔离数据即可；
-// 所有集合共用同一 Store 的向量维度与 Metric。
+// 集合名每次调用传入；Index 对不存在的集合自动创建，Retrieve 在集合不存在时返回
+// 空 Chunks 与 nil，DeleteDocument 在集合不存在时返回 nil。不同业务共用同一个
+// Engine 时，用不同集合名隔离数据即可；所有集合共用同一 Store 的向量维度与 Metric。
 //
 // # 切块
 //
-// 通过 IndexRequest.Chunker 指定切块策略，为空则使用内置默认 recursive（800 字 / 100 重叠）。
-// 内置策略 recursive / fixed / sentence / markdown 及其配置见 component/ai/chunking；
-// 也可实现 chunking.Chunker 注入自定义策略，Engine 对其输出兜底校验，违反契约返回 ErrInvalidArgument。
+// Config.Chunker 必填，内置策略 recursive / fixed / sentence / markdown 及其配置见
+// component/ai/chunking；IndexRequest.Chunker 可按调用覆盖（如 Markdown 文档与
+// 纯文本走不同策略）。也可实现 chunking.Chunker 注入自定义策略，Engine 对其输出
+// 兜底校验，违反契约返回透传 chunking.ErrInvalidArgument。
 // 块长按 rune 计，单块不得超过 chunking.MaxChunkSize 字。
 //
 // # 运行期参数
 //
-//   - 集合名、IndexRequest.Chunker、RetrieveRequest.Strategy/TopK/MinScore/Filter 都按调用传入
-//   - RetrieveRequest.TopK 必填；MinScore 为 0 表示不设阈值
+//   - 集合名、IndexRequest.Chunker、RetrieveRequest.Strategy/TopK/MinScore/Filter/
+//     RerankTopN 都按调用传入
+//   - RetrieveRequest.TopK 必填；MinScore 为 0 表示不设阈值；RerankTopN 为 0 表示
+//     重排后全部保留
 //   - Engine 不内置超时，使用调用方 ctx 控制
 //   - 向量维度在首次向量化后锁定；Embedder 输出变化返回 ErrDimensionMismatch
 //   - Store 的维度与 Metric 由 Store 构造配置决定，其下所有集合一致
@@ -54,31 +84,31 @@
 //   - 不同文档、不同集合可并发；条带碰撞会短暂串行
 //   - 保留元数据键见 MetadataKeyDocumentID 等常量，Document.Metadata 不得使用
 //
-// # 检索策略
+// # 检索增强
 //
-// 检索由 component/ai/retrieval 门面执行，rag.Retrieve 直接接受 retrieval.RetrieveRequest：
+// 编排顺序：检索 → 域过滤 → 精重排 → 提示词拼接。
 //
-//   - hybrid（默认）：向量 + BM25 混合检索，两路结果以 RRF 融合；Score 是融合排名分，
-//     MinScore 阈值须按融合分口径设置，与 vector 的 Score 不可横比
-//   - vector：纯向量检索，Score 是相似度（越大越相似，L2 已映射）
-//
-// 策略口径与词法能力（milvus 要求 Milvus 2.5+、旧集合须重建；memory 自带 BM25）见
-// component/ai/retrieval 与 component/ai/vectordb 文档。
-//
-// # 检索与删除
-//
-//   - Retrieve：集合不存在或为空时返回空切片与 nil，不视为错误；缺少 rag_content 的命中会被忽略
-//   - Retrieve 在通用检索之上叠加文档域过滤：读取命中文档当前版本与块总数，
-//     丢弃版本不一致或索引超出总数的旧块；辅助查询失败时降级为不过滤并告警。
+//   - 检索段由 component/ai/retrieval 门面执行（入参校验、查询向量化、策略路由、
+//     阈值过滤），检索入参非法透传其哨兵；hybrid（默认）/ vector 的策略口径见其文档
+//   - 域过滤：缺少块文本的命中忽略；读取命中文档当前版本与块总数，丢弃版本不一致
+//     或索引超出总数的旧块；辅助查询失败时降级为不过滤并告警。
 //     直接使用 ai/retrieval 检索本包写入的集合不会做旧块过滤
+//   - 精重排：过滤后的块文本交由 Reranker，TopN 取 RerankTopN；无命中时跳过
+//     （重排契约要求至少 1 条候选）；重排候选超过 rerank.MaxDocs 时由重排契约拒绝
+//     （透传 AI_RERANK_INVALID_ARGUMENT），请下调 TopK
+//   - 拼接：重排后的块（Content + Source）交由 Generator，Prompt 直接作为大模型输入；
+//     检索无命中时以空上下文拼接，拼接方式由实现决定
+//   - Chunks 顺序 = 重排后顺序（RerankScore 口径由 Reranker 定义，PassThrough 恒 0，
+//     顺序即检索顺序）；Score 是检索/融合分，与 RerankScore 不可横比
+//   - Generator 返回空提示词视为实现违约，返回 ErrBadResponse
 //   - Score 越大越相似；不同 Metric 与不同 Strategy 的 Score 不可横比
 //   - DeleteDocument：删除文档全部块；集合不存在时返回 nil
 //
 // # 错误
 //
 // 包内哨兵：ErrInvalidArgument / ErrDimensionMismatch / ErrBadResponse。
-// embedding / vectordb / chunking / retrieval 的错误原样透传，可用 errors.Is 判断其哨兵；
-// 自定义 Chunker 违反切块契约即透传 chunking.ErrInvalidArgument；
+// chunking / embedding / vectordb / retrieval / rerank / generation 的错误原样透传，
+// 可用 errors.Is 判断其哨兵；自定义 Chunker 违反切块契约即透传 chunking.ErrInvalidArgument；
 // 检索入参非法透传 retrieval.ErrInvalidArgument，查询向量维度不符由 vectordb 校验上报
 // （检索路径不做写侧的维度锁定）。
 //

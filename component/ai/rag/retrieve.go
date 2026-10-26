@@ -1,4 +1,4 @@
-// 域检索外壳：委托通用检索门面并叠加文档域过滤。
+// 路径②文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接。
 //
 // @author zwei
 
@@ -9,24 +9,29 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
+	"gitee.com/hq_project/yomi-boot/component/ai/generation"
+	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/logger"
 )
 
-// Retrieve 在指定集合中检索最相关的块；集合不存在或为空时返回空切片与 nil
+// Retrieve 执行文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接；集合不存在或为空时返回空 Chunks 与 nil
 //
-// 通用检索（入参校验、查询向量化、策略路由、阈值过滤）由 ai/retrieval 门面执行，
-// 检索入参非法错误透传其哨兵；本方法在其上叠加文档域过滤：
-// 缺少块文本的命中忽略、更新窗口内的旧块丢弃。
-func (e *Engine) Retrieve(ctx context.Context, collection string, req retrieval.RetrieveRequest) ([]Chunk, error) {
+// 检索段（入参校验、查询向量化、策略路由、阈值过滤）由 ai/retrieval 门面执行，
+// 检索入参非法错误透传其哨兵；本方法在其上叠加文档域过滤：缺少块文本的命中忽略、
+// 更新窗口内的旧块丢弃。随后把过滤后的块交由 Reranker 按 RerankTopN 精重排
+// （无命中时跳过，重排契约要求至少 1 条候选），最后由 Generator 拼接为输入提示词。
+func (e *Engine) Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error) {
 	name, err := normalizeCollection(collection)
 	if err != nil {
 		return nil, err
 	}
+	if req.RerankTopN < 0 {
+		return nil, errors.Sentinel(ErrInvalidArgument)
+	}
 	ctx = orBackground(ctx)
-	hits, err := e.retriever.Retrieve(ctx, name, req)
+	hits, err := e.retriever.Retrieve(ctx, name, req.RetrieveRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -41,11 +46,11 @@ func (e *Engine) Retrieve(ctx context.Context, collection string, req retrieval.
 	states, err := e.currentChunkStates(ctx, name, candidates)
 	if err != nil {
 		if errors.Is(err, vectordb.ErrNotFound) {
-			return []Chunk{}, nil
+			return e.retrieveEmpty(ctx, req)
 		}
 		return nil, err
 	}
-	out := make([]Chunk, 0, len(candidates))
+	chunks := make([]Chunk, 0, len(candidates))
 	for _, hit := range candidates {
 		if state, ok := states[strings.TrimSpace(hit.Metadata[MetadataKeyDocumentID])]; ok {
 			index, err := strconv.Atoi(strings.TrimSpace(hit.Metadata[MetadataKeyChunkIndex]))
@@ -59,9 +64,78 @@ func (e *Engine) Retrieve(ctx context.Context, collection string, req retrieval.
 				}
 			}
 		}
-		out = append(out, hitToChunk(hit, strings.TrimSpace(hit.Metadata[MetadataKeyContent])))
+		chunks = append(chunks, hitToChunk(hit, strings.TrimSpace(hit.Metadata[MetadataKeyContent])))
+	}
+	chunks, err = e.rerankChunks(ctx, req.Query, chunks, req.RerankTopN)
+	if err != nil {
+		return nil, err
+	}
+	prompt, err := e.buildPrompt(ctx, req.Query, chunks)
+	if err != nil {
+		return nil, err
+	}
+	return &RetrieveResult{Prompt: prompt, Chunks: chunks}, nil
+}
+
+// retrieveEmpty 无命中时的收尾：跳过重排（重排契约要求至少 1 条候选），
+// 仍以空上下文拼接，保证 Prompt 契约稳定
+func (e *Engine) retrieveEmpty(ctx context.Context, req RetrieveRequest) (*RetrieveResult, error) {
+	prompt, err := e.buildPrompt(ctx, req.Query, []Chunk{})
+	if err != nil {
+		return nil, err
+	}
+	return &RetrieveResult{Prompt: prompt, Chunks: []Chunk{}}, nil
+}
+
+// rerankChunks 精重排并按结果回填块；topN 为 0 表示全部保留
+func (e *Engine) rerankChunks(ctx context.Context, query string, chunks []Chunk, topN int) ([]Chunk, error) {
+	if len(chunks) == 0 {
+		return chunks, nil
+	}
+	docs := make([]string, len(chunks))
+	for i, c := range chunks {
+		docs[i] = c.Content
+	}
+	resp, err := e.reranker.Rerank(ctx, rerank.RerankRequest{
+		Query: strings.TrimSpace(query),
+		Docs:  docs,
+		TopN:  topN,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return nil, wrapSentinel(ErrBadResponse, errors.New("ai/rag 重排实现未返回结果"))
+	}
+	out := make([]Chunk, 0, len(resp.Results))
+	for _, r := range resp.Results {
+		if r.Index < 0 || r.Index >= len(chunks) {
+			return nil, wrapSentinel(ErrBadResponse, errors.New("ai/rag 重排结果下标越界"))
+		}
+		c := chunks[r.Index]
+		c.RerankScore = r.Score
+		out = append(out, c)
 	}
 	return out, nil
+}
+
+// buildPrompt 把重排后的块交由 Generator 拼接为输入提示词
+func (e *Engine) buildPrompt(ctx context.Context, query string, chunks []Chunk) (string, error) {
+	contexts := make([]generation.Context, len(chunks))
+	for i, c := range chunks {
+		contexts[i] = generation.Context{Content: c.Content, Source: c.Source}
+	}
+	resp, err := e.generator.Generate(ctx, generation.GenerateRequest{
+		Query:    strings.TrimSpace(query),
+		Contexts: contexts,
+	})
+	if err != nil {
+		return "", err
+	}
+	if resp == nil || strings.TrimSpace(resp.Prompt) == "" {
+		return "", wrapSentinel(ErrBadResponse, errors.New("ai/rag 提示词拼接实现返回空提示词"))
+	}
+	return resp.Prompt, nil
 }
 
 // chunkState 是一次写入的版本与块总数

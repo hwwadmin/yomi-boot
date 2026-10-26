@@ -4,7 +4,10 @@
 
 package rag
 
-import "gitee.com/hq_project/yomi-boot/component/ai/chunking"
+import (
+	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
+	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
+)
 
 // 保留元数据键；由本包写入，Document.Metadata 不得使用
 const (
@@ -32,19 +35,20 @@ type Document struct {
 
 // Chunk 一个可检索的文本块
 type Chunk struct {
-	ID         string            // ID 是块主键，格式为 "文档ID#序号"
-	DocumentID string            // DocumentID 是所属文档 ID
-	Index      int               // Index 是块在文档内的序号，从 0 开始
-	Content    string            // Content 是块文本
-	Source     string            // Source 是文档来源，可能为空
-	Metadata   map[string]string // Metadata 是文档自定义元数据副本；不含保留键
-	Score      float32           // Score 是相似度，越大越相似；仅检索结果有值
+	ID          string            // ID 是块主键，格式为 "文档ID#序号"
+	DocumentID  string            // DocumentID 是所属文档 ID
+	Index       int               // Index 是块在文档内的序号，从 0 开始
+	Content     string            // Content 是块文本
+	Source      string            // Source 是文档来源，可能为空
+	Metadata    map[string]string // Metadata 是文档自定义元数据副本；不含保留键
+	Score       float32           // Score 是检索/融合相关性分，越大越相似；口径见 ai/retrieval
+	RerankScore float32           // RerankScore 是精重排相关性分，越大越相关；口径由 Reranker 实现定义，不可跨实现横比；PassThrough 恒 0
 }
 
 // IndexRequest 文档入库入参
 type IndexRequest struct {
 	Documents []Document       // Documents 至少 1 条；同一请求内 ID 不得重复
-	Chunker   chunking.Chunker // Chunker 可选；空则使用内置默认 recursive（800 字 / 100 重叠）
+	Chunker   chunking.Chunker // Chunker 可选；空则使用 Config.Chunker
 }
 
 // IndexResult 文档入库结果
@@ -52,4 +56,16 @@ type IndexResult struct {
 	Documents int // Documents 是写入的文档数
 	Chunks    int // Chunks 是切分并写入的块数
 	Tokens    int // Tokens 是向量化用量合计；上游未提供时为 0
+}
+
+// RetrieveRequest 文档检索增强入参
+type RetrieveRequest struct {
+	retrieval.RetrieveRequest     // 检索段入参（Query/Strategy/TopK/MinScore/Filter）透传 ai/retrieval；Query 同时作为重排依据与拼接问题
+	RerankTopN                int // RerankTopN 是重排后保留的最大条数；0 表示全部保留；负数非法
+}
+
+// RetrieveResult 文档检索增强输出
+type RetrieveResult struct {
+	Prompt string  // Prompt 是拼接后的完整输入提示词；直接作为大模型输入
+	Chunks []Chunk // Chunks 是重排后的文档块；顺序即投喂拼接的顺序，供引用标注
 }
