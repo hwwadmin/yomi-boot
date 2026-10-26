@@ -154,26 +154,20 @@ func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, dimens
 		return err
 	}
 	if !has {
-		if err := s.createReady(ctx, n, dimension); err != nil {
-			if !errors.Is(err, ErrAlreadyExists) {
-				return err
-			}
-			// 并发创建者可能尚未完成索引/load，补一次 ready 再写
-			if err := s.ensureReady(ctx, n); err != nil {
-				return err
-			}
-		}
-	} else {
-		current, err := s.collectionDimension(ctx, n)
-		if err != nil {
+		if err := s.createReady(ctx, n, dimension); err != nil && !errors.Is(err, ErrAlreadyExists) {
 			return err
 		}
-		if current != dimension {
-			return errors.Sentinel(ErrInvalidArgument)
-		}
-		if err := s.ensureReady(ctx, n); err != nil {
-			return err
-		}
+	}
+	// 已存在（含并发创建撞车）时校验维度并确保就绪
+	current, err := s.collectionDimension(ctx, n)
+	if err != nil {
+		return err
+	}
+	if current != dimension {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	if err := s.ensureReady(ctx, n); err != nil {
+		return err
 	}
 	keep := make(map[string]struct{}, len(records))
 	if len(records) > 0 {
@@ -231,13 +225,13 @@ func (s *milvusStore) EnsureCollection(ctx context.Context, name string, dimensi
 	}
 	if !has {
 		if err := s.createReady(ctx, n, dimension); err != nil {
-			// 并发创建时另一个调用可能已先建；已存在仍视为成功
-			if errors.Is(err, ErrAlreadyExists) {
-				return nil
+			// 并发创建时另一个调用可能已先建；继续校验其维度
+			if !errors.Is(err, ErrAlreadyExists) {
+				return err
 			}
-			return err
+		} else {
+			return nil
 		}
-		return nil
 	}
 	current, err := s.collectionDimension(ctx, n)
 	if err != nil {

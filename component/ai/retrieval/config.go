@@ -15,7 +15,7 @@ import (
 // Config 创建 Engine 的构造配置；只保留依赖，集合与运行期参数由调用传入
 type Config struct {
 	Embedder embedding.Client // Embedder 向量化客户端；必填，用于查询向量化
-	Store    vectordb.Store   // Store 向量库；必填，集合 Dimension 必须与向量化输出一致
+	Store    vectordb.Store   // Store 向量库；必填，查询维度由 RetrieveRequest.Dimensions 传入并与集合维度一致
 }
 
 // validate 校验构造配置
