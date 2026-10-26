@@ -54,8 +54,9 @@
 //
 // Config.Chunker 是默认切块策略，内置 recursive / fixed / sentence / markdown 见
 // component/ai/chunking；IndexRequest.Chunker 可按调用覆盖，例如 Markdown 文档与
-// 纯文本使用不同策略。自定义 chunking.Chunker 的输出由 Engine 校验，违反契约透传
-// chunking.ErrInvalidArgument。块长按 rune 计，单块不超过 chunking.MaxChunkSize 字。
+// 纯文本使用不同策略。Index 用 chunking.Normalize 包装切块器，自定义实现的输出
+// 由切块层校验（空白块丢弃、超长块返回 chunking.ErrInvalidArgument）。
+// 块长按 rune 计，单块不超过 chunking.MaxChunkSize 字。
 //
 // # 运行期参数
 //

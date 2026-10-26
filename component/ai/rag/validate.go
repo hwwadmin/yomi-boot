@@ -72,3 +72,19 @@ func validateDocID(id string) error {
 	}
 	return nil
 }
+
+// validateChunkCount 校验单文档块数；超过上限返回 ErrInvalidArgument
+func validateChunkCount(count int) error {
+	if count > maxChunksPerDoc {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return nil
+}
+
+// validateRerankTopN 校验重排保留条数；负数返回 ErrInvalidArgument
+func validateRerankTopN(topN int) error {
+	if topN < 0 {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return nil
+}

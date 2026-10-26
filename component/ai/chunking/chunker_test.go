@@ -556,3 +556,48 @@ func TestNormalizeChunks(t *testing.T) {
 		t.Fatalf("超长块: %v", err)
 	}
 }
+
+// stubChunker 自定义切块测试替身
+type stubChunker struct {
+	chunks []string
+	err    error
+}
+
+// Chunk 实现 Chunker
+func (s stubChunker) Chunk(string) ([]string, error) {
+	return s.chunks, s.err
+}
+
+// TestNormalize 覆盖包装器：输出契约校验、错误透传与内置实现兼容
+func TestNormalize(t *testing.T) {
+	t.Parallel()
+	if Normalize(nil) != nil {
+		t.Fatal("nil 包装应返回 nil")
+	}
+	// 修剪空白块并保序
+	wrapped := Normalize(stubChunker{chunks: []string{" a ", "", "b"}})
+	chunks, err := wrapped.Chunk("x")
+	if err != nil || len(chunks) != 2 || chunks[0] != "a" || chunks[1] != "b" {
+		t.Fatalf("修剪结果: %q err=%v", chunks, err)
+	}
+	// 违约输出被拒绝
+	if _, err := Normalize(stubChunker{chunks: []string{"  "}}).Chunk("x"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("全空白: %v", err)
+	}
+	if _, err := Normalize(stubChunker{chunks: []string{strings.Repeat("a", MaxChunkSize+1)}}).Chunk("x"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("超长块: %v", err)
+	}
+	// 内部错误原样透传
+	if _, err := Normalize(stubChunker{err: ErrInvalidArgument}).Chunk("x"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("透传错误: %v", err)
+	}
+	// 内置实现包装后行为不变
+	builtin, err := New(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunks, err = Normalize(builtin).Chunk("苹果。香蕉。")
+	if err != nil || len(chunks) == 0 {
+		t.Fatalf("内置实现: %q err=%v", chunks, err)
+	}
+}

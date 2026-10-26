@@ -89,8 +89,31 @@ func ChunkText(text string, cfg Config) ([]string, error) {
 	return chunker.Chunk(text)
 }
 
+// Normalize 返回包装 Chunker 的实现：每次 Chunk 后修剪输出并校验契约，
+// 包装后的 Chunk 保证满足接口契约（空白块丢弃、超长块返回 ErrInvalidArgument）
+func Normalize(chunker Chunker) Chunker {
+	if chunker == nil {
+		return nil
+	}
+	return normalized{chunker: chunker}
+}
+
+// normalized 包装 Chunker，Chunk 后修剪输出并校验契约
+type normalized struct {
+	chunker Chunker
+}
+
+// Chunk 实现 Chunker：委托内部实现切块，再修剪并校验输出
+func (n normalized) Chunk(text string) ([]string, error) {
+	chunks, err := n.chunker.Chunk(text)
+	if err != nil {
+		return nil, err
+	}
+	return NormalizeChunks(chunks)
+}
+
 // NormalizeChunks 修剪切块输出并校验 Chunker 契约：丢弃空白块，
-// 单块超过 MaxChunkSize 或修剪后为空返回 ErrInvalidArgument；供自定义 Chunker 的调用方兜底校验
+// 单块超过 MaxChunkSize 或修剪后为空返回 ErrInvalidArgument；Normalize 用它包装实现
 func NormalizeChunks(chunks []string) ([]string, error) {
 	out := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {

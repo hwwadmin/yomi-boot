@@ -36,6 +36,8 @@ func (e *engine) Index(ctx context.Context, collection string, req IndexRequest)
 	if chunker == nil {
 		chunker = e.chunker
 	}
+	// 包装后 Chunk 自带契约校验：空白块丢弃、超长块拒绝
+	chunker = chunking.Normalize(chunker)
 	// 先切块并校验，全部通过后再创建集合与写入
 	prepared, err := chunkDocuments(chunker, docs)
 	if err != nil {
@@ -65,13 +67,8 @@ func chunkDocuments(chunker chunking.Chunker, docs []Document) ([]chunkedDocumen
 		if err != nil {
 			return nil, err
 		}
-		// 校验块契约：空白块丢弃，超长块返回 chunking.ErrInvalidArgument
-		chunks, err = chunking.NormalizeChunks(chunks)
-		if err != nil {
+		if err := validateChunkCount(len(chunks)); err != nil {
 			return nil, err
-		}
-		if len(chunks) > maxChunksPerDoc {
-			return nil, errors.Sentinel(ErrInvalidArgument)
 		}
 		version, err := random.Hex(16)
 		if err != nil {

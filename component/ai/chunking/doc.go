@@ -29,7 +29,7 @@
 //
 // Chunker 实现须并发安全：输入 trim 后非空时必须返回至少 1 个非空块，
 // 单块不得超过 MaxChunkSize 个字符，否则返回 ErrInvalidArgument；空文本返回 ErrInvalidArgument。
-// 调用方可用 NormalizeChunks 对自定义实现的输出做契约校验兜底。
+// 自定义实现可经 Normalize 包装，包装后的 Chunk 强制执行契约校验（空白块丢弃、超长块拒绝）。
 //
 // # 错误
 //

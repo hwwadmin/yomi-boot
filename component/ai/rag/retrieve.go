@@ -11,7 +11,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/ai/generation"
 	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // Retrieve 实现 Engine：检索（含域过滤）→ 精重排 → 提示词拼接
@@ -23,8 +22,8 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 	if err != nil {
 		return nil, err
 	}
-	if req.RerankTopN < 0 {
-		return nil, errors.Sentinel(ErrInvalidArgument)
+	if err := validateRerankTopN(req.RerankTopN); err != nil {
+		return nil, err
 	}
 	ctx = orBackground(ctx)
 	// 域过滤器交给检索层执行
