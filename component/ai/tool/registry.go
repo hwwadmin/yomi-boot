@@ -25,22 +25,30 @@ const (
 
 // Config 创建 Registry 的构造配置；本包不读 YAML
 type Config struct {
-	Tools             []Tool // Tools 是注册的工具集合；名称必须唯一
-	MaxArgumentsBytes int    // MaxArgumentsBytes 是单次调用参数字节上限；0 用默认值，负数非法
-	MaxContentBytes   int    // MaxContentBytes 是单次调用结果字节上限；0 用默认值，负数非法
+	Tools             []Tool     // Tools 是注册的工具集合；名称必须唯一
+	Completer         Completer  // Completer 是填槽模型端口；nil 时 Fill 返回未配置
+	Fill              FillConfig // Fill 是填槽行为配置
+	MaxArgumentsBytes int        // MaxArgumentsBytes 是单次调用参数字节上限；0 用默认值，负数非法
+	MaxContentBytes   int        // MaxContentBytes 是单次调用结果字节上限；0 用默认值，负数非法
 }
 
 // entry 是注册表内部快照；构造后只读
 type entry struct {
-	tool     Tool     // tool 是工具实现
-	spec     Spec     // spec 是构造时快照的规范定义
-	required []string // required 是根级必填参数键
+	tool         Tool          // tool 是工具实现
+	spec         Spec          // spec 是构造时快照的规范定义
+	required     []string      // required 是 Schema 根级必填参数键
+	fillRequired []string      // fillRequired 是填槽运行时必填键
+	fillable     bool          // fillable 表示工具声明了填槽规则或实现 InputResolver
+	resolver     InputResolver // resolver 非空时由工具负责 typed 入参解析
+	resolved     ResolvedTool  // resolved 非空时支持直接执行 typed 入参
 }
 
 // Registry 不可变工具注册表；构造后可并发调用
 type Registry struct {
 	entries           map[string]*entry // entries 以规范名索引
 	order             []*entry          // order 保留注册顺序
+	completer         Completer         // completer 是填槽模型端口
+	fillConfig        FillConfig        // fillConfig 是填槽行为配置
 	maxArgumentsBytes int               // maxArgumentsBytes 是参数字节上限
 	maxContentBytes   int               // maxContentBytes 是结果字节上限
 }
@@ -55,8 +63,14 @@ func New(cfg Config) (*Registry, error) {
 	if err != nil {
 		return nil, newError(CodeInvalidArgument, defaultInvalidConfigMessage, "", "", err)
 	}
+	fillConfig, err := resolveFillConfig(cfg.Fill)
+	if err != nil {
+		return nil, newError(CodeInvalidArgument, defaultInvalidConfigMessage, "", "", err)
+	}
 	registry := &Registry{
 		entries:           make(map[string]*entry, len(cfg.Tools)),
+		completer:         cfg.Completer,
+		fillConfig:        fillConfig,
 		maxArgumentsBytes: maxArguments,
 		maxContentBytes:   maxContent,
 	}
@@ -79,7 +93,25 @@ func New(cfg Config) (*Registry, error) {
 			return nil, newError(CodeInvalidArgument, defaultInvalidDefinitionMessage, normalized.Name, "", errors.Newf("ai/tool: 工具名 %q 与 %q 重复", normalized.Name, previous))
 		}
 		seen[key] = normalized.Name
-		registered := &entry{tool: current, spec: normalized, required: required}
+		resolver, _ := current.(InputResolver)
+		resolved, _ := current.(ResolvedTool)
+		if normalized.Fill.EvidenceOnly && resolver == nil {
+			return nil, newError(CodeInvalidArgument, defaultInvalidDefinitionMessage, normalized.Name, "",
+				errors.New("ai/tool: Fill.EvidenceOnly 需要 InputResolver"))
+		}
+		fillRequired := normalized.Fill.Required
+		if len(fillRequired) == 0 {
+			fillRequired = required
+		}
+		registered := &entry{
+			tool:         current,
+			spec:         normalized,
+			required:     required,
+			fillRequired: fillRequired,
+			fillable:     !fillSpecEmpty(normalized.Fill) || resolver != nil,
+			resolver:     resolver,
+			resolved:     resolved,
+		}
 		registry.entries[normalized.Name] = registered
 		registry.order = append(registry.order, registered)
 	}
@@ -139,28 +171,30 @@ func (r *Registry) Invoke(ctx context.Context, call Call) (*Result, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, contextError(err, current.spec.Name, call.ID)
 	}
-	// 零值 Registry 没有经过 New，按默认上限兜底
-	maxArguments := r.maxArgumentsBytes
-	if maxArguments == 0 {
-		maxArguments = DefaultMaxArgumentsBytes
-	}
-	maxContent := r.maxContentBytes
-	if maxContent == 0 {
-		maxContent = DefaultMaxContentBytes
-	}
-	arguments, object, err := normalizeArguments(call.Arguments, maxArguments, current.spec.Name, call.ID)
+	arguments, object, err := normalizeArguments(call.Arguments, r.argumentsLimit(), current.spec.Name, call.ID)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateRequired(current.required, object, current.spec.Name, call.ID); err != nil {
-		return nil, err
+	// 实现了 InputResolver 的工具自行校验 typed 入参；simple fillable 走 Fill 规则；
+	// 其余工具沿用 Schema required
+	if current.resolver == nil {
+		if current.fillable {
+			missing := rawRequiredMissing(object, current.fillRequired)
+			missing = append(missing, rawIdentifierMissing(object, current.spec.Fill.IdentifierKeys, call.Evidence)...)
+			missing = normalizeMissing(missing)
+			if len(missing) > 0 {
+				return nil, newIncompleteError(current.spec.Name, call.ID, missing)
+			}
+		} else if err := validateRequired(current.required, object, current.spec.Name, call.ID); err != nil {
+			return nil, err
+		}
 	}
-	normalizedCall := Call{ID: call.ID, Name: current.spec.Name, Arguments: arguments}
+	normalizedCall := Call{ID: call.ID, Name: current.spec.Name, Arguments: arguments, Evidence: call.Evidence}
 	content, err := invokeTool(ctx, current.tool, normalizedCall, current.spec.Name, call.ID)
 	if err != nil {
 		return nil, err
 	}
-	content, err = normalizeContent(content, maxContent, current.spec.Name, call.ID)
+	content, err = normalizeContent(content, r.contentLimit(), current.spec.Name, call.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -308,6 +342,51 @@ func resolveLimit(value, fallback int) (int, error) {
 		return fallback, nil
 	}
 	return value, nil
+}
+
+// resolveFillConfig 回退填槽默认值并拒绝负数
+func resolveFillConfig(cfg FillConfig) (FillConfig, error) {
+	if cfg.MaxAttempts < 0 {
+		return FillConfig{}, errors.Newf("ai/tool: Fill.MaxAttempts 不能为负: %d", cfg.MaxAttempts)
+	}
+	if cfg.MaxHistoryTurns < 0 {
+		return FillConfig{}, errors.Newf("ai/tool: Fill.MaxHistoryTurns 不能为负: %d", cfg.MaxHistoryTurns)
+	}
+	if cfg.MaxHistoryRunes < 0 {
+		return FillConfig{}, errors.Newf("ai/tool: Fill.MaxHistoryRunes 不能为负: %d", cfg.MaxHistoryRunes)
+	}
+	if cfg.MaxResponseBytes < 0 {
+		return FillConfig{}, errors.Newf("ai/tool: Fill.MaxResponseBytes 不能为负: %d", cfg.MaxResponseBytes)
+	}
+	if cfg.MaxAttempts == 0 {
+		cfg.MaxAttempts = DefaultMaxFillAttempts
+	}
+	if cfg.MaxHistoryTurns == 0 {
+		cfg.MaxHistoryTurns = DefaultMaxFillHistoryTurns
+	}
+	if cfg.MaxHistoryRunes == 0 {
+		cfg.MaxHistoryRunes = DefaultMaxFillHistoryRunes
+	}
+	if cfg.MaxResponseBytes == 0 {
+		cfg.MaxResponseBytes = DefaultMaxFillResponseBytes
+	}
+	return cfg, nil
+}
+
+// argumentsLimit 返回生效的参数字节上限
+func (r *Registry) argumentsLimit() int {
+	if r == nil || r.maxArgumentsBytes <= 0 {
+		return DefaultMaxArgumentsBytes
+	}
+	return r.maxArgumentsBytes
+}
+
+// contentLimit 返回生效的结果字节上限
+func (r *Registry) contentLimit() int {
+	if r == nil || r.maxContentBytes <= 0 {
+		return DefaultMaxContentBytes
+	}
+	return r.maxContentBytes
 }
 
 // specOf 在构造期读取工具定义并兜底 panic，坏工具只让 New 返回错误

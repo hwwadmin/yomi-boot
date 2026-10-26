@@ -15,12 +15,23 @@ import (
 // MaxToolNameBytes 是工具名字节上限，与主流模型服务对齐
 const MaxToolNameBytes = 64
 
-// Spec 工具定义；Name、Description、Parameters 面向模型，Metadata 仅宿主可见
+// Spec 工具定义；Name、Description、Parameters 面向模型，Fill、Metadata 仅宿主可见
 type Spec struct {
 	Name        string            `json:"name"`        // Name 是模型调用时使用的工具名
 	Description string            `json:"description"` // Description 是模型理解工具用途的描述
 	Parameters  json.RawMessage   `json:"parameters"`  // Parameters 是根类型为 object 的 JSON Schema
+	Fill        FillSpec          `json:"-"`           // Fill 是宿主侧填槽规则，不发给模型
 	Metadata    map[string]string `json:"-"`           // Metadata 是宿主标签，不发给模型
+}
+
+// FillSpec 描述填槽语义；与 Parameters 一起构成模型提示与运行时校验的完整契约
+type FillSpec struct {
+	Required       []string // Required 是缺槽候选键；simple tool 用默认检查，resolved tool 由 Validate 判定
+	IdentifierKeys []string // IdentifierKeys 是必须能在证据原文中找到的标识符键
+	Guidance       string   // Guidance 是给填槽模型的动作指导
+	Example        string   // Example 是期望 JSON 示例，只示范形状
+	MissingPrompt  string   // MissingPrompt 是缺槽时的默认追问文案
+	EvidenceOnly   bool     // EvidenceOnly 为 true 时跳过模型，直接从证据映射
 }
 
 // ValidateSpec 校验工具定义；供自定义 Tool 实现与注册表复用，非法返回 CodeInvalidArgument
@@ -62,10 +73,15 @@ func normalizeSpec(spec Spec) (Spec, []string, error) {
 	if err != nil {
 		return Spec{}, nil, newError(CodeInvalidArgument, defaultInvalidDefinitionMessage, name, "", err)
 	}
+	fill, err := normalizeFillSpec(spec.Fill)
+	if err != nil {
+		return Spec{}, nil, newError(CodeInvalidArgument, defaultInvalidDefinitionMessage, name, "", err)
+	}
 	return Spec{
 		Name:        name,
 		Description: description,
 		Parameters:  parameters,
+		Fill:        fill,
 		Metadata:    metadata,
 	}, required, nil
 }
@@ -150,10 +166,67 @@ func normalizeMetadata(metadata map[string]string) (map[string]string, error) {
 	return normalized, nil
 }
 
+// normalizeFillSpec 修剪填槽键与文案，并校验示例是 JSON 对象
+func normalizeFillSpec(fill FillSpec) (FillSpec, error) {
+	required, err := normalizeKeyList(fill.Required, "Required")
+	if err != nil {
+		return FillSpec{}, err
+	}
+	identifierKeys, err := normalizeKeyList(fill.IdentifierKeys, "IdentifierKeys")
+	if err != nil {
+		return FillSpec{}, err
+	}
+	example := strings.TrimSpace(fill.Example)
+	if example != "" && (example[0] != '{' || !json.Valid([]byte(example))) {
+		return FillSpec{}, errors.New("ai/tool: Fill.Example 必须是合法 JSON 对象")
+	}
+	return FillSpec{
+		Required:       required,
+		IdentifierKeys: identifierKeys,
+		Guidance:       strings.TrimSpace(fill.Guidance),
+		Example:        example,
+		MissingPrompt:  strings.TrimSpace(fill.MissingPrompt),
+		EvidenceOnly:   fill.EvidenceOnly,
+	}, nil
+}
+
+// normalizeKeyList 修剪键并拒绝空键与重复键
+func normalizeKeyList(keys []string, field string) ([]string, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(keys))
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		trimmed := strings.TrimSpace(key)
+		if trimmed == "" {
+			return nil, errors.Newf("ai/tool: Fill.%s 含空键", field)
+		}
+		if _, ok := seen[trimmed]; ok {
+			return nil, errors.Newf("ai/tool: Fill.%s 键 %q 重复", field, trimmed)
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out, nil
+}
+
+// fillSpecEmpty 判断填槽规则是否全部为零值
+func fillSpecEmpty(fill FillSpec) bool {
+	return len(fill.Required) == 0 &&
+		len(fill.IdentifierKeys) == 0 &&
+		fill.Guidance == "" &&
+		fill.Example == "" &&
+		fill.MissingPrompt == "" &&
+		!fill.EvidenceOnly
+}
+
 // cloneSpec 深拷贝工具定义，避免调用方修改返回值污染注册表
 func cloneSpec(spec Spec) Spec {
 	out := spec
 	out.Parameters = append(json.RawMessage(nil), spec.Parameters...)
+	out.Fill.Required = append([]string(nil), spec.Fill.Required...)
+	out.Fill.IdentifierKeys = append([]string(nil), spec.Fill.IdentifierKeys...)
 	if len(spec.Metadata) == 0 {
 		out.Metadata = nil
 		return out

@@ -11,6 +11,21 @@ type Call struct {
 	ID        string          `json:"id,omitempty"` // ID 是调用标识，可空
 	Name      string          `json:"name"`         // Name 是工具名；查找前 trim
 	Arguments json.RawMessage `json:"arguments"`    // Arguments 是 JSON 对象；空或 null 归一为 {}
+	Evidence  *Evidence       `json:"-"`            // Evidence 是宿主侧填槽证据；不序列化、不发给模型
+}
+
+// Evidence 填槽证据；由调用方收集，库只用于拼提示词与标识符门闩
+type Evidence struct {
+	UserInput string         `json:"user_input"`        // UserInput 是本轮用户原文
+	History   []EvidenceTurn `json:"history,omitempty"` // History 是同会话历史轮次
+	OCR       []string       `json:"ocr,omitempty"`     // OCR 是附件识别文本片段
+	Locale    string         `json:"locale,omitempty"`  // Locale 是语种，如 zh-CN
+}
+
+// EvidenceTurn 一条历史轮次
+type EvidenceTurn struct {
+	Role    string `json:"role"`    // Role 取值 user / assistant
+	Content string `json:"content"` // Content 是截断后正文
 }
 
 // Result 一次工具调用的结果
