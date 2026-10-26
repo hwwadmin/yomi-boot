@@ -1,4 +1,4 @@
-// 定义编排层哨兵错误；节点契约错误由各组件库透传。
+// 定义本包哨兵错误。
 //
 // @author zwei
 
@@ -9,7 +9,7 @@ import "gitee.com/hq_project/yomi-boot/component/core/errors"
 var (
 	// ErrInvalidArgument 配置或请求未通过本包校验
 	ErrInvalidArgument = errors.NewNoStack("AI_RAG_INVALID_ARGUMENT")
-	// ErrBadResponse 节点实现返回的数据不符合其门面契约（由本包编排侧兜底识别时使用）
+	// ErrBadResponse 节点实现返回的数据不符合契约
 	ErrBadResponse = errors.NewNoStack("AI_RAG_BAD_RESPONSE")
 )
 

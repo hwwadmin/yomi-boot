@@ -373,7 +373,8 @@ func TestMultipleCollections(t *testing.T) {
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "hr-1" {
 		t.Fatalf("人事库命中: %+v err=%v", out, err)
 	}
-	if err := e.DeleteDocument(ctx, "kb_sales", "sales-1"); err != nil {
+	// 文档删除与集合删除不属于两条流程，直接走 Store
+	if err := store.DeleteByFilter(ctx, "kb_sales", map[string]string{MetadataKeyDocumentID: "sales-1"}); err != nil {
 		t.Fatal(err)
 	}
 	out, err = e.Retrieve(ctx, "kb_hr", RetrieveRequest{
@@ -382,7 +383,7 @@ func TestMultipleCollections(t *testing.T) {
 	if err != nil || len(out.Chunks) != 1 {
 		t.Fatalf("删除销售库文档不应影响人事库: %+v err=%v", out, err)
 	}
-	if err := e.DropCollection(ctx, "kb_sales"); err != nil {
+	if err := store.DropCollection(ctx, "kb_sales"); err != nil {
 		t.Fatal(err)
 	}
 	hasSales, err := store.HasCollection(ctx, "kb_sales")
@@ -620,23 +621,17 @@ func TestRetrieveReturnsContextErrorFromChunkStateQuery(t *testing.T) {
 	}
 }
 
-// TestDeleteDocument 覆盖按文档删除与幂等语义
-func TestDeleteDocument(t *testing.T) {
+// TestDocumentDeletionViaStore 覆盖不经门面的文档删除：按保留键 rag_doc_id 经 Store 过滤删除
+func TestDocumentDeletionViaStore(t *testing.T) {
 	t.Parallel()
-	e, _, _ := newTestEngine(t)
+	e, _, store := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.DeleteDocument(ctx, testCollection, "missing"); err != nil {
-		t.Fatalf("集合不存在时应幂等: %v", err)
-	}
-	if err := e.DeleteDocument(ctx, testCollection, " "); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("非法文档 ID: %v", err)
-	}
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.DeleteDocument(ctx, testCollection, "doc"); err != nil {
+	if err := store.DeleteByFilter(ctx, testCollection, map[string]string{MetadataKeyDocumentID: "doc"}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
@@ -645,39 +640,13 @@ func TestDeleteDocument(t *testing.T) {
 	if err != nil || len(out.Chunks) != 0 {
 		t.Fatalf("删除后检索: %+v err=%v", out, err)
 	}
-	if err := e.DeleteDocument(ctx, testCollection, "doc"); err != nil {
+	// 重复删除幂等：集合内无该文档的块，Store 成功
+	if err := store.DeleteByFilter(ctx, testCollection, map[string]string{MetadataKeyDocumentID: "doc"}); err != nil {
 		t.Fatalf("重复删除应幂等: %v", err)
 	}
 }
 
-// TestCollectionLifecycle 覆盖集合创建与删除的幂等
-func TestCollectionLifecycle(t *testing.T) {
-	t.Parallel()
-	e, _, _ := newTestEngine(t)
-	ctx := context.Background()
-	if err := e.EnsureCollection(ctx, testCollection); err != nil {
-		t.Fatal(err)
-	}
-	has, err := e.store.HasCollection(ctx, testCollection)
-	if err != nil || !has {
-		t.Fatalf("集合未创建: has=%v err=%v", has, err)
-	}
-	if err := e.EnsureCollection(ctx, testCollection); err != nil {
-		t.Fatalf("重复创建: %v", err)
-	}
-	if err := e.DropCollection(ctx, testCollection); err != nil {
-		t.Fatal(err)
-	}
-	has, err = e.store.HasCollection(ctx, testCollection)
-	if err != nil || has {
-		t.Fatalf("集合未删除: has=%v err=%v", has, err)
-	}
-	if err := e.DropCollection(ctx, testCollection); err != nil {
-		t.Fatalf("重复删除: %v", err)
-	}
-}
-
-// TestCollectionValidation 覆盖集合名校验
+// TestCollectionValidation 覆盖两条流程的集合名校验
 func TestCollectionValidation(t *testing.T) {
 	t.Parallel()
 	e, emb, _ := newTestEngine(t)
@@ -687,18 +656,14 @@ func TestCollectionValidation(t *testing.T) {
 	}}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("空集合名: %v", err)
 	}
+	if _, err := e.Index(ctx, "bad-name", IndexRequest{Documents: []Document{
+		{ID: "doc", Content: "x"},
+	}}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("非法集合名: %v", err)
+	}
 	if _, err := e.Retrieve(ctx, "bad-name", RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{Query: "x", TopK: 5},
 	}); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("非法集合名: %v", err)
-	}
-	if err := e.DeleteDocument(ctx, "1bad", "doc"); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("非法集合名: %v", err)
-	}
-	if err := e.EnsureCollection(ctx, "  "); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("空白集合名: %v", err)
-	}
-	if err := e.DropCollection(ctx, "bad-name"); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("非法集合名: %v", err)
 	}
 	if emb.callCount() != 0 {
@@ -923,7 +888,7 @@ func TestRetrieveSkipsForeignChunks(t *testing.T) {
 	t.Parallel()
 	e, _, store := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.EnsureCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Upsert(ctx, testCollection, []vectordb.Record{

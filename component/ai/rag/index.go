@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sort"
-	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
@@ -33,7 +32,7 @@ func newVersion() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-// chunkedDocument 切分后的文档
+// chunkedDocument 切块后的文档
 type chunkedDocument struct {
 	doc     Document
 	chunks  []string
@@ -46,7 +45,7 @@ type indexBatch struct {
 	texts []string
 }
 
-// Index 实现 Engine：切分、向量化并写入指定集合；集合不存在时自动创建
+// Index 实现 Engine：切块、向量化并写入指定集合；集合不存在时自动创建
 func (e *engine) Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error) {
 	ctx = orBackground(ctx)
 	name, err := normalizeCollection(collection)
@@ -61,7 +60,7 @@ func (e *engine) Index(ctx context.Context, collection string, req IndexRequest)
 	if chunker == nil {
 		chunker = e.chunker
 	}
-	// 先完成切分与边界校验，避免非法请求创建空集合
+	// 先切块并校验，全部通过后再写入
 	prepared, err := chunkDocuments(chunker, docs)
 	if err != nil {
 		return nil, err
@@ -87,8 +86,7 @@ func chunkDocuments(chunker chunking.Chunker, docs []Document) ([]chunkedDocumen
 		if err != nil {
 			return nil, err
 		}
-		// 内置 Chunker 已保证块非空且不超长；这里兜底自定义 Chunker 的输出，
-		// 违反切块契约的错误原样透传
+		// 校验块契约：空白块丢弃，超长块返回 chunking.ErrInvalidArgument
 		chunks, err = chunking.NormalizeChunks(chunks)
 		if err != nil {
 			return nil, err
@@ -125,7 +123,6 @@ func buildIndexBatches(prepared []chunkedDocument, maxChunks int) []indexBatch {
 
 // writeBatch 对一批文档执行向量化、写入与旧块清理；返回本批向量化用量
 func (e *engine) writeBatch(ctx context.Context, collection string, batch indexBatch) (int, error) {
-	// 分批由 embedding 内部按 MaxBatch 处理，本层整批调用
 	resp, err := e.embedder.Embed(ctx, embedding.Request{Inputs: batch.texts})
 	if err != nil {
 		return 0, err
@@ -147,18 +144,17 @@ func (e *engine) writeBatch(ctx context.Context, collection string, batch indexB
 		}
 		offset += len(p.chunks)
 	}
-	// 写入阶段按文档加锁；条带锁只保证进程内，跨实例需调用方串行
+	// 同一文档的写入按条带锁串行（进程内）
 	unlock := e.lockDocuments(collection, batch.docs)
 	defer unlock()
 	if err := e.ensureCollection(ctx, collection); err != nil {
 		return 0, err
 	}
-	// 先写新块：Upsert 失败时不会删除旧块，可能出现新旧块并存，重试可自愈
+	// 先写新块再清理旧块：写入失败时旧块保持完整，重试即可
 	if err := e.store.Upsert(ctx, collection, records); err != nil {
 		return 0, err
 	}
-	// 写入成功后列出各文档现有块，删除不在本次新块集合中的旧块；
-	// 删除失败或进程崩溃时旧块仍在，下次 Index 会重新枚举并清理，可自愈
+	// 写入成功后删除该文档多余的旧块；清理失败时下次 Index 会重新清理
 	for _, p := range batch.docs {
 		if err := e.deleteStaleChunks(ctx, collection, p.doc.ID, len(p.chunks)); err != nil {
 			return 0, err
@@ -171,24 +167,6 @@ func (e *engine) writeBatch(ctx context.Context, collection string, batch indexB
 	return tokens, nil
 }
 
-// DeleteDocument 实现 Engine：删除指定集合中文档的所有块
-func (e *engine) DeleteDocument(ctx context.Context, collection, docID string) error {
-	ctx = orBackground(ctx)
-	name, err := normalizeCollection(collection)
-	if err != nil {
-		return err
-	}
-	id := strings.TrimSpace(docID)
-	if err := validateDocID(id); err != nil {
-		return err
-	}
-	err = e.store.DeleteByFilter(ctx, name, map[string]string{MetadataKeyDocumentID: id})
-	if errors.Is(err, vectordb.ErrNotFound) {
-		return nil
-	}
-	return err
-}
-
 // deleteStaleChunks 删除指定集合中不属于本次新块集合的旧块
 func (e *engine) deleteStaleChunks(ctx context.Context, collection, docID string, newCount int) error {
 	keep := make(map[string]struct{}, newCount)
@@ -197,7 +175,7 @@ func (e *engine) deleteStaleChunks(ctx context.Context, collection, docID string
 	}
 	ids, err := e.store.ListIDs(ctx, collection, map[string]string{MetadataKeyDocumentID: docID})
 	if err != nil {
-		// 写入已成功，集合此时不应消失；列出失败必须上报，不能把失败当成功
+		// 列出失败时直接上报
 		return err
 	}
 	stale := make([]string, 0, len(ids))
@@ -210,7 +188,6 @@ func (e *engine) deleteStaleChunks(ctx context.Context, collection, docID string
 	if len(stale) == 0 {
 		return nil
 	}
-	// 主键分批由 vectordb 内部处理
 	return e.store.Delete(ctx, collection, stale)
 }
 

@@ -1,4 +1,4 @@
-// 路径②文档检索增强：检索（含域过滤） → 精重排 → 提示词拼接。
+// 路径②文档检索增强：检索（含域过滤）→ 精重排 → 提示词拼接。
 //
 // @author zwei
 
@@ -14,11 +14,10 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// Retrieve 实现 Engine：检索增强 → 精重排 → 提示词拼接
+// Retrieve 实现 Engine：检索（含域过滤）→ 精重排 → 提示词拼接
 //
-// 检索段（入参校验、查询向量化、策略路由、前置与阈值过滤、后置域过滤）全部由
-// ai/retrieval 门面执行：本包把文档域过滤器经 RetrieveRequest.PostFilter 交给
-// 检索层（旧块丢弃、缺块文本命中忽略），检索入参非法与域过滤错误透传其哨兵。
+// 检索段由 ai/retrieval 门面执行（入参校验、查询向量化、策略路由、前置与阈值过滤、
+// 后置域过滤），本包经 RetrieveRequest.PostFilter 注入文档域过滤器；检索错误透传其哨兵。
 func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error) {
 	name, err := normalizeCollection(collection)
 	if err != nil {
@@ -28,6 +27,7 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 	ctx = orBackground(ctx)
+	// 域过滤器交给检索层执行
 	req.RetrieveRequest.PostFilter = e.filter
 	hits, err := e.retriever.Retrieve(ctx, name, req.RetrieveRequest)
 	if err != nil {
@@ -55,7 +55,7 @@ func decodeHits(hits []vectordb.Hit) []Chunk {
 }
 
 // applyRerank 精重排：候选块文本交 Reranker，结果按下标回取并回填 RerankScore；
-// 无命中时跳过（重排契约要求至少 1 条候选）
+// 无命中时跳过
 func applyRerank(ctx context.Context, reranker rerank.Reranker, query string, chunks []Chunk, topN int) ([]Chunk, error) {
 	if len(chunks) == 0 {
 		return chunks, nil
@@ -84,7 +84,7 @@ func applyRerank(ctx context.Context, reranker rerank.Reranker, query string, ch
 	return out, nil
 }
 
-// assemblePrompt 提示词拼接：重排后的块交 Generator，并核对输出契约
+// assemblePrompt 提示词拼接：重排后的块交 Generator，并校验输出契约
 func assemblePrompt(ctx context.Context, generator generation.Generator, query string, chunks []Chunk) (string, error) {
 	contexts := make([]generation.Context, len(chunks))
 	for i, c := range chunks {

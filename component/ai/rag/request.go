@@ -18,7 +18,7 @@ type IndexRequest struct {
 // IndexResult 文档入库结果
 type IndexResult struct {
 	Documents int // Documents 是写入的文档数
-	Chunks    int // Chunks 是切分并写入的块数
+	Chunks    int // Chunks 是写入的块数
 	Tokens    int // Tokens 是向量化用量合计；上游未提供时为 0
 }
 

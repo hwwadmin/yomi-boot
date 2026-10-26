@@ -1,4 +1,4 @@
-// 门面接口、Engine 实现与集合生命周期。
+// 门面接口与 Engine 实现。
 //
 // @author zwei
 
@@ -17,24 +17,18 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// Engine RAG 两条流程的门面接口；实现须并发安全
+// Engine 编排两条 RAG 流程：文档入库与文档检索增强；实现须并发安全。
+// 文档删除与集合管理直接使用 vectordb.Store。
 type Engine interface {
-	// Index 路径①文档入库：切块 → 向量化 → 写入指定集合；集合不存在时自动创建
+	// Index 文档入库：切块 → 向量化 → 写入指定集合；集合不存在时自动创建。
 	//
-	// 同一 ID 重复写入会覆盖同序号块，并清理本次新块集合之外的旧块。
+	// 同一 ID 重复写入覆盖同序号块，并清理本次新块集合之外的旧块。
 	Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error)
 
-	// Retrieve 路径②文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接
+	// Retrieve 文档检索增强：检索（含域过滤）→ 精重排 → 提示词拼接。
 	//
 	// 集合不存在或为空时返回空 Chunks 与由 Generator 拼接的 Prompt。
 	Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error)
-
-	// DeleteDocument 删除指定集合中文档的所有块；集合不存在时返回 nil
-	DeleteDocument(ctx context.Context, collection, docID string) error
-	// EnsureCollection 确保集合存在；已存在时返回 nil
-	EnsureCollection(ctx context.Context, collection string) error
-	// DropCollection 删除集合；不存在时返回 nil
-	DropCollection(ctx context.Context, collection string) error
 }
 
 // engine 是 Engine 的实现；构造后不可变，可并发调用
@@ -74,24 +68,6 @@ func newEngine(cfg Config) (*engine, error) {
 		generator: cfg.Generator,
 		store:     cfg.Store,
 	}, nil
-}
-
-// EnsureCollection 实现 Engine
-func (e *engine) EnsureCollection(ctx context.Context, collection string) error {
-	name, err := normalizeCollection(collection)
-	if err != nil {
-		return err
-	}
-	return e.ensureCollection(orBackground(ctx), name)
-}
-
-// DropCollection 实现 Engine
-func (e *engine) DropCollection(ctx context.Context, collection string) error {
-	name, err := normalizeCollection(collection)
-	if err != nil {
-		return err
-	}
-	return e.store.DropCollection(orBackground(ctx), name)
 }
 
 // ensureCollection 查询并按需创建集合；并发创建撞车时视为成功

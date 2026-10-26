@@ -1,4 +1,4 @@
-// 构造配置；本包不读 YAML。
+// 构造配置。
 //
 // @author zwei
 
@@ -19,15 +19,14 @@ const (
 	maxChunksPerDoc = 10000
 )
 
-// Config 创建 Engine 的构造配置；两条流程的门面节点与基础设施全部必填，
-// 各节点的具体实现（切块策略、向量化、检索、重排、提示词拼接）由调用方装配
+// Config 创建 Engine 的构造配置：5 个流程门面与向量库全部注入且必填
 type Config struct {
-	Chunker   chunking.Chunker     // Chunker 是路径①切块节点；必填；可经 IndexRequest.Chunker 按调用覆盖
-	Embedder  embedding.Client     // Embedder 是路径①向量化节点；必填
-	Retriever retrieval.Retriever  // Retriever 是路径②检索节点；必填；须与 Store 基于同一向量库，其查询向量化须与 Embedder 同模型同维度
-	Reranker  rerank.Reranker      // Reranker 是路径②精重排节点；必填；未接入重排模型可用 rerank.NewPassThrough
-	Generator generation.Generator // Generator 是路径②提示词拼接末节点；必填；未定制模板可用 generation.NewBasic
-	Store     vectordb.Store       // Store 是向量库基础设施（写入与域过滤辅助查询）；必填；各集合 Dimension 必须与向量化输出一致
+	Chunker   chunking.Chunker     // Chunker 是文档入库的切块节点；可经 IndexRequest.Chunker 按调用覆盖
+	Embedder  embedding.Client     // Embedder 是文档入库的向量化节点
+	Retriever retrieval.Retriever  // Retriever 是检索节点；与 Store 使用同一向量库，查询向量化与 Embedder 同模型同维度
+	Reranker  rerank.Reranker      // Reranker 是精重排节点；未接入重排模型时用 rerank.NewPassThrough
+	Generator generation.Generator // Generator 是提示词拼接节点；未定制模板时用 generation.NewBasic
+	Store     vectordb.Store       // Store 是向量库（写入与域过滤辅助查询）；向量维度与向量化输出一致
 }
 
 // validate 校验构造配置

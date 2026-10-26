@@ -1,14 +1,10 @@
-// Package rag 提供两条标准化 RAG 流程的编排：文档入库与文档检索增强。
+// Package rag 提供两条 RAG 流程的编排：文档入库与文档检索增强。
 //
-// 本包只做流程编排，不实现任何流程节点：切块、向量化、检索、精重排与提示词拼接
-// 分别由 component/ai/chunking、ai/embedding、ai/retrieval、ai/rerank、ai/generation
-// 的门面负责，构造时经 Config 全部注入（全部必填）；本包在节点之间补齐文档域语义——
-// 写入侧的块主键、保留元数据键、文档版本与旧块清理，检索侧的旧块过滤。
-// 向量库 Store 是基础设施依赖（写入与域过滤辅助查询），不是流程节点。
-// 门面接口见 Engine，由 New / MustNew 构造。
-// 同一个 Engine 可并发服务多个集合（不同业务使用不同集合名即可）。
-// 配置只在 New / MustNew 传入；本包不读 YAML、不进插件链、不注册配置根段。
-// 本包不持有各依赖的关闭权，进程退出时由调用方自行关闭。
+// 两条流程由 5 个门面组件协作：切块（ai/chunking）、向量化（ai/embedding）、
+// 检索（ai/retrieval）、精重排（ai/rerank）与提示词拼接（ai/generation），
+// 构造时经 Config 全部注入；向量库（vectordb.Store）负责数据存取。
+// 本包负责流程串联与文档域约定：块主键、保留元数据键、文档版本与旧块清理。
+// 同一个 Engine 可并发服务多个集合；配置经 New / MustNew 传入，各依赖的关闭由调用方负责。
 //
 // # 基本用法
 //
@@ -35,94 +31,74 @@
 //	    RerankTopN:      5,
 //	})
 //	// result.Prompt 直接作为大模型输入；result.Chunks 供引用标注
-//	err = engine.DeleteDocument(ctx, "kb_sales", "doc-1")
 //
 // # 两条流程
 //
-//	路径① 文档入库：Document → Chunker 切块 → Embedder 向量化 → Store 写入；
-//	  本包负责块主键（"文档ID#序号"）、保留元数据键、文档版本与旧块清理、
-//	  条带锁与按块预算分批写入。
+//	路径① 文档入库：Document → Chunker 切块 → Embedder 向量化 → Store 写入
 //	路径② 文档检索增强：Query → Retriever 检索（含域过滤）→ Reranker 精重排
-//	  → Generator 拼接提示词；返回 Prompt（直接交大模型）与重排后的 Chunks。
+//	  → Generator 拼接提示词
 //
-// 装配约束：Retriever 须与 Store 基于同一向量库，其查询向量化须与 Embedder
-// 同模型同维度；不一致时写入与检索将互不相认或由 vectordb 校验报错
-// （记录与查询向量维度由 vectordb 按集合 Dimension 校验）。
+// 装配要求：Retriever 与 Store 使用同一向量库；Embedder 与 Retriever 的查询
+// 向量化使用同一模型与维度。
 //
-// # 多集合
+// # 多集合与文档删除
 //
-// 集合名每次调用传入；Index 对不存在的集合自动创建，Retrieve 在集合不存在时返回
-// 空 Chunks 与由 Generator 拼接的 Prompt，DeleteDocument 在集合不存在时返回 nil。
-// 不同业务共用同一个 Engine 时，用不同集合名隔离数据即可；所有集合共用同一
-// Store 的向量维度与 Metric。
+// 集合名每次调用传入：Index 自动创建不存在的集合，Retrieve 在集合不存在时返回空
+// Chunks 与由 Generator 拼接的 Prompt。不同业务用不同集合名隔离数据，所有集合共用
+// 同一 Store 的向量维度与 Metric。集合创建/删除与文档删除直接使用 vectordb.Store
+// （保留键 MetadataKeyDocumentID 即 rag_doc_id）：
+//
+//	err = store.DeleteByFilter(ctx, "kb_sales", map[string]string{rag.MetadataKeyDocumentID: "doc-1"})
 //
 // # 切块
 //
-// Config.Chunker 必填，内置策略 recursive / fixed / sentence / markdown 及其配置见
-// component/ai/chunking；IndexRequest.Chunker 可按调用覆盖（如 Markdown 文档与
-// 纯文本走不同策略）。也可实现 chunking.Chunker 注入自定义策略，Engine 对其输出
-// 兜底校验，违反契约透传 chunking.ErrInvalidArgument。
-// 块长按 rune 计，单块不得超过 chunking.MaxChunkSize 字。
+// Config.Chunker 是默认切块策略，内置 recursive / fixed / sentence / markdown 见
+// component/ai/chunking；IndexRequest.Chunker 可按调用覆盖，例如 Markdown 文档与
+// 纯文本使用不同策略。自定义 chunking.Chunker 的输出由 Engine 校验，违反契约透传
+// chunking.ErrInvalidArgument。块长按 rune 计，单块不超过 chunking.MaxChunkSize 字。
 //
 // # 运行期参数
 //
-//   - 集合名、IndexRequest.Chunker、RetrieveRequest.Strategy/TopK/MinScore/Filter/
+//   - 集合名、IndexRequest.Chunker、RetrieveRequest 的 Strategy/TopK/MinScore/Filter/
 //     RerankTopN 都按调用传入
-//   - RetrieveRequest.TopK 必填；MinScore 为 0 表示不设阈值；RerankTopN 为 0 表示
-//     重排后全部保留
-//   - Engine 不内置超时，使用调用方 ctx 控制
-//   - Store 的维度与 Metric 由 Store 构造配置决定，其下所有集合一致
+//   - TopK 必填；MinScore 为 0 表示不设阈值；RerankTopN 为 0 表示重排后全部保留
+//   - Engine 使用调用方 ctx 控制超时
+//   - Store 的向量维度与 Metric 由构造配置决定，其下所有集合一致
 //
 // # 写入
 //
-//   - 块主键为 "文档ID#序号"；内容与切分信息写入保留元数据键，文档自定义元数据原样合并
-//   - 块原文同时写入向量库 Text 字段，供混合检索的 BM25 一路命中；不额外占向量维度
-//   - 每个块写入文档当前版本（保留键 rag_version）与块总数（rag_chunk_count），供检索侧过滤旧块
-//   - 同一文档重复 Index 会覆盖同序号块，并在写入成功后删除该文档中不属于本次新块集合的旧块
-//   - Index 按块预算（256 块）分批写入，避免一次请求把全部向量与记录同时放在内存；
-//     向量化与主键分批由 embedding / vectordb 内部承担；中途失败时已写入的批次保留，重试即可
-//   - 旧块清理依据保留键 rag_doc_id 列出该文档现有块，不依赖块数元数据
-//   - 同一文档的写入阶段由库内条带锁串行；条带锁仅保证进程内，跨实例需调用方用分布式锁或串行投递
-//   - Upsert 失败时不会删除旧块（可能夹杂已写入的新块）；检索按当前版本与块总数过滤，正常情况不会返回旧版本块，重试可自愈
-//   - 不同文档、不同集合可并发；条带碰撞会短暂串行
-//   - 保留元数据键见 MetadataKeyDocumentID 等常量，Document.Metadata 不得使用
+//   - 块主键为 "文档ID#序号"；块内容、切块信息与文档自定义元数据合并写入，保留键见
+//     MetadataKeyDocumentID 等常量，Document.Metadata 不使用保留键
+//   - 块原文同时写入向量库 Text 字段，供混合检索的 BM25 一路命中
+//   - 每块携带文档当前版本（rag_version）与块总数（rag_chunk_count），检索侧据此识别旧块
+//   - 同一文档重复 Index 覆盖同序号块，并在写入成功后删除多余旧块
+//   - Index 按 256 块分批写入，控制内存峰值；中途失败时已写入的批次保留，重试即可补全
+//   - 同一文档的写入阶段用条带锁串行（进程内）；跨实例由调用方用分布式锁或串行投递
+//   - Upsert 失败时旧块保持完整，重试后数据一致
 //
 // # 检索增强
 //
-// 编排顺序：检索（含三层过滤）→ 精重排 → 提示词拼接。
+// Retrieve 依次执行检索、精重排与提示词拼接：
 //
-//   - 检索段由 component/ai/retrieval 门面执行（入参校验、查询向量化、策略路由、
-//     前置过滤、阈值过滤与后置过滤），检索入参非法透传其哨兵；hybrid（默认）/
-//     vector 的策略口径见其文档
-//   - 域过滤是检索链路的后置过滤，实现由 ai/retrieval 的内置文档版本过滤器
-//     （retrieval.NewDocumentFilter）承担——缺少块文本的命中忽略；读取命中文档
-//     当前版本与块总数，丢弃版本不一致或索引超出总数的旧块；辅助查询失败时降级为
-//     不过滤并告警。本包只声明保留键与首块主键推导，并经 RetrieveRequest.PostFilter
-//     固定注入，调用方传值会被覆盖；直接使用 ai/retrieval 检索本包写入的集合时，
-//     可按相同键配置自行装配该过滤器获得旧块过滤
-//   - 精重排：过滤后的块文本交由 Reranker，TopN 取 RerankTopN；无命中时跳过
-//     （重排契约要求至少 1 条候选）；结果经 rerank.Apply 按下标回取并回填
-//     RerankScore，下标越界、nil 响应等违约为 rerank.ErrBadResponse；
-//     重排候选超过 rerank.MaxDocs 时由重排契约拒绝（透传 AI_RERANK_INVALID_ARGUMENT），
-//     请下调 TopK
-//   - 拼接：重排后的块（Content + Source）交由 Generator，Prompt 直接作为大模型输入；
-//     检索无命中时以空上下文拼接，拼接方式由实现决定；输出经
-//     generation.ValidateResponse 核对，空提示词为 generation.ErrBadResponse
-//   - Chunks 顺序 = 重排后顺序（RerankScore 口径由 Reranker 定义，PassThrough 恒 0，
-//     顺序即检索顺序）；Score 是检索/融合分，与 RerankScore 不可横比
-//   - Score 越大越相似；不同 Metric 与不同 Strategy 的 Score 不可横比
-//   - DeleteDocument：删除文档全部块；集合不存在时返回 nil
+//   - 检索由 ai/retrieval 执行：查询向量化、hybrid（默认）/ vector 策略、前置元数据
+//     过滤、MinScore 阈值与后置域过滤；检索入参非法透传其哨兵
+//   - 域过滤由 ai/retrieval 的文档版本过滤器完成，本包提供保留键与首块主键：缺少块
+//     文本的命中忽略，版本不一致或序号超出块总数的旧块丢弃，辅助查询失败时放行并告警
+//   - 精重排把过滤后的块文本交给 Reranker，保留前 RerankTopN 条，无命中时跳过；
+//     结果经 rerank.Apply 按下标回取并回填 RerankScore，下标越界为 rerank.ErrBadResponse
+//   - 拼接把重排后的块（Content + Source）交给 Generator，Prompt 直接作为大模型输入；
+//     无命中时以空上下文拼接；空提示词为 generation.ErrBadResponse
+//   - Chunks 顺序即重排后顺序；Score 是检索/融合分，RerankScore 是重排分（PassThrough 恒 0）
+//   - 重排候选超过 rerank.MaxDocs 时由重排契约拒绝，请下调 TopK
 //
 // # 错误
 //
-// 包内哨兵：ErrInvalidArgument（本包配置与编排入参）/ ErrBadResponse（节点实现
-// 返回数据不符合其门面契约时由本包兜底识别，如向量化返回条数与输入不一致）。
-// chunking / embedding / vectordb / retrieval / rerank / generation 的错误原样透传，
-// 可用 errors.Is 判断其哨兵：切块契约→chunking.ErrInvalidArgument，检索入参→
-// retrieval.ErrInvalidArgument，查询与写入向量维度→vectordb.ErrInvalidArgument，
-// 重排输出违约→rerank.ErrBadResponse，拼接输出违约→generation.ErrBadResponse。
+// 本包哨兵：ErrInvalidArgument（配置与编排入参）/ ErrBadResponse（节点返回数据不符合契约）。
+// 其余错误透传各组件哨兵：chunking.ErrInvalidArgument（切块契约）、retrieval.ErrInvalidArgument
+// （检索入参）、vectordb.ErrInvalidArgument（向量维度）、rerank.ErrBadResponse（重排输出）、
+// generation.ErrBadResponse（拼接输出）。
 //
-// Engine 构造后不可变，可并发调用；请勿复制实现值。
+// Engine 构造后不可变，可并发调用。
 //
 // @author zwei
 package rag
