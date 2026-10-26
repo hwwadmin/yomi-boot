@@ -183,9 +183,9 @@ services/{domain}/
 | `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`masking`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
-| `component/ai/` | `llm`、`embedding`、`jev`、`chunking`、`retrieval`、`rag`、`vectordb`、`rerank`、`generation` |
+| `component/ai/` | `llm`、`embedding`、`jev`、`chunking`、`retrieval`、`rag`、`vectordb`、`rerank`、`generation`、`tool` |
 
-依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/ai` 内部 `retrieval` 依赖 `embedding` + `vectordb`，`rag` 依赖 `chunking`/`embedding`/`retrieval`/`rerank`/`generation`/`vectordb`，`llm`/`embedding`/`jev`/`chunking`/`rerank`/`generation` 互不依赖；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`，`plugin/builtin` 根包可 import 全部子包（子包不得 import 根包）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/builtin` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段与访问器。
+依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/ai` 内部 `retrieval` 依赖 `embedding` + `vectordb`，`rag` 依赖 `chunking`/`embedding`/`retrieval`/`rerank`/`generation`/`vectordb`，`llm`/`embedding`/`jev`/`chunking`/`rerank`/`generation`/`tool` 互不依赖；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`，`plugin/builtin` 根包可 import 全部子包（子包不得 import 根包）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/builtin` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段与访问器。
 
 | 包 | 职责 |
 | -- | ---- |
@@ -254,6 +254,7 @@ services/{domain}/
 | `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Metric 锁在 Store，向量维度按集合传入并锁定在集合上（不同集合可不同，维度一致性由 Store 校验）；动态 Create/Drop/Replace 集合与 `EnsureCollection`（带维度）；`ReplaceByFilter` 按过滤键覆盖写入并清理旧记录（同键实例内串行）；Search 按 `SearchQuery.Text` 切换纯向量 / 向量+BM25 混合检索（RRF 融合；milvus 原生全文检索要求 2.5+，memory 自带 BM25）；不进插件链、不读 YAML |
 | `component/ai/rerank` | 通用精重排门面契约：`Reranker` 接口 + 请求/结果类型，无 Engine 中间层、不含模型接入；业务实现接口接入自有模型，`ValidateRequest` / `RankScores` / `Apply` 供实现与调用方复用（契约的可执行形式），内置 PassThrough（保序返回 TOP-N）占位；单次候选上限 `MaxDocs`；独立哨兵 `AI_RERANK_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
 | `component/ai/generation` | 提示词拼接门面契约：`Generator` 接口（把用户问题与检索到的文档块拼接为最终输入提示词）+ 请求/结果类型，无 Engine 中间层、不含提示词模板与大模型接入；业务实现接口定制模板（拼接结果可配合 `component/ai/llm` 发送），`ValidateRequest` / `ValidateResponse` 供实现与调用方复用（契约的可执行形式），内置 Basic（问题 + 编号参考资料固定模板）占位；独立哨兵 `AI_GENERATION_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
+| `component/ai/tool` | 协议无关的工具调用组件：`Spec`（原生 JSON Schema + 宿主 Metadata）/ `Tool` / `Registry` / `Call` / `Result`，`NewFunc` / `NewTyped` 适配函数工具，`Specs` / `Lookup` / `Invoke` / `InvokeAll` 提供定义快照与安全执行；参数只做对象形态与根级 required 校验，执行层统一 panic 恢复、参数/结果上限（默认 8 MiB，可配置）、防御性拷贝与批量固定 worker（默认顺序、不 fail-fast）；对外错误统一为 `*Error`（Code/Message/Tool/CallID，不实现 Unwrap，底层原因只经 Cause 供进程内日志），工具可实现 `SafeError` 提供安全文案；`AI_TOOL_*` 独立错误码；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
 
 **平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/` 下，按数据库分 `mysql/` 与 `pgsql/` 两个目录，同名文件字段口径一致，修改时须同步两份）：
@@ -610,6 +611,7 @@ kafka: ...
 | RAG 入库 / 检索 / 删除 | `component/ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；切块经 `component/ai/chunking`，可注入自定义 `Chunker`；检索经 `component/ai/retrieval` 并叠加旧块过滤；基于 `component/ai/embedding` + `component/ai/vectordb`；不含问答；不读 YAML） |
 | 向量写入 / ANN 检索 / 动态索引 | `component/ai/vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
 | 精重排 Rerank | `component/ai/rerank`（实现 `Reranker` 接口接入自有模型，`ValidateRequest` / `RankScores` 供实现复用；PassThrough 保序 TOP-N 占位；与 ai 其他组件零依赖；不读 YAML） |
+| 工具定义 / 注册 / 执行 | `component/ai/tool`（`Spec` 原生 JSON Schema；`Registry` 不可变；`NewFunc` / `NewTyped`；`Invoke` / `InvokeAll`；对外错误统一 `*Error`，底层原因只经 Cause 进内部日志；与 ai 其他组件零依赖；不读 YAML） |
 | 雪花 ID | `snowflake` |
 | 错误码 / 信封 DTO | `errors`、`shared/error`、`shared/dto` |
 | 集成测试 HTTP 调用 | `testclient` |
