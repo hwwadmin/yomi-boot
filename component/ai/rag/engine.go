@@ -23,17 +23,18 @@ type Engine interface {
 	//
 	// 同一 ID 重复写入会覆盖同序号块，并清理本次新块集合之外的旧块。
 	Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error)
+
+	// Retrieve 路径②文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接
+	//
+	// 集合不存在或为空时返回空 Chunks 与由 Generator 拼接的 Prompt。
+	Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error)
+
 	// DeleteDocument 删除指定集合中文档的所有块；集合不存在时返回 nil
 	DeleteDocument(ctx context.Context, collection, docID string) error
 	// EnsureCollection 确保集合存在；已存在时返回 nil
 	EnsureCollection(ctx context.Context, collection string) error
 	// DropCollection 删除集合；不存在时返回 nil
 	DropCollection(ctx context.Context, collection string) error
-
-	// Retrieve 路径②文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接
-	//
-	// 集合不存在或为空时返回空 Chunks 与由 Generator 拼接的 Prompt。
-	Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error)
 }
 
 // engine 是 Engine 的实现；构造后不可变，可并发调用

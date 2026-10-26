@@ -28,7 +28,6 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 	ctx = orBackground(ctx)
-	// 域过滤是检索链路的一环：由本包的过滤器实现，检索层负责应用
 	req.RetrieveRequest.PostFilter = e.filter
 	hits, err := e.retriever.Retrieve(ctx, name, req.RetrieveRequest)
 	if err != nil {
