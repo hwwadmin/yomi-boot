@@ -60,11 +60,15 @@ func newEngine(cfg Config) (*engine, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+	filter, err := newChunkFilter(cfg.Store)
+	if err != nil {
+		return nil, err
+	}
 	return &engine{
 		chunker:   cfg.Chunker,
 		embedder:  cfg.Embedder,
 		retriever: cfg.Retriever,
-		filter:    newChunkFilter(cfg.Store),
+		filter:    filter,
 		reranker:  cfg.Reranker,
 		generator: cfg.Generator,
 		store:     cfg.Store,

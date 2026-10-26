@@ -6,6 +6,8 @@ package rag
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"sort"
 	"strings"
 
@@ -21,6 +23,15 @@ const (
 	// indexLockStripes 是 Index 写入阶段的锁条数；同一文档命中同一条带
 	indexLockStripes = 64
 )
+
+// newVersion 生成文档写入版本；检索侧据此区分新旧块
+func newVersion() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
 
 // chunkedDocument 切分后的文档
 type chunkedDocument struct {

@@ -47,11 +47,6 @@ func encodeChunkMetadata(doc Document, index, total int, version, content string
 	return md
 }
 
-// hasContent 判断命中是否含块文本；非本包写入的命中不含
-func hasContent(hit vectordb.Hit) bool {
-	return strings.TrimSpace(hit.Metadata[MetadataKeyContent]) != ""
-}
-
 // decodeHit 将含块文本的命中转为块，并剥离保留元数据键
 func decodeHit(hit vectordb.Hit) Chunk {
 	c := Chunk{

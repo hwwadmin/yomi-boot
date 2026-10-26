@@ -34,7 +34,10 @@
 //   - 阈值过滤：RetrieveRequest.MinScore 在检索返回后按分数过滤，0 表示不设阈值
 //   - 后置过滤：RetrieveRequest.PostFilter 是 HitFilter 扩展点，在阈值过滤后应用，
 //     供调用方叠加域语义（如文档版本治理、内容完整性）；nil 表示不过滤，
-//     返回 vectordb.ErrNotFound 等同于集合消失（按空结果处理），其他错误原样上抛
+//     返回 vectordb.ErrNotFound 等同于集合消失（按空结果处理），其他错误原样上抛。
+//     内置默认实现 NewDocumentFilter：按调用方声明的元数据键丢弃非当前版本的旧块
+//     （版本不一致或序号超出块总数），可选丢弃缺少块文本的命中；辅助查询失败时
+//     降级为不过滤并告警
 //
 // # 契约
 //

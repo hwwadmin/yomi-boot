@@ -94,11 +94,12 @@
 //   - 检索段由 component/ai/retrieval 门面执行（入参校验、查询向量化、策略路由、
 //     前置过滤、阈值过滤与后置过滤），检索入参非法透传其哨兵；hybrid（默认）/
 //     vector 的策略口径见其文档
-//   - 域过滤是检索链路的后置过滤：本包实现 retrieval.HitFilter 并经
-//     RetrieveRequest.PostFilter 交给检索层执行——缺少块文本的命中忽略；读取命中
-//     文档当前版本与块总数，丢弃版本不一致或索引超出总数的旧块；辅助查询失败时
-//     降级为不过滤并告警。RetrieveRequest.PostFilter 由本包固定注入，调用方传值
-//     会被覆盖；该过滤器不导出，直接使用 ai/retrieval 检索本包写入的集合不会做旧块过滤
+//   - 域过滤是检索链路的后置过滤，实现由 ai/retrieval 的内置文档版本过滤器
+//     （retrieval.NewDocumentFilter）承担——缺少块文本的命中忽略；读取命中文档
+//     当前版本与块总数，丢弃版本不一致或索引超出总数的旧块；辅助查询失败时降级为
+//     不过滤并告警。本包只声明保留键与首块主键推导，并经 RetrieveRequest.PostFilter
+//     固定注入，调用方传值会被覆盖；直接使用 ai/retrieval 检索本包写入的集合时，
+//     可按相同键配置自行装配该过滤器获得旧块过滤
 //   - 精重排：过滤后的块文本交由 Reranker，TopN 取 RerankTopN；无命中时跳过
 //     （重排契约要求至少 1 条候选）；结果经 rerank.Apply 按下标回取并回填
 //     RerankScore，下标越界、nil 响应等违约为 rerank.ErrBadResponse；
