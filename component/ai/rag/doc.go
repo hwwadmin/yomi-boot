@@ -43,10 +43,10 @@
 //
 // # 多集合与文档删除
 //
-// 集合名每次调用传入：Index 自动创建不存在的集合，Retrieve 在集合不存在时返回空
-// Chunks 与由 Generator 拼接的 Prompt。不同业务用不同集合名隔离数据，所有集合共用
-// 同一 Store 的向量维度与 Metric。集合创建/删除与文档删除直接使用 vectordb.Store
-// （保留键 MetadataKeyDocumentID 即 rag_doc_id）：
+// 集合名每次调用传入：Index 按 IndexRequest.Dimensions 创建不存在的集合，Retrieve 在
+// 集合不存在时返回空 Chunks 与由 Generator 拼接的 Prompt。不同业务用不同集合名隔离数据，
+// 不同集合可有不同向量维度；Metric 由 Store 配置统一。集合创建/删除与文档删除直接使用
+// vectordb.Store（保留键 MetadataKeyDocumentID 即 rag_doc_id）：
 //
 //	err = store.DeleteByFilter(ctx, "kb_sales", map[string]string{rag.MetadataKeyDocumentID: "doc-1"})
 //
@@ -60,11 +60,12 @@
 //
 // # 运行期参数
 //
-//   - 集合名、IndexRequest.Chunker、RetrieveRequest 的 Strategy/TopK/MinScore/Filter/
-//     RerankTopN 都按调用传入
+//   - 集合名、IndexRequest 的 Dimensions/Chunker、RetrieveRequest 的 Strategy/TopK/
+//     MinScore/Filter/Dimensions/RerankTopN 都按调用传入
 //   - TopK 必填；MinScore 为 0 表示不设阈值；RerankTopN 为 0 表示重排后全部保留
 //   - Engine 使用调用方 ctx 控制超时
-//   - Store 的向量维度与 Metric 由构造配置决定，其下所有集合一致
+//   - Metric 由 Store 构造配置统一；集合维度在创建时按 IndexRequest.Dimensions 锁定，
+//     写入与查询向量都按各自请求的 Dimensions 向量化
 //
 // # 写入
 //

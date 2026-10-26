@@ -89,6 +89,12 @@ func (c *openaiClient) Embed(ctx context.Context, req Request) (*Response, error
 		if err != nil {
 			return nil, err
 		}
+		// 输出维度必须与请求一致，避免模型或网关静默返回其他维度
+		for _, v := range batchVectors {
+			if len(v) != req.Dimensions {
+				return nil, wrapSentinel(ErrBadResponse, errors.New("ai/embedding: 向量维度与请求不一致"))
+			}
+		}
 		copy(vectors[start:end], batchVectors)
 		model = resp.Model
 		promptTokens += resp.Usage.PromptTokens
@@ -112,8 +118,8 @@ func (c *openaiClient) buildParams(req Request) (openai.EmbeddingNewParams, erro
 			OfArrayOfStrings: req.Inputs,
 		},
 	}
-	if dim := resolveDimensions(req.Dimensions, c.cfg.Dimensions); dim != nil {
-		params.Dimensions = openai.Int(int64(*dim))
+	if c.cfg.SendDimensions {
+		params.Dimensions = openai.Int(int64(req.Dimensions))
 	}
 	return params, nil
 }

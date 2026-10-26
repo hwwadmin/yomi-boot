@@ -36,7 +36,7 @@ const (
 // TestStoreContractMemory 以 memory 实现跑完整门面契约
 func TestStoreContractMemory(t *testing.T) {
 	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: contractDim})
+	store, err := New(Config{Provider: ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,9 +65,8 @@ func newMilvusContractStore(t *testing.T, names ...string) Store {
 		t.Skip("请填写 testMilvusAddress 等连接常量后再跑 Milvus 契约")
 	}
 	store, err := New(Config{
-		Provider:  ProviderMilvus,
-		Dimension: contractDim,
-		Timeout:   60 * time.Second,
+		Provider: ProviderMilvus,
+		Timeout:  60 * time.Second,
 		Milvus: MilvusConfig{
 			Address:   addr,
 			DBName:    strings.TrimSpace(testMilvusDBName),
@@ -114,7 +113,7 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 		if err != nil || ok {
 			t.Fatalf("has before create: ok=%v err=%v", ok, err)
 		}
-		if err := store.CreateCollection(ctx, name); err != nil {
+		if err := store.CreateCollection(ctx, name, dim); err != nil {
 			t.Fatal(err)
 		}
 		ok, err = store.HasCollection(ctx, name)
@@ -123,8 +122,27 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 		}
 	})
 
+	t.Run("per collection dimension", func(t *testing.T) {
+		if err := store.EnsureCollection(ctx, name, dim); err != nil {
+			t.Fatalf("已存在且维度一致: %v", err)
+		}
+		if err := store.EnsureCollection(ctx, name, dim+1); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("已存在但维度不一致: %v", err)
+		}
+		if err := store.CreateCollection(ctx, contractCollNew, dim+1); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = store.DropCollection(context.Background(), contractCollNew) })
+		if err := store.Upsert(ctx, contractCollNew, []Record{{ID: "w1", Vector: contractVec(dim+1, 1)}}); err != nil {
+			t.Fatalf("不同维度集合写入: %v", err)
+		}
+		if err := store.Upsert(ctx, contractCollNew, []Record{{ID: "w2", Vector: contractVec(dim, 1)}}); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("集合维度不符应拒绝: %v", err)
+		}
+	})
+
 	t.Run("create duplicate", func(t *testing.T) {
-		err := store.CreateCollection(ctx, name)
+		err := store.CreateCollection(ctx, name, dim)
 		if !errors.Is(err, ErrAlreadyExists) {
 			t.Fatalf("got %v", err)
 		}
@@ -166,7 +184,7 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("replace snapshot", func(t *testing.T) {
-		if err := store.ReplaceCollection(ctx, name, []Record{
+		if err := store.ReplaceCollection(ctx, name, dim, []Record{
 			{ID: "z", Vector: vec(1), Metadata: map[string]string{"k": "v"}},
 		}); err != nil {
 			t.Fatal(err)
@@ -174,7 +192,7 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("replace empty keeps collection", func(t *testing.T) {
-		if err := store.ReplaceCollection(ctx, name, nil); err != nil {
+		if err := store.ReplaceCollection(ctx, name, dim, nil); err != nil {
 			t.Fatal(err)
 		}
 		ok, err := store.HasCollection(ctx, name)
@@ -184,26 +202,26 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("ensure collection", func(t *testing.T) {
-		if err := store.EnsureCollection(ctx, contractCollNew); err != nil {
+		if err := store.EnsureCollection(ctx, contractCollNew, dim); err != nil {
 			t.Fatalf("已存在时 ensure: %v", err)
 		}
 		if err := store.DropCollection(ctx, contractCollNew); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.EnsureCollection(ctx, contractCollNew); err != nil {
+		if err := store.EnsureCollection(ctx, contractCollNew, dim); err != nil {
 			t.Fatalf("不存在时 ensure: %v", err)
 		}
 		ok, err := store.HasCollection(ctx, contractCollNew)
 		if err != nil || !ok {
 			t.Fatalf("ensure 后 has: ok=%v err=%v", ok, err)
 		}
-		if err := store.EnsureCollection(ctx, "bad-name"); !errors.Is(err, ErrInvalidArgument) {
+		if err := store.EnsureCollection(ctx, "bad-name", dim); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("bad name: %v", err)
 		}
 	})
 
 	t.Run("replace missing creates", func(t *testing.T) {
-		if err := store.ReplaceCollection(ctx, contractCollNew, []Record{
+		if err := store.ReplaceCollection(ctx, contractCollNew, dim, []Record{
 			{ID: "n1", Vector: vec(1)},
 		}); err != nil {
 			t.Fatal(err)
@@ -235,10 +253,10 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("invalid args", func(t *testing.T) {
-		if err := store.CreateCollection(ctx, "bad-name"); !errors.Is(err, ErrInvalidArgument) {
+		if err := store.CreateCollection(ctx, "bad-name", dim); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("bad name: %v", err)
 		}
-		if err := store.CreateCollection(ctx, name); err != nil {
+		if err := store.CreateCollection(ctx, name, dim); err != nil {
 			t.Fatal(err)
 		}
 		if err := store.Upsert(ctx, name, []Record{{ID: "x", Vector: []float32{1}}}); !errors.Is(err, ErrInvalidArgument) {
@@ -271,7 +289,7 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 	vec := func(x float32) []float32 { return contractVec(dim, x) }
 
 	t.Run("empty search", func(t *testing.T) {
-		if err := store.CreateCollection(ctx, name); err != nil {
+		if err := store.CreateCollection(ctx, name, dim); err != nil {
 			t.Fatal(err)
 		}
 		hits, err := store.Search(ctx, name, SearchQuery{Vector: vec(1), TopK: 3})
@@ -361,7 +379,7 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("search after replace", func(t *testing.T) {
-		if err := store.ReplaceCollection(ctx, name, []Record{
+		if err := store.ReplaceCollection(ctx, name, dim, []Record{
 			{ID: "z", Vector: vec(1), Metadata: map[string]string{"k": "v"}},
 		}); err != nil {
 			t.Fatal(err)
@@ -370,7 +388,7 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 		if err != nil || len(got) != 1 || got[0].ID != "z" {
 			t.Fatalf("replace leftover: %+v err=%v", got, err)
 		}
-		if err := store.ReplaceCollection(ctx, name, nil); err != nil {
+		if err := store.ReplaceCollection(ctx, name, dim, nil); err != nil {
 			t.Fatal(err)
 		}
 		hits, err := store.Search(ctx, name, SearchQuery{Vector: vec(1), TopK: 3})
@@ -401,7 +419,7 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("replace by filter", func(t *testing.T) {
-		if err := store.ReplaceCollection(ctx, name, []Record{
+		if err := store.ReplaceCollection(ctx, name, dim, []Record{
 			{ID: "d1-0", Vector: vec(1), Metadata: map[string]string{"doc_id": "d1"}},
 			{ID: "d1-1", Vector: vec(1), Metadata: map[string]string{"doc_id": "d1"}},
 			{ID: "d2-0", Vector: vec(1), Metadata: map[string]string{"doc_id": "d2"}},
@@ -458,7 +476,7 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 	})
 
 	t.Run("invalid search", func(t *testing.T) {
-		if err := store.CreateCollection(ctx, name); err != nil {
+		if err := store.CreateCollection(ctx, name, dim); err != nil {
 			t.Fatal(err)
 		}
 		_, err := store.Search(ctx, name, SearchQuery{Vector: vec(1), TopK: 0})

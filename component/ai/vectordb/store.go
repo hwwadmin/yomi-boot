@@ -6,18 +6,19 @@ package vectordb
 
 import "context"
 
-// Store 向量库统一门面；同一实例可并发调用。集合名每次传入，维度与度量由 Config 锁定。
+// Store 向量库统一门面；同一实例可并发调用。集合名每次传入，向量维度锁定在集合上，不同集合可不同。
 type Store interface {
-	// CreateCollection 创建空集合；已存在返回 ErrAlreadyExists
-	CreateCollection(ctx context.Context, name string) error
+	// CreateCollection 创建空集合；dimension 为向量维度（必填且 >0）；已存在返回 ErrAlreadyExists
+	CreateCollection(ctx context.Context, name string, dimension int) error
 	// DropCollection 删除集合；不存在时幂等成功
 	DropCollection(ctx context.Context, name string) error
-	// ReplaceCollection 用 records 完整覆盖集合内容；不存在则先创建；空切片保留空集合；失败时不得把旧快照清成不可恢复
-	ReplaceCollection(ctx context.Context, name string, records []Record) error
+	// ReplaceCollection 用 records 完整覆盖集合内容；不存在则按 dimension 创建；已存在且维度
+	// 不一致返回 ErrInvalidArgument；空切片保留空集合；失败时不得把旧快照清成不可恢复
+	ReplaceCollection(ctx context.Context, name string, dimension int, records []Record) error
 	// HasCollection 查询集合是否存在；不存在返回 false, nil
 	HasCollection(ctx context.Context, name string) (bool, error)
-	// EnsureCollection 确保集合存在；已存在返回 nil
-	EnsureCollection(ctx context.Context, name string) error
+	// EnsureCollection 确保集合存在；不存在时按 dimension 创建，已存在且维度不一致返回 ErrInvalidArgument
+	EnsureCollection(ctx context.Context, name string, dimension int) error
 
 	// Upsert 按 ID 覆盖写入；空切片非法；集合不存在返回 ErrNotFound
 	Upsert(ctx context.Context, collection string, records []Record) error
@@ -44,14 +45,14 @@ type Store interface {
 // Record 一条待写入或按 ID 取回的向量记录
 type Record struct {
 	ID       string            // ID 是主键；trim 后非空，最长 maxIDLen 字节
-	Vector   []float32         // Vector 长度必须等于 Config.Dimension
+	Vector   []float32         // Vector 长度必须等于集合维度
 	Text     string            // Text 可选；BM25 词法检索的原文，空串表示该条不参与词法命中；最长 maxTextLen 字节
 	Metadata map[string]string // Metadata 可选；键 trim 后不得为空
 }
 
 // SearchQuery 向量检索入参
 type SearchQuery struct {
-	Vector []float32         // Vector 长度必须等于 Config.Dimension
+	Vector []float32         // Vector 长度必须等于集合维度
 	Text   string            // Text 可选；非空时启用向量 + BM25 混合检索，BM25 命中 Record.Text；最长 maxTextLen 字节
 	TopK   int               // TopK 必须 > 0 且不超过 MaxTopK
 	Filter map[string]string // Filter 可选；nil/空表示不过滤；全键等值 AND

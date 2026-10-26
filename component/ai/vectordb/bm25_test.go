@@ -88,13 +88,13 @@ func TestRRFFuse(t *testing.T) {
 // TestMemorySearchHybrid 覆盖 memory 混合检索：词法命中提升排名、纯向量路径不变
 func TestMemorySearchHybrid(t *testing.T) {
 	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2})
+	store, err := New(Config{Provider: ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, "hybrid_t"); err != nil {
+	if err := store.CreateCollection(ctx, "hybrid_t", 2); err != nil {
 		t.Fatal(err)
 	}
 	// a/b/c 向量相同（纯向量下并列），只有 a 的原文含查询词
@@ -130,13 +130,13 @@ func TestMemorySearchHybrid(t *testing.T) {
 // TestMemorySearchHybridFilterAndTopK 覆盖混合检索下 Filter 对两路生效与 TopK 截断
 func TestMemorySearchHybridFilterAndTopK(t *testing.T) {
 	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2})
+	store, err := New(Config{Provider: ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, "hybrid_f"); err != nil {
+	if err := store.CreateCollection(ctx, "hybrid_f", 2); err != nil {
 		t.Fatal(err)
 	}
 	vec := []float32{1, 0}
@@ -164,13 +164,13 @@ func TestMemorySearchHybridFilterAndTopK(t *testing.T) {
 // TestSearchTextTooLong 覆盖 Text 长度上限校验
 func TestSearchTextTooLong(t *testing.T) {
 	t.Parallel()
-	store, err := New(Config{Provider: ProviderMemory, Dimension: 2})
+	store, err := New(Config{Provider: ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, "text_limit"); err != nil {
+	if err := store.CreateCollection(ctx, "text_limit", 2); err != nil {
 		t.Fatal(err)
 	}
 	long := make([]byte, maxTextLen+1)

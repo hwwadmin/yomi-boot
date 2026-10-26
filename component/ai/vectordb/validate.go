@@ -29,6 +29,14 @@ func normalizeCollectionName(name string) (string, error) {
 	return n, nil
 }
 
+// validateDimension 校验集合向量维度；非法返回 ErrInvalidArgument
+func validateDimension(dimension int) error {
+	if dimension <= 0 || dimension > maxDimension {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return nil
+}
+
 // validateRecords 校验写入记录；同一批 ID 不得重复
 func validateRecords(records []Record, dim int) error {
 	if len(records) == 0 {

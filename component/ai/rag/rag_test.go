@@ -166,9 +166,9 @@ func (s *stubChunker) Chunk(text string) ([]string, error) {
 }
 
 // newTestStore 创建指定维度的内存向量库
-func newTestStore(t *testing.T, dim int) vectordb.Store {
+func newTestStore(t *testing.T) vectordb.Store {
 	t.Helper()
-	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory, Dimension: dim})
+	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func newTestEngineWithDeps(t *testing.T, emb embedding.Client, store vectordb.St
 // newTestEngine 创建默认测试引擎
 func newTestEngine(t *testing.T) (*engine, *fakeEmbedder, vectordb.Store) {
 	t.Helper()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	return newTestEngineWithDeps(t, emb, store), emb, store
 }
@@ -240,7 +240,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 			Metadata: map[string]string{"lang": "zh"},
 		},
 		{ID: "doc-banana", Content: "香蕉是黄色的。香蕉生长在热带。", Source: "fruit/banana.md"},
-	}})
+	}, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 		t.Fatalf("集合未创建: has=%v err=%v", has, err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -286,8 +286,7 @@ func TestIndexAndRetrieve(t *testing.T) {
 		RetrieveRequest: retrieval.RetrieveRequest{
 			Query:  "水果",
 			TopK:   10,
-			Filter: map[string]string{MetadataKeySource: "fruit/banana.md"},
-		},
+			Filter: map[string]string{MetadataKeySource: "fruit/banana.md"}, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc-banana" {
 		t.Fatalf("来源过滤: %+v err=%v", out, err)
@@ -296,26 +295,25 @@ func TestIndexAndRetrieve(t *testing.T) {
 		RetrieveRequest: retrieval.RetrieveRequest{
 			Query:  "水果",
 			TopK:   10,
-			Filter: map[string]string{"lang": "zh"},
-		},
+			Filter: map[string]string{"lang": "zh"}, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("自定义元数据过滤: %+v err=%v", out, err)
 	}
 	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.02},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.02, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("阈值过滤: %+v err=%v", out, err)
 	}
 	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 2 {
 		t.Fatalf("不设阈值: %+v err=%v", out, err)
 	}
 	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "水果", TopK: 1},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "水果", TopK: 1, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 {
 		t.Fatalf("TopK 生效: %+v err=%v", out, err)
@@ -329,11 +327,11 @@ func TestRetrievePromptAndChunks(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc-apple", Content: "苹果是一种水果。", Source: "fruit/apple.md"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -354,22 +352,22 @@ func TestMultipleCollections(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, "kb_sales", IndexRequest{Documents: []Document{
 		{ID: "sales-1", Content: "苹果报价。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Index(ctx, "kb_hr", IndexRequest{Documents: []Document{
 		{ID: "hr-1", Content: "香蕉福利。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, "kb_sales", RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 0 {
 		t.Fatalf("销售库不应命中人事文档: %+v err=%v", out, err)
 	}
 	out, err = e.Retrieve(ctx, "kb_hr", RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "hr-1" {
 		t.Fatalf("人事库命中: %+v err=%v", out, err)
@@ -379,7 +377,7 @@ func TestMultipleCollections(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err = e.Retrieve(ctx, "kb_hr", RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "香蕉", TopK: 10, MinScore: 0.02, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 {
 		t.Fatalf("删除销售库文档不应影响人事库: %+v err=%v", out, err)
@@ -402,7 +400,7 @@ func TestRetrieveEmptyCollection(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	out, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -429,8 +427,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	ctx := context.Background()
 	res, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。苹果。苹果。苹果。"}},
-		Chunker:   chunker,
-	})
+		Chunker:   chunker, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,8 +437,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	oldCount := res.Chunks
 	res, err = e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。"}},
-		Chunker:   chunker,
-	})
+		Chunker:   chunker, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +459,7 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 		t.Fatalf("尾部旧块仍存在: %+v", got)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 20},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 20, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc" {
 		t.Fatalf("重复入库后检索: %+v err=%v", out, err)
@@ -484,7 +480,7 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 			Metadata: encodeChunkMetadata(doc, i, len(old), "old", "旧内容"),
 		}
 	}
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Upsert(ctx, testCollection, old); err != nil {
@@ -503,7 +499,7 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 20},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 20, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -532,7 +528,7 @@ func TestRetrieveFiltersOldVersionAfterGrowthPartialWrite(t *testing.T) {
 			Metadata: encodeChunkMetadata(doc, i, len(old), "old", "旧内容"),
 		}
 	}
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Upsert(ctx, testCollection, old); err != nil {
@@ -551,7 +547,7 @@ func TestRetrieveFiltersOldVersionAfterGrowthPartialWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 20},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 20, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -569,11 +565,11 @@ func TestRetrieveFiltersOldVersionAfterGrowthPartialWrite(t *testing.T) {
 // TestRetrieveDegradesWhenChunkStateFails 验证版本/计数查询失败时降级为不过滤而不是检索失败
 func TestRetrieveDegradesWhenChunkStateFails(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	e := newTestEngineWithDeps(t, &fakeEmbedder{dim: testDimension}, getErrStore{Store: store})
 	ctx := context.Background()
 	doc := Document{ID: "doc", Content: "苹果"}
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Upsert(ctx, testCollection, []vectordb.Record{{
@@ -584,7 +580,7 @@ func TestRetrieveDegradesWhenChunkStateFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatalf("版本/计数查询失败不应导致检索失败: %v", err)
@@ -597,11 +593,11 @@ func TestRetrieveDegradesWhenChunkStateFails(t *testing.T) {
 // TestRetrieveReturnsContextErrorFromChunkStateQuery 验证辅助查询遇到取消时上抛而不是降级
 func TestRetrieveReturnsContextErrorFromChunkStateQuery(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	e := newTestEngineWithDeps(t, &fakeEmbedder{dim: testDimension}, ctxErrStore{Store: store})
 	ctx := context.Background()
 	doc := Document{ID: "doc", Content: "苹果"}
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Upsert(ctx, testCollection, []vectordb.Record{{
@@ -612,7 +608,7 @@ func TestRetrieveReturnsContextErrorFromChunkStateQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("期望 context.Canceled，实际 %v", err)
@@ -629,14 +625,14 @@ func TestDocumentDeletionViaStore(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.DeleteByFilter(ctx, testCollection, map[string]string{MetadataKeyDocumentID: "doc"}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 0 {
 		t.Fatalf("删除后检索: %+v err=%v", out, err)
@@ -654,16 +650,16 @@ func TestCollectionValidation(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, "", IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "x"},
-	}}); !errors.Is(err, ErrInvalidArgument) {
+	}, Dimensions: testDimension}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("空集合名: %v", err)
 	}
 	if _, err := e.Index(ctx, "bad-name", IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "x"},
-	}}); !errors.Is(err, ErrInvalidArgument) {
+	}, Dimensions: testDimension}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("非法集合名: %v", err)
 	}
 	if _, err := e.Retrieve(ctx, "bad-name", RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "x", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "x", TopK: 5, Dimensions: testDimension},
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("非法集合名: %v", err)
 	}
@@ -675,7 +671,7 @@ func TestCollectionValidation(t *testing.T) {
 // TestNewAssemblesDependencies 覆盖构造装配与门面接口
 func TestNewAssemblesDependencies(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	e := newTestEngineWithDeps(t, emb, store)
 	if e.chunker == nil || e.embedder == nil || e.retriever == nil ||
@@ -690,7 +686,7 @@ func TestNewAssemblesDependencies(t *testing.T) {
 // TestNewInvalidConfig 覆盖构造配置全量校验
 func TestNewInvalidConfig(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	full := func() Config {
 		return Config{
@@ -743,33 +739,34 @@ func TestIndexInvalidRequests(t *testing.T) {
 		name string
 		req  IndexRequest
 	}{
-		{"empty documents", IndexRequest{}},
-		{"empty id", IndexRequest{Documents: []Document{{Content: "x"}}}},
-		{"empty content", IndexRequest{Documents: []Document{{ID: "doc", Content: " \n "}}}},
+		{"empty documents", IndexRequest{Dimensions: testDimension}},
+		{"missing dimensions", IndexRequest{Documents: []Document{{ID: "doc", Content: "x"}}}},
+		{"empty id", IndexRequest{Documents: []Document{{Content: "x"}}, Dimensions: testDimension}},
+		{"empty content", IndexRequest{Documents: []Document{{ID: "doc", Content: " \n "}}, Dimensions: testDimension}},
 		{"duplicate id", IndexRequest{Documents: []Document{
 			{ID: "doc", Content: "a"}, {ID: "doc", Content: "b"},
-		}}},
+		}, Dimensions: testDimension}},
 		{"long id", IndexRequest{Documents: []Document{{
 			ID: strings.Repeat("a", maxDocIDLen+1), Content: "x",
-		}}}},
+		}}, Dimensions: testDimension}},
 		{"long multibyte id", IndexRequest{Documents: []Document{{
 			ID: strings.Repeat("中", maxDocIDLen), Content: "x",
-		}}}},
+		}}, Dimensions: testDimension}},
 		{"reserved metadata", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{MetadataKeyContent: "x"},
-		}}}},
+		}}, Dimensions: testDimension}},
 		{"reserved chunk count", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{MetadataKeyChunkCount: "1"},
-		}}}},
+		}}, Dimensions: testDimension}},
 		{"empty metadata key", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{" ": "x"},
-		}}}},
+		}}, Dimensions: testDimension}},
 		{"bad metadata key", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{`a"b`: "x"},
-		}}}},
+		}}, Dimensions: testDimension}},
 		{"duplicate normalized key", IndexRequest{Documents: []Document{{
 			ID: "doc", Content: "x", Metadata: map[string]string{"k": "1", " k ": "2"},
-		}}}},
+		}}, Dimensions: testDimension}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -796,13 +793,13 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 		name string
 		req  RetrieveRequest
 	}{
-		{"empty query", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "  ", TopK: 5}}},
-		{"zero topk", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果"}}},
-		{"negative topk", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: -1}}},
-		{"topk too large", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: vectordb.MaxTopK + 1}}},
-		{"nan min score", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.NaN())}}},
-		{"empty filter key", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{"": "x"}}}},
-		{"bad filter key", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{`a"b`: "x"}}}},
+		{"empty query", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "  ", TopK: 5, Dimensions: testDimension}}},
+		{"zero topk", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", Dimensions: testDimension}}},
+		{"negative topk", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: -1, Dimensions: testDimension}}},
+		{"topk too large", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: vectordb.MaxTopK + 1, Dimensions: testDimension}}},
+		{"nan min score", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.NaN()), Dimensions: testDimension}}},
+		{"empty filter key", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{"": "x"}, Dimensions: testDimension}}},
+		{"bad filter key", RetrieveRequest{RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{`a"b`: "x"}, Dimensions: testDimension}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -813,7 +810,7 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 	}
 	// 负 RerankTopN 是本包编排层校验
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 		RerankTopN:      -1,
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("负 RerankTopN: 期望 ErrInvalidArgument，实际 %v", err)
@@ -826,21 +823,21 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 // TestDimensionValidatedByStore 覆盖维度一致性由 vectordb 校验：写路径与检索路径一致
 func TestDimensionValidatedByStore(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	e := newTestEngineWithDeps(t, emb, store)
 	ctx := context.Background()
-	if _, err := e.Index(ctx, "rag_dim", IndexRequest{Documents: []Document{{ID: "doc", Content: "苹果"}}}); err != nil {
+	if _, err := e.Index(ctx, "rag_dim", IndexRequest{Documents: []Document{{ID: "doc", Content: "苹果"}}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	emb.setDim(testDimension - 1)
 	// 写路径：记录维度与集合维度不符由 vectordb 校验拒绝
-	if _, err := e.Index(ctx, "rag_dim", IndexRequest{Documents: []Document{{ID: "doc2", Content: "苹果"}}}); !errors.Is(err, vectordb.ErrInvalidArgument) {
+	if _, err := e.Index(ctx, "rag_dim", IndexRequest{Documents: []Document{{ID: "doc2", Content: "苹果"}}, Dimensions: testDimension}); !errors.Is(err, vectordb.ErrInvalidArgument) {
 		t.Fatalf("写路径维度不符应透传 vectordb 校验，实际 %v", err)
 	}
 	// 检索路径：查询向量维度不符同样由 vectordb 校验兜底
 	if _, err := e.Retrieve(ctx, "rag_dim", RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	}); !errors.Is(err, vectordb.ErrInvalidArgument) {
 		t.Fatalf("检索路径维度不符应透传 vectordb 校验，实际 %v", err)
 	}
@@ -849,11 +846,11 @@ func TestDimensionValidatedByStore(t *testing.T) {
 // TestIndexEmbedError 覆盖向量化错误原样透传
 func TestIndexEmbedError(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	e := newTestEngineWithDeps(t, &fakeEmbedder{dim: testDimension, err: embedding.ErrRateLimited}, store)
 	_, err := e.Index(context.Background(), "rag_embed_err", IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果"},
-	}})
+	}, Dimensions: testDimension})
 	if !errors.Is(err, embedding.ErrRateLimited) {
 		t.Fatalf("期望 embedding.ErrRateLimited，实际 %v", err)
 	}
@@ -870,8 +867,7 @@ func TestIndexSingleEmbedCall(t *testing.T) {
 	}
 	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
-		Chunker:   &stubChunker{chunks: chunks},
-	})
+		Chunker:   &stubChunker{chunks: chunks}, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -889,7 +885,7 @@ func TestRetrieveSkipsForeignChunks(t *testing.T) {
 	t.Parallel()
 	e, _, store := newTestEngine(t)
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Upsert(ctx, testCollection, []vectordb.Record{
@@ -898,7 +894,7 @@ func TestRetrieveSkipsForeignChunks(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -915,8 +911,7 @@ func TestIndexCustomChunker(t *testing.T) {
 	custom := &stubChunker{chunks: []string{"自定义块一", "自定义块二"}}
 	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
-		Chunker:   custom,
-	})
+		Chunker:   custom, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +919,7 @@ func TestIndexCustomChunker(t *testing.T) {
 		t.Fatalf("自定义切块结果: %+v calls=%d", res, custom.calls)
 	}
 	out, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "自定义", TopK: 10},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "自定义", TopK: 10, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -952,8 +947,7 @@ func TestIndexCustomChunkerInvalid(t *testing.T) {
 			e, _, _ := newTestEngine(t)
 			_, err := e.Index(context.Background(), testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "原始文本"}},
-				Chunker:   tc.chunker,
-			})
+				Chunker:   tc.chunker, Dimensions: testDimension})
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("期望 %v，实际 %v", tc.want, err)
 			}
@@ -964,7 +958,7 @@ func TestIndexCustomChunkerInvalid(t *testing.T) {
 // TestRetrieveRerankReordersAndScores 覆盖精重排：顺序、双分数口径与拼接上下文顺序
 func TestRetrieveRerankReordersAndScores(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	rr := &fakeReranker{score: func(_ int, doc string) float32 {
 		if strings.Contains(doc, "退款") {
@@ -986,13 +980,12 @@ func TestRetrieveRerankReordersAndScores(t *testing.T) {
 		// 纯向量策略下两文档正交 0 分按 ID 升序：doc-a 在前、doc-z 在后
 		{ID: "doc-a", Content: "香蕉。配送范围说明。"},
 		{ID: "doc-z", Content: "苹果。退款政策说明。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{
-			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2,
-		},
+			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1032,11 +1025,11 @@ func TestRetrieveRerankTopN(t *testing.T) {
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc-a", Content: "苹果是一种水果。"},
 		{ID: "doc-b", Content: "苹果富含维生素。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 10, Dimensions: testDimension},
 		RerankTopN:      1,
 	})
 	if err != nil {
@@ -1053,7 +1046,7 @@ func TestRetrieveRerankTopN(t *testing.T) {
 // TestRetrieveRerankSkippedWithoutHits 覆盖无命中时跳过重排
 func TestRetrieveRerankSkippedWithoutHits(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	rr := &fakeReranker{}
 	e := newTestEngineWithConfig(t, Config{
@@ -1065,7 +1058,7 @@ func TestRetrieveRerankSkippedWithoutHits(t *testing.T) {
 		Store:     store,
 	})
 	out, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1084,7 +1077,7 @@ func TestRetrieveRerankSkippedWithoutHits(t *testing.T) {
 // TestRetrieveRerankErrorPassthrough 覆盖重排错误原样透传
 func TestRetrieveRerankErrorPassthrough(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	e := newTestEngineWithConfig(t, Config{
 		Chunker:   mustTestChunker(t),
@@ -1097,11 +1090,11 @@ func TestRetrieveRerankErrorPassthrough(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if !errors.Is(err, rerank.ErrBadResponse) {
 		t.Fatalf("期望 rerank.ErrBadResponse，实际 %v", err)
@@ -1111,7 +1104,7 @@ func TestRetrieveRerankErrorPassthrough(t *testing.T) {
 // TestRetrieveRerankInvalidIndex 覆盖重排结果下标越界的违约校验（由 rerank.Apply 识别）
 func TestRetrieveRerankInvalidIndex(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	e := newTestEngineWithConfig(t, Config{
 		Chunker:   mustTestChunker(t),
@@ -1126,11 +1119,11 @@ func TestRetrieveRerankInvalidIndex(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if !errors.Is(err, rerank.ErrBadResponse) {
 		t.Fatalf("期望 rerank.ErrBadResponse，实际 %v", err)
@@ -1140,7 +1133,7 @@ func TestRetrieveRerankInvalidIndex(t *testing.T) {
 // TestRetrieveGeneratorErrorPassthrough 覆盖拼接错误原样透传
 func TestRetrieveGeneratorErrorPassthrough(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	e := newTestEngineWithConfig(t, Config{
 		Chunker:   mustTestChunker(t),
@@ -1153,11 +1146,11 @@ func TestRetrieveGeneratorErrorPassthrough(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if !errors.Is(err, generation.ErrInvalidArgument) {
 		t.Fatalf("期望 generation.ErrInvalidArgument，实际 %v", err)
@@ -1167,7 +1160,7 @@ func TestRetrieveGeneratorErrorPassthrough(t *testing.T) {
 // TestRetrieveGeneratorEmptyPrompt 覆盖拼接返回空提示词的违约校验（由 generation.ValidateResponse 识别）
 func TestRetrieveGeneratorEmptyPrompt(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	emb := &fakeEmbedder{dim: testDimension}
 	e := newTestEngineWithConfig(t, Config{
 		Chunker:   mustTestChunker(t),
@@ -1180,11 +1173,11 @@ func TestRetrieveGeneratorEmptyPrompt(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 	})
 	if !errors.Is(err, generation.ErrBadResponse) {
 		t.Fatalf("期望 generation.ErrBadResponse，实际 %v", err)
@@ -1209,23 +1202,21 @@ func (s *flakyStore) ReplaceByFilter(ctx context.Context, collection string, fil
 // TestIndexReplaceFailureKeepsOldVersionIntact 验证替换失败时旧版本保持完整，重试后只剩新版本
 func TestIndexReplaceFailureKeepsOldVersionIntact(t *testing.T) {
 	t.Parallel()
-	store := newTestStore(t, testDimension)
+	store := newTestStore(t)
 	flaky := &flakyStore{Store: store}
 	e := newTestEngineWithDeps(t, &fakeEmbedder{dim: testDimension}, flaky)
 	ctx := context.Background()
 	large := &stubChunker{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "large"}},
-		Chunker:   large,
-	}); err != nil {
+		Chunker:   large, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	small := &stubChunker{chunks: []string{"b0"}}
 	flaky.replaceFailures = 1
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Chunker:   small,
-	}); err == nil {
+		Chunker:   small, Dimensions: testDimension}); err == nil {
 		t.Fatal("期望替换失败")
 	}
 	// 替换失败时旧版本保持完整
@@ -1237,12 +1228,11 @@ func TestIndexReplaceFailureKeepsOldVersionIntact(t *testing.T) {
 	// 重试后只保留新版本
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Chunker:   small,
-	}); err != nil {
+		Chunker:   small, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "q", TopK: 20},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "q", TopK: 20, Dimensions: testDimension},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].Content != "b0" {
 		t.Fatalf("重试后应只剩新版本: %+v err=%v", out, err)
@@ -1263,15 +1253,13 @@ func TestConcurrentSameDocumentIndexKeepsConsistentChunks(t *testing.T) {
 			defer wg.Done()
 			_, _ = e.Index(ctx, testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "large"}},
-				Chunker:   &stubChunker{chunks: large},
-			})
+				Chunker:   &stubChunker{chunks: large}, Dimensions: testDimension})
 		}()
 		go func() {
 			defer wg.Done()
 			_, _ = e.Index(ctx, testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "small"}},
-				Chunker:   &stubChunker{chunks: small},
-			})
+				Chunker:   &stubChunker{chunks: small}, Dimensions: testDimension})
 		}()
 	}
 	wg.Wait()
@@ -1311,7 +1299,7 @@ func TestEngineConcurrentRetrieve(t *testing.T) {
 	ctx := context.Background()
 	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
 		{ID: "doc", Content: "苹果是一种水果。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	const goroutines = 8
@@ -1324,7 +1312,7 @@ func TestEngineConcurrentRetrieve(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < rounds; j++ {
 				out, err := e.Retrieve(context.Background(), testCollection, RetrieveRequest{
-					RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
+					RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension},
 				})
 				if err != nil {
 					errs <- err
@@ -1353,13 +1341,13 @@ func TestRetrieveHybridLexicalBoost(t *testing.T) {
 		// fakeEmbedder 把 苹果/香蕉 映到不同维度；doc-z 含查询词但按 ID 排在 doc-a 之后
 		{ID: "doc-a", Content: "香蕉。配送范围说明。"},
 		{ID: "doc-z", Content: "苹果。退款政策说明。"},
-	}}); err != nil {
+	}, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	// 查询"如何退款"的向量与两文档正交（落第三维），纯向量两文档并列 0 分按 ID 升序；
 	// 混合检索下 doc-z 靠 BM25 词法命中跃居第一
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "如何退款", TopK: 2},
+		RetrieveRequest: retrieval.RetrieveRequest{Query: "如何退款", TopK: 2, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1373,8 +1361,7 @@ func TestRetrieveHybridLexicalBoost(t *testing.T) {
 	// 纯向量策略不启用 BM25：两文档并列 0 分，按 ID 升序 doc-a 在前
 	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{
-			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2,
-		},
+			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2, Dimensions: testDimension},
 	})
 	if err != nil {
 		t.Fatal(err)

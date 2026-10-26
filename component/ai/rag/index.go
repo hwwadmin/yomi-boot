@@ -28,6 +28,9 @@ func (e *engine) Index(ctx context.Context, collection string, req IndexRequest)
 	if err != nil {
 		return nil, err
 	}
+	if err := validateDimensions(req.Dimensions); err != nil {
+		return nil, err
+	}
 	docs, err := prepareDocuments(req.Documents)
 	if err != nil {
 		return nil, err
@@ -43,12 +46,12 @@ func (e *engine) Index(ctx context.Context, collection string, req IndexRequest)
 	if err != nil {
 		return nil, err
 	}
-	if err := e.store.EnsureCollection(ctx, name); err != nil {
+	if err := e.store.EnsureCollection(ctx, name, req.Dimensions); err != nil {
 		return nil, err
 	}
 	result := &IndexResult{}
 	for _, p := range prepared {
-		tokens, err := e.writeDocument(ctx, name, p)
+		tokens, err := e.writeDocument(ctx, name, p, req.Dimensions)
 		if err != nil {
 			return nil, err
 		}
@@ -80,8 +83,11 @@ func chunkDocuments(chunker chunking.Chunker, docs []Document) ([]chunkedDocumen
 }
 
 // writeDocument 向量化单篇文档的块并覆盖写入；同一文档的替换由 Store 串行
-func (e *engine) writeDocument(ctx context.Context, collection string, p chunkedDocument) (int, error) {
-	resp, err := e.embedder.Embed(ctx, embedding.Request{Inputs: p.chunks})
+func (e *engine) writeDocument(ctx context.Context, collection string, p chunkedDocument, dimensions int) (int, error) {
+	resp, err := e.embedder.Embed(ctx, embedding.Request{
+		Inputs:     p.chunks,
+		Dimensions: dimensions,
+	})
 	if err != nil {
 		return 0, err
 	}

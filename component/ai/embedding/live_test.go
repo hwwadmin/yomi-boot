@@ -36,7 +36,8 @@ func TestEmbed(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	resp, err := cli.Embed(context.Background(), Request{
-		Inputs: []string{"hello", "world"},
+		Inputs:     []string{"hello", "world"},
+		Dimensions: 1024,
 	})
 	if err != nil {
 		t.Fatalf("Embed: %v", err)

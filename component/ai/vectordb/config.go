@@ -66,12 +66,11 @@ const (
 
 // Config 创建 Store 的构造配置；本包不读 YAML
 type Config struct {
-	Provider  Provider      // Provider 是 memory 或 milvus
-	Dimension int           // Dimension 是本实例所有集合共用的向量维度；必须 > 0
-	Metric    Metric        // Metric 空则 COSINE；仅 COSINE / L2 / IP
-	Timeout   time.Duration // Timeout 是单次操作墙钟；0 表示 10s；小于 0 非法
-	Memory    MemoryConfig  // Memory 仅 ProviderMemory 使用
-	Milvus    MilvusConfig  // Milvus 仅 ProviderMilvus 使用
+	Provider Provider      // Provider 是 memory 或 milvus
+	Metric   Metric        // Metric 空则 COSINE；仅 COSINE / L2 / IP
+	Timeout  time.Duration // Timeout 是单次操作墙钟；0 表示 10s；小于 0 非法
+	Memory   MemoryConfig  // Memory 仅 ProviderMemory 使用
+	Milvus   MilvusConfig  // Milvus 仅 ProviderMilvus 使用
 }
 
 // MemoryConfig 内存实现配置
@@ -154,9 +153,6 @@ func (c Config) validate() error {
 	switch c.Provider {
 	case ProviderMemory, ProviderMilvus:
 	default:
-		return errors.Sentinel(ErrInvalidArgument)
-	}
-	if c.Dimension <= 0 || c.Dimension > maxDimension {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	switch metricOrDefault(c.Metric) {

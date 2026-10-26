@@ -15,7 +15,7 @@ import (
 type Client interface {
 	// Embed 将文本转为向量
 	//
-	// 入参 Inputs 至少 1 条；任一条 trim 后空串非法。维度空则回退 Config.Dimensions。
+	// 入参 Inputs 至少 1 条；任一条 trim 后空串非法；Dimensions 必填且 >0。
 	// 超过 Config.MaxBatch（默认 2048）时按该值分批，对外仍是一整批成功或整包失败。
 	// 超时或取消返回上下文错误（可包装）。
 	Embed(ctx context.Context, req Request) (*Response, error)
@@ -24,7 +24,7 @@ type Client interface {
 // Request 向量化入参；模型由 Config.Model 锁定
 type Request struct {
 	Inputs     []string // Inputs 至少 1 条；trim 后不得为空串；超过 MaxBatch（默认 2048）时内部自动分批
-	Dimensions *int     // Dimensions 可选；空则回退配置；若设置必须 >0
+	Dimensions int      // Dimensions 是输出维度；必填且必须 >0
 }
 
 // Response 向量化完整结果
@@ -50,16 +50,8 @@ func validateRequest(req Request) error {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
 	}
-	if req.Dimensions != nil && *req.Dimensions <= 0 {
+	if req.Dimensions <= 0 {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	return nil
-}
-
-// resolveDimensions 请求非空则用之，否则回退配置；皆空则不传上游
-func resolveDimensions(req, def *int) *int {
-	if req != nil {
-		return req
-	}
-	return def
 }

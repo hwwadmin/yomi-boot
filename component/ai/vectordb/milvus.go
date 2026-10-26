@@ -36,10 +36,11 @@ type milvusStore struct {
 	mu               sync.Mutex
 	closed           bool
 	cli              *milvusclient.Client
-	dim              int
 	metric           Metric
 	timeout          time.Duration
 	replaceLocks     replaceLock
+	dimsMu           sync.RWMutex
+	dims             map[string]int
 	indexType        IndexType
 	indexNlist       int
 	indexM           int
@@ -63,8 +64,8 @@ func newMilvusStore(cfg Config) (*milvusStore, error) {
 	}
 	return &milvusStore{
 		cli:              cli,
-		dim:              cfg.Dimension,
 		metric:           metricOrDefault(cfg.Metric),
+		dims:             make(map[string]int),
 		timeout:          timeoutOrDefault(cfg.Timeout),
 		indexType:        indexTypeOrDefault(cfg.Milvus.IndexType),
 		indexNlist:       indexNlistOrDefault(cfg.Milvus.IndexNlist),
@@ -74,7 +75,7 @@ func newMilvusStore(cfg Config) (*milvusStore, error) {
 }
 
 // CreateCollection 创建空集合并建立索引、load；失败时 Drop 刚建集合
-func (s *milvusStore) CreateCollection(ctx context.Context, name string) error {
+func (s *milvusStore) CreateCollection(ctx context.Context, name string, dimension int) error {
 	ctx, cancel, err := s.begin(ctx)
 	if err != nil {
 		return err
@@ -84,6 +85,9 @@ func (s *milvusStore) CreateCollection(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := validateDimension(dimension); err != nil {
+		return err
+	}
 	has, err := s.has(ctx, n)
 	if err != nil {
 		return err
@@ -91,7 +95,7 @@ func (s *milvusStore) CreateCollection(ctx context.Context, name string) error {
 	if has {
 		return errors.Sentinel(ErrAlreadyExists)
 	}
-	return s.createReady(ctx, n)
+	return s.createReady(ctx, n, dimension)
 }
 
 // DropCollection 删除集合；不存在时幂等成功
@@ -105,6 +109,7 @@ func (s *milvusStore) DropCollection(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	defer s.forgetDimension(n)
 	has, err := s.has(ctx, n)
 	if err != nil {
 		return err
@@ -125,8 +130,8 @@ func (s *milvusStore) DropCollection(ctx context.Context, name string) error {
 	return nil
 }
 
-// ReplaceCollection 完整覆盖集合内容；已存在时先写新快照再删旧点
-func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, records []Record) error {
+// ReplaceCollection 完整覆盖集合内容；不存在则按 dimension 创建；已存在且维度不一致返回 ErrInvalidArgument
+func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, dimension int, records []Record) error {
 	ctx, cancel, err := s.begin(ctx)
 	if err != nil {
 		return err
@@ -136,8 +141,11 @@ func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, record
 	if err != nil {
 		return err
 	}
+	if err := validateDimension(dimension); err != nil {
+		return err
+	}
 	if len(records) > 0 {
-		if err := validateRecords(records, s.dim); err != nil {
+		if err := validateRecords(records, dimension); err != nil {
 			return err
 		}
 	}
@@ -146,7 +154,7 @@ func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, record
 		return err
 	}
 	if !has {
-		if err := s.createReady(ctx, n); err != nil {
+		if err := s.createReady(ctx, n, dimension); err != nil {
 			if !errors.Is(err, ErrAlreadyExists) {
 				return err
 			}
@@ -155,15 +163,24 @@ func (s *milvusStore) ReplaceCollection(ctx context.Context, name string, record
 				return err
 			}
 		}
-	} else if err := s.ensureReady(ctx, n); err != nil {
-		return err
+	} else {
+		current, err := s.collectionDimension(ctx, n)
+		if err != nil {
+			return err
+		}
+		if current != dimension {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
+		if err := s.ensureReady(ctx, n); err != nil {
+			return err
+		}
 	}
 	keep := make(map[string]struct{}, len(records))
 	if len(records) > 0 {
 		for i := range records {
 			keep[strings.TrimSpace(records[i].ID)] = struct{}{}
 		}
-		if err := s.upsertRecords(ctx, n, records); err != nil {
+		if err := s.upsertRecords(ctx, n, records, dimension); err != nil {
 			return err
 		}
 		if err := s.flush(ctx, n); err != nil {
@@ -194,8 +211,8 @@ func (s *milvusStore) HasCollection(ctx context.Context, name string) (bool, err
 	return s.has(ctx, n)
 }
 
-// EnsureCollection 确保集合存在
-func (s *milvusStore) EnsureCollection(ctx context.Context, name string) error {
+// EnsureCollection 确保集合存在；不存在时按 dimension 创建，已存在且维度不一致返回 ErrInvalidArgument
+func (s *milvusStore) EnsureCollection(ctx context.Context, name string, dimension int) error {
 	ctx, cancel, err := s.begin(ctx)
 	if err != nil {
 		return err
@@ -205,19 +222,29 @@ func (s *milvusStore) EnsureCollection(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := validateDimension(dimension); err != nil {
+		return err
+	}
 	has, err := s.has(ctx, n)
 	if err != nil {
 		return err
 	}
-	if has {
+	if !has {
+		if err := s.createReady(ctx, n, dimension); err != nil {
+			// 并发创建时另一个调用可能已先建；已存在仍视为成功
+			if errors.Is(err, ErrAlreadyExists) {
+				return nil
+			}
+			return err
+		}
 		return nil
 	}
-	if err := s.createReady(ctx, n); err != nil {
-		// 并发创建时另一个调用可能已先建；已存在仍视为成功
-		if errors.Is(err, ErrAlreadyExists) {
-			return nil
-		}
+	current, err := s.collectionDimension(ctx, n)
+	if err != nil {
 		return err
+	}
+	if current != dimension {
+		return errors.Sentinel(ErrInvalidArgument)
 	}
 	return nil
 }
@@ -233,9 +260,6 @@ func (s *milvusStore) Upsert(ctx context.Context, collection string, records []R
 	if err != nil {
 		return err
 	}
-	if err := validateRecords(records, s.dim); err != nil {
-		return err
-	}
 	has, err := s.has(ctx, n)
 	if err != nil {
 		return err
@@ -246,7 +270,14 @@ func (s *milvusStore) Upsert(ctx context.Context, collection string, records []R
 	if err := s.ensureReady(ctx, n); err != nil {
 		return err
 	}
-	if err := s.upsertRecords(ctx, n, records); err != nil {
+	dimension, err := s.collectionDimension(ctx, n)
+	if err != nil {
+		return err
+	}
+	if err := validateRecords(records, dimension); err != nil {
+		return err
+	}
+	if err := s.upsertRecords(ctx, n, records, dimension); err != nil {
 		return err
 	}
 	return s.flush(ctx, n)
@@ -482,9 +513,6 @@ func (s *milvusStore) Search(ctx context.Context, collection string, q SearchQue
 	if err != nil {
 		return nil, err
 	}
-	if err := validateSearchQuery(q, s.dim); err != nil {
-		return nil, err
-	}
 	has, err := s.has(ctx, n)
 	if err != nil {
 		return nil, err
@@ -493,6 +521,13 @@ func (s *milvusStore) Search(ctx context.Context, collection string, q SearchQue
 		return nil, errors.Sentinel(ErrNotFound)
 	}
 	if err := s.ensureReady(ctx, n); err != nil {
+		return nil, err
+	}
+	dimension, err := s.collectionDimension(ctx, n)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateSearchQuery(q, dimension); err != nil {
 		return nil, err
 	}
 	expr := ""
@@ -593,10 +628,10 @@ func (s *milvusStore) has(ctx context.Context, name string) (bool, error) {
 }
 
 // createReady 创建空集合并建立索引、load；索引或 load 失败则 Drop，避免半就绪
-func (s *milvusStore) createReady(ctx context.Context, name string) error {
+func (s *milvusStore) createReady(ctx context.Context, name string, dimension int) error {
 	schema := entity.NewSchema().
 		WithField(entity.NewField().WithName(fieldID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(int64(maxIDLen)).WithIsPrimaryKey(true)).
-		WithField(entity.NewField().WithName(fieldVector).WithDataType(entity.FieldTypeFloatVector).WithDim(int64(s.dim))).
+		WithField(entity.NewField().WithName(fieldVector).WithDataType(entity.FieldTypeFloatVector).WithDim(int64(dimension))).
 		WithField(entity.NewField().WithName(fieldMetadata).WithDataType(entity.FieldTypeJSON)).
 		WithField(entity.NewField().WithName(fieldText).WithDataType(entity.FieldTypeVarChar).
 			WithMaxLength(int64(maxTextLen)).
@@ -621,7 +656,60 @@ func (s *milvusStore) createReady(ctx context.Context, name string) error {
 		s.dropQuiet(ctx, name)
 		return err
 	}
+	s.dimsMu.Lock()
+	s.dims[name] = dimension
+	s.dimsMu.Unlock()
 	return nil
+}
+
+// collectionDimension 返回集合锁定的向量维度；缓存未命中时查询集合 schema。
+// 缓存由本实例的 CreateCollection / DropCollection 维护；集合在外部重建时经本实例 Drop 失效
+func (s *milvusStore) collectionDimension(ctx context.Context, name string) (int, error) {
+	s.dimsMu.RLock()
+	dimension, ok := s.dims[name]
+	s.dimsMu.RUnlock()
+	if ok {
+		return dimension, nil
+	}
+	coll, err := retryOnRateLimitVal(ctx, func() (*entity.Collection, error) {
+		return s.cli.DescribeCollection(ctx, milvusclient.NewDescribeCollectionOption(name))
+	})
+	if err != nil {
+		return 0, mapMilvusErr(err)
+	}
+	dimension, err = schemaDimension(coll.Schema)
+	if err != nil {
+		return 0, err
+	}
+	s.dimsMu.Lock()
+	s.dims[name] = dimension
+	s.dimsMu.Unlock()
+	return dimension, nil
+}
+
+// forgetDimension 清除集合维度缓存
+func (s *milvusStore) forgetDimension(name string) {
+	s.dimsMu.Lock()
+	delete(s.dims, name)
+	s.dimsMu.Unlock()
+}
+
+// schemaDimension 从集合 schema 读取向量字段维度
+func schemaDimension(schema *entity.Schema) (int, error) {
+	if schema == nil {
+		return 0, errors.Sentinel(ErrUnavailable)
+	}
+	for _, field := range schema.Fields {
+		if field == nil || field.Name != fieldVector {
+			continue
+		}
+		dimension, err := field.GetDim()
+		if err != nil || dimension <= 0 || dimension > maxDimension {
+			return 0, errors.Sentinel(ErrUnavailable)
+		}
+		return int(dimension), nil
+	}
+	return 0, errors.Sentinel(ErrUnavailable)
 }
 
 // ensureReady 补齐缺失索引并 load；已 load 则跳过
@@ -743,7 +831,7 @@ func (s *milvusStore) flush(ctx context.Context, name string) error {
 }
 
 // upsertRecords 分批 Upsert
-func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []Record) error {
+func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []Record, dimension int) error {
 	for start := 0; start < len(records); start += batchSize {
 		end := start + batchSize
 		if end > len(records) {
@@ -767,7 +855,7 @@ func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []
 		if err := retryOnRateLimit(ctx, func() error {
 			_, err := s.cli.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(name).
 				WithVarcharColumn(fieldID, ids).
-				WithFloatVectorColumn(fieldVector, s.dim, vecs).
+				WithFloatVectorColumn(fieldVector, dimension, vecs).
 				WithVarcharColumn(fieldText, texts).
 				WithColumns(column.NewColumnJSONBytes(fieldMetadata, metas)))
 			return err

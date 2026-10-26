@@ -30,6 +30,9 @@ func (e *Engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 	if req.TopK <= 0 || req.TopK > vectordb.MaxTopK {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
+	if req.Dimensions <= 0 {
+		return nil, errors.Sentinel(ErrInvalidArgument)
+	}
 	if math.IsNaN(float64(req.MinScore)) || math.IsInf(float64(req.MinScore), 0) {
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
@@ -44,7 +47,7 @@ func (e *Engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 	if !has {
 		return []vectordb.Hit{}, nil
 	}
-	vector, err := e.embedQuery(ctx, query)
+	vector, err := e.embedQuery(ctx, query, req.Dimensions)
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +116,12 @@ func normalizeStrategy(strategy RetrievalStrategy) (RetrievalStrategy, error) {
 	}
 }
 
-// embedQuery 向量化查询文本；检索路径不做写侧的维度锁定，维度不符由 vectordb 校验兜底
-func (e *Engine) embedQuery(ctx context.Context, query string) ([]float32, error) {
-	resp, err := e.embedder.Embed(ctx, embedding.Request{Inputs: []string{query}})
+// embedQuery 按请求维度向量化查询文本；集合维度不符由 vectordb 校验兜底
+func (e *Engine) embedQuery(ctx context.Context, query string, dimensions int) ([]float32, error) {
+	resp, err := e.embedder.Embed(ctx, embedding.Request{
+		Inputs:     []string{query},
+		Dimensions: dimensions,
+	})
 	if err != nil {
 		return nil, err
 	}

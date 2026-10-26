@@ -24,31 +24,35 @@ type memRow struct {
 	metadata map[string]string
 }
 
+// memCollection 内存中的一个集合
+type memCollection struct {
+	dim  int
+	rows map[string]memRow
+}
+
 // memoryStore 进程内向量库
 type memoryStore struct {
 	mu           sync.RWMutex
 	closed       bool
-	dim          int
 	metric       Metric
 	timeout      time.Duration
 	maxRecords   int
-	colls        map[string]map[string]memRow
+	colls        map[string]*memCollection
 	replaceLocks replaceLock
 }
 
 // newMemoryStore 创建内存 Store
 func newMemoryStore(cfg Config) *memoryStore {
 	return &memoryStore{
-		dim:        cfg.Dimension,
 		metric:     metricOrDefault(cfg.Metric),
 		timeout:    timeoutOrDefault(cfg.Timeout),
 		maxRecords: maxRecordsOrDefault(cfg.Memory.MaxRecords),
-		colls:      make(map[string]map[string]memRow),
+		colls:      make(map[string]*memCollection),
 	}
 }
 
 // CreateCollection 创建空集合；已存在返回 ErrAlreadyExists
-func (s *memoryStore) CreateCollection(ctx context.Context, name string) error {
+func (s *memoryStore) CreateCollection(ctx context.Context, name string, dimension int) error {
 	_, cancel, err := s.begin(ctx)
 	if err != nil {
 		return err
@@ -56,6 +60,9 @@ func (s *memoryStore) CreateCollection(ctx context.Context, name string) error {
 	defer cancel()
 	n, err := normalizeCollectionName(name)
 	if err != nil {
+		return err
+	}
+	if err := validateDimension(dimension); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -66,7 +73,7 @@ func (s *memoryStore) CreateCollection(ctx context.Context, name string) error {
 	if _, ok := s.colls[n]; ok {
 		return errors.Sentinel(ErrAlreadyExists)
 	}
-	s.colls[n] = make(map[string]memRow)
+	s.colls[n] = &memCollection{dim: dimension, rows: make(map[string]memRow)}
 	return nil
 }
 
@@ -90,8 +97,8 @@ func (s *memoryStore) DropCollection(ctx context.Context, name string) error {
 	return nil
 }
 
-// ReplaceCollection 完整覆盖集合内容；不存在则创建；空切片保留空集合
-func (s *memoryStore) ReplaceCollection(ctx context.Context, name string, records []Record) error {
+// ReplaceCollection 完整覆盖集合内容；不存在则按 dimension 创建；已存在且维度不一致返回 ErrInvalidArgument
+func (s *memoryStore) ReplaceCollection(ctx context.Context, name string, dimension int, records []Record) error {
 	_, cancel, err := s.begin(ctx)
 	if err != nil {
 		return err
@@ -101,8 +108,11 @@ func (s *memoryStore) ReplaceCollection(ctx context.Context, name string, record
 	if err != nil {
 		return err
 	}
+	if err := validateDimension(dimension); err != nil {
+		return err
+	}
 	if len(records) > 0 {
-		if err := validateRecords(records, s.dim); err != nil {
+		if err := validateRecords(records, dimension); err != nil {
 			return err
 		}
 	}
@@ -118,12 +128,15 @@ func (s *memoryStore) ReplaceCollection(ctx context.Context, name string, record
 	}
 	oldCount := 0
 	if old, ok := s.colls[n]; ok {
-		oldCount = len(old)
+		if old.dim != dimension {
+			return errors.Sentinel(ErrInvalidArgument)
+		}
+		oldCount = len(old.rows)
 	}
 	if s.totalLocked()-oldCount+len(next) > s.maxRecords {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
-	s.colls[n] = next
+	s.colls[n] = &memCollection{dim: dimension, rows: next}
 	return nil
 }
 
@@ -147,8 +160,8 @@ func (s *memoryStore) HasCollection(ctx context.Context, name string) (bool, err
 	return ok, nil
 }
 
-// EnsureCollection 确保集合存在
-func (s *memoryStore) EnsureCollection(ctx context.Context, name string) error {
+// EnsureCollection 确保集合存在；已存在且维度不一致返回 ErrInvalidArgument
+func (s *memoryStore) EnsureCollection(ctx context.Context, name string, dimension int) error {
 	_, cancel, err := s.begin(ctx)
 	if err != nil {
 		return err
@@ -158,13 +171,21 @@ func (s *memoryStore) EnsureCollection(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := validateDimension(dimension); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return errors.Sentinel(ErrClosed)
 	}
-	if _, ok := s.colls[n]; !ok {
-		s.colls[n] = make(map[string]memRow)
+	coll, ok := s.colls[n]
+	if !ok {
+		s.colls[n] = &memCollection{dim: dimension, rows: make(map[string]memRow)}
+		return nil
+	}
+	if coll.dim != dimension {
+		return errors.Sentinel(ErrInvalidArgument)
 	}
 	return nil
 }
@@ -178,9 +199,6 @@ func (s *memoryStore) Upsert(ctx context.Context, collection string, records []R
 	defer cancel()
 	n, err := normalizeCollectionName(collection)
 	if err != nil {
-		return err
-	}
-	if err := validateRecords(records, s.dim); err != nil {
 		return err
 	}
 	rows := make([]memRow, 0, len(records))
@@ -199,9 +217,12 @@ func (s *memoryStore) Upsert(ctx context.Context, collection string, records []R
 	if !ok {
 		return errors.Sentinel(ErrNotFound)
 	}
+	if err := validateRecords(records, coll.dim); err != nil {
+		return err
+	}
 	added := 0
 	for id := range newIDs {
-		if _, exists := coll[id]; !exists {
+		if _, exists := coll.rows[id]; !exists {
 			added++
 		}
 	}
@@ -209,7 +230,7 @@ func (s *memoryStore) Upsert(ctx context.Context, collection string, records []R
 		return errors.Sentinel(ErrInvalidArgument)
 	}
 	for _, row := range rows {
-		coll[row.id] = row
+		coll.rows[row.id] = row
 	}
 	return nil
 }
@@ -245,7 +266,7 @@ func (s *memoryStore) Get(ctx context.Context, collection string, ids []string) 
 			continue
 		}
 		seen[id] = struct{}{}
-		row, ok := coll[id]
+		row, ok := coll.rows[id]
 		if !ok {
 			continue
 		}
@@ -277,8 +298,8 @@ func (s *memoryStore) ListIDs(ctx context.Context, collection string, filter map
 	if !ok {
 		return nil, errors.Sentinel(ErrNotFound)
 	}
-	ids := make([]string, 0, len(coll))
-	for id, row := range coll {
+	ids := make([]string, 0, len(coll.rows))
+	for id, row := range coll.rows {
 		if matchFilter(row.metadata, filter) {
 			ids = append(ids, id)
 		}
@@ -311,7 +332,7 @@ func (s *memoryStore) Delete(ctx context.Context, collection string, ids []strin
 		return errors.Sentinel(ErrNotFound)
 	}
 	for _, raw := range ids {
-		delete(coll, strings.TrimSpace(raw))
+		delete(coll.rows, strings.TrimSpace(raw))
 	}
 	return nil
 }
@@ -339,9 +360,9 @@ func (s *memoryStore) DeleteByFilter(ctx context.Context, collection string, fil
 	if !ok {
 		return errors.Sentinel(ErrNotFound)
 	}
-	for id, row := range coll {
+	for id, row := range coll.rows {
 		if matchFilter(row.metadata, filter) {
-			delete(coll, id)
+			delete(coll.rows, id)
 		}
 	}
 	return nil
@@ -390,9 +411,6 @@ func (s *memoryStore) Search(ctx context.Context, collection string, q SearchQue
 	if err != nil {
 		return nil, err
 	}
-	if err := validateSearchQuery(q, s.dim); err != nil {
-		return nil, err
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.closed {
@@ -402,9 +420,12 @@ func (s *memoryStore) Search(ctx context.Context, collection string, q SearchQue
 	if !ok {
 		return nil, errors.Sentinel(ErrNotFound)
 	}
-	rows := make([]memRow, 0, len(coll))
+	if err := validateSearchQuery(q, coll.dim); err != nil {
+		return nil, err
+	}
+	rows := make([]memRow, 0, len(coll.rows))
 	nchk := 0
-	for _, row := range coll {
+	for _, row := range coll.rows {
 		nchk++
 		if nchk&63 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -518,7 +539,7 @@ func (s *memoryStore) begin(ctx context.Context) (context.Context, context.Cance
 func (s *memoryStore) totalLocked() int {
 	n := 0
 	for _, c := range s.colls {
-		n += len(c)
+		n += len(c.rows)
 	}
 	return n
 }

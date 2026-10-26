@@ -84,7 +84,7 @@ func (s captureSearchStore) Search(ctx context.Context, collection string, q vec
 // newTestEngine 创建挂接 memory store 的测试引擎
 func newTestEngine(t *testing.T) (*Engine, *fakeEmbedder, vectordb.Store) {
 	t.Helper()
-	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory, Dimension: testDimension})
+	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func newTestEngine(t *testing.T) (*Engine, *fakeEmbedder, vectordb.Store) {
 func TestNewInvalidConfig(t *testing.T) {
 	t.Parallel()
 	emb := &fakeEmbedder{dim: testDimension}
-	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory, Dimension: testDimension})
+	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestNewInvalidConfig(t *testing.T) {
 // TestRetrieveStrategyPlumbing 覆盖检索策略传递：默认与 hybrid 带 BM25 文本，vector 不带
 func TestRetrieveStrategyPlumbing(t *testing.T) {
 	t.Parallel()
-	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory, Dimension: testDimension})
+	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,34 +132,31 @@ func TestRetrieveStrategyPlumbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5}); err != nil {
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Text != "苹果" {
 		t.Fatalf("默认 hybrid 未传递检索文本: %+v", *captured)
 	}
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: StrategyHybrid, TopK: 5,
-	}); err != nil {
+		Query: "苹果", Strategy: StrategyHybrid, TopK: 5, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Text != "苹果" {
 		t.Fatalf("hybrid 未传递检索文本: %+v", *captured)
 	}
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: StrategyVector, TopK: 5,
-	}); err != nil {
+		Query: "苹果", Strategy: StrategyVector, TopK: 5, Dimensions: testDimension}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Text != "" {
 		t.Fatalf("vector 不应传递检索文本: %+v", *captured)
 	}
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: "bogus", TopK: 5,
-	}); !errors.Is(err, ErrInvalidArgument) {
+		Query: "苹果", Strategy: "bogus", TopK: 5, Dimensions: testDimension}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("非法策略: %v", err)
 	}
 }
@@ -173,14 +170,14 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 		name string
 		req  RetrieveRequest
 	}{
-		{"empty query", RetrieveRequest{Query: "  ", TopK: 5}},
-		{"zero topk", RetrieveRequest{Query: "苹果"}},
-		{"negative topk", RetrieveRequest{Query: "苹果", TopK: -1}},
-		{"topk too large", RetrieveRequest{Query: "苹果", TopK: vectordb.MaxTopK + 1}},
-		{"nan min score", RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.NaN())}},
-		{"inf min score", RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.Inf(1))}},
-		{"empty filter key", RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{"": "x"}}},
-		{"bad filter key", RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{`a"b`: "x"}}},
+		{"empty query", RetrieveRequest{Query: "  ", TopK: 5, Dimensions: testDimension}},
+		{"zero topk", RetrieveRequest{Query: "苹果", Dimensions: testDimension}},
+		{"negative topk", RetrieveRequest{Query: "苹果", TopK: -1, Dimensions: testDimension}},
+		{"topk too large", RetrieveRequest{Query: "苹果", TopK: vectordb.MaxTopK + 1, Dimensions: testDimension}},
+		{"nan min score", RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.NaN()), Dimensions: testDimension}},
+		{"inf min score", RetrieveRequest{Query: "苹果", TopK: 5, MinScore: float32(math.Inf(1)), Dimensions: testDimension}},
+		{"empty filter key", RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{"": "x"}, Dimensions: testDimension}},
+		{"bad filter key", RetrieveRequest{Query: "苹果", TopK: 5, Filter: map[string]string{`a"b`: "x"}, Dimensions: testDimension}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -198,7 +195,7 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 func TestRetrieveEmptyCollection(t *testing.T) {
 	t.Parallel()
 	e, emb, _ := newTestEngine(t)
-	hits, err := e.Retrieve(context.Background(), "no_such_coll", RetrieveRequest{Query: "苹果", TopK: 5})
+	hits, err := e.Retrieve(context.Background(), "no_such_coll", RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +212,7 @@ func TestRetrieveMinScore(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.store.CreateCollection(ctx, testCollection); err != nil {
+	if err := e.store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.store.Upsert(ctx, testCollection, []vectordb.Record{
@@ -226,18 +223,17 @@ func TestRetrieveMinScore(t *testing.T) {
 	}
 	// vector 策略 Score 是余弦相似度：near=1、far=0，0.5 阈值只留 near
 	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: StrategyVector, TopK: 10, MinScore: 0.5,
-	})
+		Query: "苹果", Strategy: StrategyVector, TopK: 10, MinScore: 0.5, Dimensions: testDimension})
 	if err != nil || len(hits) != 1 || hits[0].ID != "near" {
 		t.Fatalf("vector 阈值过滤: %+v err=%v", hits, err)
 	}
 	// hybrid 策略 Score 是 RRF 融合分，只看两路排名与原始余弦无关：
 	// near 为 dense 第 1 名 ≈0.0164，far 为第 2 名 ≈0.0161，阈值按融合分口径设置
-	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.0162})
+	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10, MinScore: 0.0162, Dimensions: testDimension})
 	if err != nil || len(hits) != 1 || hits[0].ID != "near" {
 		t.Fatalf("hybrid 阈值过滤: %+v err=%v", hits, err)
 	}
-	all, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10})
+	all, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 10, Dimensions: testDimension})
 	if err != nil || len(all) != 2 {
 		t.Fatalf("不设阈值: %+v err=%v", all, err)
 	}
@@ -248,7 +244,7 @@ func TestRetrieveHybridLexicalBoost(t *testing.T) {
 	t.Parallel()
 	e, _, _ := newTestEngine(t)
 	ctx := context.Background()
-	if err := e.store.CreateCollection(ctx, testCollection); err != nil {
+	if err := e.store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.store.Upsert(ctx, testCollection, []vectordb.Record{
@@ -259,7 +255,7 @@ func TestRetrieveHybridLexicalBoost(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "如何退款", TopK: 2})
+	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "如何退款", TopK: 2, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +291,7 @@ func TestRetrievePostFilter(t *testing.T) {
 	t.Parallel()
 	e, _, store := newTestEngine(t)
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, testCollection); err != nil {
+	if err := store.CreateCollection(ctx, testCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	records := []vectordb.Record{
@@ -307,7 +303,7 @@ func TestRetrievePostFilter(t *testing.T) {
 	}
 	// 后置过滤生效：只保留 keep=1 的命中
 	filter := &fakeHitFilter{keep: func(hit vectordb.Hit) bool { return hit.Metadata["keep"] == "1" }}
-	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: filter})
+	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: filter, Dimensions: testDimension})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,24 +311,24 @@ func TestRetrievePostFilter(t *testing.T) {
 		t.Fatalf("后置过滤结果: %+v calls=%d", hits, filter.calls)
 	}
 	// nil 过滤器不改变结果
-	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
+	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, Dimensions: testDimension})
 	if err != nil || len(hits) != 2 {
 		t.Fatalf("nil 过滤器: %+v err=%v", hits, err)
 	}
 	// 过滤器错误原样上抛
 	boom := &fakeHitFilter{err: ErrBadResponse}
-	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: boom}); !errors.Is(err, ErrBadResponse) {
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: boom, Dimensions: testDimension}); !errors.Is(err, ErrBadResponse) {
 		t.Fatalf("过滤器错误应透传，实际 %v", err)
 	}
 	// 过滤器报告集合消失：按空结果处理
 	missing := &fakeHitFilter{err: vectordb.ErrNotFound}
-	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: missing})
+	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: missing, Dimensions: testDimension})
 	if err != nil || hits == nil || len(hits) != 0 {
 		t.Fatalf("集合消失应按空结果处理: %+v err=%v", hits, err)
 	}
 	// 空命中不调用过滤器
 	quiet := &fakeHitFilter{}
-	hits, err = e.Retrieve(ctx, "no_such_collection", RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: quiet})
+	hits, err = e.Retrieve(ctx, "no_such_collection", RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: quiet, Dimensions: testDimension})
 	if err != nil || len(hits) != 0 || quiet.calls != 0 {
 		t.Fatalf("空命中不应调用过滤器: %+v calls=%d err=%v", hits, quiet.calls, err)
 	}

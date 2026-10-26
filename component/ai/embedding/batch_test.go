@@ -75,7 +75,7 @@ func TestEmbedBatchesLargeInput(t *testing.T) {
 	for i := range inputs {
 		inputs[i] = "x"
 	}
-	resp, err := cli.Embed(context.Background(), Request{Inputs: inputs})
+	resp, err := cli.Embed(context.Background(), Request{Inputs: inputs, Dimensions: 1})
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestEmbedCustomMaxBatch(t *testing.T) {
 	for i := range inputs {
 		inputs[i] = "x"
 	}
-	resp, err := cli.Embed(context.Background(), Request{Inputs: inputs})
+	resp, err := cli.Embed(context.Background(), Request{Inputs: inputs, Dimensions: 1})
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
 	}

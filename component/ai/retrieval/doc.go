@@ -41,10 +41,10 @@
 //
 // # 契约
 //
-//   - 集合名、RetrieveRequest 全部字段按调用传入；TopK 必填；MinScore 为 0 表示不设阈值
+//   - 集合名、RetrieveRequest 全部字段按调用传入；TopK 与 Dimensions 必填；
+//     MinScore 为 0 表示不设阈值
 //   - 集合不存在或为空时返回空切片与 nil，不视为错误，且不消耗向量化调用
-//   - Engine 不内置超时，使用调用方 ctx 控制；查询向量维度由 vectordb 校验兜底，
-//     检索路径不做写侧的维度锁定
+//   - Engine 不内置超时，使用调用方 ctx 控制；查询向量按 Dimensions 请求，与集合维度不符由 vectordb 校验兜底
 //   - Engine 构造后不可变，可并发调用；请勿复制 Engine 值
 //
 // # 错误

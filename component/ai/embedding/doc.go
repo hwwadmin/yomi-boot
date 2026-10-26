@@ -3,7 +3,9 @@
 // 本包与 ai/llm、ai/jev 相互独立，配置与协议类型互不混用。
 // 模型由 Config.Model 锁定；换模型请另 New 一个实例。
 // APIKey 可空，供本地或免费、免鉴权网关；空则不带 Authorization。
-// Dimensions：配置与请求皆空则不传上游（不设缺省维度）；请求指针非空则覆盖配置；若设置必须 >0。
+// Dimensions 是每次 Embed 调用的必填入参（输出维度，必须 >0），返回向量按它校验长度。
+// SendDimensions 开启时随请求下发上游 dimensions 参数（OpenAI text-embedding-3 系列等支持）；
+// 不支持该参数的网关会返回 400，此时仅本地校验维度。
 // 一次 Embed 整批成功或整包失败；输入超过 MaxBatch（默认 2048）时按该值分批。不进插件链、不读 YAML、不做限流。
 //
 // # 基本用法
@@ -15,7 +17,8 @@
 //	    Model:    "text-embedding-3-small",
 //	})
 //	vec, err := emb.Embed(ctx, embedding.Request{
-//	    Inputs: []string{"hello", "world"},
+//	    Inputs:     []string{"hello", "world"},
+//	    Dimensions: 1536,
 //	})
 //
 // # BaseURL（APIURL 原样注入，本包不拼接路径）

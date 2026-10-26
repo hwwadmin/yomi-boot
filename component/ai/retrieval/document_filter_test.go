@@ -76,13 +76,13 @@ func (s *countGetStore) Get(ctx context.Context, collection string, ids []string
 // newFilterTestStore 创建含两篇文档状态的内存向量库
 func newFilterTestStore(t *testing.T) vectordb.Store {
 	t.Helper()
-	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory, Dimension: testDimension})
+	store, err := vectordb.New(vectordb.Config{Provider: vectordb.ProviderMemory})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	if err := store.CreateCollection(ctx, docFilterCollection); err != nil {
+	if err := store.CreateCollection(ctx, docFilterCollection, testDimension); err != nil {
 		t.Fatal(err)
 	}
 	records := []vectordb.Record{

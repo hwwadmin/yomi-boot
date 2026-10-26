@@ -1,20 +1,20 @@
 // Package vectordb 提供统一向量库门面，支持 milvus 与 memory。
 //
 // 配置只在 New / MustNew 传入；本包不读 YAML、不进插件链、不注册配置根段。
-// 一个 Store 锁定 Dimension 与 Metric（空则 COSINE）；milvus 还锁定 IndexType（空则 HNSW）。
+// 一个 Store 锁定 Metric（空则 COSINE）与 milvus IndexType（空则 HNSW）；向量维度在创建集合时传入并锁定在集合上，不同集合可不同。
 // 集合名每次调用传入，用于动态新增、删除、覆盖索引。已存在集合不会因改 IndexType 而重建索引。
 // 业务禁止直引 github.com/milvus-io/milvus/client/v2。
 //
 //	store, err := vectordb.New(vectordb.Config{
-//	    Provider:  vectordb.ProviderMemory,
-//	    Dimension: 1024,
+//	    Provider: vectordb.ProviderMemory,
 //	})
+//	err = store.CreateCollection(ctx, "kb_sales", 1024)
 //
-// CreateCollection 已存在返回 ErrAlreadyExists。HasCollection 不存在返回 false, nil。
+// CreateCollection 接收集合向量维度，已存在返回 ErrAlreadyExists。HasCollection 不存在返回 false, nil。
 // milvus 建集时索引或 load 失败会删掉刚建的集合，避免半就绪；读写前会对未 load 的集合补索引并 load。
-// ReplaceCollection 用完整快照覆盖；过程允许脏读；milvus 先写新点再删旧点，失败时旧数据仍在（可能夹杂已写入的新点）；空切片保留空集合。
+// ReplaceCollection 用完整快照覆盖，集合不存在时按传入维度创建；过程允许脏读；milvus 先写新点再删旧点，失败时旧数据仍在（可能夹杂已写入的新点）；空切片保留空集合。
 // ListIDs 按元数据等值 AND 列出主键，只返回 ID；用于按业务键枚举/清理，不读向量。
-// EnsureCollection 确保集合存在；已存在返回 nil。
+// EnsureCollection 确保集合存在；已存在且维度不一致返回 ErrInvalidArgument。
 // ReplaceByFilter 按过滤键覆盖写入：先 Upsert records，再删除过滤命中但不在 records 中的
 // 旧主键；records 为空时只清理；同一过滤键的替换在本实例内串行。
 // Close 由业务在进程退出时调用，plugin.PluginSlot 不会自动关闭。

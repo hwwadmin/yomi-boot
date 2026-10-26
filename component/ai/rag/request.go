@@ -11,8 +11,9 @@ import (
 
 // IndexRequest 文档入库入参
 type IndexRequest struct {
-	Documents []Document       // Documents 至少 1 条；同一请求内 ID 不得重复
-	Chunker   chunking.Chunker // Chunker 可选；空则使用 Config.Chunker
+	Documents  []Document       // Documents 至少 1 条；同一请求内 ID 不得重复
+	Dimensions int              // Dimensions 是集合向量维度；必填且 >0；集合不存在时按它创建，已存在时须与集合维度一致
+	Chunker    chunking.Chunker // Chunker 可选；空则使用 Config.Chunker
 }
 
 // IndexResult 文档入库结果

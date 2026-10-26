@@ -36,7 +36,6 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 		{"bad url", func(c *Config) { c.APIURL = "not-a-url" }},
 		{"bad scheme", func(c *Config) { c.APIURL = "ftp://example.com" }},
 		{"empty model", func(c *Config) { c.Model = "\t" }},
-		{"non-positive dimensions", func(c *Config) { z := 0; c.Dimensions = &z }},
 		{"negative max batch", func(c *Config) { c.MaxBatch = -1 }},
 		{"negative timeout", func(c *Config) { c.Timeout = -time.Second }},
 		{"reserved header", func(c *Config) { c.ExtraHeaders = map[string]string{"Authorization": "x"} }},
@@ -58,9 +57,7 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 // TestNewCopiesConfig 验证构造后修改原配置不影响已拷贝字段
 func TestNewCopiesConfig(t *testing.T) {
 	t.Parallel()
-	dim := 8
 	cfg := validCfg()
-	cfg.Dimensions = &dim
 	cfg.ExtraHeaders = map[string]string{"X-Gateway": "a"}
 	cli, err := New(cfg)
 	if err != nil {
@@ -70,14 +67,10 @@ func TestNewCopiesConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("type=%T", cli)
 	}
-	dim = 16
 	cfg.ExtraHeaders["X-Gateway"] = "b"
 	cfg.Model = "changed"
 	if impl.cfg.Model != "text-embedding-3-small" {
 		t.Fatalf("model=%s", impl.cfg.Model)
-	}
-	if impl.cfg.Dimensions == nil || *impl.cfg.Dimensions != 8 {
-		t.Fatalf("dimensions=%v", impl.cfg.Dimensions)
 	}
 	if impl.cfg.ExtraHeaders["X-Gateway"] != "a" {
 		t.Fatalf("headers=%v", impl.cfg.ExtraHeaders)
@@ -102,37 +95,22 @@ func TestNewAllowsEmptyAPIKey(t *testing.T) {
 	}
 }
 
-// TestValidateRequest 验证空列表、trim 后空串与非正维度
+// TestValidateRequest 验证空列表、trim 后空串与缺失/非正维度
 func TestValidateRequest(t *testing.T) {
 	t.Parallel()
-	zero := 0
 	cases := []Request{
 		{},
-		{Inputs: []string{"ok", "  "}},
-		{Inputs: []string{"ok"}, Dimensions: &zero},
+		{Inputs: []string{"ok", "  "}, Dimensions: 8},
+		{Inputs: []string{"ok"}},
+		{Inputs: []string{"ok"}, Dimensions: -1},
 	}
 	for i, req := range cases {
 		if err := validateRequest(req); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("case %d err=%v", i, err)
 		}
 	}
-	if err := validateRequest(Request{Inputs: []string{" a "}}); err != nil {
+	if err := validateRequest(Request{Inputs: []string{" a "}, Dimensions: 8}); err != nil {
 		t.Fatalf("valid: %v", err)
-	}
-}
-
-// TestResolveDimensions 验证请求覆盖配置、皆空则不传
-func TestResolveDimensions(t *testing.T) {
-	t.Parallel()
-	req, def := 3, 8
-	if got := resolveDimensions(&req, &def); got == nil || *got != 3 {
-		t.Fatalf("override=%v", got)
-	}
-	if got := resolveDimensions(nil, &def); got == nil || *got != 8 {
-		t.Fatalf("fallback=%v", got)
-	}
-	if got := resolveDimensions(nil, nil); got != nil {
-		t.Fatalf("both nil=%v", got)
 	}
 }
 

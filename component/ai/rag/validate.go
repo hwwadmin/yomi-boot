@@ -73,6 +73,14 @@ func validateDocID(id string) error {
 	return nil
 }
 
+// validateDimensions 校验集合向量维度；非法返回 ErrInvalidArgument
+func validateDimensions(dimensions int) error {
+	if dimensions <= 0 {
+		return errors.Sentinel(ErrInvalidArgument)
+	}
+	return nil
+}
+
 // validateChunkCount 校验单文档块数；超过上限返回 ErrInvalidArgument
 func validateChunkCount(count int) error {
 	if count > maxChunksPerDoc {
