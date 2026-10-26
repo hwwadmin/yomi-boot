@@ -1,4 +1,4 @@
-// 路径②文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接。
+// 路径②文档检索增强：检索（含域过滤） → 精重排 → 提示词拼接。
 //
 // @author zwei
 
@@ -14,11 +14,11 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// Retrieve 实现 Engine：检索、域过滤、精重排与提示词拼接
+// Retrieve 实现 Engine：检索增强 → 精重排 → 提示词拼接
 //
-// 检索段（入参校验、查询向量化、策略路由、阈值过滤）由 ai/retrieval 门面执行，
-// 检索入参非法错误透传其哨兵；在其上叠加文档域过滤（缺少块文本的命中忽略、
-// 更新窗口内的旧块丢弃），再按 RerankTopN 精重排，最后由 Generator 拼接提示词。
+// 检索段（入参校验、查询向量化、策略路由、前置与阈值过滤、后置域过滤）全部由
+// ai/retrieval 门面执行：本包把文档域过滤器经 RetrieveRequest.PostFilter 交给
+// 检索层（旧块丢弃、缺块文本命中忽略），检索入参非法与域过滤错误透传其哨兵。
 func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error) {
 	name, err := normalizeCollection(collection)
 	if err != nil {
@@ -28,14 +28,13 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
 	ctx = orBackground(ctx)
+	// 域过滤是检索链路的一环：由本包的过滤器实现，检索层负责应用
+	req.RetrieveRequest.PostFilter = e.filter
 	hits, err := e.retriever.Retrieve(ctx, name, req.RetrieveRequest)
 	if err != nil {
 		return nil, err
 	}
-	chunks, err := e.filterHits(ctx, name, hits)
-	if err != nil {
-		return nil, err
-	}
+	chunks := decodeHits(hits)
 	chunks, err = applyRerank(ctx, e.reranker, req.Query, chunks, req.RerankTopN)
 	if err != nil {
 		return nil, err
@@ -47,29 +46,13 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 	return &RetrieveResult{Prompt: prompt, Chunks: chunks}, nil
 }
 
-// filterHits 域过滤：忽略缺少块文本的命中，按文档当前版本与块总数丢弃旧块
-func (e *engine) filterHits(ctx context.Context, collection string, hits []vectordb.Hit) ([]Chunk, error) {
-	candidates := make([]vectordb.Hit, 0, len(hits))
+// decodeHits 将检索命中转为块
+func decodeHits(hits []vectordb.Hit) []Chunk {
+	chunks := make([]Chunk, 0, len(hits))
 	for _, hit := range hits {
-		if hasContent(hit) {
-			candidates = append(candidates, hit)
-		}
-	}
-	states, err := e.loadDocumentStates(ctx, collection, candidates)
-	if err != nil {
-		if errors.Is(err, vectordb.ErrNotFound) {
-			return []Chunk{}, nil
-		}
-		return nil, err
-	}
-	chunks := make([]Chunk, 0, len(candidates))
-	for _, hit := range candidates {
-		if !isCurrentChunk(hit, states) {
-			continue
-		}
 		chunks = append(chunks, decodeHit(hit))
 	}
-	return chunks, nil
+	return chunks
 }
 
 // applyRerank 精重排：候选块文本交 Reranker，结果按下标回取并回填 RerankScore；

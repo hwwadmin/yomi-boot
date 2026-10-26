@@ -41,6 +41,7 @@ type engine struct {
 	chunker    chunking.Chunker
 	embedder   embedding.Client
 	retriever  retrieval.Retriever
+	filter     retrieval.HitFilter
 	reranker   rerank.Reranker
 	generator  generation.Generator
 	store      vectordb.Store
@@ -63,6 +64,7 @@ func newEngine(cfg Config) (*engine, error) {
 		chunker:   cfg.Chunker,
 		embedder:  cfg.Embedder,
 		retriever: cfg.Retriever,
+		filter:    newChunkFilter(cfg.Store),
 		reranker:  cfg.Reranker,
 		generator: cfg.Generator,
 		store:     cfg.Store,

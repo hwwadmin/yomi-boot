@@ -66,15 +66,36 @@ func (e *Engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 		}
 		return nil, err
 	}
-	if req.MinScore == 0 {
-		return hits, nil
+	hits = filterByScore(hits, req.MinScore)
+	return applyPostFilter(ctx, collection, req.PostFilter, hits)
+}
+
+// filterByScore 按 MinScore 过滤命中；0 表示不设阈值
+func filterByScore(hits []vectordb.Hit, minScore float32) []vectordb.Hit {
+	if minScore == 0 {
+		return hits
 	}
 	out := make([]vectordb.Hit, 0, len(hits))
 	for _, hit := range hits {
-		if hit.Score < req.MinScore {
+		if hit.Score < minScore {
 			continue
 		}
 		out = append(out, hit)
+	}
+	return out
+}
+
+// applyPostFilter 应用后置过滤器；集合消失等同于空检索，其他错误原样上抛
+func applyPostFilter(ctx context.Context, collection string, filter HitFilter, hits []vectordb.Hit) ([]vectordb.Hit, error) {
+	if filter == nil || len(hits) == 0 {
+		return hits, nil
+	}
+	out, err := filter.Filter(ctx, collection, hits)
+	if err != nil {
+		if errors.Is(err, vectordb.ErrNotFound) {
+			return []vectordb.Hit{}, nil
+		}
+		return nil, err
 	}
 	return out, nil
 }

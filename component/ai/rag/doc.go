@@ -42,7 +42,7 @@
 //	路径① 文档入库：Document → Chunker 切块 → Embedder 向量化 → Store 写入；
 //	  本包负责块主键（"文档ID#序号"）、保留元数据键、文档版本与旧块清理、
 //	  条带锁与按块预算分批写入。
-//	路径② 文档检索增强：Query → Retriever 检索 → 文档域过滤 → Reranker 精重排
+//	路径② 文档检索增强：Query → Retriever 检索（含域过滤）→ Reranker 精重排
 //	  → Generator 拼接提示词；返回 Prompt（直接交大模型）与重排后的 Chunks。
 //
 // 装配约束：Retriever 须与 Store 基于同一向量库，其查询向量化须与 Embedder
@@ -89,13 +89,16 @@
 //
 // # 检索增强
 //
-// 编排顺序：检索 → 域过滤 → 精重排 → 提示词拼接。
+// 编排顺序：检索（含三层过滤）→ 精重排 → 提示词拼接。
 //
 //   - 检索段由 component/ai/retrieval 门面执行（入参校验、查询向量化、策略路由、
-//     阈值过滤），检索入参非法透传其哨兵；hybrid（默认）/ vector 的策略口径见其文档
-//   - 域过滤：缺少块文本的命中忽略；读取命中文档当前版本与块总数，丢弃版本不一致
-//     或索引超出总数的旧块；辅助查询失败时降级为不过滤并告警。
-//     直接使用 ai/retrieval 检索本包写入的集合不会做旧块过滤
+//     前置过滤、阈值过滤与后置过滤），检索入参非法透传其哨兵；hybrid（默认）/
+//     vector 的策略口径见其文档
+//   - 域过滤是检索链路的后置过滤：本包实现 retrieval.HitFilter 并经
+//     RetrieveRequest.PostFilter 交给检索层执行——缺少块文本的命中忽略；读取命中
+//     文档当前版本与块总数，丢弃版本不一致或索引超出总数的旧块；辅助查询失败时
+//     降级为不过滤并告警。RetrieveRequest.PostFilter 由本包固定注入，调用方传值
+//     会被覆盖；该过滤器不导出，直接使用 ai/retrieval 检索本包写入的集合不会做旧块过滤
 //   - 精重排：过滤后的块文本交由 Reranker，TopN 取 RerankTopN；无命中时跳过
 //     （重排契约要求至少 1 条候选）；结果经 rerank.Apply 按下标回取并回填
 //     RerankScore，下标越界、nil 响应等违约为 rerank.ErrBadResponse；

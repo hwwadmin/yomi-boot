@@ -267,3 +267,73 @@ func TestRetrieveHybridLexicalBoost(t *testing.T) {
 		t.Fatalf("词法命中应排第一: %+v", hits)
 	}
 }
+
+// fakeHitFilter 后置过滤测试替身
+type fakeHitFilter struct {
+	keep  func(hit vectordb.Hit) bool
+	err   error
+	calls int
+}
+
+// Filter 实现 HitFilter
+func (f *fakeHitFilter) Filter(ctx context.Context, collection string, hits []vectordb.Hit) ([]vectordb.Hit, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make([]vectordb.Hit, 0, len(hits))
+	for _, hit := range hits {
+		if f.keep == nil || f.keep(hit) {
+			out = append(out, hit)
+		}
+	}
+	return out, nil
+}
+
+// TestRetrievePostFilter 覆盖后置过滤：应用、错误透传与集合消失
+func TestRetrievePostFilter(t *testing.T) {
+	t.Parallel()
+	e, _, store := newTestEngine(t)
+	ctx := context.Background()
+	if err := store.CreateCollection(ctx, testCollection); err != nil {
+		t.Fatal(err)
+	}
+	records := []vectordb.Record{
+		{ID: "doc-a", Vector: []float32{1, 0, 0}, Metadata: map[string]string{"keep": "1"}},
+		{ID: "doc-b", Vector: []float32{1, 0, 0}, Metadata: map[string]string{"keep": "0"}},
+	}
+	if err := store.Upsert(ctx, testCollection, records); err != nil {
+		t.Fatal(err)
+	}
+	// 后置过滤生效：只保留 keep=1 的命中
+	filter := &fakeHitFilter{keep: func(hit vectordb.Hit) bool { return hit.Metadata["keep"] == "1" }}
+	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: filter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filter.calls != 1 || len(hits) != 1 || hits[0].ID != "doc-a" {
+		t.Fatalf("后置过滤结果: %+v calls=%d", hits, filter.calls)
+	}
+	// nil 过滤器不改变结果
+	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5})
+	if err != nil || len(hits) != 2 {
+		t.Fatalf("nil 过滤器: %+v err=%v", hits, err)
+	}
+	// 过滤器错误原样上抛
+	boom := &fakeHitFilter{err: ErrBadResponse}
+	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: boom}); !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("过滤器错误应透传，实际 %v", err)
+	}
+	// 过滤器报告集合消失：按空结果处理
+	missing := &fakeHitFilter{err: vectordb.ErrNotFound}
+	hits, err = e.Retrieve(ctx, testCollection, RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: missing})
+	if err != nil || hits == nil || len(hits) != 0 {
+		t.Fatalf("集合消失应按空结果处理: %+v err=%v", hits, err)
+	}
+	// 空命中不调用过滤器
+	quiet := &fakeHitFilter{}
+	hits, err = e.Retrieve(ctx, "no_such_collection", RetrieveRequest{Query: "苹果", TopK: 5, PostFilter: quiet})
+	if err != nil || len(hits) != 0 || quiet.calls != 0 {
+		t.Fatalf("空命中不应调用过滤器: %+v calls=%d err=%v", hits, quiet.calls, err)
+	}
+}

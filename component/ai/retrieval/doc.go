@@ -26,6 +26,16 @@
 // 词法能力由 vectordb 提供（milvus 原生 BM25 全文检索要求 Milvus 2.5+，
 // 旧版本创建的集合须重建后才能混合检索；memory 自带 BM25 实现），详见 component/ai/vectordb 文档。
 //
+// # 过滤
+//
+// 检索链路上的过滤全部由本包执行，分三层：
+//
+//   - 前置过滤：RetrieveRequest.Filter（元数据等值 AND）随检索下推到向量库
+//   - 阈值过滤：RetrieveRequest.MinScore 在检索返回后按分数过滤，0 表示不设阈值
+//   - 后置过滤：RetrieveRequest.PostFilter 是 HitFilter 扩展点，在阈值过滤后应用，
+//     供调用方叠加域语义（如文档版本治理、内容完整性）；nil 表示不过滤，
+//     返回 vectordb.ErrNotFound 等同于集合消失（按空结果处理），其他错误原样上抛
+//
 // # 契约
 //
 //   - 集合名、RetrieveRequest 全部字段按调用传入；TopK 必填；MinScore 为 0 表示不设阈值
