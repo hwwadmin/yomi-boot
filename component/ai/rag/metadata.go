@@ -32,6 +32,25 @@ func chunkID(docID string, index int) string {
 	return docID + "#" + strconv.Itoa(index)
 }
 
+// encodeChunkRecord 组装一条块记录：主键、向量、词法文本与元数据
+func encodeChunkRecord(doc Document, index, total int, version, content string, vector []float64) vectordb.Record {
+	return vectordb.Record{
+		ID:       chunkID(doc.ID, index),
+		Vector:   toFloat32(vector),
+		Text:     content,
+		Metadata: encodeChunkMetadata(doc, index, total, version, content),
+	}
+}
+
+// toFloat32 将向量化输出转为向量库所需的 float32
+func toFloat32(vec []float64) []float32 {
+	out := make([]float32, len(vec))
+	for i, v := range vec {
+		out[i] = float32(v)
+	}
+	return out
+}
+
 // encodeChunkMetadata 合并文档自定义元数据与保留键；total 是块总数，version 是本次写入版本
 func encodeChunkMetadata(doc Document, index, total int, version, content string) map[string]string {
 	md := make(map[string]string, len(doc.Metadata)+6)

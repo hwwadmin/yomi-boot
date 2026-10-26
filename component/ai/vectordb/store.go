@@ -16,6 +16,8 @@ type Store interface {
 	ReplaceCollection(ctx context.Context, name string, records []Record) error
 	// HasCollection 查询集合是否存在；不存在返回 false, nil
 	HasCollection(ctx context.Context, name string) (bool, error)
+	// EnsureCollection 确保集合存在；已存在返回 nil
+	EnsureCollection(ctx context.Context, name string) error
 
 	// Upsert 按 ID 覆盖写入；空切片非法；集合不存在返回 ErrNotFound
 	Upsert(ctx context.Context, collection string, records []Record) error
@@ -27,6 +29,10 @@ type Store interface {
 	Delete(ctx context.Context, collection string, ids []string) error
 	// DeleteByFilter 按元数据等值 AND 删除；filter 至少 1 个键；集合不存在返回 ErrNotFound
 	DeleteByFilter(ctx context.Context, collection string, filter map[string]string) error
+	// ReplaceByFilter 按过滤键覆盖写入并清理旧记录：先 Upsert records，再删除 filter 命中
+	// 但不在 records 中的主键；records 为空时只清理；filter 至少 1 个键；集合不存在返回
+	// ErrNotFound；同一过滤键的替换在本实例内串行，records 应属于 filter 命中的集合
+	ReplaceByFilter(ctx context.Context, collection string, filter map[string]string, records []Record) error
 	// Search 向量检索；Text 为空走纯向量，非空走向量 + BM25 混合检索（RRF 融合）；
 	// 无命中返回空切片；集合不存在返回 ErrNotFound；Hit 不含 Vector
 	Search(ctx context.Context, collection string, q SearchQuery) ([]Hit, error)

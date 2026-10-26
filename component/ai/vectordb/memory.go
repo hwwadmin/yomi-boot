@@ -26,13 +26,14 @@ type memRow struct {
 
 // memoryStore 进程内向量库
 type memoryStore struct {
-	mu         sync.RWMutex
-	closed     bool
-	dim        int
-	metric     Metric
-	timeout    time.Duration
-	maxRecords int
-	colls      map[string]map[string]memRow
+	mu           sync.RWMutex
+	closed       bool
+	dim          int
+	metric       Metric
+	timeout      time.Duration
+	maxRecords   int
+	colls        map[string]map[string]memRow
+	replaceLocks replaceLock
 }
 
 // newMemoryStore 创建内存 Store
@@ -144,6 +145,28 @@ func (s *memoryStore) HasCollection(ctx context.Context, name string) (bool, err
 	}
 	_, ok := s.colls[n]
 	return ok, nil
+}
+
+// EnsureCollection 确保集合存在
+func (s *memoryStore) EnsureCollection(ctx context.Context, name string) error {
+	_, cancel, err := s.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	n, err := normalizeCollectionName(name)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return errors.Sentinel(ErrClosed)
+	}
+	if _, ok := s.colls[n]; !ok {
+		s.colls[n] = make(map[string]memRow)
+	}
+	return nil
 }
 
 // Upsert 按 ID 覆盖写入
@@ -322,6 +345,38 @@ func (s *memoryStore) DeleteByFilter(ctx context.Context, collection string, fil
 		}
 	}
 	return nil
+}
+
+// ReplaceByFilter 按过滤键覆盖写入并清理旧记录
+func (s *memoryStore) ReplaceByFilter(ctx context.Context, collection string, filter map[string]string, records []Record) error {
+	_, cancel, err := s.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	n, err := normalizeCollectionName(collection)
+	if err != nil {
+		return err
+	}
+	if err := validateFilter(filter, true); err != nil {
+		return err
+	}
+	unlock := s.replaceLocks.lock(n, filter)
+	defer unlock()
+	if len(records) > 0 {
+		if err := s.Upsert(ctx, n, records); err != nil {
+			return err
+		}
+	}
+	ids, err := s.ListIDs(ctx, n, filter)
+	if err != nil {
+		return err
+	}
+	stale := staleIDs(ids, records)
+	if len(stale) == 0 {
+		return nil
+	}
+	return s.Delete(ctx, n, stale)
 }
 
 // Search 暴力扫描 TopK；Text 非空时走向量 + BM25 混合并以 RRF 融合

@@ -14,6 +14,9 @@
 // milvus 建集时索引或 load 失败会删掉刚建的集合，避免半就绪；读写前会对未 load 的集合补索引并 load。
 // ReplaceCollection 用完整快照覆盖；过程允许脏读；milvus 先写新点再删旧点，失败时旧数据仍在（可能夹杂已写入的新点）；空切片保留空集合。
 // ListIDs 按元数据等值 AND 列出主键，只返回 ID；用于按业务键枚举/清理，不读向量。
+// EnsureCollection 确保集合存在；已存在返回 nil。
+// ReplaceByFilter 按过滤键覆盖写入：先 Upsert records，再删除过滤命中但不在 records 中的
+// 旧主键；records 为空时只清理；同一过滤键的替换在本实例内串行。
 // Close 由业务在进程退出时调用，plugin.PluginSlot 不会自动关闭。
 //
 // # 检索模式

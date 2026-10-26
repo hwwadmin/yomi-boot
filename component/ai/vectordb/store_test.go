@@ -183,6 +183,25 @@ func runStoreMutateContract(t *testing.T, store Store, dim int) {
 		}
 	})
 
+	t.Run("ensure collection", func(t *testing.T) {
+		if err := store.EnsureCollection(ctx, contractCollNew); err != nil {
+			t.Fatalf("已存在时 ensure: %v", err)
+		}
+		if err := store.DropCollection(ctx, contractCollNew); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.EnsureCollection(ctx, contractCollNew); err != nil {
+			t.Fatalf("不存在时 ensure: %v", err)
+		}
+		ok, err := store.HasCollection(ctx, contractCollNew)
+		if err != nil || !ok {
+			t.Fatalf("ensure 后 has: ok=%v err=%v", ok, err)
+		}
+		if err := store.EnsureCollection(ctx, "bad-name"); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("bad name: %v", err)
+		}
+	})
+
 	t.Run("replace missing creates", func(t *testing.T) {
 		if err := store.ReplaceCollection(ctx, contractCollNew, []Record{
 			{ID: "n1", Vector: vec(1)},
@@ -378,6 +397,45 @@ func runStoreQueryContract(t *testing.T, store Store, dim int) {
 		}
 		if hits[0].Score <= 0 || hits[0].Score > 1.0 {
 			t.Fatalf("RRF 融合分超界: %+v", hits)
+		}
+	})
+
+	t.Run("replace by filter", func(t *testing.T) {
+		if err := store.ReplaceCollection(ctx, name, []Record{
+			{ID: "d1-0", Vector: vec(1), Metadata: map[string]string{"doc_id": "d1"}},
+			{ID: "d1-1", Vector: vec(1), Metadata: map[string]string{"doc_id": "d1"}},
+			{ID: "d2-0", Vector: vec(1), Metadata: map[string]string{"doc_id": "d2"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// 覆盖 d1：写入新块 d1-0，清理 d1-1，d2 不受影响
+		if err := store.ReplaceByFilter(ctx, name, map[string]string{"doc_id": "d1"}, []Record{
+			{ID: "d1-0", Vector: vec(0.5), Metadata: map[string]string{"doc_id": "d1"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		ids, err := store.ListIDs(ctx, name, map[string]string{"doc_id": "d1"})
+		if err != nil || len(ids) != 1 || ids[0] != "d1-0" {
+			t.Fatalf("d1 替换结果: %+v err=%v", ids, err)
+		}
+		ids, err = store.ListIDs(ctx, name, map[string]string{"doc_id": "d2"})
+		if err != nil || len(ids) != 1 {
+			t.Fatalf("d2 应不受影响: %+v err=%v", ids, err)
+		}
+		// 空 records 只清理
+		if err := store.ReplaceByFilter(ctx, name, map[string]string{"doc_id": "d2"}, nil); err != nil {
+			t.Fatal(err)
+		}
+		ids, err = store.ListIDs(ctx, name, map[string]string{"doc_id": "d2"})
+		if err != nil || len(ids) != 0 {
+			t.Fatalf("空 records 清理: %+v err=%v", ids, err)
+		}
+		// 参数校验与集合缺失
+		if err := store.ReplaceByFilter(ctx, name, nil, nil); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("empty filter: %v", err)
+		}
+		if err := store.ReplaceByFilter(ctx, "idx_none", map[string]string{"k": "v"}, nil); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("missing collection: %v", err)
 		}
 	})
 

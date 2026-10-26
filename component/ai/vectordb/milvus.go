@@ -39,6 +39,7 @@ type milvusStore struct {
 	dim              int
 	metric           Metric
 	timeout          time.Duration
+	replaceLocks     replaceLock
 	indexType        IndexType
 	indexNlist       int
 	indexM           int
@@ -191,6 +192,34 @@ func (s *milvusStore) HasCollection(ctx context.Context, name string) (bool, err
 		return false, err
 	}
 	return s.has(ctx, n)
+}
+
+// EnsureCollection 确保集合存在
+func (s *milvusStore) EnsureCollection(ctx context.Context, name string) error {
+	ctx, cancel, err := s.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	n, err := normalizeCollectionName(name)
+	if err != nil {
+		return err
+	}
+	has, err := s.has(ctx, n)
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if err := s.createReady(ctx, n); err != nil {
+		// 并发创建时另一个调用可能已先建；已存在仍视为成功
+		if errors.Is(err, ErrAlreadyExists) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // Upsert 按 ID 覆盖写入
@@ -408,6 +437,38 @@ func (s *milvusStore) DeleteByFilter(ctx context.Context, collection string, fil
 		return mapMilvusErr(err)
 	}
 	return s.flush(ctx, n)
+}
+
+// ReplaceByFilter 按过滤键覆盖写入并清理旧记录
+func (s *milvusStore) ReplaceByFilter(ctx context.Context, collection string, filter map[string]string, records []Record) error {
+	ctx, cancel, err := s.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	n, err := normalizeCollectionName(collection)
+	if err != nil {
+		return err
+	}
+	if err := validateFilter(filter, true); err != nil {
+		return err
+	}
+	unlock := s.replaceLocks.lock(n, filter)
+	defer unlock()
+	if len(records) > 0 {
+		if err := s.Upsert(ctx, n, records); err != nil {
+			return err
+		}
+	}
+	ids, err := s.ListIDs(ctx, n, filter)
+	if err != nil {
+		return err
+	}
+	stale := staleIDs(ids, records)
+	if len(stale) == 0 {
+		return nil
+	}
+	return s.Delete(ctx, n, stale)
 }
 
 // Search 向量检索；Text 非空时走 HybridSearch 以 RRF 融合 BM25

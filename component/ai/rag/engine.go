@@ -6,7 +6,6 @@ package rag
 
 import (
 	"context"
-	"sync"
 
 	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
@@ -14,7 +13,6 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
 	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // Engine 编排两条 RAG 流程：文档入库与文档检索增强；实现须并发安全。
@@ -33,14 +31,13 @@ type Engine interface {
 
 // engine 是 Engine 的实现；构造后不可变，可并发调用
 type engine struct {
-	chunker    chunking.Chunker
-	embedder   embedding.Client
-	retriever  retrieval.Retriever
-	filter     retrieval.HitFilter
-	reranker   rerank.Reranker
-	generator  generation.Generator
-	store      vectordb.Store
-	indexLocks [indexLockStripes]sync.Mutex
+	chunker   chunking.Chunker
+	embedder  embedding.Client
+	retriever retrieval.Retriever
+	filter    retrieval.HitFilter
+	reranker  rerank.Reranker
+	generator generation.Generator
+	store     vectordb.Store
 }
 
 var _ Engine = (*engine)(nil)
@@ -68,24 +65,6 @@ func newEngine(cfg Config) (*engine, error) {
 		generator: cfg.Generator,
 		store:     cfg.Store,
 	}, nil
-}
-
-// ensureCollection 查询并按需创建集合；并发创建撞车时视为成功
-func (e *engine) ensureCollection(ctx context.Context, collection string) error {
-	has, err := e.store.HasCollection(ctx, collection)
-	if err != nil {
-		return err
-	}
-	if has {
-		return nil
-	}
-	if err := e.store.CreateCollection(ctx, collection); err != nil {
-		if errors.Is(err, vectordb.ErrAlreadyExists) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 // orBackground 返回可用的 ctx；nil 回退 Background

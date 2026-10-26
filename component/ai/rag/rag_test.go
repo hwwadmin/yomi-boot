@@ -277,8 +277,9 @@ func TestIndexAndRetrieve(t *testing.T) {
 	if top.Score <= chunks[1].Score {
 		t.Fatalf("排序错误: %+v", chunks)
 	}
-	if emb.callCount() != 2 {
-		t.Fatalf("向量化调用 = %d，期望 2", emb.callCount())
+	// 两篇文档各一次写入向量化，首次检索一次查询向量化
+	if emb.callCount() != 3 {
+		t.Fatalf("向量化调用 = %d，期望 3", emb.callCount())
 	}
 
 	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
@@ -862,7 +863,7 @@ func TestIndexEmbedError(t *testing.T) {
 func TestIndexSingleEmbedCall(t *testing.T) {
 	t.Parallel()
 	e, emb, _ := newTestEngine(t)
-	total := indexBatchChunks + 6
+	total := 300
 	chunks := make([]string, total)
 	for i := range chunks {
 		chunks[i] = "苹果"
@@ -877,7 +878,7 @@ func TestIndexSingleEmbedCall(t *testing.T) {
 	if res.Chunks != total || res.Tokens != total {
 		t.Fatalf("入库结果: %+v", res)
 	}
-	// 单批 262 块一次 Embed 调用（跨批时按 indexBatchChunks 分组各调用一次）
+	// 单篇文档一次 Embed 调用，分批由 embedding 内部承担
 	if emb.callCount() != 1 {
 		t.Fatalf("调用次数 = %d，期望 1", emb.callCount())
 	}
@@ -1190,33 +1191,23 @@ func TestRetrieveGeneratorEmptyPrompt(t *testing.T) {
 	}
 }
 
-// flakyStore 在指定次数内让 Upsert 或 Delete 失败，用于模拟写入/清理的瞬时故障
+// flakyStore 在前 N 次 ReplaceByFilter 调用上返回错误，用于模拟写入瞬时故障
 type flakyStore struct {
 	vectordb.Store
-	upsertFailures int
-	deleteFailures int
+	replaceFailures int
 }
 
-// Upsert 按剩余失败次数返回错误，其余透传
-func (s *flakyStore) Upsert(ctx context.Context, collection string, records []vectordb.Record) error {
-	if s.upsertFailures > 0 {
-		s.upsertFailures--
-		return errors.New("simulated upsert failure")
+// ReplaceByFilter 按剩余失败次数返回错误，其余透传
+func (s *flakyStore) ReplaceByFilter(ctx context.Context, collection string, filter map[string]string, records []vectordb.Record) error {
+	if s.replaceFailures > 0 {
+		s.replaceFailures--
+		return errors.New("simulated replace failure")
 	}
-	return s.Store.Upsert(ctx, collection, records)
+	return s.Store.ReplaceByFilter(ctx, collection, filter, records)
 }
 
-// Delete 按剩余失败次数返回错误，其余透传
-func (s *flakyStore) Delete(ctx context.Context, collection string, ids []string) error {
-	if s.deleteFailures > 0 {
-		s.deleteFailures--
-		return errors.New("simulated delete failure")
-	}
-	return s.Store.Delete(ctx, collection, ids)
-}
-
-// TestIndexUpsertFailureKeepsOldVersionIntact 验证写入失败时不删除旧块
-func TestIndexUpsertFailureKeepsOldVersionIntact(t *testing.T) {
+// TestIndexReplaceFailureKeepsOldVersionIntact 验证替换失败时旧版本保持完整，重试后只剩新版本
+func TestIndexReplaceFailureKeepsOldVersionIntact(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
 	flaky := &flakyStore{Store: store}
@@ -1230,63 +1221,20 @@ func TestIndexUpsertFailureKeepsOldVersionIntact(t *testing.T) {
 		t.Fatal(err)
 	}
 	small := &stubChunker{chunks: []string{"b0"}}
-	flaky.upsertFailures = 1
+	flaky.replaceFailures = 1
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
 		Chunker:   small,
 	}); err == nil {
-		t.Fatal("期望写入失败")
+		t.Fatal("期望替换失败")
 	}
-	// 写入失败发生在清理之前，旧版本必须保持完整
+	// 替换失败时旧版本保持完整
 	got, err := store.Get(ctx, testCollection, []string{chunkID("doc", 0), chunkID("doc", 5)})
 	if err != nil || len(got) != 2 ||
 		got[0].Metadata[MetadataKeyContent] != "a0" || got[1].Metadata[MetadataKeyContent] != "a5" {
 		t.Fatalf("旧版本应保持完整: %+v err=%v", got, err)
 	}
 	// 重试后只保留新版本
-	if _, err := e.Index(ctx, testCollection, IndexRequest{
-		Documents: []Document{{ID: "doc", Content: "small"}},
-		Chunker:   small,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		RetrieveRequest: retrieval.RetrieveRequest{Query: "q", TopK: 20},
-	})
-	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].Content != "b0" {
-		t.Fatalf("重试后应只剩新版本: %+v err=%v", out, err)
-	}
-}
-
-// TestIndexDeleteFailureSelfHeals 验证清理失败后旧块残留，重试会重新枚举并清理
-func TestIndexDeleteFailureSelfHeals(t *testing.T) {
-	t.Parallel()
-	store := newTestStore(t, testDimension)
-	flaky := &flakyStore{Store: store}
-	e := newTestEngineWithDeps(t, &fakeEmbedder{dim: testDimension}, flaky)
-	ctx := context.Background()
-	large := &stubChunker{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
-	if _, err := e.Index(ctx, testCollection, IndexRequest{
-		Documents: []Document{{ID: "doc", Content: "large"}},
-		Chunker:   large,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	small := &stubChunker{chunks: []string{"b0"}}
-	flaky.deleteFailures = 1
-	if _, err := e.Index(ctx, testCollection, IndexRequest{
-		Documents: []Document{{ID: "doc", Content: "small"}},
-		Chunker:   small,
-	}); err == nil {
-		t.Fatal("期望旧块清理失败")
-	}
-	// 写入已成功：第 0 块是新版本，旧块 1..5 仍残留
-	got, err := store.Get(ctx, testCollection, []string{chunkID("doc", 0), chunkID("doc", 5)})
-	if err != nil || len(got) != 2 ||
-		got[0].Metadata[MetadataKeyContent] != "b0" || got[1].Metadata[MetadataKeyContent] != "a5" {
-		t.Fatalf("写入后应保留新块与旧尾块: %+v err=%v", got, err)
-	}
-	// 重试会重新枚举该文档的块并清理旧尾块
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
 		Chunker:   small,
