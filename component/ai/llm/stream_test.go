@@ -187,6 +187,18 @@ func TestStreamEmptyTextIsBadResponse(t *testing.T) {
 	}
 }
 
+// TestStreamPumpContextError 验证底层返回上下文错误时按上下文错误包装
+func TestStreamPumpContextError(t *testing.T) {
+	t.Parallel()
+	s := newChatStream(context.Background(), nil, &stubPump{err: context.Canceled})
+	if _, err := s.Recv(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
+	}
+	if _, err := s.Recv(); err != io.EOF {
+		t.Fatalf("after context error: %v", err)
+	}
+}
+
 // TestStreamTimeoutThenEOF 验证当次超时非结束符，之后为未包装结束符
 func TestStreamTimeoutThenEOF(t *testing.T) {
 	t.Parallel()

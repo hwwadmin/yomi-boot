@@ -30,7 +30,11 @@ func New(cfg Config) (Store, error) {
 	case ProviderMemory:
 		return newMemoryStore(copied), nil
 	case ProviderMilvus:
-		return newMilvusStore(copied)
+		store, err := newMilvusStore(copied)
+		if err != nil {
+			return nil, err
+		}
+		return store, nil
 	default:
 		return nil, errors.Sentinel(ErrInvalidArgument)
 	}
