@@ -19,7 +19,7 @@ type Store interface {
 
 	// Upsert 按 ID 覆盖写入；空切片非法；集合不存在返回 ErrNotFound
 	Upsert(ctx context.Context, collection string, records []Record) error
-	// Get 按 ID 取回；只返回命中；空 ids 非法；集合不存在返回 ErrNotFound
+	// Get 按 ID 取回；只返回命中；空 ids 非法；集合不存在返回 ErrNotFound；内部按批查询，调用方无需分批
 	Get(ctx context.Context, collection string, ids []string) ([]Record, error)
 	// ListIDs 按元数据等值 AND 列出主键；filter 至少 1 个键；集合不存在返回 ErrNotFound；无命中返回空切片
 	ListIDs(ctx context.Context, collection string, filter map[string]string) ([]string, error)

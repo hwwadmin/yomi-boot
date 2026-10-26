@@ -42,11 +42,12 @@ const (
 	defaultIndexEFConstruct = 64
 	maxDimension            = 32768
 	// MaxTopK 是单次检索允许的最大 TopK
-	MaxTopK         = 16384
-	maxIDLen        = 128 // 主键最大字节数（Milvus VARCHAR max_length 按字节计）
-	maxTextLen      = 65536
-	maxNameLen      = 255
-	upsertBatchSize = 500
+	MaxTopK    = 16384
+	maxIDLen   = 128 // 主键最大字节数（Milvus VARCHAR max_length 按字节计）
+	maxTextLen = 65536
+	maxNameLen = 255
+	// batchSize 是单次上游请求的记录/主键条数上限；写入、按 ID 查询与删除内部按此分批
+	batchSize = 500
 )
 
 // IndexType milvus 向量索引类型；空则 HNSW

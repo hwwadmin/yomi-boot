@@ -1,4 +1,4 @@
-// 文档入库与删除。
+// 路径①文档入库：切块 → 向量化 → 写入 → 旧块清理。
 //
 // @author zwei
 
@@ -6,31 +6,37 @@ package rag
 
 import (
 	"context"
-	"strconv"
+	"sort"
 	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
+	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// preparedDocument 切分后的文档
-type preparedDocument struct {
+const (
+	// indexBatchChunks 是单批写入的块数预算；控制向量与记录的峰值内存
+	indexBatchChunks = 256
+	// indexLockStripes 是 Index 写入阶段的锁条数；同一文档命中同一条带
+	indexLockStripes = 64
+)
+
+// chunkedDocument 切分后的文档
+type chunkedDocument struct {
 	doc     Document
 	chunks  []string
 	version string // version 是本次写入的文档版本
 }
 
-// idBatchSize 是按 ID 读写时的单批上限，避免一次请求携带过多主键
-const idBatchSize = 500
+// indexBatch 是一次写入的文档批次；texts 是批内全部块文本
+type indexBatch struct {
+	docs  []chunkedDocument
+	texts []string
+}
 
-// indexGroupChunks 是单组写入的块数预算；控制向量与记录的峰值内存
-const indexGroupChunks = 256
-
-// Index 切分、向量化并写入指定集合；集合不存在时自动创建
-//
-// 同一 ID 重复写入会覆盖同序号块，并清理本次新块集合之外的旧块。
-func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error) {
+// Index 实现 Engine：切分、向量化并写入指定集合；集合不存在时自动创建
+func (e *engine) Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error) {
 	ctx = orBackground(ctx)
 	name, err := normalizeCollection(collection)
 	if err != nil {
@@ -45,7 +51,26 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 		chunker = e.chunker
 	}
 	// 先完成切分与边界校验，避免非法请求创建空集合
-	prepared := make([]preparedDocument, 0, len(docs))
+	prepared, err := chunkDocuments(chunker, docs)
+	if err != nil {
+		return nil, err
+	}
+	result := &IndexResult{}
+	for _, batch := range buildIndexBatches(prepared, indexBatchChunks) {
+		tokens, err := e.writeBatch(ctx, name, batch)
+		if err != nil {
+			return nil, err
+		}
+		result.Documents += len(batch.docs)
+		result.Chunks += len(batch.texts)
+		result.Tokens += tokens
+	}
+	return result, nil
+}
+
+// chunkDocuments 对每个文档切块、校验契约并生成写入版本
+func chunkDocuments(chunker chunking.Chunker, docs []Document) ([]chunkedDocument, error) {
+	prepared := make([]chunkedDocument, 0, len(docs))
 	for _, doc := range docs {
 		chunks, err := chunker.Chunk(doc.Content)
 		if err != nil {
@@ -64,68 +89,55 @@ func (e *Engine) Index(ctx context.Context, collection string, req IndexRequest)
 		if err != nil {
 			return nil, wrapSentinel(ErrBadResponse, err)
 		}
-		prepared = append(prepared, preparedDocument{doc: doc, chunks: chunks, version: version})
+		prepared = append(prepared, chunkedDocument{doc: doc, chunks: chunks, version: version})
 	}
-	result := &IndexResult{}
-	// 按块预算分组写入，避免一次请求把全部向量与记录同时放在内存
-	for _, group := range groupPrepared(prepared, indexGroupChunks) {
-		tokens, err := e.indexGroup(ctx, name, group)
-		if err != nil {
-			return nil, err
-		}
-		result.Documents += len(group.docs)
-		result.Chunks += len(group.texts)
-		result.Tokens += tokens
-	}
-	return result, nil
+	return prepared, nil
 }
 
-// docGroup 是一次写入的文档批次；texts 是组内全部块文本
-type docGroup struct {
-	docs  []preparedDocument
-	texts []string
-}
-
-// groupPrepared 按块数预算把文档分组；单文档超过预算时独占一组
-func groupPrepared(prepared []preparedDocument, maxChunks int) []docGroup {
-	groups := make([]docGroup, 0, len(prepared))
-	current := docGroup{}
+// buildIndexBatches 按块数预算把文档分组；单文档超过预算时独占一组
+func buildIndexBatches(prepared []chunkedDocument, maxChunks int) []indexBatch {
+	batches := make([]indexBatch, 0, len(prepared))
+	current := indexBatch{}
 	for _, p := range prepared {
 		if len(current.texts) > 0 && len(current.texts)+len(p.chunks) > maxChunks {
-			groups = append(groups, current)
-			current = docGroup{}
+			batches = append(batches, current)
+			current = indexBatch{}
 		}
 		current.docs = append(current.docs, p)
 		current.texts = append(current.texts, p.chunks...)
 	}
 	if len(current.docs) > 0 {
-		groups = append(groups, current)
+		batches = append(batches, current)
 	}
-	return groups
+	return batches
 }
 
-// indexGroup 对一组文档执行向量化、写入与旧块清理；返回本组向量化用量
-func (e *Engine) indexGroup(ctx context.Context, collection string, group docGroup) (int, error) {
-	vectors, tokens, err := e.embed(ctx, group.texts)
+// writeBatch 对一批文档执行向量化、写入与旧块清理；返回本批向量化用量
+func (e *engine) writeBatch(ctx context.Context, collection string, batch indexBatch) (int, error) {
+	// 分批由 embedding 内部按 MaxBatch 处理，本层整批调用
+	resp, err := e.embedder.Embed(ctx, embedding.Request{Inputs: batch.texts})
 	if err != nil {
 		return 0, err
 	}
-	records := make([]vectordb.Record, 0, len(group.texts))
+	if resp == nil || len(resp.Vectors) != len(batch.texts) {
+		return 0, wrapSentinel(ErrBadResponse, errors.New("ai/rag 向量化返回条数与输入不一致"))
+	}
+	records := make([]vectordb.Record, 0, len(batch.texts))
 	offset := 0
-	for _, p := range group.docs {
+	for _, p := range batch.docs {
 		for i, content := range p.chunks {
 			records = append(records, vectordb.Record{
 				ID:     chunkID(p.doc.ID, i),
-				Vector: toFloat32(vectors[offset+i]),
+				Vector: toFloat32(resp.Vectors[offset+i]),
 				// 块原文写入 Text，供混合检索的 BM25 一路命中
 				Text:     content,
-				Metadata: chunkMetadata(p.doc, i, len(p.chunks), p.version, content),
+				Metadata: encodeChunkMetadata(p.doc, i, len(p.chunks), p.version, content),
 			})
 		}
 		offset += len(p.chunks)
 	}
 	// 写入阶段按文档加锁；条带锁只保证进程内，跨实例需调用方串行
-	unlock := e.lockDocuments(collection, group.docs)
+	unlock := e.lockDocuments(collection, batch.docs)
 	defer unlock()
 	if err := e.ensureCollection(ctx, collection); err != nil {
 		return 0, err
@@ -136,16 +148,20 @@ func (e *Engine) indexGroup(ctx context.Context, collection string, group docGro
 	}
 	// 写入成功后列出各文档现有块，删除不在本次新块集合中的旧块；
 	// 删除失败或进程崩溃时旧块仍在，下次 Index 会重新枚举并清理，可自愈
-	for _, p := range group.docs {
+	for _, p := range batch.docs {
 		if err := e.deleteStaleChunks(ctx, collection, p.doc.ID, len(p.chunks)); err != nil {
 			return 0, err
 		}
 	}
+	tokens := 0
+	if resp.Usage != nil {
+		tokens = resp.Usage.TotalTokens
+	}
 	return tokens, nil
 }
 
-// DeleteDocument 删除指定集合中文档的所有块；集合不存在时返回 nil
-func (e *Engine) DeleteDocument(ctx context.Context, collection, docID string) error {
+// DeleteDocument 实现 Engine：删除指定集合中文档的所有块
+func (e *engine) DeleteDocument(ctx context.Context, collection, docID string) error {
 	ctx = orBackground(ctx)
 	name, err := normalizeCollection(collection)
 	if err != nil {
@@ -162,23 +178,8 @@ func (e *Engine) DeleteDocument(ctx context.Context, collection, docID string) e
 	return err
 }
 
-// chunkMetadata 合并文档元数据与保留键；total 是块总数，version 是本次写入版本
-func chunkMetadata(doc Document, index, total int, version, content string) map[string]string {
-	md := make(map[string]string, len(doc.Metadata)+6)
-	for k, v := range doc.Metadata {
-		md[k] = v
-	}
-	md[MetadataKeyDocumentID] = doc.ID
-	md[MetadataKeyChunkIndex] = strconv.Itoa(index)
-	md[MetadataKeyChunkCount] = strconv.Itoa(total)
-	md[MetadataKeyVersion] = version
-	md[MetadataKeySource] = doc.Source
-	md[MetadataKeyContent] = content
-	return md
-}
-
 // deleteStaleChunks 删除指定集合中不属于本次新块集合的旧块
-func (e *Engine) deleteStaleChunks(ctx context.Context, collection, docID string, newCount int) error {
+func (e *engine) deleteStaleChunks(ctx context.Context, collection, docID string, newCount int) error {
 	keep := make(map[string]struct{}, newCount)
 	for i := 0; i < newCount; i++ {
 		keep[chunkID(docID, i)] = struct{}{}
@@ -195,14 +196,60 @@ func (e *Engine) deleteStaleChunks(ctx context.Context, collection, docID string
 		}
 		stale = append(stale, id)
 	}
-	for start := 0; start < len(stale); start += idBatchSize {
-		end := start + idBatchSize
-		if end > len(stale) {
-			end = len(stale)
+	if len(stale) == 0 {
+		return nil
+	}
+	// 主键分批由 vectordb 内部处理
+	return e.store.Delete(ctx, collection, stale)
+}
+
+// lockDocuments 按文档获取写入锁；条带按序加锁避免死锁，返回释放函数
+func (e *engine) lockDocuments(collection string, docs []chunkedDocument) func() {
+	stripes := make([]int, 0, len(docs))
+	seen := make(map[int]struct{}, len(docs))
+	for _, doc := range docs {
+		stripe := int(indexLockHash(collection, doc.doc.ID) % indexLockStripes)
+		if _, ok := seen[stripe]; ok {
+			continue
 		}
-		if err := e.store.Delete(ctx, collection, stale[start:end]); err != nil {
-			return err
+		seen[stripe] = struct{}{}
+		stripes = append(stripes, stripe)
+	}
+	sort.Ints(stripes)
+	for _, stripe := range stripes {
+		e.indexLocks[stripe].Lock()
+	}
+	return func() {
+		for i := len(stripes) - 1; i >= 0; i-- {
+			e.indexLocks[stripes[i]].Unlock()
 		}
 	}
-	return nil
+}
+
+// indexLockHash 计算集合与文档 ID 的 FNV-1a 哈希
+func indexLockHash(collection, docID string) uint32 {
+	const (
+		offset32 = 2166136261
+		prime32  = 16777619
+	)
+	h := uint32(offset32)
+	for i := 0; i < len(collection); i++ {
+		h ^= uint32(collection[i])
+		h *= prime32
+	}
+	h *= prime32
+	for i := 0; i < len(docID); i++ {
+		h ^= uint32(docID[i])
+		h *= prime32
+	}
+	return h
+}
+
+// toFloat32 将向量化输出转为向量库所需的 float32
+func toFloat32(vec []float64) []float32 {
+	out := make([]float32, len(vec))
+	for i, v := range vec {
+		out[i] = float32(v)
+	}
+	return out
 }

@@ -196,10 +196,10 @@ func newTestRetriever(t *testing.T, emb embedding.Client, store vectordb.Store) 
 	return r
 }
 
-// newTestEngineWithConfig 校验并构造引擎，失败即终止测试
-func newTestEngineWithConfig(t *testing.T, cfg Config) *Engine {
+// newTestEngineWithConfig 校验并构造引擎实现，失败即终止测试
+func newTestEngineWithConfig(t *testing.T, cfg Config) *engine {
 	t.Helper()
-	e, err := New(cfg)
+	e, err := newEngine(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func newTestEngineWithConfig(t *testing.T, cfg Config) *Engine {
 }
 
 // newTestEngineWithDeps 用显式 Embedder/Store 构造全配置引擎（占位重排与拼接）
-func newTestEngineWithDeps(t *testing.T, emb embedding.Client, store vectordb.Store) *Engine {
+func newTestEngineWithDeps(t *testing.T, emb embedding.Client, store vectordb.Store) *engine {
 	t.Helper()
 	return newTestEngineWithConfig(t, Config{
 		Chunker:   mustTestChunker(t),
@@ -220,7 +220,7 @@ func newTestEngineWithDeps(t *testing.T, emb embedding.Client, store vectordb.St
 }
 
 // newTestEngine 创建默认测试引擎
-func newTestEngine(t *testing.T) (*Engine, *fakeEmbedder, vectordb.Store) {
+func newTestEngine(t *testing.T) (*engine, *fakeEmbedder, vectordb.Store) {
 	t.Helper()
 	store := newTestStore(t, testDimension)
 	emb := &fakeEmbedder{dim: testDimension}
@@ -479,7 +479,7 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 		old[i] = vectordb.Record{
 			ID:       chunkID("doc", i),
 			Vector:   []float32{1, 0, 0},
-			Metadata: chunkMetadata(doc, i, len(old), "old", "旧内容"),
+			Metadata: encodeChunkMetadata(doc, i, len(old), "old", "旧内容"),
 		}
 	}
 	if err := store.CreateCollection(ctx, testCollection); err != nil {
@@ -494,7 +494,7 @@ func TestRetrieveFiltersStaleChunks(t *testing.T) {
 		fresh[i] = vectordb.Record{
 			ID:       chunkID("doc", i),
 			Vector:   []float32{1, 0, 0},
-			Metadata: chunkMetadata(doc, i, len(fresh), "new", "新内容"),
+			Metadata: encodeChunkMetadata(doc, i, len(fresh), "new", "新内容"),
 		}
 	}
 	if err := store.Upsert(ctx, testCollection, fresh); err != nil {
@@ -527,7 +527,7 @@ func TestRetrieveFiltersOldVersionAfterGrowthPartialWrite(t *testing.T) {
 		old[i] = vectordb.Record{
 			ID:       chunkID("doc", i),
 			Vector:   []float32{1, 0, 0},
-			Metadata: chunkMetadata(doc, i, len(old), "old", "旧内容"),
+			Metadata: encodeChunkMetadata(doc, i, len(old), "old", "旧内容"),
 		}
 	}
 	if err := store.CreateCollection(ctx, testCollection); err != nil {
@@ -542,7 +542,7 @@ func TestRetrieveFiltersOldVersionAfterGrowthPartialWrite(t *testing.T) {
 		fresh[i] = vectordb.Record{
 			ID:       chunkID("doc", i),
 			Vector:   []float32{1, 0, 0},
-			Metadata: chunkMetadata(doc, i, 8, "new", "新内容"),
+			Metadata: encodeChunkMetadata(doc, i, 8, "new", "新内容"),
 		}
 	}
 	if err := store.Upsert(ctx, testCollection, fresh); err != nil {
@@ -577,7 +577,7 @@ func TestRetrieveDegradesWhenChunkStateFails(t *testing.T) {
 	if err := store.Upsert(ctx, testCollection, []vectordb.Record{{
 		ID:       chunkID("doc", 0),
 		Vector:   []float32{1, 0, 0},
-		Metadata: chunkMetadata(doc, 0, 1, "v1", "苹果"),
+		Metadata: encodeChunkMetadata(doc, 0, 1, "v1", "苹果"),
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -605,7 +605,7 @@ func TestRetrieveReturnsContextErrorFromChunkStateQuery(t *testing.T) {
 	if err := store.Upsert(ctx, testCollection, []vectordb.Record{{
 		ID:       chunkID("doc", 0),
 		Vector:   []float32{1, 0, 0},
-		Metadata: chunkMetadata(doc, 0, 1, "v1", "苹果"),
+		Metadata: encodeChunkMetadata(doc, 0, 1, "v1", "苹果"),
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -706,7 +706,7 @@ func TestCollectionValidation(t *testing.T) {
 	}
 }
 
-// TestNewAssemblesDependencies 覆盖构造装配与维度延迟锁定
+// TestNewAssemblesDependencies 覆盖构造装配与门面接口
 func TestNewAssemblesDependencies(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
@@ -716,8 +716,8 @@ func TestNewAssemblesDependencies(t *testing.T) {
 		e.reranker == nil || e.generator == nil || e.store == nil {
 		t.Fatal("构造依赖未装配完整")
 	}
-	if e.dimension.Load() != 0 {
-		t.Fatalf("维度应延迟锁定: %d", e.dimension.Load())
+	if _, ok := any(e).(Engine); !ok {
+		t.Fatal("engine 未实现 Engine 门面接口")
 	}
 }
 
@@ -857,8 +857,8 @@ func TestRetrieveInvalidRequests(t *testing.T) {
 	}
 }
 
-// TestDimensionLock 覆盖首次向量化后锁定维度
-func TestDimensionLock(t *testing.T) {
+// TestDimensionValidatedByStore 覆盖维度一致性由 vectordb 校验：写路径与检索路径一致
+func TestDimensionValidatedByStore(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
 	emb := &fakeEmbedder{dim: testDimension}
@@ -868,15 +868,15 @@ func TestDimensionLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	emb.setDim(testDimension - 1)
-	// 写路径锁定维度：与首次不一致返回 ErrDimensionMismatch
-	if _, err := e.Index(ctx, "rag_dim", IndexRequest{Documents: []Document{{ID: "doc2", Content: "苹果"}}}); !errors.Is(err, ErrDimensionMismatch) {
-		t.Fatalf("期望 ErrDimensionMismatch，实际 %v", err)
+	// 写路径：记录维度与集合维度不符由 vectordb 校验拒绝
+	if _, err := e.Index(ctx, "rag_dim", IndexRequest{Documents: []Document{{ID: "doc2", Content: "苹果"}}}); !errors.Is(err, vectordb.ErrInvalidArgument) {
+		t.Fatalf("写路径维度不符应透传 vectordb 校验，实际 %v", err)
 	}
-	// 检索路径不做写侧维度锁定，维度不符由 vectordb 校验兜底
+	// 检索路径：查询向量维度不符同样由 vectordb 校验兜底
 	if _, err := e.Retrieve(ctx, "rag_dim", RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
 	}); !errors.Is(err, vectordb.ErrInvalidArgument) {
-		t.Fatalf("检索维度不符应透传 vectordb 校验，实际 %v", err)
+		t.Fatalf("检索路径维度不符应透传 vectordb 校验，实际 %v", err)
 	}
 }
 
@@ -893,11 +893,11 @@ func TestIndexEmbedError(t *testing.T) {
 	}
 }
 
-// TestIndexBatchEmbed 覆盖内部分批向量化与用量累计
-func TestIndexBatchEmbed(t *testing.T) {
+// TestIndexSingleEmbedCall 覆盖向量化整批委托：分批由 embedding 内部承担
+func TestIndexSingleEmbedCall(t *testing.T) {
 	t.Parallel()
 	e, emb, _ := newTestEngine(t)
-	total := embedBatchSize + 6
+	total := indexBatchChunks + 6
 	chunks := make([]string, total)
 	for i := range chunks {
 		chunks[i] = "苹果"
@@ -912,8 +912,9 @@ func TestIndexBatchEmbed(t *testing.T) {
 	if res.Chunks != total || res.Tokens != total {
 		t.Fatalf("入库结果: %+v", res)
 	}
-	if emb.callCount() != 2 {
-		t.Fatalf("调用次数 = %d，期望 2", emb.callCount())
+	// 单批 262 块一次 Embed 调用（跨批时按 indexBatchChunks 分组各调用一次）
+	if emb.callCount() != 1 {
+		t.Fatalf("调用次数 = %d，期望 1", emb.callCount())
 	}
 }
 
@@ -1141,7 +1142,7 @@ func TestRetrieveRerankErrorPassthrough(t *testing.T) {
 	}
 }
 
-// TestRetrieveRerankInvalidIndex 覆盖重排结果下标越界的违约校验
+// TestRetrieveRerankInvalidIndex 覆盖重排结果下标越界的违约校验（由 rerank.Apply 识别）
 func TestRetrieveRerankInvalidIndex(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
@@ -1165,8 +1166,8 @@ func TestRetrieveRerankInvalidIndex(t *testing.T) {
 	_, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
 	})
-	if !errors.Is(err, ErrBadResponse) {
-		t.Fatalf("期望 ErrBadResponse，实际 %v", err)
+	if !errors.Is(err, rerank.ErrBadResponse) {
+		t.Fatalf("期望 rerank.ErrBadResponse，实际 %v", err)
 	}
 }
 
@@ -1197,7 +1198,7 @@ func TestRetrieveGeneratorErrorPassthrough(t *testing.T) {
 	}
 }
 
-// TestRetrieveGeneratorEmptyPrompt 覆盖拼接返回空提示词的违约校验
+// TestRetrieveGeneratorEmptyPrompt 覆盖拼接返回空提示词的违约校验（由 generation.ValidateResponse 识别）
 func TestRetrieveGeneratorEmptyPrompt(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t, testDimension)
@@ -1219,8 +1220,8 @@ func TestRetrieveGeneratorEmptyPrompt(t *testing.T) {
 	_, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{Query: "苹果", TopK: 5},
 	})
-	if !errors.Is(err, ErrBadResponse) {
-		t.Fatalf("期望 ErrBadResponse，实际 %v", err)
+	if !errors.Is(err, generation.ErrBadResponse) {
+		t.Fatalf("期望 generation.ErrBadResponse，实际 %v", err)
 	}
 }
 

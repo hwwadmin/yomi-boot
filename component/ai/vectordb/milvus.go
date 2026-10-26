@@ -257,16 +257,28 @@ func (s *milvusStore) Get(ctx context.Context, collection string, ids []string) 
 		seen[id] = struct{}{}
 		trimmed = append(trimmed, id)
 	}
-	rs, err := retryOnRateLimitVal(ctx, func() (milvusclient.ResultSet, error) {
-		return s.cli.Query(ctx, milvusclient.NewQueryOption(n).
-			WithIDs(column.NewColumnVarChar(fieldID, trimmed)).
-			WithOutputFields(fieldID, fieldVector, fieldText, fieldMetadata).
-			WithConsistencyLevel(entity.ClStrong))
-	})
-	if err != nil {
-		return nil, mapMilvusErr(err)
+	out := make([]Record, 0, len(trimmed))
+	for start := 0; start < len(trimmed); start += batchSize {
+		end := start + batchSize
+		if end > len(trimmed) {
+			end = len(trimmed)
+		}
+		rs, err := retryOnRateLimitVal(ctx, func() (milvusclient.ResultSet, error) {
+			return s.cli.Query(ctx, milvusclient.NewQueryOption(n).
+				WithIDs(column.NewColumnVarChar(fieldID, trimmed[start:end])).
+				WithOutputFields(fieldID, fieldVector, fieldText, fieldMetadata).
+				WithConsistencyLevel(entity.ClStrong))
+		})
+		if err != nil {
+			return nil, mapMilvusErr(err)
+		}
+		records, err := resultSetToRecords(&rs)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, records...)
 	}
-	return resultSetToRecords(&rs)
+	return out, nil
 }
 
 // ListIDs 按元数据等值 AND 列出主键
@@ -671,8 +683,8 @@ func (s *milvusStore) flush(ctx context.Context, name string) error {
 
 // upsertRecords 分批 Upsert
 func (s *milvusStore) upsertRecords(ctx context.Context, name string, records []Record) error {
-	for start := 0; start < len(records); start += upsertBatchSize {
-		end := start + upsertBatchSize
+	for start := 0; start < len(records); start += batchSize {
+		end := start + batchSize
 		if end > len(records) {
 			end = len(records)
 		}
@@ -742,8 +754,8 @@ func (s *milvusStore) idsNotIn(ctx context.Context, name string, keep map[string
 
 // deleteIDs 按主键分批删除；空切片成功
 func (s *milvusStore) deleteIDs(ctx context.Context, name string, ids []string) error {
-	for start := 0; start < len(ids); start += upsertBatchSize {
-		end := start + upsertBatchSize
+	for start := 0; start < len(ids); start += batchSize {
+		end := start + batchSize
 		if end > len(ids) {
 			end = len(ids)
 		}

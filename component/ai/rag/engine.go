@@ -1,4 +1,4 @@
-// Engine 定义与集合生命周期。
+// 门面接口、Engine 实现与集合生命周期。
 //
 // @author zwei
 
@@ -6,10 +6,7 @@ package rag
 
 import (
 	"context"
-	"sort"
-	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
 	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
@@ -20,26 +17,60 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// embedBatchSize 是单次向量化的文本条数上限
-const embedBatchSize = 64
+// Engine RAG 两条流程的门面接口；实现须并发安全
+type Engine interface {
+	// Index 路径①文档入库：切块 → 向量化 → 写入指定集合；集合不存在时自动创建
+	//
+	// 同一 ID 重复写入会覆盖同序号块，并清理本次新块集合之外的旧块。
+	Index(ctx context.Context, collection string, req IndexRequest) (*IndexResult, error)
+	// DeleteDocument 删除指定集合中文档的所有块；集合不存在时返回 nil
+	DeleteDocument(ctx context.Context, collection, docID string) error
+	// EnsureCollection 确保集合存在；已存在时返回 nil
+	EnsureCollection(ctx context.Context, collection string) error
+	// DropCollection 删除集合；不存在时返回 nil
+	DropCollection(ctx context.Context, collection string) error
 
-// indexLockStripes 是 Index 写入阶段的锁条数；同一文档命中同一条带
-const indexLockStripes = 64
+	// Retrieve 路径②文档检索增强：检索 → 域过滤 → 精重排 → 提示词拼接
+	//
+	// 集合不存在或为空时返回空 Chunks 与由 Generator 拼接的 Prompt。
+	Retrieve(ctx context.Context, collection string, req RetrieveRequest) (*RetrieveResult, error)
+}
 
-// Engine 检索增强编排引擎；同一实例可并发服务多个集合；构造后不可变，请勿复制值
-type Engine struct {
+// engine 是 Engine 的实现；构造后不可变，可并发调用
+type engine struct {
 	chunker    chunking.Chunker
 	embedder   embedding.Client
 	retriever  retrieval.Retriever
 	reranker   rerank.Reranker
 	generator  generation.Generator
 	store      vectordb.Store
-	dimension  atomic.Int64
 	indexLocks [indexLockStripes]sync.Mutex
 }
 
-// EnsureCollection 确保集合存在；已存在时返回 nil
-func (e *Engine) EnsureCollection(ctx context.Context, collection string) error {
+var _ Engine = (*engine)(nil)
+
+// New 校验配置并构造 Engine；不访问网络、不创建集合
+func New(cfg Config) (Engine, error) {
+	return newEngine(cfg)
+}
+
+// newEngine 校验配置并装配 engine 实现
+func newEngine(cfg Config) (*engine, error) {
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &engine{
+		chunker:   cfg.Chunker,
+		embedder:  cfg.Embedder,
+		retriever: cfg.Retriever,
+		reranker:  cfg.Reranker,
+		generator: cfg.Generator,
+		store:     cfg.Store,
+	}, nil
+}
+
+// EnsureCollection 实现 Engine
+func (e *engine) EnsureCollection(ctx context.Context, collection string) error {
 	name, err := normalizeCollection(collection)
 	if err != nil {
 		return err
@@ -47,8 +78,8 @@ func (e *Engine) EnsureCollection(ctx context.Context, collection string) error 
 	return e.ensureCollection(orBackground(ctx), name)
 }
 
-// DropCollection 删除集合；不存在时返回 nil
-func (e *Engine) DropCollection(ctx context.Context, collection string) error {
+// DropCollection 实现 Engine
+func (e *engine) DropCollection(ctx context.Context, collection string) error {
 	name, err := normalizeCollection(collection)
 	if err != nil {
 		return err
@@ -57,7 +88,7 @@ func (e *Engine) DropCollection(ctx context.Context, collection string) error {
 }
 
 // ensureCollection 查询并按需创建集合；并发创建撞车时视为成功
-func (e *Engine) ensureCollection(ctx context.Context, collection string) error {
+func (e *engine) ensureCollection(ctx context.Context, collection string) error {
 	has, err := e.store.HasCollection(ctx, collection)
 	if err != nil {
 		return err
@@ -80,108 +111,4 @@ func orBackground(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return ctx
-}
-
-// embed 分批向量化并校验维度与返回条数；返回向量与用量合计
-func (e *Engine) embed(ctx context.Context, texts []string) ([][]float64, int, error) {
-	if len(texts) == 0 {
-		return nil, 0, nil
-	}
-	out := make([][]float64, 0, len(texts))
-	tokens := 0
-	for start := 0; start < len(texts); start += embedBatchSize {
-		end := start + embedBatchSize
-		if end > len(texts) {
-			end = len(texts)
-		}
-		resp, err := e.embedder.Embed(ctx, embedding.Request{Inputs: texts[start:end]})
-		if err != nil {
-			return nil, 0, err
-		}
-		if resp == nil || len(resp.Vectors) != end-start {
-			return nil, 0, wrapSentinel(ErrBadResponse, errors.New("ai/rag 向量化返回条数与输入不一致"))
-		}
-		for i := range resp.Vectors {
-			if err := e.checkDimension(len(resp.Vectors[i])); err != nil {
-				return nil, 0, err
-			}
-		}
-		if resp.Usage != nil {
-			tokens += resp.Usage.TotalTokens
-		}
-		out = append(out, resp.Vectors...)
-	}
-	return out, tokens, nil
-}
-
-// checkDimension 校验向量维度；未锁定则用本次结果锁定
-func (e *Engine) checkDimension(n int) error {
-	if n <= 0 {
-		return errors.Sentinel(ErrDimensionMismatch)
-	}
-	locked := e.dimension.Load()
-	if locked == 0 {
-		e.dimension.CompareAndSwap(0, int64(n))
-		locked = e.dimension.Load()
-	}
-	if int64(n) != locked {
-		return errors.Sentinel(ErrDimensionMismatch)
-	}
-	return nil
-}
-
-// chunkID 拼接块主键；文档 ID 最长 120，块序号最大 4 位，总长不超过 128
-func chunkID(docID string, index int) string {
-	return docID + "#" + strconv.Itoa(index)
-}
-
-// toFloat32 将向量化输出转为向量库所需的 float32
-func toFloat32(vec []float64) []float32 {
-	out := make([]float32, len(vec))
-	for i, v := range vec {
-		out[i] = float32(v)
-	}
-	return out
-}
-
-// lockDocuments 按文档获取写入锁；条带按序加锁避免死锁，返回释放函数
-func (e *Engine) lockDocuments(collection string, docs []preparedDocument) func() {
-	stripes := make([]int, 0, len(docs))
-	seen := make(map[int]struct{}, len(docs))
-	for _, doc := range docs {
-		stripe := int(indexLockHash(collection, doc.doc.ID) % indexLockStripes)
-		if _, ok := seen[stripe]; ok {
-			continue
-		}
-		seen[stripe] = struct{}{}
-		stripes = append(stripes, stripe)
-	}
-	sort.Ints(stripes)
-	for _, stripe := range stripes {
-		e.indexLocks[stripe].Lock()
-	}
-	return func() {
-		for i := len(stripes) - 1; i >= 0; i-- {
-			e.indexLocks[stripes[i]].Unlock()
-		}
-	}
-}
-
-// indexLockHash 计算集合与文档 ID 的 FNV-1a 哈希
-func indexLockHash(collection, docID string) uint32 {
-	const (
-		offset32 = 2166136261
-		prime32  = 16777619
-	)
-	h := uint32(offset32)
-	for i := 0; i < len(collection); i++ {
-		h ^= uint32(collection[i])
-		h *= prime32
-	}
-	h *= prime32
-	for i := 0; i < len(docID); i++ {
-		h ^= uint32(docID[i])
-		h *= prime32
-	}
-	return h
 }

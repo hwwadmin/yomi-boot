@@ -84,3 +84,17 @@ func TestBasicInvalidRequest(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateResponse 覆盖拼接输出契约校验
+func TestValidateResponse(t *testing.T) {
+	t.Parallel()
+	if err := ValidateResponse(nil); !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("nil 响应: %v", err)
+	}
+	if err := ValidateResponse(&GenerateResponse{Prompt: " \n "}); !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("空提示词: %v", err)
+	}
+	if err := ValidateResponse(&GenerateResponse{Prompt: "q"}); err != nil {
+		t.Fatalf("合法输出被拒: %v", err)
+	}
+}

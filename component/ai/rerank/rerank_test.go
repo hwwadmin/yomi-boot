@@ -130,3 +130,34 @@ func TestPassThrough(t *testing.T) {
 		t.Fatalf("PassThrough 用量应为 0: %d", result.Tokens)
 	}
 }
+
+// TestApply 覆盖重排结果按候选回取：顺序、分数、空候选与违约
+func TestApply(t *testing.T) {
+	t.Parallel()
+	items := []string{"甲", "乙", "丙"}
+	scored, err := Apply(items, &RerankResponse{Results: []RankedDoc{
+		{Index: 2, Score: 0.9},
+		{Index: 0, Score: 0.5},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scored) != 2 || scored[0].Item != "丙" || scored[0].Score != 0.9 ||
+		scored[1].Item != "甲" || scored[1].Score != 0.5 {
+		t.Fatalf("回取结果错误: %+v", scored)
+	}
+	// 空候选：无结果返回空切片
+	empty, err := Apply[string](nil, &RerankResponse{})
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("空候选: %+v err=%v", empty, err)
+	}
+	// 违约：nil 响应与下标越界
+	if _, err := Apply(items, nil); !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("nil 响应: %v", err)
+	}
+	for _, index := range []int{-1, 3} {
+		if _, err := Apply(items, &RerankResponse{Results: []RankedDoc{{Index: index}}}); !errors.Is(err, ErrBadResponse) {
+			t.Fatalf("下标 %d 越界: %v", index, err)
+		}
+	}
+}

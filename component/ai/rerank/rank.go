@@ -1,4 +1,4 @@
-// 契约的可执行形式：入参校验与分数排序，供 Reranker 实现复用。
+// 契约的可执行形式：入参校验、分数排序与结果回取，供 Reranker 实现与调用方复用。
 //
 // @author zwei
 
@@ -54,4 +54,27 @@ func RankScores(scores []float32, topN int) ([]RankedDoc, error) {
 		return ranked[:topN:topN], nil
 	}
 	return ranked, nil
+}
+
+// Scored 一条应用重排结果后的候选
+type Scored[T any] struct {
+	Item  T       // Item 是候选对象，按 RankedDoc.Index 从调用方切片回取
+	Score float32 // Score 是重排相关性分，口径由 Reranker 实现定义，不可跨实现横比
+}
+
+// Apply 把重排结果应用到候选切片：按下标回取 Item，按重排顺序返回；
+// 供调用方把 RerankResponse 映射回自有对象（契约的可执行形式）。
+// resp 为 nil 或 Results 下标越界返回 ErrBadResponse；候选可为空（返回空切片）
+func Apply[T any](items []T, resp *RerankResponse) ([]Scored[T], error) {
+	if resp == nil {
+		return nil, errors.Sentinel(ErrBadResponse)
+	}
+	out := make([]Scored[T], 0, len(resp.Results))
+	for _, r := range resp.Results {
+		if r.Index < 0 || r.Index >= len(items) {
+			return nil, errors.Sentinel(ErrBadResponse)
+		}
+		out = append(out, Scored[T]{Item: items[r.Index], Score: r.Score})
+	}
+	return out, nil
 }

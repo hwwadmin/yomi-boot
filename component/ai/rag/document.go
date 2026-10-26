@@ -1,29 +1,8 @@
-// 定义文档、块与请求响应类型。
+// 定义文档与块模型。
 //
 // @author zwei
 
 package rag
-
-import (
-	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
-)
-
-// 保留元数据键；由本包写入，Document.Metadata 不得使用
-const (
-	// MetadataKeyDocumentID 文档 ID
-	MetadataKeyDocumentID = "rag_doc_id"
-	// MetadataKeyChunkIndex 块在文档内的序号，从 0 开始
-	MetadataKeyChunkIndex = "rag_chunk_index"
-	// MetadataKeySource 文档来源
-	MetadataKeySource = "rag_source"
-	// MetadataKeyContent 块文本
-	MetadataKeyContent = "rag_content"
-	// MetadataKeyChunkCount 文档当前版本的块总数；用于检索侧过滤更新窗口内的旧块
-	MetadataKeyChunkCount = "rag_chunk_count"
-	// MetadataKeyVersion 文档当前写入版本；检索侧据此丢弃旧版本块
-	MetadataKeyVersion = "rag_version"
-)
 
 // Document 待入库的原始文档
 type Document struct {
@@ -43,29 +22,4 @@ type Chunk struct {
 	Metadata    map[string]string // Metadata 是文档自定义元数据副本；不含保留键
 	Score       float32           // Score 是检索/融合相关性分，越大越相似；口径见 ai/retrieval
 	RerankScore float32           // RerankScore 是精重排相关性分，越大越相关；口径由 Reranker 实现定义，不可跨实现横比；PassThrough 恒 0
-}
-
-// IndexRequest 文档入库入参
-type IndexRequest struct {
-	Documents []Document       // Documents 至少 1 条；同一请求内 ID 不得重复
-	Chunker   chunking.Chunker // Chunker 可选；空则使用 Config.Chunker
-}
-
-// IndexResult 文档入库结果
-type IndexResult struct {
-	Documents int // Documents 是写入的文档数
-	Chunks    int // Chunks 是切分并写入的块数
-	Tokens    int // Tokens 是向量化用量合计；上游未提供时为 0
-}
-
-// RetrieveRequest 文档检索增强入参
-type RetrieveRequest struct {
-	retrieval.RetrieveRequest     // 检索段入参（Query/Strategy/TopK/MinScore/Filter）透传 ai/retrieval；Query 同时作为重排依据与拼接问题
-	RerankTopN                int // RerankTopN 是重排后保留的最大条数；0 表示全部保留；负数非法
-}
-
-// RetrieveResult 文档检索增强输出
-type RetrieveResult struct {
-	Prompt string  // Prompt 是拼接后的完整输入提示词；直接作为大模型输入
-	Chunks []Chunk // Chunks 是重排后的文档块；顺序即投喂拼接的顺序，供引用标注
 }

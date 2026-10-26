@@ -72,24 +72,3 @@ func validateDocID(id string) error {
 	}
 	return nil
 }
-
-// validateFilter 校验元数据等值过滤的键
-func validateFilter(filter map[string]string) error {
-	for k := range filter {
-		key := strings.TrimSpace(k)
-		if key == "" || strings.ContainsAny(key, `"\`) {
-			return errors.Sentinel(ErrInvalidArgument)
-		}
-	}
-	return nil
-}
-
-// isReservedMetadataKey 判断是否为本包保留的元数据键
-func isReservedMetadataKey(key string) bool {
-	switch key {
-	case MetadataKeyDocumentID, MetadataKeyChunkIndex, MetadataKeySource, MetadataKeyContent, MetadataKeyChunkCount, MetadataKeyVersion:
-		return true
-	default:
-		return false
-	}
-}
