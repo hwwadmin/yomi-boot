@@ -320,6 +320,57 @@ func TestFillFailureModes(t *testing.T) {
 	})
 }
 
+// TestFillCompletionInterrupted 覆盖模型调用中途取消/超时的上下文错误口径
+func TestFillCompletionInterrupted(t *testing.T) {
+	t.Parallel()
+	tool := newOrderTool(t, nil, nil)
+
+	t.Run("调用中取消", func(t *testing.T) {
+		t.Parallel()
+		registry := newFillRegistry(t, blockingCompleter{}, FillConfig{}, tool)
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+		}()
+		_, err := registry.Fill(ctx, Call{Name: "order_query", Evidence: orderEvidence()})
+		cancel()
+		requireCode(t, err, CodeCanceled)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("应可按 errors.Is 识别取消: %v", err)
+		}
+	})
+	t.Run("调用中超时", func(t *testing.T) {
+		t.Parallel()
+		registry := newFillRegistry(t, blockingCompleter{}, FillConfig{}, tool)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		_, err := registry.Fill(ctx, Call{Name: "order_query", Evidence: orderEvidence()})
+		requireCode(t, err, CodeTimeout)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("应可按 errors.Is 识别超时: %v", err)
+		}
+	})
+	t.Run("Completer 自带超时错误", func(t *testing.T) {
+		t.Parallel()
+		completer := &fakeCompleter{err: errors.Wrap(context.DeadlineExceeded, "ai/tool: 模型网关超时")}
+		registry := newFillRegistry(t, completer, FillConfig{}, tool)
+		_, err := registry.Fill(context.Background(), Call{Name: "order_query", Evidence: orderEvidence()})
+		requireCode(t, err, CodeTimeout)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("应可按 errors.Is 识别超时: %v", err)
+		}
+	})
+}
+
+// blockingCompleter 阻塞至 ctx 结束后返回其错误，模拟模型调用中途被打断
+type blockingCompleter struct{}
+
+func (blockingCompleter) Complete(ctx context.Context, _ CompletionRequest) (*CompletionResponse, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 // TestFillResponseTooLarge 覆盖模型输出超限
 func TestFillResponseTooLarge(t *testing.T) {
 	t.Parallel()

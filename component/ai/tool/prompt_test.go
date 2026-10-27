@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestBuildFillPrompt 覆盖提示词分区、证据编码与历史截断
@@ -89,6 +90,7 @@ func TestExtractJSONObject(t *testing.T) {
 		{"字符串含花括号", `{"order_id":"LPP-1","note":"含 } 与 { 的字符串"}`, `{"order_id":"LPP-1","note":"含 } 与 { 的字符串"}`},
 		{"多个对象取第一个", `{"order_id":"LPP-1"} {"order_id":"LPP-2"}`, `{"order_id":"LPP-1"}`},
 		{"转义引号", `{"order_id":"LPP-1","note":"引号 \" 与反斜杠 \\"}`, `{"order_id":"LPP-1","note":"引号 \" 与反斜杠 \\"}`},
+		{"嵌套外壳取内层", `{{"order_id":"LPP-1"}}`, `{"order_id":"LPP-1"}`},
 	}
 	for _, c := range cases {
 		c := c
@@ -112,6 +114,30 @@ func TestExtractJSONObjectInvalid(t *testing.T) {
 		if _, err := extractJSONObject(raw); err == nil {
 			t.Fatalf("非法输出应被拒: %q", raw)
 		}
+	}
+}
+
+// TestExtractJSONObjectPathological 覆盖大体积退化输出的线性扫描耗时
+func TestExtractJSONObjectPathological(t *testing.T) {
+	t.Parallel()
+	// 1 MiB 连续 "{"：逐起点重扫为平方复杂度（实测分钟级），单次配对扫描应线性返回
+	raw := strings.Repeat("{", 1<<20)
+	start := time.Now()
+	if _, err := extractJSONObject(raw); err == nil {
+		t.Fatal("无配对输出应返回错误")
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("退化输出应线性处理，实际耗时 %v", elapsed)
+	}
+	// 合法对象后跟大体积退化尾部：应快速取到对象
+	raw = `{"order_id":"LPP-1"}` + strings.Repeat("{", 1<<20)
+	start = time.Now()
+	got, err := extractJSONObject(raw)
+	if err != nil || string(got) != `{"order_id":"LPP-1"}` {
+		t.Fatalf("前缀对象应被取出: %v %v", got, err)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("退化输出应线性处理，实际耗时 %v", elapsed)
 	}
 }
 

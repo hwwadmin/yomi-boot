@@ -105,6 +105,15 @@ func (r *Registry) Fill(ctx context.Context, call Call) (*Filled, error) {
 			Schema: current.spec.Parameters,
 		})
 		if err != nil {
+			// 请求 ctx 失效时取消/超时优先，不降级成填槽失败
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, contextError(ctxErr, current.spec.Name, call.ID)
+			}
+			// Completer 自带的取消/超时（如模型网关超时）同样保持上下文错误口径，
+			// 供调用方按 errors.Is(err, context.Canceled/DeadlineExceeded) 判定
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, contextError(err, current.spec.Name, call.ID)
+			}
 			return nil, newError(CodeFillFailed, defaultFillFailedMessage, current.spec.Name, call.ID,
 				errors.Wrap(err, "ai/tool: 填槽模型调用失败"))
 		}

@@ -6,6 +6,7 @@ package tool
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -165,16 +166,12 @@ func extractJSONObject(raw string) (json.RawMessage, error) {
 			return nil, errors.New("ai/tool: 模型输出必须是 JSON 对象")
 		}
 	}
-	// 再扫描第一个平衡的 JSON 对象，跳过字符串与转义
-	for start := 0; start < len(trimmed); start++ {
-		if trimmed[start] != '{' {
-			continue
-		}
-		end, ok := balancedObjectEnd(trimmed, start)
-		if !ok {
-			continue
-		}
-		if object, ok := parseObjectCandidate(trimmed[start:end]); ok {
+	// 再单次扫描求出全部平衡的 {...} 区间，按起点顺序逐个尝试解析，
+	// 跳过字符串与转义；避免逐起点重扫到串尾的平方复杂度
+	spans := balancedSpans(trimmed)
+	sort.Slice(spans, func(i, j int) bool { return spans[i][0] < spans[j][0] })
+	for _, span := range spans {
+		if object, ok := parseObjectCandidate(trimmed[span[0]:span[1]]); ok {
 			return object, nil
 		}
 	}
@@ -190,12 +187,15 @@ func parseObjectCandidate(candidate string) (json.RawMessage, bool) {
 	return append(json.RawMessage(nil), candidate...), true
 }
 
-// balancedObjectEnd 返回从 start 开始的平衡对象结束下标（不含）
-func balancedObjectEnd(text string, start int) (int, bool) {
-	depth := 0
+// balancedSpans 单次扫描返回文本内全部平衡的 {...} 区间（左闭右开，按结束位置序），
+// 跳过字符串与转义；每个 "{" 至多配对一个 "}"，未配对的 "{" 与 "}" 不产生区间。
+// 行为等价于对每个 "{" 起点求首个配对结束下标，但整体只有线性复杂度
+func balancedSpans(text string) [][2]int {
+	var spans [][2]int
+	var stack []int
 	inString := false
 	escaped := false
-	for i := start; i < len(text); i++ {
+	for i := 0; i < len(text); i++ {
 		c := text[i]
 		if inString {
 			if escaped {
@@ -214,13 +214,14 @@ func balancedObjectEnd(text string, start int) (int, bool) {
 		case '"':
 			inString = true
 		case '{':
-			depth++
+			stack = append(stack, i)
 		case '}':
-			depth--
-			if depth == 0 {
-				return i + 1, true
+			if len(stack) > 0 {
+				start := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				spans = append(spans, [2]int{start, i + 1})
 			}
 		}
 	}
-	return 0, false
+	return spans
 }
