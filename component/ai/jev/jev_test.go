@@ -79,6 +79,31 @@ func TestNewCopiesConfig(t *testing.T) {
 	}
 }
 
+// TestNewAllowsNonReservedExtraHeaders 验证保留键只覆盖本包实际发送的鉴权头，
+// 非保留扩展头（含曾从 llm 复制痕迹误伤的 anthropic-version）可正常传入
+func TestNewAllowsNonReservedExtraHeaders(t *testing.T) {
+	t.Parallel()
+	cfg := validCfg()
+	cfg.ExtraHeaders = map[string]string{"anthropic-version": "2023-06-01", "X-Gateway": "a"}
+	cli, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	impl, ok := cli.(*systemOneClient)
+	if !ok {
+		t.Fatalf("type=%T", cli)
+	}
+	if impl.cfg.ExtraHeaders["anthropic-version"] != "2023-06-01" {
+		t.Fatalf("headers=%v", impl.cfg.ExtraHeaders)
+	}
+	// 鉴权头仍保留
+	rejected := validCfg()
+	rejected.ExtraHeaders = map[string]string{"X-Api-Key": "x"}
+	if _, err := New(rejected); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 // TestNewAllowsEmptyAPIKey 验证密钥为空或仅空白时仍可构造
 func TestNewAllowsEmptyAPIKey(t *testing.T) {
 	t.Parallel()

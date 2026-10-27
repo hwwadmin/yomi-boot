@@ -65,7 +65,7 @@ func (c Config) validate() error {
 	seenHeaders := make(map[string]struct{}, len(c.ExtraHeaders))
 	for k := range c.ExtraHeaders {
 		key := strings.TrimSpace(k)
-		// 空键、与鉴权或版本头冲突、修剪后重名的键拒绝构造
+		// 空键、与鉴权头冲突、修剪后重名的键拒绝构造
 		if key == "" || isReservedHeader(key) {
 			return errors.Sentinel(ErrInvalidArgument)
 		}
@@ -89,10 +89,11 @@ func validateEndpoint(raw string) error {
 	return nil
 }
 
-// isReservedHeader 判断扩展头是否与鉴权或版本头冲突（大小写不敏感）
+// isReservedHeader 判断扩展头是否与鉴权头冲突（大小写不敏感）；
+// 保留键按本包实际发送的头决定，jev 不发送协议版本头，与 llm 的保留集有意不同
 func isReservedHeader(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "authorization", "x-api-key", "anthropic-version":
+	case "authorization", "x-api-key":
 		return true
 	default:
 		return false
