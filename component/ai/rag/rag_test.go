@@ -345,6 +345,58 @@ func TestRetrievePromptAndChunks(t *testing.T) {
 	}
 }
 
+// TestRetrieveComposesCallerPostFilter 覆盖调用方 PostFilter 与本包域过滤器的串联
+func TestRetrieveComposesCallerPostFilter(t *testing.T) {
+	t.Parallel()
+	e, _, _ := newTestEngine(t)
+	ctx := context.Background()
+	if _, err := e.Index(ctx, testCollection, IndexRequest{Documents: []Document{
+		{ID: "doc-apple", Content: "苹果是一种水果。", Source: "fruit/apple.md"},
+		{ID: "doc-banana", Content: "香蕉是黄色的。", Source: "fruit/banana.md"},
+	}, Dimensions: testDimension}); err != nil {
+		t.Fatal(err)
+	}
+	// 调用方过滤器只保留 apple：在域过滤后的命中上继续过滤，不被覆盖
+	seen := 0
+	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
+		RetrieveRequest: retrieval.RetrieveRequest{
+			Query: "水果", TopK: 10, Dimensions: testDimension,
+			PostFilter: hitFilterFunc(func(_ context.Context, _ string, hits []vectordb.Hit) ([]vectordb.Hit, error) {
+				seen += len(hits)
+				kept := make([]vectordb.Hit, 0, len(hits))
+				for _, hit := range hits {
+					if hit.Metadata[MetadataKeyDocumentID] == "doc-apple" {
+						kept = append(kept, hit)
+					}
+				}
+				return kept, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen == 0 {
+		t.Fatal("调用方过滤器未被调用")
+	}
+	if len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc-apple" {
+		t.Fatalf("调用方 PostFilter 应生效: %+v", out.Chunks)
+	}
+	// 调用方过滤器错误原样上抛
+	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
+		RetrieveRequest: retrieval.RetrieveRequest{
+			Query: "水果", TopK: 10, Dimensions: testDimension,
+			PostFilter: hitFilterFunc(func(_ context.Context, _ string, _ []vectordb.Hit) ([]vectordb.Hit, error) {
+				return nil, errors.New("ai/rag 调用方过滤器故障")
+			}),
+		},
+	})
+	if err == nil {
+		t.Fatal("调用方过滤器错误应上抛")
+	}
+	_ = out
+}
+
 // TestMultipleCollections 覆盖同一 Engine 下多业务集合的数据隔离
 func TestMultipleCollections(t *testing.T) {
 	t.Parallel()

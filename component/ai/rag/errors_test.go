@@ -11,17 +11,22 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
-// TestWrapSentinelKeepsCleanCode 验证包装后 Error() 仍是干净哨兵码，原因保留在错误链
-func TestWrapSentinelKeepsCleanCode(t *testing.T) {
+// TestWrapSentinel 验证哨兵与原因同时保留；错误链风格与同族四包一致
+func TestWrapSentinel(t *testing.T) {
 	t.Parallel()
-	err := wrapSentinel(ErrBadResponse, errors.New("detail"))
-	if err.Error() != "AI_RAG_BAD_RESPONSE" {
-		t.Fatalf("Error()=%q", err.Error())
+	only := wrapSentinel(ErrBadResponse, nil)
+	if !errors.Is(only, ErrBadResponse) {
+		t.Fatalf("err=%v", only)
 	}
-	if !errors.Is(err, ErrBadResponse) {
-		t.Fatal("errors.Is 未匹配 ErrBadResponse")
+	cause := errors.New("detail")
+	err := wrapSentinel(ErrBadResponse, cause)
+	if !errors.Is(err, ErrBadResponse) || !errors.Is(err, cause) {
+		t.Fatalf("err=%v", err)
 	}
 	if stack := errors.Stack(err); !strings.Contains(stack, "detail") {
 		t.Fatalf("Stack 丢失原因: %q", stack)
+	}
+	if !strings.Contains(err.Error(), "AI_RAG_BAD_RESPONSE") || !strings.Contains(err.Error(), "detail") {
+		t.Fatalf("Error() 应与同族四包一致携带原因文本: %q", err.Error())
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/ai/generation"
 	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
+	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
 	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
 )
 
@@ -26,8 +27,8 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 		return nil, err
 	}
 	ctx = orBackground(ctx)
-	// 域过滤器交给检索层执行
-	req.RetrieveRequest.PostFilter = e.filter
+	// 域过滤器交给检索层执行；调用方自带过滤器时串联在本包域过滤器之后，不静默覆盖
+	req.RetrieveRequest.PostFilter = e.composeFilter(req.RetrieveRequest.PostFilter)
 	hits, err := e.retriever.Retrieve(ctx, name, req.RetrieveRequest)
 	if err != nil {
 		return nil, err
@@ -51,6 +52,38 @@ func decodeHits(hits []vectordb.Hit) []Chunk {
 		chunks = append(chunks, decodeHit(hit))
 	}
 	return chunks
+}
+
+// composeFilter 返回组合后置过滤器：先执行本包文档域过滤，再执行调用方过滤器；
+// 调用方未提供时仅本包过滤器
+func (e *engine) composeFilter(caller retrieval.HitFilter) retrieval.HitFilter {
+	if caller == nil {
+		return e.filter
+	}
+	return hitFilterChain{first: e.filter, second: caller}
+}
+
+// hitFilterChain 串联两个后置过滤器，前段输出作为后段输入；两段均无状态，可并发调用
+type hitFilterChain struct {
+	first  retrieval.HitFilter
+	second retrieval.HitFilter
+}
+
+// Filter 实现 retrieval.HitFilter
+func (c hitFilterChain) Filter(ctx context.Context, collection string, hits []vectordb.Hit) ([]vectordb.Hit, error) {
+	out, err := c.first.Filter(ctx, collection, hits)
+	if err != nil {
+		return nil, err
+	}
+	return c.second.Filter(ctx, collection, out)
+}
+
+// hitFilterFunc 把函数适配为 retrieval.HitFilter
+type hitFilterFunc func(ctx context.Context, collection string, hits []vectordb.Hit) ([]vectordb.Hit, error)
+
+// Filter 实现 retrieval.HitFilter
+func (f hitFilterFunc) Filter(ctx context.Context, collection string, hits []vectordb.Hit) ([]vectordb.Hit, error) {
+	return f(ctx, collection, hits)
 }
 
 // applyRerank 精重排：候选块文本交 Reranker，结果按下标回取并回填 RerankScore；
