@@ -380,6 +380,55 @@ func TestFillSimpleTool(t *testing.T) {
 	}
 }
 
+// TestFillIdentifierNonStringFailsClosed 覆盖标识符提供了但解不出非空字符串时按缺槽处理
+func TestFillIdentifierNonStringFailsClosed(t *testing.T) {
+	t.Parallel()
+	var handlerCalls atomic.Int32
+	spec := validSpec("weather")
+	spec.Fill = FillSpec{IdentifierKeys: []string{"city"}}
+	current := newTool(t, spec, func(_ context.Context, args json.RawMessage) (json.RawMessage, error) {
+		handlerCalls.Add(1)
+		return args, nil
+	})
+	for name, raw := range map[string]string{
+		"数字": `{"city":123}`,
+		"布尔": `{"city":true}`,
+		"对象": `{"city":{"x":1}}`,
+		"空值": `{"city":null}`,
+		"空白": `{"city":"  "}`,
+	} {
+		completer := &fakeCompleter{responses: []string{raw}}
+		registry := newFillRegistry(t, completer, FillConfig{}, current)
+		filled, err := registry.Fill(context.Background(), Call{Name: "weather", Evidence: &Evidence{UserInput: "北京天气"}})
+		if err != nil || filled.Complete || !sameStrings(filled.Missing, []string{"city"}) {
+			t.Fatalf("%s 应缺槽: %+v %v", name, filled, err)
+		}
+		if _, err := registry.InvokeFilled(context.Background(), filled); err == nil {
+			t.Fatalf("%s 不完整结果不得执行", name)
+		}
+	}
+	// 对照一：数字标量按文本形态核验，证据含该文本即放行
+	completer := &fakeCompleter{responses: []string{`{"city":123}`}}
+	registry := newFillRegistry(t, completer, FillConfig{}, current)
+	filled, err := registry.Fill(context.Background(), Call{Name: "weather", Evidence: &Evidence{UserInput: "北京 123 号"}})
+	if err != nil || !filled.Complete {
+		t.Fatalf("数字标量在证据中应放行: %+v %v", filled, err)
+	}
+	if _, err := registry.InvokeFilled(context.Background(), filled); err != nil || handlerCalls.Load() != 1 {
+		t.Fatalf("数字标量放行后应执行: %v calls=%d", err, handlerCalls.Load())
+	}
+	// 对照二：字符串形态且在证据中可核验时照常执行
+	completer = &fakeCompleter{responses: []string{`{"city":"北京"}`}}
+	registry = newFillRegistry(t, completer, FillConfig{}, current)
+	filled, err = registry.Fill(context.Background(), Call{Name: "weather", Evidence: &Evidence{UserInput: "北京天气"}})
+	if err != nil || !filled.Complete {
+		t.Fatalf("可核验标识符应通过: %+v %v", filled, err)
+	}
+	if _, err := registry.InvokeFilled(context.Background(), filled); err != nil || handlerCalls.Load() != 2 {
+		t.Fatalf("可核验标识符应执行: %v calls=%d", err, handlerCalls.Load())
+	}
+}
+
 // TestInvokeSimpleFillable 覆盖 simple fillable 的 Invoke 缺槽语义
 func TestInvokeSimpleFillable(t *testing.T) {
 	t.Parallel()

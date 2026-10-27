@@ -65,7 +65,11 @@
 // Fill 按工具定义拼装 system/user 提示词，交给 Config.Completer：
 //
 //   - Schema：Spec.Parameters 原样进入提示词，是模型侧契约；
-//   - IdentifierKeys：值必须能在 Evidence 原文中找到，防止模型臆造；
+//   - IdentifierKeys：值必须能在 Evidence 原文中找到，防止模型臆造；键缺失交由必填
+//     规则判定，出现过的键取标量文本核验——字符串取内容、数字/布尔取文本形态
+//     （如 99999 按 "99999" 在证据中查找），对象/数组等复合形态与空白/null 无法
+//     核验视为缺槽；EvidenceOnly 的证据映射取值由 Decode 自证，零值与未提供
+//     不可区分时跳过核验；
 //   - RequiredKeys：Fill.Required 作为候选必填进入提示词，真正缺失仍由 Validate 判；
 //   - Guidance/Example：动作专属填法，Example 只示范字段形状；
 //   - Evidence：用户原文、历史、OCR 以 JSON 编码注入，避免破坏提示词结构；

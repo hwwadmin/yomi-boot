@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -21,7 +22,7 @@ type InputContract[In any] struct {
 	Normalize func(In) (In, error)
 	// Validate 做业务必填、互斥与条件校验；返回缺失槽位键，error 表示硬失败
 	Validate func(In) (missing []string, err error)
-	// Identify 返回标识符键值；nil 时按 JSON 字段名从 In 编码结果中取字符串
+	// Identify 返回标识符键值；nil 时按 JSON 字段名从 In 编码结果中取标量文本
 	Identify func(In) map[string]string
 }
 
@@ -104,11 +105,21 @@ func resolveWithSpec[In any](
 		missing = append(missing, current...)
 	}
 	if ev != nil && len(spec.Fill.IdentifierKeys) > 0 {
-		values, err := identifyValues(input, spec.Fill.IdentifierKeys, contract.Identify)
+		// provided 记录模型原始参数里实际出现的键；typed 重新编码后零值与未提供
+		// 不可区分，是否提供过只能看原始参数。原始参数不可考（EvidenceOnly 传 nil）
+		// 时退回仅核验非空白字符串的旧行为
+		var provided map[string]json.RawMessage
+		if trimmedRaw := bytes.TrimSpace(raw); len(trimmedRaw) > 0 && trimmedRaw[0] == '{' {
+			if err := json.Unmarshal(trimmedRaw, &provided); err != nil {
+				provided = nil
+			}
+		}
+		values, unverifiable, err := identifyValues(input, provided, spec.Fill.IdentifierKeys, contract.Identify)
 		if err != nil {
 			return nil, invalidInputError(err, spec.Name, defaultInvalidArgumentMessage)
 		}
 		missing = append(missing, identifierMissing(values, spec.Fill.IdentifierKeys, ev)...)
+		missing = append(missing, unverifiable...)
 	}
 	missing = normalizeMissing(missing)
 	return &Resolution{Input: input, Missing: missing, Complete: len(missing) == 0}, nil
@@ -234,32 +245,66 @@ func requiredMissingFromValue[In any](input In, keys []string) ([]string, error)
 	return rawRequiredMissing(object, keys), nil
 }
 
-// identifyValues 取标识符值；未提供 Identify 时按 JSON 字段名取字符串
-func identifyValues[In any](input In, keys []string, identify func(In) map[string]string) (map[string]string, error) {
+// identifyValues 取标识符值；未提供 Identify 时按 JSON 字段名从 typed 入参取标量文本。
+// provided 是模型原始参数对象，键未出现视为未提供、不参与核验（typed 零值与未提供
+// 不可区分）；出现过的键取核验值——字符串取内容，数字/布尔取文本形态，空白、null
+// 与对象/数组等复合形态无法核验，进 unverifiable 由调用方并入缺槽。
+// provided 为 nil 表示原始参数不可考（EvidenceOnly 证据映射），退回旧行为：仅核验
+// 非空白字符串，零值与未提供不可区分、一律跳过；自定义 Identify 由实现自证契约
+func identifyValues[In any](input In, provided map[string]json.RawMessage, keys []string, identify func(In) map[string]string) (map[string]string, []string, error) {
 	if identify != nil {
-		return identify(input), nil
+		return identify(input), nil, nil
 	}
 	raw, err := marshalSafe(input)
 	if err != nil {
-		return nil, errors.Wrap(err, "ai/tool: 标识符取值失败")
+		return nil, nil, errors.Wrap(err, "ai/tool: 标识符取值失败")
 	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &object); err != nil {
-		return nil, errors.Wrap(err, "ai/tool: 标识符入参不是 JSON 对象")
+		return nil, nil, errors.Wrap(err, "ai/tool: 标识符入参不是 JSON 对象")
 	}
 	values := make(map[string]string, len(keys))
+	var unverifiable []string
 	for _, key := range keys {
 		rawValue, ok := object[key]
 		if !ok {
 			continue
 		}
-		var value string
-		if err := json.Unmarshal(rawValue, &value); err != nil {
+		if provided != nil {
+			if _, ok := provided[key]; !ok {
+				continue
+			}
+		}
+		trimmed := bytes.TrimSpace(rawValue)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+			if provided != nil {
+				unverifiable = append(unverifiable, key)
+			}
 			continue
 		}
-		values[key] = value
+		var value string
+		if err := json.Unmarshal(trimmed, &value); err == nil {
+			if provided != nil && strings.TrimSpace(value) == "" {
+				unverifiable = append(unverifiable, key)
+				continue
+			}
+			values[key] = value
+			continue
+		}
+		var num json.Number
+		if err := json.Unmarshal(trimmed, &num); err == nil {
+			values[key] = num.String()
+			continue
+		}
+		var flag bool
+		if err := json.Unmarshal(trimmed, &flag); err == nil {
+			values[key] = strconv.FormatBool(flag)
+			continue
+		}
+		// 对象/数组等复合形态无法对照证据核验
+		unverifiable = append(unverifiable, key)
 	}
-	return values, nil
+	return values, unverifiable, nil
 }
 
 // rawRequiredMissing 检查原始 JSON 对象的必填键；null 与空字符串视为缺失
@@ -287,7 +332,10 @@ func rawRequiredMissing(object map[string]json.RawMessage, keys []string) []stri
 	return missing
 }
 
-// rawIdentifierMissing 检查原始 JSON 对象中的标识符是否出现在证据原文
+// rawIdentifierMissing 检查原始 JSON 对象中的标识符是否可对照证据核验；
+// 键未提供交由必填规则判定，出现过的键取标量文本参与核验——字符串取内容，
+// 数字/布尔取文本形态；空白、null 与对象/数组等复合形态无法核验，视为缺槽，
+// 避免臆造值绕过门闩
 func rawIdentifierMissing(object map[string]json.RawMessage, keys []string, ev *Evidence) []string {
 	if ev == nil || len(keys) == 0 {
 		return nil
@@ -299,12 +347,30 @@ func rawIdentifierMissing(object map[string]json.RawMessage, keys []string, ev *
 		if !ok {
 			continue
 		}
-		var value string
-		if err := json.Unmarshal(rawValue, &value); err != nil {
+		trimmed := bytes.TrimSpace(rawValue)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+			missing = append(missing, key)
 			continue
+		}
+		var value string
+		if err := json.Unmarshal(trimmed, &value); err != nil {
+			// 非字符串标量取文本形态核验，复合形态无法核验
+			var num json.Number
+			if nerr := json.Unmarshal(trimmed, &num); nerr == nil {
+				value = num.String()
+			} else {
+				var flag bool
+				if ferr := json.Unmarshal(trimmed, &flag); ferr == nil {
+					value = strconv.FormatBool(flag)
+				} else {
+					missing = append(missing, key)
+					continue
+				}
+			}
 		}
 		value = strings.TrimSpace(value)
 		if value == "" {
+			missing = append(missing, key)
 			continue
 		}
 		if !containsFold(blob, value) {

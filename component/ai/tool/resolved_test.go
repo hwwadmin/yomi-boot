@@ -252,6 +252,39 @@ func TestResolveDefaults(t *testing.T) {
 	}
 }
 
+// TestResolveDefaultsNonStringIdentifier 覆盖默认标识符取值遇非字符串字段时按缺槽处理
+func TestResolveDefaultsNonStringIdentifier(t *testing.T) {
+	t.Parallel()
+	spec := Spec{
+		Name:        "simple",
+		Description: "默认校验",
+		Parameters:  json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"},"id":{"type":"string"}},"required":["city"]}`),
+		Fill: FillSpec{
+			Required:       []string{"city"},
+			IdentifierKeys: []string{"id"},
+		},
+	}
+	contract := InputContract[struct {
+		City string `json:"city"`
+		ID   int    `json:"id"`
+	}]{}
+	// 数字标量按文本形态核验：证据含 "999" 放行，不含则缺槽
+	if resolution, err := Resolve(json.RawMessage(`{"city":"北京","id":999}`), spec, contract, &Evidence{UserInput: "单号 999 已登记"}); err != nil || !resolution.Complete {
+		t.Fatalf("数字标识符在证据中应放行: %+v %v", resolution, err)
+	}
+	if resolution, err := Resolve(json.RawMessage(`{"city":"北京","id":999}`), spec, contract, &Evidence{UserInput: "北京"}); err != nil || resolution.Complete || !sameStrings(resolution.Missing, []string{"id"}) {
+		t.Fatalf("数字标识符不在证据中应缺槽: %+v %v", resolution, err)
+	}
+	// 数字标量不在证据文本中应缺槽
+	if resolution, err := Resolve(json.RawMessage(`{"city":"北京","id":1}`), spec, contract, &Evidence{UserInput: "北京 true"}); err != nil || resolution.Complete || !sameStrings(resolution.Missing, []string{"id"}) {
+		t.Fatalf("数字标量不在证据中应缺槽: %+v %v", resolution, err)
+	}
+	// 模型原始参数未出现该键时零值不参与核验，交由必填规则
+	if resolution, err := Resolve(json.RawMessage(`{"city":"北京"}`), spec, contract, &Evidence{UserInput: "北京"}); err != nil || !resolution.Complete {
+		t.Fatalf("未提供的数字标识符不应缺槽: %+v %v", resolution, err)
+	}
+}
+
 // TestResolvedInvoke 覆盖解析后执行、缺槽与 typed 执行
 func TestResolvedInvoke(t *testing.T) {
 	t.Parallel()
