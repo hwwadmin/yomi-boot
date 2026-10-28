@@ -68,5 +68,7 @@ func HandleDrop() RecordHandleResult {
 	return RecordHandleResult{Status: RecordHandleDrop}
 }
 
-// RecordHandler 是 HTTP 访问记录消费处理函数（Kafka / 内存队列 / Redis Stream 共用）
+// RecordHandler 是 HTTP 访问记录消费处理函数（Kafka / 内存队列 / Redis Stream 共用）。
+// 由各传输层的消费协程并发调用，须保证并发安全；返回 Retry 时的重投语义由传输层决定：
+// kafka 重新投递、redis_stream 留 PEL 等待重认领、内存队列记 Warn 后丢弃。
 type RecordHandler func(ctx context.Context, record *HttpRecord) RecordHandleResult

@@ -13,10 +13,15 @@
 package main
 
 import (
+	"context"
+
 	"gitee.com/hq_project/yomi-boot/boot"
+	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
+	"gitee.com/hq_project/yomi-boot/component/core/logger"
 	"gitee.com/hq_project/yomi-boot/component/core/masking"
 	"gitee.com/hq_project/yomi-boot/component/core/router"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
 )
 
 // envPrefix 是传给 boot.Run 的环境变量前缀。
@@ -39,7 +44,17 @@ func main() {
 	boot.Run(envPrefix, wire)
 }
 
-// wire 是路由装配入口；示例无业务，返回空注册器列表。
-func wire(*plugin.PluginSlot) []router.Registrar {
+// wire 是路由装配入口；示例无业务，仅演示注入 HTTP 访问记录消费处理函数。
+func wire(slot *plugin.PluginSlot) []router.Registrar {
+	httprecordplugin.From(slot).MustRegisterHandler(func(ctx context.Context, record *httprecord.HttpRecord) httprecord.RecordHandleResult {
+		logger.Info(ctx, "HTTP 访问记录已消费",
+			"serviceType", record.ServiceType,
+			"method", record.Method,
+			"path", record.Path,
+			"statusCode", record.StatusCode,
+			"traceId", record.TraceID,
+		)
+		return httprecord.HandleOK()
+	})
 	return nil
 }

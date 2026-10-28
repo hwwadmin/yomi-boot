@@ -11,14 +11,14 @@ const SectionKey = "http_record"
 
 // ConsumerBootConfig 表示 HTTP 访问记录消费者的 YAML 绑定
 type ConsumerBootConfig struct {
-	Enabled *bool  `mapstructure:"enabled"`  // Enabled 是否启用消费者，未配置默认 false
-	GroupID string `mapstructure:"group_id"` // GroupID 是消费组标识
+	Enabled *bool  `mapstructure:"enabled"`  // Enabled 是否在本进程消费：kafka / redis_stream 生效，未配置默认 false；memory 恒消费
+	GroupID string `mapstructure:"group_id"` // GroupID 是消费组标识（kafka / redis_stream）
 }
 
 // MemoryBootConfig 表示进程内内存队列的 YAML 绑定
 type MemoryBootConfig struct {
 	QueueSize int `mapstructure:"queue_size"` // QueueSize 是内存队列缓冲容量
-	Workers   int `mapstructure:"workers"`    // Workers 是内存消费协程数（供消费端点读取）
+	Workers   int `mapstructure:"workers"`    // Workers 是内存消费协程数（provider=memory 时生效）
 }
 
 // BootConfig 表示 http_record 配置段的 YAML 绑定
@@ -34,7 +34,7 @@ type BootConfig struct {
 	RecordResponseBody  bool               `mapstructure:"record_response_body"`   // RecordResponseBody 是否记录响应体
 	MaskSensitive       *bool              `mapstructure:"mask_sensitive"`         // MaskSensitive 记录内容是否经统一脱敏服务；nil 默认 true，规则见 masking 段
 	Memory              MemoryBootConfig   `mapstructure:"memory"`                 // Memory 是内存队列配置（provider=memory）
-	Consumer            ConsumerBootConfig `mapstructure:"consumer"`               // Consumer 是消费者配置
+	Consumer            ConsumerBootConfig `mapstructure:"consumer"`               // Consumer 是消费者配置（kafka / redis_stream 生效）
 }
 
 // EnabledOrDefault 返回是否启用 HTTP 访问记录，未配置默认 false

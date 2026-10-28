@@ -49,7 +49,7 @@ import (
 //  15. dtm        — 始终构造客户端（注入 consul 插件 Client）；enabled 时探活；db 可用时构造 tx.Runner
 //  16. idempotency — stale_cleaner_enabled=true 时启动（依赖 app/db/redis 插件）
 //  17. token      — token.enabled=true 时启动服务；middleware 始终挂载，受 token.enabled 控制
-//  18. httprecord — http_record.enabled=true 时按 provider 装配 kafka/memory/redis_stream 服务；未启用时不创建服务（中间件短路）；默认关，文件 access 由 logger.Middleware 负责；脱敏经注入的 masking 服务（http_record.mask_sensitive 控制）
+//  18. httprecord — http_record.enabled=true 时按 provider 装配生产端，并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 consumer.enabled 控制）；消费处理函数须在 wire 中经 httprecordplugin.From(slot).MustRegisterHandler 注入；默认关，文件 access 由 logger.Middleware 负责；脱敏经注入的 masking 服务（http_record.mask_sensitive 控制）
 //  19. event      — outbox_enabled / inbox_enabled 任一为 true 时启动（依赖 app/db/tx/redis/kafka/snowflake 插件）
 //  20. custom     — PluginOptions.AddCustomPlugin 注册的服务自定义插件
 //

@@ -105,6 +105,7 @@ func TestConfigValidateBranches(t *testing.T) {
 		{name: "请求体上限为负", cfg: Config{MaxRequestBodySize: intPtr(-1)}},
 		{name: "响应体上限为负", cfg: Config{MaxResponseBodySize: intPtr(-1)}},
 		{name: "provider 不支持", cfg: Config{Provider: "nsq"}},
+		{name: "memory 关闭消费", cfg: Config{Provider: ProviderMemory, Consumer: ConsumerConfig{Enabled: boolPtr(false)}}},
 		{name: "queue_size 为负", cfg: Config{Memory: MemoryConfig{QueueSize: -1}}},
 		{name: "workers 为负", cfg: Config{Memory: MemoryConfig{Workers: -1}}},
 	}

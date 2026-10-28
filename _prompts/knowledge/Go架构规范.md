@@ -226,7 +226,7 @@ services/{domain}/
 | `bc/sm2` | SM2 PEM、C1C3C2/ASN.1 加解密、ASN.1 签名验签（国密） |
 | `kafka` | 生产者 `NewPublisher` / `PublisherService`、消费者 `NewConsumerManager` / `ConsumerService`，两端独立构造、校验与关闭；`kafkatest` 提供独立测试入口 |
 | `redisstream` | Redis Stream 发布/消费组（`PublisherService` / `ConsumerService`）；复用 `RedisClient`，不耦合 `RedisService` |
-| `httprecord` | HTTP 访问记录中间件、Kafka 发布端；`StartKafkaRecordConsumer` / `MustStartKafkaRecordConsumer` 提供消费端点（反序列化 + 委托 handler），**不含**业务消费逻辑；记录内容脱敏经注入的 `masking` 服务（`http_record.mask_sensitive` 控制，默认 true） |
+| `httprecord` | HTTP 访问记录中间件、Kafka/Redis Stream 发布端与三传输消费端点（反序列化 + ack 映射）；插件按 provider 装配生产端并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 `consumer.enabled` 控制），业务在 wire 中注入 `RecordHandler`；记录内容脱敏经注入的 `masking` 服务（`http_record.mask_sensitive` 控制，默认 true） |
 | `rpc` | HTTP RPC 读传输（EndpointResolver 端点解析 + POST JSON + 反序列化）；轻量重试（退避）+ 按 HTTP 状态码/尝试耗时熔断；不解析业务信封，不区分分页；跨域写走 DTM，不在此叠加写重试 |
 | `ws` | 独立端口 WebSocket（coder/websocket）：Config 配 Processor/可选 Handler；默认 Handler 消费消息；ConnID 仅服务端；心跳/寿命/`MaxConnections`；可选 `MaxFramePayloadSize` 协议分片；无 yml/默认插件；小文件可走 WS，大文件走 `oss` |
 | `distlock` | 基于 Redsync 的分布式锁、看门狗 |
@@ -399,7 +399,7 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 | 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活；db 可用时构造 `tx.Runner`（供 Saga 分支 usecase 注入） |
 | 15 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
 | 16 | token | `token.enabled=true`（依赖 redis 插件） |
-| 17 | httprecord | `http_record.enabled=true` 时按 provider 装配；未启用时不创建服务（中间件短路） |
+| 17 | httprecord | `http_record.enabled=true` 时按 provider 装配生产端，并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 `consumer.enabled` 控制）；handler 由业务在 wire 注入，未启用时不创建服务（中间件短路） |
 | 18 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
 | 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可经 slot 依赖内置插件；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 

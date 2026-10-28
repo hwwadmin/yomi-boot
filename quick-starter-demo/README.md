@@ -6,3 +6,5 @@ yomi-boot 组件库的快速启动示例：只有一个 `main` 函数和一个 `
 
 `config/dev.yml` 覆盖了全部内置插件配置段，仅排除分布式微服务组件 `consul` 与 `dtm`（保持 `enabled: false`）。其余插件（db / redis / kafka / redis_stream / oss / idempotency / token / http_record / event / pprof / ratelimit 等）全部启用。
 
+`main.go` 的 `wire` 演示业务侧如何向 `http_record` 插件注入消费处理函数：`httprecordplugin.From(slot).MustRegisterHandler(...)`；示例 handler 只打印日志并返回 `HandleOK`。
+
