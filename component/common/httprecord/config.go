@@ -16,7 +16,7 @@ const (
 	defaultHTTPRecordMaxResponseBodySize = 4096
 	defaultHttpRecordKafkaTopic          = "yomi.http.record"
 	defaultHttpRecordStream              = "yomi.http.record"
-	defaultHttpRecordConsumerGroupID     = "httprecord-service"
+	defaultKafkaRecordMaxRetries         = 3
 	defaultHttpRecordProvider            = ProviderMemory
 	defaultMemoryQueueSize               = 1024
 	defaultMemoryWorkers                 = 2
@@ -31,8 +31,9 @@ const (
 
 // ConsumerConfig 表示 HTTP 访问记录消费者配置（Kafka / Redis Stream 共用 group_id）
 type ConsumerConfig struct {
-	Enabled *bool  // Enabled 是否在本进程消费：kafka / redis_stream 生效，未配置默认 false；memory 恒消费
-	GroupID string // GroupID 是消费组标识（kafka / redis_stream）
+	Enabled  *bool  // Enabled 是否在本进程消费：kafka / redis_stream 生效，未配置默认 false；memory 恒消费
+	GroupID  string // GroupID 是消费组标识（kafka / redis_stream）；未配置时由插件按 app.name + "-httprecord" 派生
+	MaxRetry *int   // MaxRetry 是 Kafka 消费同一消息的最大重试次数，超限后直接丢弃；nil 默认 3，0 表示不重试
 }
 
 // EnabledOrDefault 返回是否启用消费者，未配置默认 false；memory provider 恒消费，不受该开关影响
@@ -96,6 +97,9 @@ func (c Config) Validate() error {
 	if c.ProviderOrDefault() == ProviderMemory && c.Consumer.Enabled != nil && !*c.Consumer.Enabled {
 		return errors.New("provider=memory 时必须消费，consumer.enabled 不能为 false")
 	}
+	if c.Consumer.MaxRetry != nil && *c.Consumer.MaxRetry < 0 {
+		return errors.New("consumer.max_retry 不能小于 0")
+	}
 	if c.Memory.QueueSize < 0 {
 		return errors.New("memory.queue_size 不能小于 0")
 	}
@@ -119,14 +123,6 @@ func (c Config) StreamOrDefault() string {
 		return stream
 	}
 	return defaultHttpRecordStream
-}
-
-// GroupIDOrDefault 返回消费组标识
-func (c ConsumerConfig) GroupIDOrDefault() string {
-	if groupID := strings.TrimSpace(c.GroupID); groupID != "" {
-		return groupID
-	}
-	return defaultHttpRecordConsumerGroupID
 }
 
 // QueueSizeOrDefault 返回内存队列缓冲容量

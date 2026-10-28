@@ -33,6 +33,7 @@ type HttpRecord struct {
 
 	kafkaConsumer  yomikafka.ConsumerService   // kafkaConsumer 是 kafka 消费端（启用消费时持有）
 	streamConsumer redisstream.ConsumerService // streamConsumer 是 Redis Stream 消费端（启用消费时持有）
+	consumerGroup  string                      // consumerGroup 是解析后的消费组标识
 	consumerName   string                      // consumerName 是 Redis Stream 同组内唯一的消费者名
 
 	handlerMu sync.Mutex               // handlerMu 保护 handler 的注册与读取
@@ -113,6 +114,9 @@ func (p *HttpRecord) initConsumerDeps(slot *plugin.PluginSlot) error {
 		return nil
 	}
 
+	name := appName(slot)
+	p.consumerGroup = resolveConsumerGroupID(p.cfg.Consumer.GroupID, name)
+
 	switch p.provider {
 	case httprecord.ProviderKafka:
 		consumer := kafkaplugin.FromConsumer(slot).Service()
@@ -126,7 +130,7 @@ func (p *HttpRecord) initConsumerDeps(slot *plugin.PluginSlot) error {
 			return errors.New("http_record: 已启用消费但 redisstream 未初始化（检查 redis_stream.enabled）")
 		}
 		p.streamConsumer = consumer
-		p.consumerName = redisConsumerName(slot)
+		p.consumerName = redisConsumerName(name)
 	case httprecord.ProviderMemory:
 		// 内存队列自消费，无需外部依赖
 	default:

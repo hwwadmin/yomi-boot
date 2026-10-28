@@ -45,6 +45,10 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 			return
 		}
 
+		// 后置阶段 c.Request.Context() 可能已被后续中间件（如 httpguard）取消，
+		// 投递记录须使用进入时的请求上下文
+		ctx := c.Request.Context()
+
 		start := time.Now()
 		requestAt := start
 		var requestBody string
@@ -65,7 +69,7 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 		c.Next()
 
 		record := m.buildRecord(c, requestAt, time.Since(start), requestBody, requestBodyTruncated, blw)
-		m.safeInvoke(c.Request.Context(), record)
+		m.safeInvoke(ctx, record)
 	}
 }
 

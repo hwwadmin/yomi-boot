@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
@@ -60,14 +61,15 @@ func (p *HttpRecord) OnReady(context.Context) error {
 	case httprecord.ProviderKafka:
 		err = httprecord.StartKafkaRecordConsumer(p.runtimeCtx, p.kafkaConsumer, httprecord.KafkaConsumerID,
 			httprecord.KafkaRecordConsumerConfig{
-				Topics:  []string{p.cfg.KafkaTopicOrDefault()},
-				GroupID: p.cfg.Consumer.GroupIDOrDefault(),
+				Topics:     []string{p.cfg.KafkaTopicOrDefault()},
+				GroupID:    p.consumerGroup,
+				MaxRetries: p.cfg.Consumer.MaxRetry,
 			}, handler)
 	case httprecord.ProviderRedisStream:
 		err = httprecord.StartRedisStreamRecordConsumer(p.runtimeCtx, p.streamConsumer, httprecord.RedisStreamConsumerID,
 			httprecord.RedisStreamRecordConsumerConfig{
 				Stream:   p.cfg.StreamOrDefault(),
-				Group:    p.cfg.Consumer.GroupIDOrDefault(),
+				Group:    p.consumerGroup,
 				Consumer: p.consumerName,
 			}, handler)
 	default:
@@ -102,11 +104,30 @@ func withTraceID(handler httprecord.RecordHandler) httprecord.RecordHandler {
 	}
 }
 
-// redisConsumerName 生成同组内唯一的消费者名：服务名-主机名-进程号
-func redisConsumerName(slot *plugin.PluginSlot) string {
-	name := "httprecord"
-	if app := appctxplugin.From(slot).AppCtx(); app != nil && app.Name() != "" {
-		name = app.Name()
+// appName 返回应用名；appctx 未就绪时返回空串
+func appName(slot *plugin.PluginSlot) string {
+	if app := appctxplugin.From(slot).AppCtx(); app != nil {
+		return app.Name()
+	}
+	return ""
+}
+
+// resolveConsumerGroupID 返回消费组：显式配置优先，未配置按 应用名-httprecord 派生
+func resolveConsumerGroupID(configured, appName string) string {
+	if groupID := strings.TrimSpace(configured); groupID != "" {
+		return groupID
+	}
+	if name := strings.TrimSpace(appName); name != "" {
+		return name + "-httprecord"
+	}
+	return "httprecord"
+}
+
+// redisConsumerName 生成同组内唯一的消费者名：应用名-主机名-进程号
+func redisConsumerName(appName string) string {
+	name := strings.TrimSpace(appName)
+	if name == "" {
+		name = "httprecord"
 	}
 	host, err := os.Hostname()
 	if err != nil || host == "" {

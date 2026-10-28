@@ -62,7 +62,10 @@ func (s *KafkaHttpRecordService) Handle(ctx context.Context, record *HttpRecord)
 		req.Key = []byte(record.TraceID)
 	}
 
-	if err := s.publisher.PublishAsync(ctx, req); err != nil {
+	// 投递使用独立短预算：发布队列满时超时丢弃，不阻塞业务请求
+	publishCtx, cancel := publishContext(ctx)
+	defer cancel()
+	if err := s.publisher.PublishAsync(publishCtx, req); err != nil {
 		logger.Warn(ctx, "HTTP 访问记录 Kafka 发布失败", "error", err, "topic", s.topic)
 	}
 }

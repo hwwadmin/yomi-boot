@@ -11,8 +11,9 @@ const SectionKey = "http_record"
 
 // ConsumerBootConfig 表示 HTTP 访问记录消费者的 YAML 绑定
 type ConsumerBootConfig struct {
-	Enabled *bool  `mapstructure:"enabled"`  // Enabled 是否在本进程消费：kafka / redis_stream 生效，未配置默认 false；memory 恒消费
-	GroupID string `mapstructure:"group_id"` // GroupID 是消费组标识（kafka / redis_stream）
+	Enabled  *bool  `mapstructure:"enabled"`   // Enabled 是否在本进程消费：kafka / redis_stream 生效，未配置默认 false；memory 恒消费
+	GroupID  string `mapstructure:"group_id"`  // GroupID 是消费组标识（kafka / redis_stream）；未配置时按 app.name + "-httprecord" 派生
+	MaxRetry *int   `mapstructure:"max_retry"` // MaxRetry 是 Kafka 消费同一消息的最大重试次数，超限后直接丢弃；nil 默认 3，0 表示不重试
 }
 
 // MemoryBootConfig 表示进程内内存队列的 YAML 绑定
@@ -68,8 +69,9 @@ func (c BootConfig) ToConfig() httprecord.Config {
 			Workers:   c.Memory.Workers,
 		},
 		Consumer: httprecord.ConsumerConfig{
-			Enabled: c.Consumer.Enabled,
-			GroupID: c.Consumer.GroupID,
+			Enabled:  c.Consumer.Enabled,
+			GroupID:  c.Consumer.GroupID,
+			MaxRetry: c.Consumer.MaxRetry,
 		},
 	}
 }

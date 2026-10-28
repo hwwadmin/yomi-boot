@@ -46,7 +46,10 @@ func (s *RedisStreamHttpRecordService) Handle(ctx context.Context, record *HttpR
 	}
 
 	wire := toWireRecord(record)
-	if err := s.publisher.AddJSONAsync(ctx, s.stream, wire); err != nil {
+	// 投递使用独立短预算：发布队列满时超时丢弃，不阻塞业务请求
+	publishCtx, cancel := publishContext(ctx)
+	defer cancel()
+	if err := s.publisher.AddJSONAsync(publishCtx, s.stream, wire); err != nil {
 		logger.Warn(ctx, "HTTP 访问记录 Redis Stream 发布失败",
 			"error", err,
 			"stream", s.stream,

@@ -17,17 +17,21 @@ import (
 	"gitee.com/hq_project/yomi-boot/component/core/config"
 	"gitee.com/hq_project/yomi-boot/component/core/traceid"
 	"gitee.com/hq_project/yomi-boot/plugin"
+	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
 )
 
-// newTestConfig 加载仅含 http_record 段的测试配置
-func newTestConfig(t *testing.T, content string) *config.Config {
+// newTestConfig 加载测试配置；未指定配置段时只注册 http_record
+func newTestConfig(t *testing.T, content string, sections ...config.Section) *config.Config {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yml")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("写入测试配置失败: %v", err)
 	}
+	if len(sections) == 0 {
+		sections = []config.Section{ConfigSection()}
+	}
 	reg := config.NewRegistry()
-	reg.Register(ConfigSection())
+	reg.Register(sections...)
 	return config.MustLoadConfig(path, "", reg)
 }
 
@@ -43,6 +47,7 @@ func mustPanic(t *testing.T, fn func()) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+func intPtr(v int) *int    { return &v }
 
 // fakeRecordService 是仅用于装配校验的生产端空实现
 type fakeRecordService struct{}
@@ -202,10 +207,11 @@ func TestKafkaConsumerLifecycle(t *testing.T) {
 	p := &HttpRecord{
 		Base:          plugin.NewBase(Name),
 		service:       fakeRecordService{},
-		cfg:           httprecord.Config{KafkaTopic: "topic-1", Consumer: httprecord.ConsumerConfig{Enabled: boolPtr(true), GroupID: "group-1"}},
+		cfg:           httprecord.Config{KafkaTopic: "topic-1", Consumer: httprecord.ConsumerConfig{Enabled: boolPtr(true), MaxRetry: intPtr(5)}},
 		provider:      httprecord.ProviderKafka,
 		runtimeCtx:    context.Background(),
 		kafkaConsumer: consumer,
+		consumerGroup: "svc-httprecord",
 	}
 	p.MustRegisterHandler(func(context.Context, *httprecord.HttpRecord) httprecord.RecordHandleResult {
 		return httprecord.HandleOK()
@@ -223,8 +229,11 @@ func TestKafkaConsumerLifecycle(t *testing.T) {
 	if len(consumer.cfg.Topics) != 1 || consumer.cfg.Topics[0] != "topic-1" {
 		t.Fatalf("订阅主题 = %v，期望 [topic-1]", consumer.cfg.Topics)
 	}
-	if consumer.cfg.GroupID != "group-1" {
-		t.Fatalf("消费组 = %q，期望 group-1", consumer.cfg.GroupID)
+	if consumer.cfg.GroupID != "svc-httprecord" {
+		t.Fatalf("消费组 = %q，期望 svc-httprecord", consumer.cfg.GroupID)
+	}
+	if consumer.cfg.MaxHandlerRetries == nil || *consumer.cfg.MaxHandlerRetries != 5 {
+		t.Fatalf("最大重试次数未按配置透传: %v", consumer.cfg.MaxHandlerRetries)
 	}
 
 	if err := p.Close(context.Background()); err != nil {
@@ -241,10 +250,11 @@ func TestRedisStreamConsumerLifecycle(t *testing.T) {
 	p := &HttpRecord{
 		Base:           plugin.NewBase(Name),
 		service:        fakeRecordService{},
-		cfg:            httprecord.Config{Stream: "stream-1", Consumer: httprecord.ConsumerConfig{Enabled: boolPtr(true), GroupID: "group-1"}},
+		cfg:            httprecord.Config{Stream: "stream-1", Consumer: httprecord.ConsumerConfig{Enabled: boolPtr(true)}},
 		provider:       httprecord.ProviderRedisStream,
 		runtimeCtx:     context.Background(),
 		streamConsumer: consumer,
+		consumerGroup:  "svc-httprecord",
 		consumerName:   "demo-1",
 	}
 	p.MustRegisterHandler(func(context.Context, *httprecord.HttpRecord) httprecord.RecordHandleResult {
@@ -260,7 +270,7 @@ func TestRedisStreamConsumerLifecycle(t *testing.T) {
 	if consumer.id != httprecord.RedisStreamConsumerID {
 		t.Fatalf("消费者标识 = %q，期望 %q", consumer.id, httprecord.RedisStreamConsumerID)
 	}
-	if consumer.cfg.Stream != "stream-1" || consumer.cfg.Group != "group-1" || consumer.cfg.Consumer != "demo-1" {
+	if consumer.cfg.Stream != "stream-1" || consumer.cfg.Group != "svc-httprecord" || consumer.cfg.Consumer != "demo-1" {
 		t.Fatalf("消费组参数 = %+v", consumer.cfg)
 	}
 
@@ -307,9 +317,47 @@ func TestInitRequiresKafkaPublisher(t *testing.T) {
 
 // TestRedisConsumerName 验证无 appctx 时消费者名退化为进程级唯一名
 func TestRedisConsumerName(t *testing.T) {
-	name := redisConsumerName(nil)
+	name := redisConsumerName("")
 	if !strings.HasPrefix(name, "httprecord-") {
 		t.Fatalf("消费者名 = %q，期望以 httprecord- 开头", name)
+	}
+}
+
+// TestResolveConsumerGroupID 验证消费组显式配置优先、未配置按应用名派生
+func TestResolveConsumerGroupID(t *testing.T) {
+	cases := []struct {
+		name       string
+		configured string
+		appName    string
+		want       string
+	}{
+		{name: "显式配置优先", configured: " custom-group ", appName: "demo", want: "custom-group"},
+		{name: "按应用名派生", appName: "demo", want: "demo-httprecord"},
+		{name: "应用名为空退化为 httprecord", want: "httprecord"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveConsumerGroupID(tc.configured, tc.appName); got != tc.want {
+				t.Fatalf("resolveConsumerGroupID() = %q，期望 %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestInitDerivesConsumerGroup 验证未配置 group_id 时 Init 按 app.name + "-httprecord" 派生消费组
+func TestInitDerivesConsumerGroup(t *testing.T) {
+	cfg := newTestConfig(t, "app:\n  name: demo\n  env: dev\n  version: v1\nhttp_record:\n  enabled: true\n  provider: memory\n",
+		appctxplugin.ConfigSection(), ConfigSection())
+	p := NewHttpRecord()
+	slot := plugin.NewPluginSlot(cfg, []plugin.Plugin{appctxplugin.NewAppCtx(), p})
+	ctx := context.Background()
+	if err := slot.Init(ctx); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	defer func() { _ = slot.Close(ctx) }()
+
+	if p.consumerGroup != "demo-httprecord" {
+		t.Fatalf("消费组 = %q，期望 demo-httprecord", p.consumerGroup)
 	}
 }
 

@@ -123,3 +123,52 @@ func TestMapRecordHandlerResultToRedisStream(t *testing.T) {
 		})
 	}
 }
+
+// blockingStreamPublisher 阻塞到投递上下文结束的 Redis Stream 发布器桩
+type blockingStreamPublisher struct{}
+
+// Add 空实现
+func (blockingStreamPublisher) Add(context.Context, string, map[string]string) (string, error) {
+	return "", nil
+}
+
+// AddBytes 空实现
+func (blockingStreamPublisher) AddBytes(context.Context, string, []byte) (string, error) {
+	return "", nil
+}
+
+// AddJSON 空实现
+func (blockingStreamPublisher) AddJSON(context.Context, string, any) (string, error) { return "", nil }
+
+// AddAsync 空实现
+func (blockingStreamPublisher) AddAsync(context.Context, string, map[string]string) error {
+	return nil
+}
+
+// AddBytesAsync 空实现
+func (blockingStreamPublisher) AddBytesAsync(context.Context, string, []byte) error { return nil }
+
+// AddJSONAsync 阻塞到投递上下文结束
+func (blockingStreamPublisher) AddJSONAsync(ctx context.Context, _ string, _ any) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Close 空实现
+func (blockingStreamPublisher) Close() error { return nil }
+
+// TestRedisStreamRecordHandleBudget 验证发布阻塞时投递只等独立短预算
+func TestRedisStreamRecordHandleBudget(t *testing.T) {
+	svc := NewRedisStreamHttpRecordService(blockingStreamPublisher{}, "s")
+
+	start := time.Now()
+	svc.Handle(context.Background(), &HttpRecord{TraceID: "budget", Method: "GET", Path: "/x"})
+	elapsed := time.Since(start)
+
+	if elapsed < recordPublishBudget/2 {
+		t.Fatalf("投递应等待预算，实际耗时 %v", elapsed)
+	}
+	if elapsed > recordPublishBudget+2*time.Second {
+		t.Fatalf("投递阻塞超出预算: %v", elapsed)
+	}
+}

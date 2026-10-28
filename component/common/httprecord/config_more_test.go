@@ -30,8 +30,8 @@ func TestConfigProviderOrDefault(t *testing.T) {
 	}
 }
 
-// TestConfigTopicStreamGroupDefaults 验证主题、Stream 与消费组默认值
-func TestConfigTopicStreamGroupDefaults(t *testing.T) {
+// TestConfigTopicStreamDefaults 验证主题与 Stream 默认值
+func TestConfigTopicStreamDefaults(t *testing.T) {
 	if got := (Config{}).KafkaTopicOrDefault(); got != "yomi.http.record" {
 		t.Fatalf("KafkaTopic 默认不符: %q", got)
 	}
@@ -43,12 +43,6 @@ func TestConfigTopicStreamGroupDefaults(t *testing.T) {
 	}
 	if got := (Config{Stream: "s1"}).StreamOrDefault(); got != "s1" {
 		t.Fatalf("Stream 覆盖不符: %q", got)
-	}
-	if got := (ConsumerConfig{}).GroupIDOrDefault(); got != "httprecord-service" {
-		t.Fatalf("GroupID 默认不符: %q", got)
-	}
-	if got := (ConsumerConfig{GroupID: "g1"}).GroupIDOrDefault(); got != "g1" {
-		t.Fatalf("GroupID 覆盖不符: %q", got)
 	}
 }
 
@@ -106,6 +100,7 @@ func TestConfigValidateBranches(t *testing.T) {
 		{name: "响应体上限为负", cfg: Config{MaxResponseBodySize: intPtr(-1)}},
 		{name: "provider 不支持", cfg: Config{Provider: "nsq"}},
 		{name: "memory 关闭消费", cfg: Config{Provider: ProviderMemory, Consumer: ConsumerConfig{Enabled: boolPtr(false)}}},
+		{name: "max_retry 为负", cfg: Config{Consumer: ConsumerConfig{MaxRetry: intPtr(-1)}}},
 		{name: "queue_size 为负", cfg: Config{Memory: MemoryConfig{QueueSize: -1}}},
 		{name: "workers 为负", cfg: Config{Memory: MemoryConfig{Workers: -1}}},
 	}

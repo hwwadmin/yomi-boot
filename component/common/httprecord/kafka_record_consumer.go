@@ -19,8 +19,17 @@ const KafkaConsumerID = "httprecord"
 
 // KafkaRecordConsumerConfig 表示 HTTP 访问记录 Kafka 消费者参数
 type KafkaRecordConsumerConfig struct {
-	Topics  []string // Topics 是订阅主题列表
-	GroupID string   // GroupID 是消费组标识
+	Topics     []string // Topics 是订阅主题列表
+	GroupID    string   // GroupID 是消费组标识
+	MaxRetries *int     // MaxRetries 是同一消息 handler 返回 Retry 时的最大重试次数，超限后丢弃；nil 使用默认值，0 表示不重试
+}
+
+// MaxRetriesOrDefault 返回最大重试次数，未配置时使用默认值
+func (c KafkaRecordConsumerConfig) MaxRetriesOrDefault() int {
+	if c.MaxRetries == nil {
+		return defaultKafkaRecordMaxRetries
+	}
+	return *c.MaxRetries
 }
 
 // StartKafkaRecordConsumer 启动 HTTP 访问记录 Kafka 消费者
@@ -43,10 +52,15 @@ func StartKafkaRecordConsumer(
 	if strings.TrimSpace(cfg.GroupID) == "" {
 		return errors.New("HTTP 访问记录消费组不能为空")
 	}
+	maxRetries := cfg.MaxRetriesOrDefault()
+	if maxRetries < 0 {
+		return errors.New("HTTP 访问记录消费最大重试次数不能小于 0")
+	}
 
 	return consumer.Start(parentCtx, id, yomikafka.ConsumerConfig{
-		Topics:  cfg.Topics,
-		GroupID: cfg.GroupID,
+		Topics:            cfg.Topics,
+		GroupID:           cfg.GroupID,
+		MaxHandlerRetries: &maxRetries,
 	}, func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		var wire wireRecord
 		if err := json.Unmarshal(msg.Value, &wire); err != nil {

@@ -241,6 +241,7 @@ http_record:
   consumer:
     enabled: true
     group_id: quick-starter-demo-httprecord
+    max_retry: 3 # kafka：同一记录最大重试次数，超限直接丢弃；0 表示不重试
 
 event:
   outbox_enabled: true

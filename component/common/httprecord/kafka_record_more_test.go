@@ -163,14 +163,50 @@ func TestStartKafkaRecordConsumerGuards(t *testing.T) {
 	}
 }
 
+// TestKafkaRecordConsumerMaxRetries 验证最大重试次数的默认值、透传与负值校验
+func TestKafkaRecordConsumerMaxRetries(t *testing.T) {
+	handler := func(context.Context, *HttpRecord) RecordHandleResult { return HandleOK() }
+	cases := []struct {
+		name       string
+		configured *int
+		want       int
+	}{
+		{name: "未配置使用默认值", want: defaultKafkaRecordMaxRetries},
+		{name: "显式 0 不重试", configured: intPtr(0), want: 0},
+		{name: "显式 5", configured: intPtr(5), want: 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			manager := &stubConsumerManager{}
+			cfg := KafkaRecordConsumerConfig{Topics: []string{"t"}, GroupID: "g", MaxRetries: tc.configured}
+			if err := StartKafkaRecordConsumer(context.Background(), manager, "id", cfg, handler); err != nil {
+				t.Fatalf("StartKafkaRecordConsumer() error = %v", err)
+			}
+			if manager.cfg.MaxHandlerRetries == nil {
+				t.Fatal("MaxHandlerRetries 未透传")
+			}
+			if got := *manager.cfg.MaxHandlerRetries; got != tc.want {
+				t.Fatalf("MaxHandlerRetries = %d，期望 %d", got, tc.want)
+			}
+		})
+	}
+
+	if err := StartKafkaRecordConsumer(context.Background(), &stubConsumerManager{}, "id",
+		KafkaRecordConsumerConfig{Topics: []string{"t"}, GroupID: "g", MaxRetries: intPtr(-1)}, handler); err == nil {
+		t.Fatal("负最大重试次数应返回错误")
+	}
+}
+
 // stubConsumerManager 记录 Start 调用的消费者管理器桩
 type stubConsumerManager struct {
 	started int
+	cfg     yomikafka.ConsumerConfig
 }
 
-// Start 记录调用并返回 nil
-func (m *stubConsumerManager) Start(context.Context, string, yomikafka.ConsumerConfig, yomikafka.ConsumeHandler) error {
+// Start 记录调用与消费配置并返回 nil
+func (m *stubConsumerManager) Start(_ context.Context, _ string, cfg yomikafka.ConsumerConfig, _ yomikafka.ConsumeHandler) error {
 	m.started++
+	m.cfg = cfg
 	return nil
 }
 
@@ -242,4 +278,57 @@ func TestMustStartKafkaRecordConsumerPanics(t *testing.T) {
 	MustStartKafkaRecordConsumer(context.Background(), nil, "id",
 		KafkaRecordConsumerConfig{Topics: []string{"t"}, GroupID: "g"},
 		func(context.Context, *HttpRecord) RecordHandleResult { return HandleOK() })
+}
+
+// blockingKafkaPublisher 阻塞到投递上下文结束的发布器桩
+type blockingKafkaPublisher struct{}
+
+// Publish 空实现
+func (blockingKafkaPublisher) Publish(context.Context, yomikafka.PublishRequest) error { return nil }
+
+// PublishBatch 空实现
+func (blockingKafkaPublisher) PublishBatch(context.Context, []yomikafka.PublishRequest) error {
+	return nil
+}
+
+// PublishJSON 空实现
+func (blockingKafkaPublisher) PublishJSON(context.Context, string, string, any) error {
+	return nil
+}
+
+// PublishAsync 阻塞到投递上下文结束
+func (blockingKafkaPublisher) PublishAsync(ctx context.Context, _ yomikafka.PublishRequest) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// PublishBatchAsync 空实现
+func (blockingKafkaPublisher) PublishBatchAsync(context.Context, []yomikafka.PublishRequest) error {
+	return nil
+}
+
+// PublishJSONAsync 空实现
+func (blockingKafkaPublisher) PublishJSONAsync(context.Context, string, string, any) error {
+	return nil
+}
+
+// Close 空实现
+func (blockingKafkaPublisher) Close() error { return nil }
+
+// TestKafkaRecordHandleBudget 验证发布阻塞时投递只等独立短预算，且不受调用方 ctx 取消影响
+func TestKafkaRecordHandleBudget(t *testing.T) {
+	svc := NewKafkaHttpRecordService(blockingKafkaPublisher{}, "t")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	svc.Handle(ctx, &HttpRecord{TraceID: "budget", Method: "GET", Path: "/x"})
+	elapsed := time.Since(start)
+
+	if elapsed < recordPublishBudget/2 {
+		t.Fatalf("调用方 ctx 已取消不应缩短投递预算，实际耗时 %v", elapsed)
+	}
+	if elapsed > recordPublishBudget+2*time.Second {
+		t.Fatalf("投递阻塞超出预算: %v", elapsed)
+	}
 }

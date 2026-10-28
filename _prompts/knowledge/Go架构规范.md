@@ -399,7 +399,7 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 | 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活；db 可用时构造 `tx.Runner`（供 Saga 分支 usecase 注入） |
 | 15 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
 | 16 | token | `token.enabled=true`（依赖 redis 插件） |
-| 17 | httprecord | `http_record.enabled=true` 时按 provider 装配生产端，并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 `consumer.enabled` 控制）；handler 由业务在 wire 注入，未启用时不创建服务（中间件短路） |
+| 17 | httprecord | `http_record.enabled=true` 时按 provider 装配生产端，并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 `consumer.enabled` 控制）；Kafka 消费重试默认 3 次、超限直接丢弃（`consumer.max_retry`）；未配置 `consumer.group_id` 时按 `app.name + "-httprecord"` 派生；记录投递使用 200ms 独立短预算，队列满超时丢弃、不阻塞请求；handler 由业务在 wire 注入，未启用时不创建服务（中间件短路） |
 | 18 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
 | 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可经 slot 依赖内置插件；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
