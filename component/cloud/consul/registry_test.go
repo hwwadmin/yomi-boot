@@ -134,10 +134,14 @@ func TestDeregisterService(t *testing.T) {
 		wantCalled bool
 		wantErr    string
 	}{
-		{name: "正常注销", serviceID: "svc-1", agentCode: http.StatusOK,
-			wantPath: "/v1/agent/service/deregister/svc-1", wantCalled: true},
-		{name: "Agent 失败", serviceID: "svc-1", agentCode: http.StatusInternalServerError,
-			wantPath: "/v1/agent/service/deregister/svc-1", wantCalled: true, wantErr: "consul 注销失败"},
+		{
+			name: "正常注销", serviceID: "svc-1", agentCode: http.StatusOK,
+			wantPath: "/v1/agent/service/deregister/svc-1", wantCalled: true,
+		},
+		{
+			name: "Agent 失败", serviceID: "svc-1", agentCode: http.StatusInternalServerError,
+			wantPath: "/v1/agent/service/deregister/svc-1", wantCalled: true, wantErr: "consul 注销失败",
+		},
 		{name: "空 ID 跳过请求", serviceID: "   ", wantCalled: false},
 	}
 	for _, tt := range tests {

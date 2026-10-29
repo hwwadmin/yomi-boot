@@ -175,10 +175,13 @@ func TestValidateSearchQueryInput(t *testing.T) {
 	}
 }
 
+// nilContext 返回 nil 值的 context.Context，用于覆盖库对空上下文的兜底契约
+func nilContext() context.Context { return nil }
+
 // TestWithTimeoutNilContext 验证空上下文回退 Background 并套默认超时
 func TestWithTimeoutNilContext(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := withTimeout(nil, 0)
+	ctx, cancel := withTimeout(nilContext(), 0)
 	defer cancel()
 	deadline, ok := ctx.Deadline()
 	if !ok {

@@ -283,7 +283,7 @@ func TestMilvusStoreLifecycle(t *testing.T) {
 	if err := store.errIfClosed(); err != nil {
 		t.Fatalf("errIfClosed: %v", err)
 	}
-	ctx, cancel, err := store.begin(nil)
+	ctx, cancel, err := store.begin(nilContext())
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}

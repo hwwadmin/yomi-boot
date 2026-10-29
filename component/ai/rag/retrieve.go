@@ -28,7 +28,7 @@ func (e *engine) Retrieve(ctx context.Context, collection string, req RetrieveRe
 	}
 	ctx = orBackground(ctx)
 	// 域过滤器交给检索层执行；调用方自带过滤器时串联在本包域过滤器之后，不静默覆盖
-	req.RetrieveRequest.PostFilter = e.composeFilter(req.RetrieveRequest.PostFilter)
+	req.PostFilter = e.composeFilter(req.PostFilter)
 	hits, err := e.retriever.Retrieve(ctx, name, req.RetrieveRequest)
 	if err != nil {
 		return nil, err

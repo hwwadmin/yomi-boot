@@ -294,7 +294,7 @@ func TestResolvedInvoke(t *testing.T) {
 
 	// 缺槽：handler 不执行
 	_, err := registry.Invoke(context.Background(), Call{ID: "call-1", Name: "order_query", Arguments: json.RawMessage(`{}`)})
-	toolErr := requireCode(t, err, CodeInputIncomplete)
+	toolErr := requireCodeError(t, err, CodeInputIncomplete)
 	if !sameStrings(toolErr.Missing, []string{"order_id", "merchant_order_no"}) || handlerCalls.Load() != 0 {
 		t.Fatalf("缺槽语义不符: %+v calls=%d", toolErr, handlerCalls.Load())
 	}
@@ -304,7 +304,7 @@ func TestResolvedInvoke(t *testing.T) {
 		ID: "call-2", Name: "order_query", Arguments: json.RawMessage(`{"order_id":"FAKE-1"}`),
 		Evidence: &Evidence{UserInput: "订单 LPP3000456"},
 	})
-	toolErr = requireCode(t, err, CodeInputIncomplete)
+	toolErr = requireCodeError(t, err, CodeInputIncomplete)
 	if !sameStrings(toolErr.Missing, []string{"order_id"}) || handlerCalls.Load() != 0 {
 		t.Fatalf("标识符门闩不符: %+v calls=%d", toolErr, handlerCalls.Load())
 	}
@@ -427,7 +427,7 @@ func TestResolvedInvokeResolveError(t *testing.T) {
 	_, err := registry.Invoke(context.Background(), Call{
 		ID: "call-1", Name: "order_query", Arguments: json.RawMessage(`{"order_id":123}`),
 	})
-	toolErr := requireCode(t, err, CodeInvalidArgument)
+	toolErr := requireCodeError(t, err, CodeInvalidArgument)
 	if toolErr.CallID != "call-1" || toolErr.Tool != "order_query" {
 		t.Fatalf("错误上下文不符: %+v", toolErr)
 	}
@@ -449,7 +449,7 @@ func TestInvokeFilledTypedPanic(t *testing.T) {
 		Input: fillOrderInput{OrderID: "LPP-1"}, Arguments: json.RawMessage(`{"order_id":"LPP-1"}`),
 	}
 	_, err = registry.InvokeFilled(context.Background(), filled)
-	toolErr := requireCode(t, err, CodePanic)
+	toolErr := requireCodeError(t, err, CodePanic)
 	if strings.Contains(toolErr.Error(), "typed panic detail") ||
 		toolErr.Cause() == nil || !strings.Contains(toolErr.Cause().Error(), "typed panic detail") {
 		t.Fatalf("panic 封装不符: %+v", toolErr)

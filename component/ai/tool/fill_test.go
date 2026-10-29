@@ -126,7 +126,7 @@ func TestFillMissingNoRetry(t *testing.T) {
 	if _, err := registry.InvokeFilled(context.Background(), filled); err == nil {
 		t.Fatal("不完整结果不应执行")
 	} else {
-		toolErr := requireCode(t, err, CodeInputIncomplete)
+		toolErr := requireCodeError(t, err, CodeInputIncomplete)
 		if !sameStrings(toolErr.Missing, filled.Missing) {
 			t.Fatalf("Missing 未保留: %+v", toolErr)
 		}
@@ -235,7 +235,7 @@ func TestFillInvalidExhausted(t *testing.T) {
 	filled, err := registry.Fill(context.Background(), Call{
 		ID: "call-1", Name: "order_query", Evidence: orderEvidence(),
 	})
-	toolErr := requireCode(t, err, CodeFillInvalid)
+	toolErr := requireCodeError(t, err, CodeFillInvalid)
 	if filled == nil || filled.Complete || filled.Attempts != 2 || filled.Raw == "" {
 		t.Fatalf("重试耗尽应返回审计结果: %+v", filled)
 	}
@@ -493,7 +493,7 @@ func TestInvokeSimpleFillable(t *testing.T) {
 	registry := newRegistry(t, current)
 
 	_, err := registry.Invoke(context.Background(), Call{Name: "weather", Arguments: json.RawMessage(`{}`)})
-	toolErr := requireCode(t, err, CodeInputIncomplete)
+	toolErr := requireCodeError(t, err, CodeInputIncomplete)
 	if !sameStrings(toolErr.Missing, []string{"city"}) || handlerCalls.Load() != 0 {
 		t.Fatalf("simple 缺槽不符: %+v", toolErr)
 	}
@@ -502,7 +502,7 @@ func TestInvokeSimpleFillable(t *testing.T) {
 		Name: "weather", Arguments: json.RawMessage(`{"city":"上海"}`),
 		Evidence: &Evidence{UserInput: "北京天气"},
 	})
-	toolErr = requireCode(t, err, CodeInputIncomplete)
+	toolErr = requireCodeError(t, err, CodeInputIncomplete)
 	if !sameStrings(toolErr.Missing, []string{"city"}) || handlerCalls.Load() != 0 {
 		t.Fatalf("simple 标识符门闩不符: %+v", toolErr)
 	}
@@ -532,7 +532,7 @@ func TestFillAndInvoke(t *testing.T) {
 	completer = &fakeCompleter{responses: []string{`{}`}}
 	registry = newFillRegistry(t, completer, FillConfig{}, current)
 	_, err = registry.FillAndInvoke(context.Background(), Call{Name: "order_query", Evidence: orderEvidence()})
-	toolErr := requireCode(t, err, CodeInputIncomplete)
+	toolErr := requireCodeError(t, err, CodeInputIncomplete)
 	if !sameStrings(toolErr.Missing, []string{"order_id", "merchant_order_no"}) || handlerCalls.Load() != 1 {
 		t.Fatalf("FillAndInvoke 缺槽不符: %+v", toolErr)
 	}
@@ -584,7 +584,7 @@ func TestFillCompleterPanic(t *testing.T) {
 	t.Parallel()
 	registry := newFillRegistry(t, panickingCompleter{}, FillConfig{}, newOrderTool(t, nil, nil))
 	_, err := registry.Fill(context.Background(), Call{Name: "order_query", Evidence: orderEvidence()})
-	toolErr := requireCode(t, err, CodeFillFailed)
+	toolErr := requireCodeError(t, err, CodeFillFailed)
 	if strings.Contains(toolErr.Error(), "completer panic detail") ||
 		toolErr.Cause() == nil || !strings.Contains(toolErr.Cause().Error(), "completer panic detail") {
 		t.Fatalf("Completer panic 封装不符: %+v", toolErr)
@@ -598,7 +598,7 @@ func TestFillErrorEncapsulation(t *testing.T) {
 	completer := &fakeCompleter{err: upstream}
 	registry := newFillRegistry(t, completer, FillConfig{}, newOrderTool(t, nil, nil))
 	_, err := registry.Fill(context.Background(), Call{Name: "order_query", Evidence: orderEvidence()})
-	toolErr := requireCode(t, err, CodeFillFailed)
+	toolErr := requireCodeError(t, err, CodeFillFailed)
 	if strings.Contains(toolErr.Error(), upstream.text) {
 		t.Fatal("Error() 不应包含底层错误")
 	}

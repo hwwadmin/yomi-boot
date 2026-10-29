@@ -32,8 +32,14 @@ func validSpec(name string) Spec {
 	}
 }
 
-// requireCode 断言错误为 *Error 且错误码匹配
-func requireCode(t *testing.T, err error, code string) *Error {
+// requireCode 断言错误为 *Error 且错误码匹配，不关心错误详情
+func requireCode(t *testing.T, err error, code string) {
+	t.Helper()
+	_ = requireCodeError(t, err, code)
+}
+
+// requireCodeError 断言错误为 *Error 且错误码匹配，返回错误供进一步断言
+func requireCodeError(t *testing.T, err error, code string) *Error {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("期望错误码 %s，得到 nil", code)

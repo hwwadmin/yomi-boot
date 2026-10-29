@@ -286,7 +286,8 @@ func TestIndexAndRetrieve(t *testing.T) {
 		RetrieveRequest: retrieval.RetrieveRequest{
 			Query:  "水果",
 			TopK:   10,
-			Filter: map[string]string{MetadataKeySource: "fruit/banana.md"}, Dimensions: testDimension},
+			Filter: map[string]string{MetadataKeySource: "fruit/banana.md"}, Dimensions: testDimension,
+		},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc-banana" {
 		t.Fatalf("来源过滤: %+v err=%v", out, err)
@@ -295,7 +296,8 @@ func TestIndexAndRetrieve(t *testing.T) {
 		RetrieveRequest: retrieval.RetrieveRequest{
 			Query:  "水果",
 			TopK:   10,
-			Filter: map[string]string{"lang": "zh"}, Dimensions: testDimension},
+			Filter: map[string]string{"lang": "zh"}, Dimensions: testDimension,
+		},
 	})
 	if err != nil || len(out.Chunks) != 1 || out.Chunks[0].DocumentID != "doc-apple" {
 		t.Fatalf("自定义元数据过滤: %+v err=%v", out, err)
@@ -479,7 +481,8 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	ctx := context.Background()
 	res, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。苹果。苹果。苹果。"}},
-		Chunker:   chunker, Dimensions: testDimension})
+		Chunker:   chunker, Dimensions: testDimension,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +492,8 @@ func TestIndexReplacesStaleChunks(t *testing.T) {
 	oldCount := res.Chunks
 	res, err = e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "苹果。"}},
-		Chunker:   chunker, Dimensions: testDimension})
+		Chunker:   chunker, Dimensions: testDimension,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -919,7 +923,8 @@ func TestIndexSingleEmbedCall(t *testing.T) {
 	}
 	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
-		Chunker:   &stubChunker{chunks: chunks}, Dimensions: testDimension})
+		Chunker:   &stubChunker{chunks: chunks}, Dimensions: testDimension,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -963,7 +968,8 @@ func TestIndexCustomChunker(t *testing.T) {
 	custom := &stubChunker{chunks: []string{"自定义块一", "自定义块二"}}
 	res, err := e.Index(context.Background(), testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "原始文本"}},
-		Chunker:   custom, Dimensions: testDimension})
+		Chunker:   custom, Dimensions: testDimension,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -999,7 +1005,8 @@ func TestIndexCustomChunkerInvalid(t *testing.T) {
 			e, _, _ := newTestEngine(t)
 			_, err := e.Index(context.Background(), testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "原始文本"}},
-				Chunker:   tc.chunker, Dimensions: testDimension})
+				Chunker:   tc.chunker, Dimensions: testDimension,
+			})
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("期望 %v，实际 %v", tc.want, err)
 			}
@@ -1037,7 +1044,8 @@ func TestRetrieveRerankReordersAndScores(t *testing.T) {
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{
-			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2, Dimensions: testDimension},
+			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2, Dimensions: testDimension,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1261,14 +1269,16 @@ func TestIndexReplaceFailureKeepsOldVersionIntact(t *testing.T) {
 	large := &stubChunker{chunks: []string{"a0", "a1", "a2", "a3", "a4", "a5"}}
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "large"}},
-		Chunker:   large, Dimensions: testDimension}); err != nil {
+		Chunker:   large, Dimensions: testDimension,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	small := &stubChunker{chunks: []string{"b0"}}
 	flaky.replaceFailures = 1
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Chunker:   small, Dimensions: testDimension}); err == nil {
+		Chunker:   small, Dimensions: testDimension,
+	}); err == nil {
 		t.Fatal("期望替换失败")
 	}
 	// 替换失败时旧版本保持完整
@@ -1280,7 +1290,8 @@ func TestIndexReplaceFailureKeepsOldVersionIntact(t *testing.T) {
 	// 重试后只保留新版本
 	if _, err := e.Index(ctx, testCollection, IndexRequest{
 		Documents: []Document{{ID: "doc", Content: "small"}},
-		Chunker:   small, Dimensions: testDimension}); err != nil {
+		Chunker:   small, Dimensions: testDimension,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
@@ -1305,13 +1316,15 @@ func TestConcurrentSameDocumentIndexKeepsConsistentChunks(t *testing.T) {
 			defer wg.Done()
 			_, _ = e.Index(ctx, testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "large"}},
-				Chunker:   &stubChunker{chunks: large}, Dimensions: testDimension})
+				Chunker:   &stubChunker{chunks: large}, Dimensions: testDimension,
+			})
 		}()
 		go func() {
 			defer wg.Done()
 			_, _ = e.Index(ctx, testCollection, IndexRequest{
 				Documents: []Document{{ID: "doc", Content: "small"}},
-				Chunker:   &stubChunker{chunks: small}, Dimensions: testDimension})
+				Chunker:   &stubChunker{chunks: small}, Dimensions: testDimension,
+			})
 		}()
 	}
 	wg.Wait()
@@ -1413,7 +1426,8 @@ func TestRetrieveHybridLexicalBoost(t *testing.T) {
 	// 纯向量策略不启用 BM25：两文档并列 0 分，按 ID 升序 doc-a 在前
 	out, err = e.Retrieve(ctx, testCollection, RetrieveRequest{
 		RetrieveRequest: retrieval.RetrieveRequest{
-			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2, Dimensions: testDimension},
+			Query: "如何退款", Strategy: retrieval.StrategyVector, TopK: 2, Dimensions: testDimension,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

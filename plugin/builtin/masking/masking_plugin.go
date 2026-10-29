@@ -20,8 +20,10 @@ type Masking struct {
 	ruleCount int
 }
 
-var _ plugin.Plugin = (*Masking)(nil)
-var _ plugin.ReadyHook = (*Masking)(nil)
+var (
+	_ plugin.Plugin    = (*Masking)(nil)
+	_ plugin.ReadyHook = (*Masking)(nil)
+)
 
 // NewMasking 创建统一脱敏服务生命周期插件
 func NewMasking() *Masking {

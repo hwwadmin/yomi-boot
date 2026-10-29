@@ -112,8 +112,10 @@ func TestResolveHTTPBaseErrors(t *testing.T) {
 		{name: "上下文已取消", entries: `[]`, service: "svc", ctx: ctx, wantErr: "context canceled"},
 		{name: "服务名为空", entries: `[]`, service: "  ", ctx: context.Background(), wantErr: "服务名不能为空"},
 		{name: "无健康实例", entries: `[]`, service: "svc", ctx: context.Background(), wantErr: "consul 未发现健康实例"},
-		{name: "实例地址全部无效", entries: `[{"Node":{"Address":""},"Service":{"Address":"","Port":8080}}]`,
-			service: "svc", ctx: context.Background(), wantErr: "consul 实例地址无效"},
+		{
+			name: "实例地址全部无效", entries: `[{"Node":{"Address":""},"Service":{"Address":"","Port":8080}}]`,
+			service: "svc", ctx: context.Background(), wantErr: "consul 实例地址无效",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -142,21 +142,24 @@ func TestRetrieveStrategyPlumbing(t *testing.T) {
 		t.Fatalf("默认 hybrid 未传递检索文本: %+v", *captured)
 	}
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: StrategyHybrid, TopK: 5, Dimensions: testDimension}); err != nil {
+		Query: "苹果", Strategy: StrategyHybrid, TopK: 5, Dimensions: testDimension,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Text != "苹果" {
 		t.Fatalf("hybrid 未传递检索文本: %+v", *captured)
 	}
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: StrategyVector, TopK: 5, Dimensions: testDimension}); err != nil {
+		Query: "苹果", Strategy: StrategyVector, TopK: 5, Dimensions: testDimension,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Text != "" {
 		t.Fatalf("vector 不应传递检索文本: %+v", *captured)
 	}
 	if _, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: "bogus", TopK: 5, Dimensions: testDimension}); !errors.Is(err, ErrInvalidArgument) {
+		Query: "苹果", Strategy: "bogus", TopK: 5, Dimensions: testDimension,
+	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("非法策略: %v", err)
 	}
 }
@@ -223,7 +226,8 @@ func TestRetrieveMinScore(t *testing.T) {
 	}
 	// vector 策略 Score 是余弦相似度：near=1、far=0，0.5 阈值只留 near
 	hits, err := e.Retrieve(ctx, testCollection, RetrieveRequest{
-		Query: "苹果", Strategy: StrategyVector, TopK: 10, MinScore: 0.5, Dimensions: testDimension})
+		Query: "苹果", Strategy: StrategyVector, TopK: 10, MinScore: 0.5, Dimensions: testDimension,
+	})
 	if err != nil || len(hits) != 1 || hits[0].ID != "near" {
 		t.Fatalf("vector 阈值过滤: %+v err=%v", hits, err)
 	}

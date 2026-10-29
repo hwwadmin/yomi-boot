@@ -276,12 +276,15 @@ func TestGenGidEmptyGid(t *testing.T) {
 	}
 }
 
+// nilContext 返回 nil 值的 context.Context，用于覆盖库对空上下文的兜底契约
+func nilContext() context.Context { return nil }
+
 // TestNewSagaNilContext 验证 ctx 为 nil 时退回 Background 不报错
 func TestNewSagaNilContext(t *testing.T) {
 	srv := newJSONGidServer(t, http.StatusOK, `{"gid":"g-nil"}`)
 	defer srv.Close()
 
-	saga, err := NewClient(nil, srv.URL).NewSaga(nil)
+	saga, err := NewClient(nil, srv.URL).NewSaga(nilContext())
 	if err != nil || saga == nil {
 		t.Fatalf("nil ctx 应正常创建 Saga，saga=%v err=%v", saga, err)
 	}
@@ -299,8 +302,10 @@ func TestTruncateBody(t *testing.T) {
 		{name: "短文本原样", in: "short", want: "short"},
 		{name: "去除首尾空白", in: "  padded  ", want: "padded"},
 		{name: "恰好上限不截断", in: strings.Repeat("汉", maxErrorBodyRunes), want: strings.Repeat("汉", maxErrorBodyRunes)},
-		{name: "超限按 rune 截断", in: strings.Repeat("汉", maxErrorBodyRunes+50),
-			want: strings.Repeat("汉", maxErrorBodyRunes) + "..."},
+		{
+			name: "超限按 rune 截断", in: strings.Repeat("汉", maxErrorBodyRunes+50),
+			want: strings.Repeat("汉", maxErrorBodyRunes) + "...",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -127,6 +127,10 @@ func TestStaleCleanerDoTaskError(t *testing.T) {
 }
 
 // TestStaleCleanerLifecycle 验证启动、重复启动与关闭
+// nilContext 返回 nil 值的 context.Context，用于覆盖库对空上下文的兜底契约
+func nilContext() context.Context { return nil }
+
+// TestStaleCleanerLifecycle 验证启动、重复启动与关闭
 func TestStaleCleanerLifecycle(t *testing.T) {
 	env := newCleanerEnv(t)
 	defer env.cleanup()
@@ -137,10 +141,10 @@ func TestStaleCleanerLifecycle(t *testing.T) {
 		BatchSize:    100,
 		ServiceName:  "svc",
 	})
-	if err := cleaner.Start(nil, env.factory); err != nil {
+	if err := cleaner.Start(nilContext(), env.factory); err != nil {
 		t.Fatalf("启动清理器失败: %v", err)
 	}
-	if err := cleaner.Start(nil, env.factory); err != nil {
+	if err := cleaner.Start(nilContext(), env.factory); err != nil {
 		t.Fatalf("重复启动应幂等: %v", err)
 	}
 	// 给轮询 goroutine 一点时间跑一轮空任务

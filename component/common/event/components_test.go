@@ -293,7 +293,9 @@ func TestMustNewAndStartPanicsOnFailure(t *testing.T) {
 // modelSysEventTables 返回事件组件所需的全部数据表模型
 func modelSysEventTables() []schema.Tabler {
 	return []schema.Tabler{
-		model.SysEventOutbox{}, model.SysEventOutboxDlq{},
-		model.SysEventInbox{}, model.SysEventInboxDlq{},
+		model.SysEventOutbox{},
+		model.SysEventOutboxDlq{},
+		model.SysEventInbox{},
+		model.SysEventInboxDlq{},
 	}
 }

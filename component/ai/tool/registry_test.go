@@ -271,7 +271,7 @@ func TestInvokeLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = argsRegistry.Invoke(context.Background(), Call{Name: "get_weather", Arguments: json.RawMessage(`{"city":"北京"}`)})
-	toolErr := requireCode(t, err, CodeInvalidArgument)
+	toolErr := requireCodeError(t, err, CodeInvalidArgument)
 	if toolErr.Message != defaultArgumentsTooLargeMessage {
 		t.Fatalf("参数超限文案不符: %s", toolErr.Message)
 	}
@@ -284,7 +284,7 @@ func TestInvokeLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = contentRegistry.Invoke(context.Background(), Call{Name: "big", Arguments: json.RawMessage(`{}`)})
-	toolErr = requireCode(t, err, CodeBadResponse)
+	toolErr = requireCodeError(t, err, CodeBadResponse)
 	if toolErr.Message != defaultContentTooLargeMessage {
 		t.Fatalf("内容超限文案不符: %s", toolErr.Message)
 	}
@@ -293,7 +293,7 @@ func TestInvokeLimits(t *testing.T) {
 // TestInvokeContent 覆盖结果归一、非法 JSON 与防御性拷贝
 func TestInvokeContent(t *testing.T) {
 	t.Parallel()
-	var shared = json.RawMessage(`{"ok":true}`)
+	shared := json.RawMessage(`{"ok":true}`)
 	current := newTool(t, noArgsSpec("copy"), func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		return shared, nil
 	})
@@ -374,7 +374,7 @@ func TestInvokeEncapsulation(t *testing.T) {
 		return nil, raw
 	}))
 	_, err := registry.Invoke(context.Background(), Call{ID: "call-1", Name: "get_weather", Arguments: json.RawMessage(`{"city":"北京"}`)})
-	toolErr := requireCode(t, err, CodeExecution)
+	toolErr := requireCodeError(t, err, CodeExecution)
 	if toolErr.Tool != "get_weather" || toolErr.CallID != "call-1" {
 		t.Fatalf("工具名或调用标识不符: %+v", toolErr)
 	}
@@ -404,7 +404,7 @@ func TestInvokeEncapsulation(t *testing.T) {
 		return nil, safe
 	}))
 	_, err = safeRegistry.Invoke(context.Background(), Call{Name: "get_weather", Arguments: json.RawMessage(`{"city":"北京"}`)})
-	toolErr = requireCode(t, err, CodeExecution)
+	toolErr = requireCodeError(t, err, CodeExecution)
 	if toolErr.Message != "城市不存在" || strings.Contains(toolErr.Error(), safe.raw) {
 		t.Fatalf("SafeError 文案不符: %+v", toolErr)
 	}
@@ -414,7 +414,7 @@ func TestInvokeEncapsulation(t *testing.T) {
 		return nil, nested
 	}))
 	_, err = nestedRegistry.Invoke(context.Background(), Call{Name: "get_weather", Arguments: json.RawMessage(`{"city":"北京"}`)})
-	toolErr = requireCode(t, err, CodeInvalidArgument)
+	toolErr = requireCodeError(t, err, CodeInvalidArgument)
 	if toolErr.Message != "城市不合法" || toolErr.Tool != "get_weather" || toolErr.CallID != "" {
 		t.Fatalf("嵌套错误应保留错误码与安全文案: %+v", toolErr)
 	}
@@ -432,7 +432,7 @@ func TestInvokeEncapsulation(t *testing.T) {
 			return nil, nestedErr
 		}))
 		_, err = nestedRegistry.Invoke(context.Background(), Call{Name: "get_weather", Arguments: json.RawMessage(`{"city":"北京"}`)})
-		toolErr = requireCode(t, err, CodeExecution)
+		toolErr = requireCodeError(t, err, CodeExecution)
 		if toolErr.Message != defaultExecutionMessage {
 			t.Fatalf("未知错误码应回退安全文案: %+v", toolErr)
 		}
@@ -462,7 +462,7 @@ func TestInvokeClassifiedErrors(t *testing.T) {
 				return nil, c.err
 			}))
 			_, err := registry.Invoke(context.Background(), Call{Name: "get_weather", Arguments: json.RawMessage(`{"city":"北京"}`)})
-			toolErr := requireCode(t, err, c.code)
+			toolErr := requireCodeError(t, err, c.code)
 			if !errors.Is(toolErr.Cause(), c.cause) {
 				t.Fatalf("原因不符: %v", toolErr.Cause())
 			}
@@ -476,7 +476,7 @@ func TestInvokeClassifiedErrors(t *testing.T) {
 		panic("panic secret detail")
 	}))
 	_, err := registry.Invoke(context.Background(), Call{Name: "panic", Arguments: json.RawMessage(`{}`)})
-	toolErr := requireCode(t, err, CodePanic)
+	toolErr := requireCodeError(t, err, CodePanic)
 	if strings.Contains(toolErr.Error(), "panic secret detail") {
 		t.Fatal("Error() 不应包含 panic 值")
 	}
