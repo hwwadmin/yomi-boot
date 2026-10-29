@@ -65,6 +65,12 @@ type RedisHelper struct {
 
 var _ RedisService = (*RedisHelper)(nil)
 
+// IsNotFound 判断错误是否表示键不存在或 Lua 脚本没有返回值（底层驱动返回 redis.Nil）。
+// 调用方需要区分"没找到"和"真的故障"时用本函数判断，不要直接依赖具体 Redis 驱动。
+func IsNotFound(err error) bool {
+	return errors.Is(err, redisv9.Nil)
+}
+
 // HelperOption 表示 RedisHelper 的可选构造参数
 type HelperOption func(*RedisHelper)
 
@@ -145,7 +151,7 @@ func (h *RedisHelper) OpsStr4Get(ctx context.Context, key string) (value string,
 	defer cancel()
 
 	value, err = h.client.Get(ctx, key).Result()
-	if errors.Is(err, redisv9.Nil) {
+	if IsNotFound(err) {
 		return "", false, nil
 	}
 	if err != nil {
@@ -209,7 +215,7 @@ func (h *RedisHelper) OpsHash4Get(ctx context.Context, key string, field string)
 	defer cancel()
 
 	value, err = h.client.HGet(ctx, key, field).Result()
-	if errors.Is(err, redisv9.Nil) {
+	if IsNotFound(err) {
 		return "", false, nil
 	}
 	if err != nil {

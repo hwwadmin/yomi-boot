@@ -2,11 +2,13 @@ package redis
 
 import (
 	"context"
+	stderrors "errors"
 	"net"
 	"testing"
 	"time"
 
 	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )
@@ -527,5 +529,24 @@ func TestRedisHelper_ErrorPathsOnClosedServer(t *testing.T) {
 	}
 	if _, err := helper.OpsRateLimit4Allow(ctx, "k", 10, 1, time.Minute); err == nil {
 		t.Fatal("OpsRateLimit4Allow 期望错误")
+	}
+}
+
+// TestIsNotFound 验证"未找到"判定：直接错误、包装错误与无关错误
+func TestIsNotFound(t *testing.T) {
+	if IsNotFound(nil) {
+		t.Fatal("nil 不应判为未找到")
+	}
+	if !IsNotFound(redisv9.Nil) {
+		t.Fatal("redis.Nil 应判为未找到")
+	}
+	if !IsNotFound(errors.Wrap(redisv9.Nil, "执行 Redis Lua 脚本失败")) {
+		t.Fatal("包装后的 redis.Nil 应判为未找到")
+	}
+	if !IsNotFound(stderrors.Join(redisv9.Nil, stderrors.New("other"))) {
+		t.Fatal("Join 后的 redis.Nil 应判为未找到")
+	}
+	if IsNotFound(errors.New("boom")) {
+		t.Fatal("普通错误不应判为未找到")
 	}
 }

@@ -209,7 +209,7 @@ services/{domain}/
 | `handler` | `BindAndHandle` 等协议适配 |
 | `shared` | 跨服务通用 dto（含微服务请求/响应信封）、enums、常量 |
 | `utils` | 通用辅助函数收口（`ginutil`、`ptrutil`、`timeutil`、`validateutil` 等子包） |
-| `redis` | `RedisService` 接口与 `RedisHelper` 实现（含 `OpsRateLimit4Allow` 滑动窗口限流原语） |
+| `redis` | `RedisService` 接口与 `RedisHelper` 实现（含 `OpsRateLimit4Allow` 滑动窗口限流原语、`IsNotFound` 未找到判定） |
 | `redisratelimit` | 调用式限流门面 `LimitService`（`Allow`/`AllowN`）；依赖 `RedisService`，不进默认中间件链 |
 | `bc` | 密码学基础设施能力簇（Bootstrap Crypto）；无状态按需 import，不挂 plugin 插件链 |
 | `bc/passwd` | 密码单向哈希/校验（bcrypt，≤72 字节） |

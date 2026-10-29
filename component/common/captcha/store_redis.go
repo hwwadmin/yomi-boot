@@ -11,8 +11,6 @@ import (
 
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
-
-	redisv9 "github.com/redis/go-redis/v9"
 )
 
 // luaConsumeCaptcha 原子读取并删除验证码；返回 nil 表示不存在
@@ -74,7 +72,7 @@ func (s *redisStore) Consume(ctx context.Context, id string) (string, bool, erro
 
 	result, err := s.redis.OpsScript4Eval(ctx, luaConsumeCaptcha, []string{s.key(id)})
 	if err != nil {
-		if errors.Is(err, redisv9.Nil) {
+		if yomiredis.IsNotFound(err) {
 			return "", false, nil
 		}
 		return "", false, errors.Wrap(err, "captcha: 读取验证码失败")
