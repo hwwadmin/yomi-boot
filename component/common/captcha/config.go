@@ -7,8 +7,6 @@ package captcha
 import (
 	"strings"
 	"time"
-
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // Driver 验证码驱动标识
@@ -85,28 +83,28 @@ func (c Config) normalize() (Config, error) {
 	switch normalized.Driver {
 	case DriverDigit, DriverString, DriverMath:
 	default:
-		return Config{}, errors.Newf("captcha: driver 仅支持 digit / string / math，实际为 %q", c.Driver)
+		return Config{}, invalidArgument("captcha: driver 仅支持 digit / string / math，实际为 %q", c.Driver)
 	}
 
 	if normalized.TTL == 0 {
 		normalized.TTL = defaultTTL
 	}
 	if normalized.TTL < minTTL || normalized.TTL > maxTTL {
-		return Config{}, errors.Newf("captcha: ttl 必须在 %s..%s 之间", minTTL, maxTTL)
+		return Config{}, invalidArgument("captcha: ttl 必须在 %s..%s 之间", minTTL, maxTTL)
 	}
 
 	if normalized.Width == 0 {
 		normalized.Width = defaultWidth
 	}
 	if normalized.Width < minWidth || normalized.Width > maxWidth {
-		return Config{}, errors.Newf("captcha: width 必须在 %d..%d 之间", minWidth, maxWidth)
+		return Config{}, invalidArgument("captcha: width 必须在 %d..%d 之间", minWidth, maxWidth)
 	}
 
 	if normalized.Height == 0 {
 		normalized.Height = defaultHeight
 	}
 	if normalized.Height < minHeight || normalized.Height > maxHeight {
-		return Config{}, errors.Newf("captcha: height 必须在 %d..%d 之间", minHeight, maxHeight)
+		return Config{}, invalidArgument("captcha: height 必须在 %d..%d 之间", minHeight, maxHeight)
 	}
 
 	switch normalized.Driver {
@@ -115,7 +113,7 @@ func (c Config) normalize() (Config, error) {
 			normalized.Length = defaultLength
 		}
 		if normalized.Length < minLength || normalized.Length > maxLength {
-			return Config{}, errors.Newf("captcha: length 必须在 %d..%d 之间", minLength, maxLength)
+			return Config{}, invalidArgument("captcha: length 必须在 %d..%d 之间", minLength, maxLength)
 		}
 	}
 
@@ -130,10 +128,10 @@ func (c Config) normalize() (Config, error) {
 
 	if normalized.Driver == DriverString || normalized.Driver == DriverMath {
 		if normalized.NoiseCount < 0 || normalized.NoiseCount > maxNoiseCount {
-			return Config{}, errors.Newf("captcha: noise_count 必须在 0..%d 之间", maxNoiseCount)
+			return Config{}, invalidArgument("captcha: noise_count 必须在 0..%d 之间", maxNoiseCount)
 		}
 		if normalized.Lines&^(LineHollow|LineSlime|LineSine) != 0 {
-			return Config{}, errors.New("captcha: lines 含未知的干扰线类型")
+			return Config{}, invalidArgument("captcha: lines 含未知的干扰线类型")
 		}
 	}
 
@@ -143,13 +141,13 @@ func (c Config) normalize() (Config, error) {
 // validateSource 校验字符源仅含 ASCII 字母数字且长度合理
 func validateSource(source string) error {
 	if len(source) < minSourceLen || len(source) > maxSourceLen {
-		return errors.Newf("captcha: source 长度必须在 %d..%d 之间", minSourceLen, maxSourceLen)
+		return invalidArgument("captcha: source 长度必须在 %d..%d 之间", minSourceLen, maxSourceLen)
 	}
 	for _, r := range source {
 		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
 			continue
 		}
-		return errors.New("captcha: source 仅允许 ASCII 字母和数字")
+		return invalidArgument("captcha: source 仅允许 ASCII 字母和数字")
 	}
 	return nil
 }

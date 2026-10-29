@@ -16,3 +16,8 @@ var (
 	// ErrGenerateFailed 渲染或编码验证码失败
 	ErrGenerateFailed = errors.NewNoStack("CAPTCHA_GENERATE_FAILED")
 )
+
+// invalidArgument 返回带 ErrInvalidArgument 身份的配置/调用参数错误
+func invalidArgument(format string, args ...any) error {
+	return errors.Wrap(ErrInvalidArgument, format, args...)
+}

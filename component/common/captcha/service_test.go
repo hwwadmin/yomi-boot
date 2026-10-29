@@ -424,6 +424,30 @@ func (errorDriver) DrawCaptcha(string) (base64Captcha.Item, error) {
 	return nil, stderrors.New("draw failed")
 }
 
+// badIDDriver 模拟上游产出无法通过校验的 id
+type badIDDriver struct{}
+
+func (badIDDriver) GenerateIdQuestionAnswer() (string, string, string) {
+	return "bad-id!", "question", "answer"
+}
+
+func (badIDDriver) DrawCaptcha(string) (base64Captcha.Item, error) {
+	return fixedItem{}, nil
+}
+
+// TestServiceGenerateRejectsInvalidID 验证不会发出无法校验的 id
+func TestServiceGenerateRejectsInvalidID(t *testing.T) {
+	store := newSpyStore()
+	svc := &service{driver: badIDDriver{}, store: store, ttl: time.Minute}
+
+	if _, err := svc.Generate(context.Background()); !errors.Is(err, ErrGenerateFailed) {
+		t.Fatalf("Generate err = %v, 期望 ErrGenerateFailed", err)
+	}
+	if save, _ := store.counts(); save != 0 {
+		t.Fatalf("非法 id 不应写入 Store: save=%d", save)
+	}
+}
+
 // TestServiceGenerateFailed 验证上游 panic/空 Item/错误统一转 ErrGenerateFailed
 func TestServiceGenerateFailed(t *testing.T) {
 	tests := []struct {
@@ -475,8 +499,12 @@ func TestNewConfigError(t *testing.T) {
 		{Driver: DriverString, Source: "ab"},
 	}
 	for _, cfg := range tests {
-		if svc, err := New(store, cfg); err == nil || svc != nil {
+		svc, err := New(store, cfg)
+		if err == nil || svc != nil {
 			t.Fatalf("New(%+v) = (%v, %v), 期望错误", cfg, svc, err)
+		}
+		if !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("New(%+v) 的错误应携带 ErrInvalidArgument: %v", cfg, err)
 		}
 	}
 }

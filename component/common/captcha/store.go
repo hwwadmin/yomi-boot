@@ -8,12 +8,10 @@ import (
 	"context"
 	"strings"
 	"time"
-
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 const (
-	defaultKeyPrefix = "yomi:captcha"
+	defaultKeyPrefix = "yomi:captcha:default"
 	maxKeyPrefixLen  = 64
 
 	maxIDLen = 64
@@ -24,7 +22,7 @@ const (
 
 // RedisStoreConfig Redis Store 配置
 type RedisStoreConfig struct {
-	KeyPrefix string // KeyPrefix 是 Redis 键前缀；空则 yomi:captcha；小写字母、数字、冒号、下划线，长度不超过 64
+	KeyPrefix string // KeyPrefix 是 Redis 键前缀；空则 yomi:captcha:default；小写字母、数字、冒号、下划线，长度不超过 64
 }
 
 // Store 表示验证码答案摘要存储；实现须并发安全。
@@ -42,16 +40,16 @@ type Store interface {
 // validateStoreRecord 校验 Store 写入入参
 func validateStoreRecord(id, digest string, ttl time.Duration) error {
 	if strings.TrimSpace(id) == "" {
-		return errors.New("captcha: id 不能为空")
+		return invalidArgument("captcha: id 不能为空")
 	}
 	if len(id) > maxIDLen {
-		return errors.Newf("captcha: id 长度不能超过 %d", maxIDLen)
+		return invalidArgument("captcha: id 长度不能超过 %d", maxIDLen)
 	}
 	if len(digest) != answerDigestLen {
-		return errors.Newf("captcha: 答案摘要长度必须为 %d", answerDigestLen)
+		return invalidArgument("captcha: 答案摘要长度必须为 %d", answerDigestLen)
 	}
 	if ttl <= 0 {
-		return errors.New("captcha: ttl 必须大于 0")
+		return invalidArgument("captcha: ttl 必须大于 0")
 	}
 	return nil
 }
@@ -59,10 +57,10 @@ func validateStoreRecord(id, digest string, ttl time.Duration) error {
 // validateConsumeID 校验 Store 读取入参
 func validateConsumeID(id string) error {
 	if strings.TrimSpace(id) == "" {
-		return errors.New("captcha: id 不能为空")
+		return invalidArgument("captcha: id 不能为空")
 	}
 	if len(id) > maxIDLen {
-		return errors.Newf("captcha: id 长度不能超过 %d", maxIDLen)
+		return invalidArgument("captcha: id 长度不能超过 %d", maxIDLen)
 	}
 	return nil
 }

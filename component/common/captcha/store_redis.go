@@ -35,7 +35,7 @@ var _ Store = (*redisStore)(nil)
 // NewRedisStore 创建基于 Redis 的验证码存储
 func NewRedisStore(redisService yomiredis.RedisService, cfg RedisStoreConfig) (Store, error) {
 	if redisService == nil {
-		return nil, errors.New("captcha: redis service 不能为 nil")
+		return nil, invalidArgument("captcha: redis service 不能为 nil")
 	}
 
 	prefix := strings.TrimSpace(cfg.KeyPrefix)
@@ -103,19 +103,19 @@ func (s *redisStore) key(id string) string {
 // validateKeyPrefix 校验 Redis 键前缀
 func validateKeyPrefix(prefix string) error {
 	if prefix == "" {
-		return errors.New("captcha: key_prefix 不能为空")
+		return invalidArgument("captcha: key_prefix 不能为空")
 	}
 	if len(prefix) > maxKeyPrefixLen {
-		return errors.Newf("captcha: key_prefix 长度不能超过 %d", maxKeyPrefixLen)
+		return invalidArgument("captcha: key_prefix 长度不能超过 %d", maxKeyPrefixLen)
 	}
 	if strings.HasPrefix(prefix, ":") || strings.HasSuffix(prefix, ":") {
-		return errors.New("captcha: key_prefix 不能以冒号开头或结尾")
+		return invalidArgument("captcha: key_prefix 不能以冒号开头或结尾")
 	}
 	for _, r := range prefix {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ':' || r == '_' {
 			continue
 		}
-		return errors.New("captcha: key_prefix 仅允许小写字母、数字、冒号和下划线")
+		return invalidArgument("captcha: key_prefix 仅允许小写字母、数字、冒号和下划线")
 	}
 	return nil
 }

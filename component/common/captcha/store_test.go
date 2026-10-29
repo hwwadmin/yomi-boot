@@ -93,8 +93,12 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				store := newStore(t)
-				if err := store.Save(context.Background(), tt.id, tt.digest, tt.ttl); err == nil {
+				err := store.Save(context.Background(), tt.id, tt.digest, tt.ttl)
+				if err == nil {
 					t.Fatal("期望返回错误，实际为 nil")
+				}
+				if !errors.Is(err, ErrInvalidArgument) {
+					t.Fatalf("入参错误应携带 ErrInvalidArgument: %v", err)
 				}
 			})
 		}
@@ -112,8 +116,12 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				store := newStore(t)
-				if _, _, err := store.Consume(context.Background(), tt.id); err == nil {
+				_, _, err := store.Consume(context.Background(), tt.id)
+				if err == nil {
 					t.Fatal("期望返回错误，实际为 nil")
+				}
+				if !errors.Is(err, ErrInvalidArgument) {
+					t.Fatalf("入参错误应携带 ErrInvalidArgument: %v", err)
 				}
 			})
 		}

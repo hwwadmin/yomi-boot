@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 )
 
 // TestConfigNormalizeDefaults 验证零值配置填充默认值
@@ -83,6 +85,9 @@ func TestConfigValidate(t *testing.T) {
 			}
 			if !tt.wantErr && err != nil {
 				t.Fatalf("不期望错误，实际为 %v", err)
+			}
+			if tt.wantErr && !errors.Is(err, ErrInvalidArgument) {
+				t.Fatalf("配置错误应携带 ErrInvalidArgument: %v", err)
 			}
 		})
 	}

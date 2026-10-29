@@ -11,6 +11,7 @@ import (
 	"time"
 
 	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
+	"gitee.com/hq_project/yomi-boot/component/core/errors"
 
 	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
@@ -76,12 +77,16 @@ func TestNewRedisStoreConfig(t *testing.T) {
 		}
 	}
 	for _, prefix := range []string{"Yomi", "yomi-captcha", ":yomi", "yomi:", "yomi captcha", strings.Repeat("a", maxKeyPrefixLen+1)} {
-		if _, err := NewRedisStore(helper, RedisStoreConfig{KeyPrefix: prefix}); err == nil {
+		_, err := NewRedisStore(helper, RedisStoreConfig{KeyPrefix: prefix})
+		if err == nil {
 			t.Fatalf("prefix=%q 应非法", prefix)
 		}
+		if !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("prefix=%q 的错误应携带 ErrInvalidArgument: %v", prefix, err)
+		}
 	}
-	if _, err := NewRedisStore(nil, RedisStoreConfig{}); err == nil {
-		t.Fatal("nil RedisService 应返回错误")
+	if _, err := NewRedisStore(nil, RedisStoreConfig{}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("nil RedisService 应返回带 ErrInvalidArgument 的错误: %v", err)
 	}
 
 	store, err := NewRedisStore(helper, RedisStoreConfig{})

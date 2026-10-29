@@ -48,7 +48,7 @@ var _ Service = (*service)(nil)
 // New 创建验证码服务；store 为 nil 或配置非法时返回错误
 func New(store Store, cfg Config) (Service, error) {
 	if store == nil {
-		return nil, errors.New("captcha: store 不能为 nil")
+		return nil, invalidArgument("captcha: store 不能为 nil")
 	}
 
 	normalized, err := cfg.normalize()
@@ -97,7 +97,8 @@ func (s *service) render() (id, answer, image string, err error) {
 	}()
 
 	id, question, answer := s.driver.GenerateIdQuestionAnswer()
-	if id == "" || answer == "" || len(id) > maxIDLen || len(answer) > maxAnswerLen {
+	// id 必须与 Verify 用同一套校验，确保发出的验证码一定能被校验
+	if !validID(id) || answer == "" || len(answer) > maxAnswerLen {
 		return "", "", "", errors.Sentinel(ErrGenerateFailed)
 	}
 
