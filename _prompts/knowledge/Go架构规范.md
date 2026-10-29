@@ -97,12 +97,13 @@
 #### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
-- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、chunking、retrieval、rag、vectordb、rerank。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
+- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、captcha、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、chunking、retrieval、rag、vectordb、rerank。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链与每个插件的初始化状态，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单放 `plugin/builtin` 根包（根包可 import 全部子包，`plugin/builtin/{lib}` 子包不得 import 根包，否则成环）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
+- `gitee.com/hq_project/yomi-boot/component/common/captcha` 提供图形验证码生成与一次性校验（digit/string/math），Store 由调用方注入（memory 单实例 / Redis 多实例），**不进插件链、不读 YAML**；生成与校验接口的限流由业务负责。
 
 ### 3.2 标准目录结构（模式）
 
@@ -181,7 +182,7 @@ services/{domain}/
 | `boot/` | `boot`（启动快捷入口与初始化）、`server`（HTTP 装配）、`lifecycle`、`banner` |
 | `plugin/` | `Plugin` 接口、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`、`ReadyHook` / `DrainHook` |
 | `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`masking`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
-| `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`worker`、`ws`、`testclient` |
+| `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`captcha`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
 | `component/ai/` | `llm`、`embedding`、`jev`、`chunking`、`retrieval`、`rag`、`vectordb`、`rerank`、`generation`、`tool` |
 
@@ -200,6 +201,7 @@ services/{domain}/
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
 | `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
+| `captcha` | 图形验证码（基于 `mojocn/base64Captcha`）：`New`/`MustNew`，digit/string/math 三种驱动；`Generate` 只返回 id 与 data URI，答案只写 Store；`Verify` 原子消费、一次性校验（错答案同样消费）；memory（仅单实例/粘性会话）或 Redis（多实例）存储，TTL 由 Store 执行；Store 故障失败关闭；不返回答案、不进插件链、不读 YAML、不做限流 |
 | `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Runner`/`Executor` 契约、`LocalRunner` 实现、Context 事务传递）、`db/dbtest` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
 | `event` | 可选 Outbox/Inbox 事件组件（`outbox_enabled` / `inbox_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
@@ -601,6 +603,7 @@ kafka: ...
 | 异步消息 | 按需选用 `kafka` 或 `redisstream`；可靠领域事件另看 `event` |
 | WebSocket 长连接 | `ws`（独立端口 Server/Client；ConnID 仅服务端）；小文件可走 WS，大文件走 `oss` |
 | 鉴权令牌 | `token` |
+| 图形验证码 | `captcha`（`New`/`MustNew`；digit/string/math；一次性消费；memory 仅单实例，多实例用 Redis；不读 YAML） |
 | 加解密 / 哈希 / 密码 | `bc/*` |
 | 对象存储 | `oss`（大文件上传/下载；勿用 `ws` 整包） |
 | 调用大模型 Chat / 流式 | `component/ai/llm`（`New`/`MustNew`；OpenAI / Anthropic；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |

@@ -194,6 +194,7 @@ BindAndHandle / Handle / ...
 | ---- | ---- | -------- |
 | 系统通用 | `INTERNAL_ERROR`、`INVALID_BODY`、`INVALID_INPUT`、`REQUEST_TIMEOUT`、`REQUEST_BODY_TOO_LARGE` | `gitee.com/hq_project/yomi-boot/component/core/shared/error` |
 | 令牌域（boot） | `TOKEN_INVALID`、`TOKEN_REQUIRED`、`TOKEN_VALIDATE_FAILED` | `gitee.com/hq_project/yomi-boot/component/common/token` 就近 |
+| 验证码域 | `CAPTCHA_INVALID_ARGUMENT`、`CAPTCHA_EXPIRED`、`CAPTCHA_MISMATCH`、`CAPTCHA_GENERATE_FAILED`、`CAPTCHA_STORE_FULL` | `gitee.com/hq_project/yomi-boot/component/common/captcha` 就近 |
 | 限流 / 下游 | `RATE_LIMITED`、`DOWNSTREAM_ERROR` | 对应库就近 |
 | 业务域 | `USER_NOT_FOUND` 等 | 各服务 `bizerr` |
 | 权限域 | `PERMISSION_DENIED` 等 | **仅业务仓**，gitee.com/hq_project/yomi-boot 不定义 |
