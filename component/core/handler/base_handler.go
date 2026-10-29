@@ -6,7 +6,6 @@ import (
 
 	"gitee.com/hq_project/yomi-boot/component/core/errors"
 	"gitee.com/hq_project/yomi-boot/component/core/response"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/dto"
 	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
 
 	"github.com/gin-gonic/gin"
@@ -42,21 +41,6 @@ func Handle[T any](c *gin.Context, fn func(ctx context.Context) (T, error)) {
 	WriteSuccess(c, output)
 }
 
-// HandlePage 执行分页用例并输出分页成功响应
-func HandlePage[T any](c *gin.Context, fn func(ctx context.Context) (*dto.PageOutput[T], error)) {
-	output, err := fn(c.Request.Context())
-	if err != nil {
-		WriteBusinessError(c, err)
-		return
-	}
-	if output == nil {
-		WriteBusinessError(c, errors.Sentinel(sharederr.ErrInternal))
-		return
-	}
-
-	WritePageSuccess(c, output.Items, output.Total)
-}
-
 // HandleVoid 执行无返回数据的用例并输出成功响应
 func HandleVoid(c *gin.Context, fn func(ctx context.Context) error) {
 	if err := fn(c.Request.Context()); err != nil {
@@ -75,18 +59,6 @@ func BindAndHandle[TIn any, TOut any](c *gin.Context, execute func(ctx context.C
 	}
 
 	Handle(c, func(ctx context.Context) (TOut, error) {
-		return execute(ctx, &input)
-	})
-}
-
-// BindAndHandlePage 绑定请求体后执行分页用例并输出分页成功响应
-func BindAndHandlePage[TIn any, TItem any](c *gin.Context, execute func(ctx context.Context, input *TIn) (*dto.PageOutput[TItem], error)) {
-	var input TIn
-	if !BindJSON(c, &input) {
-		return
-	}
-
-	HandlePage(c, func(ctx context.Context) (*dto.PageOutput[TItem], error) {
 		return execute(ctx, &input)
 	})
 }
@@ -118,11 +90,6 @@ func BindAndHandleWithRequest[TIn any, TOut any](c *gin.Context, execute func(ct
 // WriteSuccess 输出成功响应
 func WriteSuccess(c *gin.Context, data any) {
 	response.Enc().EncodeSuccess(c, data)
-}
-
-// WritePageSuccess 输出分页成功响应
-func WritePageSuccess(c *gin.Context, data any, total int64) {
-	response.Enc().EncodePage(c, data, total)
 }
 
 // WriteFailure 输出失败响应

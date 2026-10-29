@@ -24,8 +24,16 @@ func (p *PageInput) ValiPage() {
 	}
 }
 
-// PageOutput 表示分页查询输出，包装 usecase 出参结构体使用
+// PageOutput 表示分页载荷，由业务出参结构体内嵌，随响应 data 序列化为 {items,total}
 type PageOutput[T any] struct {
-	Items []T   // Items 是当前页结果列表
-	Total int64 // Total 是满足条件的总记录数
+	Items []T   `json:"items"` // Items 是当前页结果列表
+	Total int64 `json:"total"` // Total 是满足条件的总记录数
+}
+
+// NewPageOutput 构造分页载荷，items 为 nil 时归一为空切片，保证序列化为 [] 而非 null
+func NewPageOutput[T any](items []T, total int64) PageOutput[T] {
+	if items == nil {
+		items = []T{}
+	}
+	return PageOutput[T]{Items: items, Total: total}
 }

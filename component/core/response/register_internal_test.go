@@ -39,9 +39,6 @@ type nopEncoder struct{}
 // EncodeSuccess 实现 EncodeSuccess 接口（测试桩）
 func (nopEncoder) EncodeSuccess(_ *gin.Context, _ any) {}
 
-// EncodePage 实现 EncodePage 接口（测试桩）
-func (nopEncoder) EncodePage(_ *gin.Context, _ any, _ int64) {}
-
 // EncodeFailure 实现 EncodeFailure 接口（测试桩）
 func (nopEncoder) EncodeFailure(_ *gin.Context, _ error) {}
 

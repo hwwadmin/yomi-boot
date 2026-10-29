@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：约束 **BFF / 领域服务 HTTP 出口** 的编码适配方式：业务结果与 error 如何交给 Encoder、如何确定编码器（boot 默认 / 显式指定）、handler 边界如何收口。
-- **边界**：**不**定义某一套固定响应 JSON（字段名、成功码字面量、分页 `total` 位置、HTTP 状态等均由**已注册的 Encoder 实现**决定）。**不**规定 HTTP 方法（入口编排对外方法见 [Go架构规范](./Go架构规范.md) §3.6；微服务间见 [微服务调用规范](./微服务调用规范.md) §3）。微服务间请求信封见微服务调用规范；异常创建与哨兵见 [Go异常规范](./Go异常规范.md)。
+- **边界**：**不**定义某一套固定响应 JSON（字段名、成功码字面量、HTTP 状态等均由**已注册的 Encoder 实现**决定）；分页等业务载荷形状由业务出参决定，不属于 Encoder。**不**规定 HTTP 方法（入口编排对外方法见 [Go架构规范](./Go架构规范.md) §3.6；微服务间见 [微服务调用规范](./微服务调用规范.md) §3）。微服务间请求信封见微服务调用规范；异常创建与哨兵见 [Go异常规范](./Go异常规范.md)。
 - **适用对象**：后端协议适配、脚手架接入、前后端契约对齐（契约细节以各服务 Encoder 为准）、代码评审。
 
 ---
@@ -43,7 +43,7 @@
 ### 3.1 核心原则
 
 1. **启动必须确定唯一 Encoder**：`boot` 未指定 `Options.ResponseEncoder` 时默认注册 `DefaultEncoder`；低层启动路径未 `MustRegister` 不得写出业务响应。
-2. **JSON 形状属于 Encoder 实现**：成功/失败/分页如何序列化、HTTP 状态码如何取值，全部由实现决定；**不得**把某一预制实现（如 `DefaultEncoder`）的字段写成全站强制契约。
+2. **JSON 形状属于 Encoder 实现**：成功/失败如何序列化、HTTP 状态码如何取值，全部由实现决定；**不得**把某一预制实现（如 `DefaultEncoder`）的字段写成全站强制契约。分页等业务载荷形状由业务出参决定（见 §3.4）。
 3. **handler 只做适配调用**：把 usecase 的 `(data, nil)` / `error` 交给 Encoder，禁止业务路径手写 `c.JSON` 拼信封。
 4. **错误不在 boot 内投影为固定码表后再编码**：框架抛简单 err；写出时把 err 交给 `EncodeFailure`。
 
@@ -51,19 +51,17 @@
 
 ### 3.2 Encoder 接口（必选）
 
-JSON **组装与解析**均由 Encoder 实现完成。解析结果核心是 `code` / `msg` / `data`；分页时实现可附带 `total`，不必额外复杂化。
+JSON **组装与解析**均由 Encoder 实现完成，只关心信封本身；解析结果核心是 `code` / `msg` / `data`。分页等业务载荷由业务出参结构体组装，随 `data` 落地，Encoder 不感知分页。
 
 ```go
 type Response struct {
-    Code  string
-    Msg   string
-    Data  json.RawMessage
-    Total int64 // 分页可选，无则为 0
+    Code string
+    Msg  string
+    Data json.RawMessage
 }
 
 type Encoder interface {
     EncodeSuccess(c *gin.Context, data any)
-    EncodePage(c *gin.Context, items any, total int64)
     EncodeFailure(c *gin.Context, err error)
     Parse(body []byte) (resp Response, ok bool)
     IsSuccess(code string) bool
@@ -72,8 +70,8 @@ type Encoder interface {
 
 | 方法 | 职责 |
 | ---- | ---- |
-| `EncodeSuccess` / `EncodePage` / `EncodeFailure` | 组装写出 JSON |
-| `Parse` | 对称解析为 `code`/`msg`/`data`（及可选 `total`）；无法识别时 `ok=false` |
+| `EncodeSuccess` / `EncodeFailure` | 组装写出 JSON |
+| `Parse` | 对称解析为 `code`/`msg`/`data`；无法识别时 `ok=false` |
 | `IsSuccess` | 判定 `code` 是否成功 |
 
 包级无额外解包 API：调用方使用 `Enc().Parse` / `Enc().IsSuccess`。供 `httprecord` 观测与集成测试；**不**约束微服务间 `rpc`（对内信封见 [微服务调用规范](./微服务调用规范.md)）。
@@ -116,10 +114,11 @@ gitee.com/hq_project/yomi-boot 提供的预制实现（如 `response.DefaultEnco
 | 场景 | handler API | 底层调用 |
 | ---- | ----------- | -------- |
 | 单条成功 | `WriteSuccess(c, data)` | `Enc().EncodeSuccess` |
-| 分页成功 | `WritePageSuccess(c, items, total)` | `Enc().EncodePage` |
 | 失败 | `WriteBusinessError` / `WriteFailure` | `Enc().EncodeFailure` |
 
-优先使用 `BindAndHandle` / `BindAndHandlePage` / `BindAndHandleVoid` / `BindAndHandleWithRequest`，避免手写绑定与写出样板。
+分页等业务载荷直接作为 `data` 经 `WriteSuccess` / `Handle` 输出：业务出参结构体**内嵌** `dto.PageOutput[T]`（含 `items` 与 `total` JSON 字段，`dto.NewPageOutput` 保证空列表为 `[]`），序列化后落在 `data` 下；handler 不感知分页。
+
+优先使用 `BindAndHandle` / `BindAndHandleVoid` / `BindAndHandleWithRequest`，避免手写绑定与写出样板。
 
 失败路径仅做必要归一（如超时、body 过大 → 对应框架哨兵），**不**在 handler 内组装 JSON 字段。
 
@@ -141,7 +140,7 @@ gitee.com/hq_project/yomi-boot 提供的预制实现（如 `response.DefaultEnco
 ## 4. 检查清单
 
 - [ ] 启动已确定唯一 Encoder（`boot.Options.ResponseEncoder`；低层路径已 `MustRegister`），未依赖包 init 静默默认
-- [ ] 业务接口经 `WriteSuccess` / `WritePageSuccess` / `WriteBusinessError`（或 BindAndHandle*）写出
+- [ ] 业务接口经 `WriteSuccess` / `WriteBusinessError`（或 BindAndHandle*）写出；分页载荷由业务出参内嵌 `dto.PageOutput` 落在 `data` 下
 - [ ] 未在 usecase/service/repo 中 `c.JSON` 拼业务响应
 - [ ] 自定义 Encoder 实现了全部接口方法（含 `Parse`、`IsSuccess`）
 - [ ] 前后端/联调文档描述的是**本服务 Encoder** 的实际契约，而非抄写预制实现字段当强制标准

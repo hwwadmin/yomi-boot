@@ -19,9 +19,6 @@ type testResponseEncoder struct{}
 // EncodeSuccess 空实现
 func (testResponseEncoder) EncodeSuccess(*gin.Context, any) {}
 
-// EncodePage 空实现
-func (testResponseEncoder) EncodePage(*gin.Context, any, int64) {}
-
 // EncodeFailure 空实现
 func (testResponseEncoder) EncodeFailure(*gin.Context, error) {}
 

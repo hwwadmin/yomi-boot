@@ -47,7 +47,7 @@ func TestInvoke_PreservesInt64Precision(t *testing.T) {
 func TestInvoke_PreservesInt64InPageResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":"OK","msg":"","total":9223372036854775807,"data":[{"id":9223372036854775807}]}`))
+		_, _ = w.Write([]byte(`{"code":"OK","msg":"","data":{"items":[{"id":9223372036854775807}],"total":9223372036854775807}}`))
 	}))
 	defer server.Close()
 
@@ -56,18 +56,21 @@ func TestInvoke_PreservesInt64InPageResponse(t *testing.T) {
 	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if env.Total != maxInt64JSON {
-		t.Fatalf("total: got %d, want %d", env.Total, maxInt64JSON)
-	}
 
-	var items []struct {
-		ID int64 `json:"id"`
+	var page struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+		Total int64 `json:"total"`
 	}
-	if err := json.Unmarshal(env.Data, &items); err != nil {
+	if err := json.Unmarshal(env.Data, &page); err != nil {
 		t.Fatalf("unmarshal data: %v", err)
 	}
-	if len(items) != 1 || items[0].ID != maxInt64JSON {
-		t.Fatalf("items: got %+v, want one item with id %d", items, maxInt64JSON)
+	if page.Total != maxInt64JSON {
+		t.Fatalf("total: got %d, want %d", page.Total, maxInt64JSON)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != maxInt64JSON {
+		t.Fatalf("items: got %+v, want one item with id %d", page.Items, maxInt64JSON)
 	}
 }
 

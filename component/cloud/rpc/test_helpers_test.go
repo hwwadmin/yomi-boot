@@ -48,10 +48,9 @@ func invokeTestWith(c *HttpRpcClient, ctx context.Context, endpoint string, reqB
 
 // testEnvelope 测试用读响应信封
 type testEnvelope struct {
-	Code  string          `json:"code"`
-	Msg   string          `json:"msg"`
-	Data  json.RawMessage `json:"data"`
-	Total int64           `json:"total"`
+	Code string          `json:"code"`
+	Msg  string          `json:"msg"`
+	Data json.RawMessage `json:"data"`
 }
 
 // checkTestEnvelope 测试用业务判定 hook

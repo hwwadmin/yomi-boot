@@ -12,7 +12,7 @@ import (
 
 // DefaultEncoder 当前 API 风格的预制 Encoder，boot.Options.ResponseEncoder
 // 为空时由 boot 默认注册。
-// 写出：{code,msg,timestamp,data}，分页另含顶层 total；HTTP 固定 200。
+// 写出：{code,msg,timestamp,data}；HTTP 固定 200。
 // 失败：code/msg 直接取自 err（*BizError 取其 Code/Message，其余取 Error()）。
 type DefaultEncoder struct{}
 
@@ -24,10 +24,10 @@ type defaultBody struct {
 	Msg       string          `json:"msg"`
 	Timestamp int64           `json:"timestamp"`
 	Data      json.RawMessage `json:"data,omitempty"`
-	Total     int64           `json:"total,omitempty"`
 }
 
 // EncodeSuccess 编码成功响应（code=OK）。
+// 分页等业务载荷形状由业务出参决定，随 data 落地。
 func (DefaultEncoder) EncodeSuccess(c *gin.Context, data any) {
 	body := map[string]any{
 		"code":      "OK",
@@ -40,17 +40,6 @@ func (DefaultEncoder) EncodeSuccess(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, body)
 }
 
-// EncodePage 编码分页成功响应（code=OK，total 在顶层）。
-func (DefaultEncoder) EncodePage(c *gin.Context, items any, total int64) {
-	c.JSON(http.StatusOK, map[string]any{
-		"code":      "OK",
-		"msg":       "success",
-		"timestamp": time.Now().UnixMilli(),
-		"data":      items,
-		"total":     total,
-	})
-}
-
 // EncodeFailure 编码失败响应；code/msg 直接来自 err。
 func (DefaultEncoder) EncodeFailure(c *gin.Context, err error) {
 	code, msg := wireFromErr(err)
@@ -61,7 +50,7 @@ func (DefaultEncoder) EncodeFailure(c *gin.Context, err error) {
 	})
 }
 
-// Parse 解析当前 API 风格 body → code / msg / data / total。
+// Parse 解析当前 API 风格 body → code / msg / data。
 func (DefaultEncoder) Parse(body []byte) (Response, bool) {
 	var raw defaultBody
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -71,10 +60,9 @@ func (DefaultEncoder) Parse(body []byte) (Response, bool) {
 		return Response{}, false
 	}
 	return Response{
-		Code:  raw.Code,
-		Msg:   raw.Msg,
-		Data:  raw.Data,
-		Total: raw.Total,
+		Code: raw.Code,
+		Msg:  raw.Msg,
+		Data: raw.Data,
 	}, true
 }
 

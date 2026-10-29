@@ -183,16 +183,17 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 
 ### 3.3.1 handler 协议适配辅助
 
-业务 handler 的 JSON 绑定、用例执行、分页响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/component/core/handler` 完成。
+业务 handler 的 JSON 绑定、用例执行、成功/失败响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/component/core/handler` 完成。
 
 ##### 3.3.1.1 领域 handler
 
 | 场景 | 用法 |
 | ---- | ---- |
 | 绑定 + 执行 | `handler.BindAndHandle(c, uc.Execute)` |
-| 绑定 + 分页 | `handler.BindAndHandlePage(c, uc.Execute)` |
 | DTM Action | `dtm.BindAndHandleAction(c, uc.Execute)` |
 | DTM Compensate | `dtm.BindAndHandleCompensate(c, uc.Compensate)` |
+
+> 分页查询同样走 `BindAndHandle`：分页载荷由业务出参结构体内嵌 `dto.PageOutput[T]` 提供（见 §3.3.2），handler 不感知分页。
 
 - 领域 handler **禁止**从 token Context 取 userId；身份字段由 BFF 按接口 DTO 传入。
 - import 时可用别名：`platformhandler "gitee.com/hq_project/yomi-boot/component/core/handler"` 或 `handler "gitee.com/hq_project/yomi-boot/component/core/handler"`。
@@ -207,7 +208,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 - BFF 经 `gitee.com/hq_project/yomi-boot/component/common/token` 解析 Claims 后，按下游接口 DTO **按需**写入业务字段。
 - 登出等无 Body 场景：`platformhandler.HandleVoid(c, revokeFn)`。
 
-分页 usecase 入参嵌入 `dto.PageInput`，出参直接返回 `*dto.PageOutput[TItem]`；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页辅助方法见 [Go数据库规范](./Go数据库规范.md) §3.2.2。
+分页 usecase 入参嵌入 `dto.PageInput`，出参结构体**内嵌** `dto.PageOutput[TItem]`（见 §3.3.2）；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页辅助方法见 [Go数据库规范](./Go数据库规范.md) §3.2.2。
 
 用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（boot 未指定 `Options.ResponseEncoder` 时默认注册预制实现；低层启动路径须显式 `MustRegister`）。
 
@@ -240,7 +241,7 @@ func (h *ResourceHandler) handleGetProfile(c *gin.Context) {
 | 类型 | 用法 | 说明 |
 | ---- | ---- | ---- |
 | `dto.PageInput` | **嵌入** usecase 入参 | 含 `page`、`pageSize` JSON 字段；`ValiPage()` 校验并填充默认值 |
-| `dto.PageOutput[T]` | **包装** usecase 出参 | 含 `Items []T` 与 `Total int64`；Execute 直接返回 `*dto.PageOutput[TItem]`，不另建 `XxxOutput` 类型别名 |
+| `dto.PageOutput[T]` | **嵌入**业务出参结构体 | 分页载荷（JSON `items` / `total`），随响应 `data` 落地；`dto.NewPageOutput(items, total)` 构造，nil items 归一为 `[]` |
 
 ```go
 type QueryUsersInput struct {
@@ -248,14 +249,19 @@ type QueryUsersInput struct {
     dto.PageInput
 }
 
-func (uc *QueryUsersUseCase) Execute(ctx context.Context, input *QueryUsersInput) (*dto.PageOutput[QueryUsersItem], error) {
+// QueryUsersOutput 分页查询出参：内嵌分页载荷，序列化后 data 下为 {"items":[...],"total":N}
+type QueryUsersOutput struct {
+    dto.PageOutput[QueryUsersItem]
+}
+
+func (uc *QueryUsersUseCase) Execute(ctx context.Context, input *QueryUsersInput) (QueryUsersOutput, error) {
     input.PageInput.ValiPage() // 或在 Validate() 中调用
     // ...
-    return &dto.PageOutput[QueryUsersItem]{Items: items, Total: total}, nil
+    return QueryUsersOutput{PageOutput: dto.NewPageOutput(items, total)}, nil
 }
 ```
 
-handler 侧：`platformhandler.BindAndHandlePage(c, h.QueryUsers.Execute)`，无需手动拆 `Items` 与 `Total`。
+handler 侧与单条接口一致：`platformhandler.BindAndHandle(c, h.QueryUsers.Execute)`；分页形状由出参结构体决定，handler 不感知分页。
 
 ### 3.4 前后端交互时间类型
 
