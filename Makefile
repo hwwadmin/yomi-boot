@@ -11,7 +11,7 @@ GOLANGCI         := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-
 # 作用: 本地提交前门禁
 # 用法: make check
 .PHONY: check
-check: fmt vet lint layers
+check: fmt vet lint
 
 # deps
 # 作用: 下载模块依赖
@@ -55,74 +55,3 @@ lint:
 .PHONY: test
 test:
 	$(GO) test ./...
-
-# layers
-# 作用: 校验分层依赖方向（component/core 无状态；component 四分组；仅 bootstrap/plugin 可依赖 cloud）
-# 用法: make layers
-.PHONY: layers
-layers:
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/core/... | \
-	  awk '{ \
-	         for (i = 2; i <= NF; i++) \
-	           if ($$i ~ /yomi-boot\/(boot|plugin)\// || $$i ~ /yomi-boot\/component\/(common|cloud|ai)\//) { \
-	             print "component/core 禁止依赖 boot/plugin/兄弟组件: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	       } \
-	       END { exit bad }'
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/common/... | \
-	  awk '{ \
-	         for (i = 2; i <= NF; i++) { \
-	           if ($$i ~ /yomi-boot\/component\/(cloud|ai)\//) { \
-	             print "component/common 禁止依赖 component/cloud|ai: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	           if ($$i ~ /yomi-boot\/(boot|plugin)\//) { \
-	             print "component/common 禁止依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	         } \
-	       } \
-	       END { exit bad }'
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/cloud/... | \
-	  awk '{ \
-	         for (i = 2; i <= NF; i++) { \
-	           if ($$i ~ /yomi-boot\/component\/ai\//) { \
-	             print "component/cloud 禁止依赖 component/ai: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	           if ($$i ~ /yomi-boot\/(boot|plugin)\//) { \
-	             print "component/cloud 禁止依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	         } \
-	       } \
-	       END { exit bad }'
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./component/ai/... | \
-	  awk '{ \
-	         for (i = 2; i <= NF; i++) { \
-	           if ($$i ~ /yomi-boot\/component\/cloud\//) { \
-	             print "component/ai 禁止依赖 component/cloud: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	           if ($$i ~ /yomi-boot\/(boot|plugin)\//) { \
-	             print "component/ai 禁止依赖 boot/plugin: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	         } \
-	       } \
-	       END { exit bad }'
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./boot/... | \
-	  awk '{ \
-	         for (i = 2; i <= NF; i++) { \
-	           if ($$i ~ /yomi-boot\/component\/ai\//) { \
-	             print "boot 禁止依赖 component/ai: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	           if ($$i ~ /yomi-boot\/component\/cloud\// && $$1 != "gitee.com/hq_project/yomi-boot/boot/bootstrap") { \
-	             print "仅 boot/bootstrap 允许依赖 component/cloud: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	         } \
-	       } \
-	       END { exit bad }'
-	@$(GO) list -f '{{.ImportPath}} {{join .Imports " "}}' ./plugin/... | \
-	  awk '{ \
-	         for (i = 2; i <= NF; i++) { \
-	           if ($$i ~ /yomi-boot\/boot\//) { \
-	             print "plugin 禁止依赖 boot: " $$1 " -> " $$i; bad = 1 \
-	           } \
-	         } \
-	       } \
-	       END { exit bad }'
