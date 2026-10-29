@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/base64"
 	stderrors "errors"
+	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -19,10 +21,10 @@ import (
 	base64Captcha "github.com/mojocn/base64Captcha"
 )
 
-// spyStore 是测试用的内存 Store，可注入读写错误并检查答案
+// spyStore 是测试用的内存 Store，可注入读写错误并检查摘要
 type spyStore struct {
 	mu           sync.Mutex
-	answers      map[string]string
+	digests      map[string]string
 	saveErr      error
 	consumeErr   error
 	saveCalls    int
@@ -31,18 +33,18 @@ type spyStore struct {
 
 // newSpyStore 创建测试 Store
 func newSpyStore() *spyStore {
-	return &spyStore{answers: make(map[string]string)}
+	return &spyStore{digests: make(map[string]string)}
 }
 
 // Save 实现 Store.Save
-func (s *spyStore) Save(_ context.Context, id, answer string, _ time.Duration) error {
+func (s *spyStore) Save(_ context.Context, id, digest string, _ time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.saveCalls++
 	if s.saveErr != nil {
 		return s.saveErr
 	}
-	s.answers[id] = answer
+	s.digests[id] = digest
 	return nil
 }
 
@@ -54,17 +56,24 @@ func (s *spyStore) Consume(_ context.Context, id string) (string, bool, error) {
 	if s.consumeErr != nil {
 		return "", false, s.consumeErr
 	}
-	answer, ok := s.answers[id]
-	delete(s.answers, id)
-	return answer, ok, nil
+	digest, ok := s.digests[id]
+	delete(s.digests, id)
+	return digest, ok, nil
 }
 
-// answer 读取指定 id 的答案
-func (s *spyStore) answer(id string) (string, bool) {
+// digest 读取指定 id 的摘要
+func (s *spyStore) digest(id string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	answer, ok := s.answers[id]
-	return answer, ok
+	digest, ok := s.digests[id]
+	return digest, ok
+}
+
+// setDigest 直接写入摘要，用于构造已知答案的场景
+func (s *spyStore) setDigest(id, digest string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.digests[id] = digest
 }
 
 // setSaveErr 注入写入错误
@@ -133,7 +142,22 @@ func assertPNGDataURI(t *testing.T, image string) {
 	}
 }
 
-// TestServiceGenerateAndVerify 验证三种驱动的生成与一次性校验
+// assertAnswerDigest 校验 Store 中保存的是 64 位小写十六进制摘要
+func assertAnswerDigest(t *testing.T, digest string) {
+	t.Helper()
+	if len(digest) != answerDigestLen {
+		t.Fatalf("摘要长度 = %d, 期望 %d", len(digest), answerDigestLen)
+	}
+	for i := 0; i < len(digest); i++ {
+		c := digest[i]
+		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') {
+			continue
+		}
+		t.Fatalf("摘要含非十六进制字符: %q", digest)
+	}
+}
+
+// TestServiceGenerateAndVerify 验证三种驱动都能生成合法挑战，且答案只以摘要落 Store
 func TestServiceGenerateAndVerify(t *testing.T) {
 	for _, driver := range []Driver{DriverDigit, DriverString, DriverMath} {
 		t.Run(string(driver), func(t *testing.T) {
@@ -147,58 +171,103 @@ func TestServiceGenerateAndVerify(t *testing.T) {
 			assertChallengeID(t, challenge.ID)
 			assertPNGDataURI(t, challenge.Image)
 
-			answer, ok := store.answer(challenge.ID)
-			if !ok || answer == "" {
-				t.Fatalf("Store 中未找到答案: ok=%v answer=%q", ok, answer)
+			stored, ok := store.digest(challenge.ID)
+			if !ok || stored == "" {
+				t.Fatalf("Store 中未找到摘要: ok=%v digest=%q", ok, stored)
 			}
-			if err := svc.Verify(ctx, challenge.ID, answer); err != nil {
-				t.Fatalf("Verify: %v", err)
+			assertAnswerDigest(t, stored)
+
+			// 错误答案同样消费
+			if err := svc.Verify(ctx, challenge.ID, "wrong-answer"); !errors.Is(err, ErrMismatch) {
+				t.Fatalf("错误答案 err = %v, 期望 ErrMismatch", err)
 			}
-			if err := svc.Verify(ctx, challenge.ID, answer); !errors.Is(err, ErrExpired) {
-				t.Fatalf("二次 Verify err = %v, 期望 ErrExpired", err)
+			if err := svc.Verify(ctx, challenge.ID, "wrong-answer"); !errors.Is(err, ErrExpired) {
+				t.Fatalf("消费后 err = %v, 期望 ErrExpired", err)
 			}
 		})
 	}
 }
 
-// TestServiceVerifyMismatchConsumes 验证错误答案同样消费验证码
-func TestServiceVerifyMismatchConsumes(t *testing.T) {
-	svc, store := newTestService(t, Config{Driver: DriverDigit})
+// fixedDriver 返回固定 id 与答案，用于断言「答案 → 摘要」的写入口径
+type fixedDriver struct {
+	id     string
+	answer string
+}
+
+// GenerateIdQuestionAnswer 实现 base64Captcha.Driver
+func (d fixedDriver) GenerateIdQuestionAnswer() (string, string, string) {
+	return d.id, d.answer, d.answer
+}
+
+// DrawCaptcha 返回最小的 Item，图片内容与答案无关
+func (fixedDriver) DrawCaptcha(string) (base64Captcha.Item, error) {
+	return fixedItem{}, nil
+}
+
+// fixedItem 是测试用的最小验证码图片
+type fixedItem struct{}
+
+// WriteTo 实现 base64Captcha.Item
+func (fixedItem) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write([]byte("png"))
+	return int64(n), err
+}
+
+// EncodeB64string 实现 base64Captcha.Item
+func (fixedItem) EncodeB64string() string {
+	return "data:image/png;base64,AAAA"
+}
+
+// TestServiceAnswerDigest 验证答案只以摘要写入 Store，且校验时按归一化后的摘要比较
+func TestServiceAnswerDigest(t *testing.T) {
+	const id = "fixedid1234567890ab"
+	store := newSpyStore()
+	svc := &service{driver: fixedDriver{id: id, answer: "AbCd"}, store: store, ttl: time.Minute}
 	ctx := context.Background()
 
 	challenge, err := svc.Generate(ctx)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	answer, ok := store.answer(challenge.ID)
-	if !ok {
-		t.Fatal("Store 中未找到答案")
+	if challenge.ID != id {
+		t.Fatalf("id = %q, 期望 %q", challenge.ID, id)
 	}
 
-	if err := svc.Verify(ctx, challenge.ID, answer+"x"); !errors.Is(err, ErrMismatch) {
-		t.Fatalf("错误答案 err = %v, 期望 ErrMismatch", err)
+	stored, ok := store.digest(id)
+	if !ok {
+		t.Fatal("Store 中未找到摘要")
 	}
-	if err := svc.Verify(ctx, challenge.ID, answer); !errors.Is(err, ErrExpired) {
-		t.Fatalf("错误答案消费后 err = %v, 期望 ErrExpired", err)
+	if stored != answerDigest("AbCd") {
+		t.Fatalf("Store 存的值 = %q, 期望摘要 %q", stored, answerDigest("AbCd"))
+	}
+	if stored == "AbCd" {
+		t.Fatal("明文答案不应写入 Store")
+	}
+
+	// 大小写与首尾空白在摘要前归一化
+	if err := svc.Verify(ctx, id, "  abcd  "); err != nil {
+		t.Fatalf("归一化后 Verify: %v", err)
+	}
+	if err := svc.Verify(ctx, id, "abcd"); !errors.Is(err, ErrExpired) {
+		t.Fatalf("成功后二次 Verify err = %v, 期望 ErrExpired", err)
 	}
 }
 
-// TestServiceVerifyCaseInsensitiveAndTrim 验证答案大小写不敏感并去除首尾空白
-func TestServiceVerifyCaseInsensitiveAndTrim(t *testing.T) {
-	svc, store := newTestService(t, Config{Driver: DriverString, Source: "ABCDEFGH"})
+// TestServiceVerifyMismatchConsumes 验证错误答案同样消费验证码
+func TestServiceVerifyMismatchConsumes(t *testing.T) {
+	const id = "fixedid1234567890ab"
+	store := newSpyStore()
+	svc := &service{driver: fixedDriver{id: id, answer: "1234"}, store: store, ttl: time.Minute}
 	ctx := context.Background()
 
-	challenge, err := svc.Generate(ctx)
-	if err != nil {
+	if _, err := svc.Generate(ctx); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	answer, ok := store.answer(challenge.ID)
-	if !ok {
-		t.Fatal("Store 中未找到答案")
+	if err := svc.Verify(ctx, id, "4321"); !errors.Is(err, ErrMismatch) {
+		t.Fatalf("错误答案 err = %v, 期望 ErrMismatch", err)
 	}
-
-	if err := svc.Verify(ctx, "  "+challenge.ID+"  ", "  "+strings.ToLower(answer)+"  "); err != nil {
-		t.Fatalf("大小写/空白归一化后 Verify: %v", err)
+	if err := svc.Verify(ctx, id, "1234"); !errors.Is(err, ErrExpired) {
+		t.Fatalf("错误答案消费后 err = %v, 期望 ErrExpired", err)
 	}
 }
 
@@ -251,16 +320,20 @@ func TestServiceGenerateBoundaryConfig(t *testing.T) {
 		t.Run(string(cfg.Driver), func(t *testing.T) {
 			svc, store := newTestService(t, cfg)
 			ctx := context.Background()
+
 			challenge, err := svc.Generate(ctx)
 			if err != nil {
 				t.Fatalf("Generate: %v", err)
 			}
-			answer, ok := store.answer(challenge.ID)
+			assertPNGDataURI(t, challenge.Image)
+			stored, ok := store.digest(challenge.ID)
 			if !ok {
-				t.Fatal("Store 中未找到答案")
+				t.Fatal("Store 中未找到摘要")
 			}
-			if err := svc.Verify(ctx, challenge.ID, answer); err != nil {
-				t.Fatalf("Verify: %v", err)
+			assertAnswerDigest(t, stored)
+
+			if err := svc.Verify(ctx, challenge.ID, "wrong"); !errors.Is(err, ErrMismatch) {
+				t.Fatalf("错误答案 err = %v, 期望 ErrMismatch", err)
 			}
 		})
 	}
@@ -421,8 +494,7 @@ func TestServiceConcurrent(t *testing.T) {
 	ctx := context.Background()
 
 	const total = 20
-	challenges := make([]Challenge, total)
-	answers := make([]string, total)
+	ids := make([]string, total)
 	seen := make(map[string]struct{}, total)
 
 	for i := 0; i < total; i++ {
@@ -434,12 +506,20 @@ func TestServiceConcurrent(t *testing.T) {
 			t.Fatalf("重复 id: %s", challenge.ID)
 		}
 		seen[challenge.ID] = struct{}{}
+		ids[i] = challenge.ID
 
-		answer, ok := store.answer(challenge.ID)
+		stored, ok := store.digest(challenge.ID)
 		if !ok {
-			t.Fatalf("Store 中未找到答案: %s", challenge.ID)
+			t.Fatalf("Store 中未找到摘要: %s", challenge.ID)
 		}
-		challenges[i], answers[i] = challenge, answer
+		assertAnswerDigest(t, stored)
+	}
+
+	// 用已知答案覆盖摘要后并发校验
+	answers := make([]string, total)
+	for i := range answers {
+		answers[i] = fmt.Sprintf("ans%02d", i)
+		store.setDigest(ids[i], answerDigest(answers[i]))
 	}
 
 	var wg sync.WaitGroup
@@ -448,7 +528,7 @@ func TestServiceConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errCh <- svc.Verify(ctx, challenges[i].ID, answers[i])
+			errCh <- svc.Verify(ctx, ids[i], answers[i])
 		}(i)
 	}
 	wg.Wait()
@@ -476,21 +556,33 @@ func TestLineOptions(t *testing.T) {
 	}
 }
 
-// TestEqualAnswer 验证答案归一化与比较
-func TestEqualAnswer(t *testing.T) {
-	tests := []struct {
-		stored string
-		answer string
-		want   bool
-	}{
-		{stored: "ABCD", answer: "abcd", want: true},
-		{stored: " abcd ", answer: "ABCD", want: true},
-		{stored: "abcd", answer: "abce", want: false},
-		{stored: "abcd", answer: "abc", want: false},
+// TestAnswerDigest 验证答案摘要的归一化与长度
+func TestAnswerDigest(t *testing.T) {
+	if answerDigest("ABCD") != answerDigest(" abcd ") {
+		t.Fatal("大写与首尾空白应归一化为同一摘要")
 	}
-	for _, tt := range tests {
-		if got := equalAnswer(tt.stored, tt.answer); got != tt.want {
-			t.Fatalf("equalAnswer(%q, %q) = %v, 期望 %v", tt.stored, tt.answer, got, tt.want)
-		}
+	if answerDigest("abcd") == answerDigest("abce") {
+		t.Fatal("不同答案的摘要不应相同")
+	}
+	got := answerDigest("1234")
+	if len(got) != answerDigestLen {
+		t.Fatalf("摘要长度 = %d, 期望 %d", len(got), answerDigestLen)
+	}
+	if got == "1234" {
+		t.Fatal("摘要不应等于明文")
+	}
+}
+
+// TestEqualDigest 验证摘要比较
+func TestEqualDigest(t *testing.T) {
+	digest := answerDigest("abcd")
+	if !equalDigest(digest, answerDigest("ABCD")) {
+		t.Fatal("同一答案的摘要应判等")
+	}
+	if equalDigest(digest, answerDigest("abce")) {
+		t.Fatal("不同答案的摘要不应判等")
+	}
+	if equalDigest(digest, digest[:len(digest)-1]) {
+		t.Fatal("长度不同的摘要不应判等")
 	}
 }

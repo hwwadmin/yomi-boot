@@ -103,7 +103,7 @@
 - `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
 - `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
 - `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
-- `gitee.com/hq_project/yomi-boot/component/common/captcha` 提供图形验证码生成与一次性校验（digit/string/math），Store 由调用方注入（memory 单实例 / Redis 多实例），**不进插件链、不读 YAML**；生成与校验接口的限流由业务负责。
+- `gitee.com/hq_project/yomi-boot/component/common/captcha` 提供图形验证码生成与一次性校验（digit/string/math），Store 由调用方注入（内置只提供 Redis 实现，答案只以 SHA-256 摘要落库），**不进插件链、不读 YAML**；生成与校验接口的限流由业务负责。
 
 ### 3.2 标准目录结构（模式）
 
@@ -201,7 +201,7 @@ services/{domain}/
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
 | `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
-| `captcha` | 图形验证码（基于 `mojocn/base64Captcha`）：`New`/`MustNew`，digit/string/math 三种驱动；`Generate` 只返回 id 与 data URI，答案只写 Store；`Verify` 原子消费、一次性校验（错答案同样消费）；memory（仅单实例/粘性会话）或 Redis（多实例）存储，TTL 由 Store 执行；Store 故障失败关闭；不返回答案、不进插件链、不读 YAML、不做限流 |
+| `captcha` | 图形验证码（基于 `mojocn/base64Captcha`）：`New`/`MustNew`，digit/string/math 三种驱动；`Generate` 只返回 id 与 data URI，答案归一化后只以 SHA-256 摘要写 Store（明文不落存储）；`Verify` 原子消费、一次性校验（错答案同样消费）；内置只提供 Redis 存储（多实例可直接用），TTL 由 Redis 保证；Store 故障失败关闭；不返回答案、不进插件链、不读 YAML、不做限流 |
 | `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Runner`/`Executor` 契约、`LocalRunner` 实现、Context 事务传递）、`db/dbtest` |
 | `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
 | `event` | 可选 Outbox/Inbox 事件组件（`outbox_enabled` / `inbox_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
@@ -603,7 +603,7 @@ kafka: ...
 | 异步消息 | 按需选用 `kafka` 或 `redisstream`；可靠领域事件另看 `event` |
 | WebSocket 长连接 | `ws`（独立端口 Server/Client；ConnID 仅服务端）；小文件可走 WS，大文件走 `oss` |
 | 鉴权令牌 | `token` |
-| 图形验证码 | `captcha`（`New`/`MustNew`；digit/string/math；一次性消费；memory 仅单实例，多实例用 Redis；不读 YAML） |
+| 图形验证码 | `captcha`（`New`/`MustNew`；digit/string/math；一次性消费；答案只存摘要；内置 Redis Store；不读 YAML） |
 | 加解密 / 哈希 / 密码 | `bc/*` |
 | 对象存储 | `oss`（大文件上传/下载；勿用 `ws` 整包） |
 | 调用大模型 Chat / 流式 | `component/ai/llm`（`New`/`MustNew`；OpenAI / Anthropic；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |

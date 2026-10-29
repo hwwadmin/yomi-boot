@@ -49,21 +49,21 @@ func NewRedisStore(redisService yomiredis.RedisService, cfg RedisStoreConfig) (S
 	return &redisStore{redis: redisService, prefix: prefix}, nil
 }
 
-// Save 写入答案并设置 TTL
-func (s *redisStore) Save(ctx context.Context, id, answer string, ttl time.Duration) error {
-	if err := validateStoreRecord(id, answer, ttl); err != nil {
+// Save 写入答案摘要并设置 TTL
+func (s *redisStore) Save(ctx context.Context, id, digest string, ttl time.Duration) error {
+	if err := validateStoreRecord(id, digest, ttl); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := s.redis.OpsStr4Set(ctx, s.key(id), answer, ttl); err != nil {
+	if err := s.redis.OpsStr4Set(ctx, s.key(id), digest, ttl); err != nil {
 		return errors.Wrap(err, "captcha: 保存验证码失败")
 	}
 	return nil
 }
 
-// Consume 原子读取并删除答案
+// Consume 原子读取并删除答案摘要
 func (s *redisStore) Consume(ctx context.Context, id string) (string, bool, error) {
 	if err := validateConsumeID(id); err != nil {
 		return "", false, err
@@ -80,19 +80,19 @@ func (s *redisStore) Consume(ctx context.Context, id string) (string, bool, erro
 		return "", false, errors.Wrap(err, "captcha: 读取验证码失败")
 	}
 
-	var answer string
+	var digest string
 	switch value := result.(type) {
 	case string:
-		answer = value
+		digest = value
 	case []byte:
-		answer = string(value)
+		digest = string(value)
 	default:
 		return "", false, nil
 	}
-	if answer == "" {
+	if digest == "" {
 		return "", false, nil
 	}
-	return answer, true, nil
+	return digest, true, nil
 }
 
 // key 组装 Redis 键

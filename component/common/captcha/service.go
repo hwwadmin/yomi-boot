@@ -6,7 +6,9 @@ package captcha
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"strings"
 	"time"
 
@@ -14,6 +16,9 @@ import (
 
 	base64Captcha "github.com/mojocn/base64Captcha"
 )
+
+// maxAnswerLen 是答案明文的最大长度；生成与用户输入都用它做上限
+const maxAnswerLen = 64
 
 // Challenge 表示一次验证码挑战
 type Challenge struct {
@@ -74,7 +79,8 @@ func (s *service) Generate(ctx context.Context) (Challenge, error) {
 	if err := ctx.Err(); err != nil {
 		return Challenge{}, err
 	}
-	if err := s.store.Save(ctx, id, answer, s.ttl); err != nil {
+	// 只把答案摘要交给 Store，明文答案不落存储
+	if err := s.store.Save(ctx, id, answerDigest(answer), s.ttl); err != nil {
 		return Challenge{}, err
 	}
 
@@ -131,7 +137,7 @@ func (s *service) Verify(ctx context.Context, id, answer string) error {
 	if !found {
 		return errors.Sentinel(ErrExpired)
 	}
-	if !equalAnswer(stored, answer) {
+	if !equalDigest(stored, answerDigest(answer)) {
 		return errors.Sentinel(ErrMismatch)
 	}
 	return nil
@@ -152,12 +158,17 @@ func validID(id string) bool {
 	return true
 }
 
-// equalAnswer 以大小写不敏感、常量时间方式比较答案
-func equalAnswer(stored, answer string) bool {
-	left := []byte(strings.ToUpper(strings.TrimSpace(stored)))
-	right := []byte(strings.ToUpper(strings.TrimSpace(answer)))
-	if len(left) != len(right) {
+// answerDigest 计算答案摘要：去首尾空白、统一大写后取 SHA-256 的小写十六进制
+func answerDigest(answer string) string {
+	normalized := strings.ToUpper(strings.TrimSpace(answer))
+	sum := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(sum[:])
+}
+
+// equalDigest 以常量时间比较两个摘要
+func equalDigest(stored, computed string) bool {
+	if len(stored) != len(computed) {
 		return false
 	}
-	return subtle.ConstantTimeCompare(left, right) == 1
+	return subtle.ConstantTimeCompare([]byte(stored), []byte(computed)) == 1
 }

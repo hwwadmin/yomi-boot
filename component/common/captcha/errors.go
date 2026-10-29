@@ -15,6 +15,4 @@ var (
 	ErrMismatch = errors.NewNoStack("CAPTCHA_MISMATCH")
 	// ErrGenerateFailed 渲染或编码验证码失败
 	ErrGenerateFailed = errors.NewNoStack("CAPTCHA_GENERATE_FAILED")
-	// ErrStoreFull 内存 Store 达到条目上限
-	ErrStoreFull = errors.NewNoStack("CAPTCHA_STORE_FULL")
 )

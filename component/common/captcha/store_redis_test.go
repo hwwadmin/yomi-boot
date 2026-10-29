@@ -44,16 +44,17 @@ func TestRedisStoreTTL(t *testing.T) {
 	store, mr := newTestRedisStore(t, "yomi:test:captcha")
 	ctx := context.Background()
 
-	if err := store.Save(ctx, "before-expiry", "a", time.Minute); err != nil {
+	digestA := testDigest("a")
+	if err := store.Save(ctx, "before-expiry", digestA, time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	mr.FastForward(59 * time.Second)
 	answer, found, err := store.Consume(ctx, "before-expiry")
-	if err != nil || !found || answer != "a" {
+	if err != nil || !found || answer != digestA {
 		t.Fatalf("未到期 Consume = (%q, %v, %v), 期望命中", answer, found, err)
 	}
 
-	if err := store.Save(ctx, "after-expiry", "b", time.Minute); err != nil {
+	if err := store.Save(ctx, "after-expiry", testDigest("b"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	mr.FastForward(61 * time.Second)
@@ -87,11 +88,33 @@ func TestNewRedisStoreConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRedisStore: %v", err)
 	}
-	if err := store.Save(context.Background(), "id-1", "answer-1", time.Minute); err != nil {
+	if err := store.Save(context.Background(), "id-1", testDigest("answer-1"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	if !mr.Exists(defaultKeyPrefix + ":id-1") {
 		t.Fatalf("默认前缀键不存在，现有键: %v", mr.Keys())
+	}
+}
+
+// TestRedisStoreNeverStoresPlaintext 验证经 Service 写入 Redis 的只有答案摘要
+func TestRedisStoreNeverStoresPlaintext(t *testing.T) {
+	const id = "fixedid1234567890ab"
+	store, mr := newTestRedisStore(t, "yomi:test:captcha")
+	svc := &service{driver: fixedDriver{id: id, answer: "9876"}, store: store, ttl: time.Minute}
+
+	if _, err := svc.Generate(context.Background()); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	raw, err := mr.Get("yomi:test:captcha:" + id)
+	if err != nil {
+		t.Fatalf("读取 Redis 值: %v", err)
+	}
+	if raw == "9876" {
+		t.Fatal("Redis 中不应出现明文答案")
+	}
+	if raw != answerDigest("9876") {
+		t.Fatalf("Redis 值 = %q, 期望摘要 %q", raw, answerDigest("9876"))
 	}
 }
 
@@ -112,14 +135,14 @@ func TestRedisStorePrefixIsolation(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := storeA.Save(ctx, "id-1", "answer-1", time.Minute); err != nil {
+	if err := storeA.Save(ctx, "id-1", testDigest("answer-1"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	if _, found, err := storeB.Consume(ctx, "id-1"); err != nil || found {
 		t.Fatalf("另一个前缀不应读到记录: found=%v err=%v", found, err)
 	}
 	answer, found, err := storeA.Consume(ctx, "id-1")
-	if err != nil || !found || answer != "answer-1" {
+	if err != nil || !found || answer != testDigest("answer-1") {
 		t.Fatalf("原前缀 Consume = (%q, %v, %v), 期望命中", answer, found, err)
 	}
 }

@@ -1,7 +1,7 @@
 // Package captcha 提供图形验证码的生成与一次性校验能力（渲染基于 github.com/mojocn/base64Captcha）。
 //
 // 本包与业务解耦：不读 YAML、不进插件链、不做限流；Config 由调用方显式构造，
-// Store 由调用方注入（memory 适用于单实例或粘性会话，Redis 适用于多实例）。
+// Store 由调用方注入（本包提供 Redis 实现，也可自行实现 Store 接入其他存储）。
 //
 // # 基本用法
 //
@@ -12,16 +12,18 @@
 //
 // # 安全不变量
 //
-//   - Generate 只返回 id 与图片，答案只写 Store，不返回给调用方；日志不得打印答案。
+//   - Generate 只返回 id 与图片；答案在服务端归一化（去首尾空白、转大写）后只以 SHA-256
+//     摘要写入 Store，明文答案不落存储，日志也不得打印答案。
 //   - Verify 先原子消费再比较，无论答案对错都会消费，同一个 id 至多成功一次。
-//   - 过期由 Store 执行：Redis 用 PX，memory 逐条检查到期时间。
+//   - 过期由 Redis 保证：写入时 SET 带过期时间（整秒 TTL 走 EX），不做进程内计时。
 //   - Store 故障一律向上返回，绝不当作验证通过；业务应按 500 处理。
 //
-// # 存储选择
+// # 存储
 //
-//   - memory：仅单实例或粘性会话可用；进程重启即失效；达到 MaxEntries 后拒绝新生成。
-//   - Redis：多实例与滚动发布必须使用；key 为 "prefix:id"，TTL 由 Redis 保证；
+//   - 本包只提供 Redis 实现，多实例与滚动发布可直接使用；key 为 "prefix:id"，TTL 由 Redis 保证；
 //     建议按场景使用独立前缀（如 yomi:captcha:login）。
+//   - Store 是导出接口，业务可实现自己的版本，但必须满足：只保存 64 位十六进制摘要、
+//     原子取出并删除、并发消费同一 id 至多命中一次；实现不得假设收到的是明文答案。
 //
 // # 驱动
 //
@@ -36,7 +38,7 @@
 //
 // # 并发
 //
-// Service 与内置 Store 均可并发使用；Driver 在 New 时构造一次并复用，不能每请求重建
+// Service 与 RedisStore 均可并发使用；Driver 在 New 时构造一次并复用，不能每请求重建
 // （会重复解析字体）。
 //
 // # 业务侧
@@ -46,7 +48,7 @@
 //
 // # 错误
 //
-// 包内哨兵：ErrInvalidArgument、ErrExpired、ErrMismatch、ErrGenerateFailed、ErrStoreFull。
+// 包内哨兵：ErrInvalidArgument、ErrExpired、ErrMismatch、ErrGenerateFailed。
 //
 // @author zwei
 package captcha
