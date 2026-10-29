@@ -73,7 +73,7 @@ handler/                         biz/handler/
 | 读 token / 鉴权 | ✓ gitee.com/hq_project/yomi-boot/component/common/token | ✗ |
 | 只读聚合 | ✓ bff | ✗ |
 | DTM Saga 提交 | ✓ saga | ✗ |
-| 本地 DB 事务 | ✗ | ✓ usecase |
+| 本地 DB 事务 | ✗ | ✓ 典型为 usecase（按原子动作归属，见 Go事务规范 §3.4） |
 | DTM 子事务 Execute/Compensate | ✗ | ✓ usecase |
 | 领域规则 | ✗ | ✓ domain/service |
 
@@ -105,7 +105,7 @@ handler/                         biz/handler/
 - **硬约束**：一个 usecase 文件仅一个用例 struct、仅一个 `Execute`；参与 Saga 的写用例在**同文件**仅增加一个对应的 `Compensate`；**禁止** `*_usecases.go` 等多用例合文件。
 - 通过 Input 获取各接口 DTO 声明的业务字段（如按需 `operatorId`、`targetUserId`），**不**从 Context 解析身份。
 - 写用例通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹业务逻辑；细则见 [微服务调用规范](./微服务调用规范.md) §3.4。
-- 写事务边界见 [Go事务规范](./Go事务规范.md) §3.3、§3.4。
+- 事务边界与开启点见 [Go事务规范](./Go事务规范.md) §3.4、§4、§5；开启点按原子业务动作归属，usecase 是典型而非强制。
 - **禁止**跨域编排；**禁止**调用其他领域 HTTP；**禁止** usecase 互调。
 
 #### 3.4.3 domain/contract/
@@ -124,7 +124,7 @@ handler/                         biz/handler/
 - 接口：`repo/contract/{域}/{module}_repo_contract.go`。
 - 实现：`repo/db/{域}/` 含 `{module}_repo.go`、`{module}_model.go`、`{module}_mapper.go`。
 - 只负责数据存取；通过 `tx.Exec(ctx, r.DB)` 感知事务。
-- **禁止**业务规则；**禁止**自行开启事务。
+- **禁止**业务规则；默认不自行开启事务，事务边界按原子业务动作归属（见 [Go事务规范](./Go事务规范.md) §3.4）。
 
 #### 3.4.6 internal/bizerr/
 

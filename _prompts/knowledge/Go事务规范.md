@@ -4,17 +4,22 @@
 
 ## 0. 文档信息
 - **文档名称**: Go事务规范
-- **描述**: 定义领域服务本地事务控制、DTM Saga 子事务、usecase Execute/Compensate 与 Handler Action/Compensate 分工规范。
+- **描述**: 定义本地事务与分布式事务的判定、边界、时长、颗粒度与技术契约；事务归属按原子业务动作确定，不按分层强制。
 - **作者**: zwei
 - **创建日期**: 2026-06-17
+- **修订日期**: 2026-10-29（重写：本地事务与分布式事务分篇；移除"事务必须在某一层开启"的层级约束，改为边界、时长、颗粒度判定）
 
 ---
 
 ## 1. 文档定位
 
-- **用途**：约束领域 usecase 层事务边界、DTM barrier 下的本地子事务、以及 BFF 与领域在分布式写场景下的职责划分。
-- **边界**：Saga 编排见 [GoBFF规范](./GoBFF规范.md)；repository 事务感知见 [Go数据库规范](./Go数据库规范.md)；`tx.Executor` 实现位于 `gitee.com/hq_project/yomi-boot/component/common/db/tx`；**信封与业务幂等细则见 [微服务调用规范](./微服务调用规范.md) §3.4，本文不重复**。
-- **适用对象**：领域写 usecase、DTM 分支 Handler、BFF `saga/` 实现与评审。
+- **用途**：回答写路径上的四个问题：要不要开事务、边界画在哪、事务闭包内放什么/放多久、跨服务时用什么一致性手段。
+- **边界**：
+  - Saga 编排、BFF 写入口、领域 client 见 [GoBFF规范](./GoBFF规范.md)。
+  - 微服务信封、`bizId`/`bizSubId`、业务幂等与 DTM 分工以 [微服务调用规范](./微服务调用规范.md) §3.4、§5 为唯一权威，本文只讲事务形态的配合，不重复展开。
+  - repository 的 GORM 写法与 `tx.Exec` 事务感知见 [Go数据库规范](./Go数据库规范.md)。
+  - `tx.Runner`/`tx.Executor` 实现位于 `gitee.com/hq_project/yomi-boot/component/common/db/tx`；DTM 集成位于 `gitee.com/hq_project/yomi-boot/component/cloud/dtm`。
+- **适用对象**：领域写 usecase/service/repository 的设计者、BFF `saga/` 实现者、DTM 分支 Handler、基础设施组件作者与评审者。
 
 ---
 
@@ -22,25 +27,268 @@
 
 ### 2.1 适用范围
 
-- 领域服务内需要原子性的本地数据库操作。
-- BFF 发起的跨域写，通过 DTM Saga 协调多服务本地子事务。
-- 不适用于纯查询；不适用于 BFF 令牌操作（Redis Store）；BFF 本库仅用于基础设施（如 event Inbox），领域写仍经 Saga 下沉领域服务。
+- 单数据源内的多语句写（本地事务）。
+- 跨服务/跨库写的一致性方案选择（最终一致或 DTM Saga）。
+- 事务闭包内外的操作边界、事务时长与颗粒度、嵌套与自治事务、失败与重试。
+- 不适用于纯查询；不适用于只涉及单条语句且数据库已保证原子性的写（见 §4.1）。
 
 ### 2.2 关联文档
 
 | 文档 | 关联点 |
 | ---- | ------ |
-| [Go架构规范](./Go架构规范.md) | DTM、gitee.com/hq_project/yomi-boot/component/cloud/dtm |
-| [GoBFF规范](./GoBFF规范.md) | BFF 提交 Saga、payload 喂饱 |
-| [Go业务分层规范](./Go业务分层规范.md) | usecase/handler 分层 |
-| [Go数据库规范](./Go数据库规范.md) | repository 事务感知 |
-| [微服务调用规范](./微服务调用规范.md) | 信封、bizId、bizSubId、sys_biz 幂等 |
+| [GoBFF规范](./GoBFF规范.md) | BFF `saga/` 提交 Saga、payload 与补偿快照 |
+| [微服务调用规范](./微服务调用规范.md) | 信封、`bizId`/`bizSubId`、业务幂等、DTM 分支契约（权威） |
+| [Go业务分层规范](./Go业务分层规范.md) | handler/usecase/domain/service/repo 分层 |
+| [Go数据库规范](./Go数据库规范.md) | repository 事务感知、`tx.Exec` |
+| [Go异常规范](./Go异常规范.md) | 事务内异常与错误码 |
+
+### 2.3 阅读路径
+
+- 只写本服务数据库：读 §3、§4。
+- 跨服务/跨库写：读 §3、§5；Saga 的编排与信封细节转到 [GoBFF规范](./GoBFF规范.md) 与 [微服务调用规范](./微服务调用规范.md)。
 
 ---
 
-## 3. 技术方案
+## 3. 总原则
 
-### 3.1 分布式事务总览
+### 3.1 两个维度与三种手段
+
+| 维度 | 范围 | 手段 |
+| ---- | ---- | ---- |
+| 本地事务 | 单个数据源（一个 GORM 根句柄）内的多语句写 | `tx.Runner` / `tx.Executor`，ACID |
+| 分布式一致性 | 跨服务、跨库、跨数据源 | DTM Saga（补偿型）或最终一致（outbox/inbox、重试、对账） |
+
+- 同库多表是本地事务，不是分布式事务。
+- 多数据源之间不能共享 ACID；需要协调时按分布式处理，但优先避免一个服务写多个数据源。
+- 分布式事务不是默认选项：能最终一致就不上 Saga；必须协调回滚才上 Saga。
+
+### 3.2 判定顺序
+
+先判定，再画边界。每个写动作按下面顺序回答，不得跳过：
+
+```text
+写动作
+├─ 只读？ → 不开事务（除非需要一致性快照读）
+├─ 单条语句 / 单行条件更新，数据库已保证原子？ → 通常不开
+│    └─ 但"先读再判断再写"依赖读到的值 → 开事务，或改成条件更新/乐观锁/唯一约束
+├─ 多条写、同一数据源、失败必须一起消失？ → 本地事务（§4）
+├─ 含 Redis/MQ/HTTP/文件等非 DB 副作用？ → 移出事务闭包
+│    └─ "DB 写 + 消息"必须同生共死 → outbox 与业务写同一事务落库
+└─ 跨服务/跨库写？
+     ├─ 能接受最终一致（重试/对账/事件） → 不用分布式事务，outbox/inbox + 幂等
+     └─ 必须协调回滚 → DTM Saga（§5），BFF 编排
+```
+
+- 判定结果要能一句话说清："这个事务保护哪条业务不变量，失败时哪些写必须一起消失。"
+- 说不清边界的写动作，先不要开事务；先补业务不变量，再决定。
+
+### 3.3 三条设计准则
+
+#### 3.3.1 边界：失败时必须一起消失的最小写集合
+
+- 从业务不变量倒推，不从表、方法或代码结构倒推。
+- 参与写决策的读必须与写同事务，或把判断下推到数据库（条件更新、唯一约束、版本号）。
+- 只影响展示、通知、统计、缓存的读写移出边界。
+- 跨聚合写优先拆成多个短事务 + 领域事件/补偿；只有当不变量确实跨聚合且无法用状态机/对账兜底时，才扩大边界。
+
+#### 3.3.2 长短：事务内只放本地 DB 往返
+
+- 事务从开启到提交应短、可预期；具体时长以正常请求 P99 和锁范围为参照，不设无依据的毫秒阈值。
+- 出现秒级事务必须有明确理由（如批量迁移），并说明锁范围、分批策略和失败续跑方式。
+- 事务内不做 RPC/HTTP、Redis、MQ、文件、邮件/短信、大对象序列化、HTTP Output 组装、等待或睡眠。
+
+#### 3.3.3 颗粒度：一次事务承载一次业务状态迁移
+
+- 不是一个请求一个事务，也不是一个用例的所有步骤都塞进一个事务。
+- 多个独立业务动作拆成多个短事务 + 幂等/补偿；不要用大事务追求"一次成功"。
+- 长流程（审批、第三方回调、人工操作）用状态机 + 幂等 + 补偿，事务只包单步。
+- 批量写分批提交，每批一个事务，记录进度，失败可续跑。
+
+### 3.4 事务归属：按原子业务动作，不按层
+
+事务的开启点由"哪个组件拥有这个原子业务动作"决定，不由分层强制。任何层都可以是开启点，前提是满足 §3.5 的契约。
+
+| 组件 | 在事务中的职责 | 典型归属（非强制） |
+| ---- | -------------- | ------------------ |
+| BFF `saga/` | 编排分布式事务、组装 payload 与补偿快照 | 不操作领域 DB，不开领域本地事务；自身基础设施表（如 event Inbox）可在组件内部有自己的事务边界 |
+| 领域 handler | 协议适配、入口、响应 | 通常不承载业务原子性；若发现需要开事务，优先检查该动作是否应下沉到 usecase |
+| 领域 usecase | 一个业务用例 = 一个原子动作 | 最常见的本地事务开启点 |
+| domain/service | 领域规则与不变量 | 默认只参与事务；若一个领域命令自身就是完整原子动作，可以开启，但必须显式注入 Runner 并在契约中说明 |
+| repository | 持久化、事务感知 | 单个自包含写操作（计数、批量 upsert、条件更新）可以开启；必须复用 ctx 中已有事务 |
+| 基础设施组件 | 自持生命周期与内部一致性 | outbox/DLQ、消费循环等可在组件内部开启自己的事务 |
+
+- 事务归属的判定问题：**这个动作失败时，哪些写必须一起消失？谁最清楚这个集合，谁就是开启点。**
+- 层不是约束，提交点才是：非 barrier 形态下，同一个 `tx.Runner` 在 ctx 已有同源事务时复用外层事务，提交/回滚归最外层（`component/common/db/tx/local_runner.go`）；barrier 分支见 §4.6。
+- 不要为了"规矩"把事务硬塞到某一层；也不要因为"哪层都能开"就在多个层重复开启。
+
+### 3.5 通用技术契约
+
+以下契约与分层无关，所有开启点都必须满足：
+
+1. **统一入口**：通过 `tx.Runner.Run` 开启事务，不裸用 `gorm.DB.Begin`/`Commit`/`Rollback`；需要自治事务时用 `tx.Executor.RunAutonomous`。
+2. **尊重 ctx**：ctx 已绑定同源事务时必须复用，不得静默另起一个会独立提交的事务；确需独立提交时用 `RunAutonomous`，并说明"外层回滚不会撤销这里、这里的失败也不会回滚外层"的语义。
+3. **不传 `*gorm.DB`**：事务通过 Context 传递；repository 用 `tx.Exec(ctx, root)` 获取当前事务连接。
+4. **闭包内用传入的 ctx**：使用 `Run` 传入的 `executeCtx`（已绑定事务），不要用外层 `ctx` 写库；Output/响应组装放在闭包外。
+5. **错误即回滚**：闭包返回 error 时回滚；业务结果通过闭包变量捕获，不要在闭包内组装 HTTP 响应或做非 DB 副作用。
+
+---
+
+## 4. 本地事务
+
+### 4.1 何时开、何时不开
+
+| 场景 | 建议 | 说明 |
+| ---- | ---- | ---- |
+| 纯查询 | 不开 | 除非需要一致性快照读 |
+| 单条 INSERT/UPDATE/DELETE | 通常不开 | 数据库单语句已原子 |
+| 单行条件更新（`WHERE version = ?`、`WHERE status = ?`） | 通常不开 | 判断已下推到数据库，天然防丢失更新 |
+| 先读再判断再写（read-modify-write） | 开，或改成条件更新/乐观锁 | 读与写分开会丢失更新；能下推判断就不开事务 |
+| 同数据源多表写，失败必须一起消失 | 开 | 典型本地事务 |
+| 写后写缓存/发 MQ/调 HTTP | 按上述规则决定 DB 写是否开事务；副作用移出闭包 | 缓存提交后处理；消息用 outbox 与业务写同事务落库 |
+| 跨服务/跨库写 | 不用本地事务覆盖 | 见 §5 |
+
+- "默认写路径都开事务"不是本规范的要求；开事务要有明确的不变量理由。
+- 不开事务的写路径必须能说清失败后果和补偿方式（重试、对账、状态字段、唯一约束）。
+
+### 4.2 边界设计
+
+按顺序回答三个问题：
+
+1. **失败时哪些写必须一起消失？** 得到最小原子集；这是事务边界。
+2. **哪些读参与写决策？** 参与决策的读必须与写同事务，或把判断下推到数据库（条件更新、唯一约束、版本号）。
+3. **哪些读写可以晚一点、差一点？** 缓存、消息、通知、统计、审计（若业务允许异步）移出边界。
+
+边界设计的常见错误：
+
+- 把参数校验、权限查询、远程校验放进事务：拉长持锁时间，且远程结果无法随事务回滚。
+- 为了"保险"把整个 usecase 包进事务：查询、组装、外部调用全部进闭包，锁范围和时间失控。
+- 把"写主表 + 发 MQ"放一个事务：MQ 不参与数据库事务；用 outbox 或提交后发送。
+- 两个聚合强绑一个事务：先问不变量是否真的要求同时生效；多数场景可用状态机 + 事件 + 补偿替代。
+
+### 4.3 时长控制
+
+**事务内允许**：
+
+- 本地 DB 读写（`tx.Exec`）。
+- 必要的轻量领域计算（不阻塞、不等待）。
+
+**事务内禁止**（附原因）：
+
+| 操作 | 原因 | 替代 |
+| ---- | ---- | ---- |
+| RPC/HTTP | 网络不可控，失败无法随事务回滚；拉长持锁时间 | 移到事务外，失败用补偿/Saga |
+| Redis | 不参与数据库事务，回滚后可能留下脏缓存 | 提交后更新/删除缓存；或接受短暂不一致 |
+| MQ | 不参与数据库事务，可能"库回滚但消息已发" | outbox 与业务写同事务落库，提交后投递 |
+| 文件/对象存储 | 无事务语义，回滚困难 | 先落库后异步处理；或设计补偿 |
+| 大对象序列化/HTTP Output 组装 | 纯 CPU/内存工作，无谓拉长事务 | 闭包外组装 |
+| 等待/睡眠/重试循环 | 持锁等待，放大冲突 | 事务外重试整个闭包 |
+| 跨服务查询作为写决策依据 | 读结果不可随事务回滚，且可能已过期 | 前置校验 + 事务内约束兜底（唯一键/版本号） |
+
+**批量写**：
+
+- 分批提交，每批一个事务；批大小按单批耗时与锁范围反推，不写死行数。
+- 每批记录进度/游标，失败可从断点续跑；不要用一个事务包住全部批次。
+- 大批量更新避免全表扫描和无索引条件；必要时用主键/时间范围切片。
+
+**超时**：
+
+- 事务超时由调用方 ctx 控制；不得用 `context.Background`/`WithoutCancel` 绕过（`RunAutonomous` 除外，它有自己的显式 timeout）。
+- 数据库驱动必须支持 ctx 取消；ctx 到期后事务应尽快回滚释放连接。
+
+### 4.4 颗粒度与拆分
+
+- **一事务一状态迁移**：一个事务内只完成一次业务状态变化（一个聚合/一个业务动作的主写 + 必要从写）。
+- **多个独立动作**：拆成多个短事务 + 幂等键/补偿；不要为了"一次成功"合并。
+- **跨聚合/跨服务**：优先拆；用领域事件、outbox、Saga 或对账收敛。
+- **长流程**：审批、第三方回调、人工操作不要占用事务；用状态机 + 幂等 + 补偿，事务只包单步。
+- **嵌套调用**：外层已开事务时，内层 `Run` 复用外层，不产生新提交点；内层不要假设自己会独立提交。
+- **需要独立提交**：用 `RunAutonomous`，明确它使用独立连接、不受外层回滚影响、失败也不回滚外层；同时为连接池预留余量。
+
+### 4.5 并发控制与失败重试
+
+- **隔离级别**：默认使用数据库默认隔离级别；不要为了规避幻读随意升级隔离级别，优先用唯一约束、条件更新、乐观锁解决。
+- **乐观锁/条件更新**：高并发写优先用版本号或状态条件更新，减少锁持有和冲突。
+- **锁顺序**：多行/多表加锁按固定顺序，降低死锁概率。
+- **死锁/锁等待超时**：重试整个事务闭包，不重试单条语句；闭包必须可重入（幂等或先查后写安全）。
+- **重试边界**：重试次数、退避和超时由调用方决定；不要在事务闭包内 sleep 重试。
+- **幂等**：写入口的幂等要求以《微服务调用规范》§3.4 为准；本文只强调幂等记录必须与业务写在同一个事务里提交（见 §4.7）。
+
+### 4.6 传播、嵌套与自治事务
+
+本栈没有 Spring 式传播级别，只有三种形态：
+
+| 形态 | 行为 | 使用场景 |
+| ---- | ---- | -------- |
+| 新建事务 | ctx 未绑定同源事务，`Runner.Run` 新开事务并提交/回滚 | 最外层写动作 |
+| 嵌套复用 | ctx 已绑定同源事务，`Runner.Run` 直接复用，不再新开连接 | 内层调用、复用的领域方法 |
+| 自治事务 | `Executor.RunAutonomous` 在独立连接上新开事务 | 审计留痕、失败也要保留的记录、与主事务互不影响的写 |
+
+- `Runner.InTx(ctx)` 报告 ctx 是否已绑定本数据源事务；提交点归最外层。
+- DTM barrier 分支由 `TxRunner` 自己开启并提交事务，`InTx` 返回 false（提交点归 `Run`）；不要把 barrier 分支当作"已在事务中"。
+- 自治事务每次额外占用一条连接，须为 `max_open_conns` 预留余量；回调内不得使用外层事务对象。
+- `dtm.TxRunner` 只实现 `tx.Runner`，不提供 `RunAutonomous`；Saga 分支确需自治事务时，另行注入本地 `tx.Executor`，并明确它不随分支事务回滚。
+- 禁止在已有事务中静默开启一个会独立提交的事务；需要独立提交时必须显式使用 `RunAutonomous` 并说明语义。
+
+### 4.7 与幂等、缓存、消息的组合
+
+- **幂等**：`idempotency.Execute` 必须是写路径最外层事务边界（要求 ctx 尚未绑定同源事务）；已在事务内时用 `ExecuteInTx`，它跟随外层事务、不写结果缓存。DTM barrier 分支用 `Execute`（barrier 的 `InTx` 为 false），分支内幂等由 `sys_barrier` 承担。细则以《微服务调用规范》§3.4 为准。
+- **缓存**：DB 提交后再更新/删除缓存；不要在事务闭包内写 Redis，也不要假设缓存与事务原子。幂等 Guard 的 Redis 锁/结果缓存由组件在事务闭包外管理，不违反此条。
+- **消息**：需要"DB 写 + 消息"同生共死时，用 outbox 在同一事务内写业务表和 outbox 表，提交后异步投递；消费侧用 inbox/幂等表去重。
+- **审计/日志**：必须随业务回滚的审计写放同一事务；失败也要留痕的审计用自治事务，并接受它不随主事务回滚。
+
+### 4.8 代码契约与示例
+
+```go
+// 事务边界由拥有原子动作的组件开启；Runner 由装配层注入，不写死实现。
+err := runner.Run(ctx, func(executeCtx context.Context) error {
+    if err := svc.Transfer(executeCtx, input); err != nil {
+        return err
+    }
+    return outbox.Append(executeCtx, event)
+})
+if err != nil {
+    return err
+}
+// Output/响应在闭包外组装
+```
+
+- `runner` 类型为 `tx.Runner`；本地事务用 `tx.Executor`（如 `dbplugin.FromTx(slot).Executor()`），Saga 分支用 `dtmplugin.From(slot).Runner()`。
+- 需要写事务的用例通过构造函数注入 `tx.Runner`；按《微服务调用规范》§3.4 需要幂等的写入口再注入 `*idempotency.Guard`。不要写死具体实现。
+- `plugin/builtin/dtm` 在 `dtm.enabled=true` 且 db 插件可用时构造 Saga Runner；未启用时 `Runner()` 返回 nil，由装配层决定是否 Fail Fast。`dtm.barrier_table` 默认 `sys_barrier`。
+- 可重试写入口在外层使用 `idempotency.Execute(guard, runner, ctx, key, fn)`；事务由 `runner` 开启，幂等记录与业务写同事务提交（细则见《微服务调用规范》§3.4）。
+- repository 通过 `tx.Exec(ctx, r.DB)` 感知事务；方法签名不含 `*gorm.DB`。
+- 业务结果通过闭包变量捕获；不要在闭包内组装 HTTP Output。
+- 纯查询不包裹事务。
+
+---
+
+## 5. 分布式事务
+
+### 5.1 何时需要
+
+- 写跨服务或跨库，且一个动作失败时另一个动作必须撤销 → 需要协调，考虑 DTM Saga。
+- 跨服务写但业务能接受最终一致（重试、对账、事件） → 不需要 Saga，用 outbox/inbox + 幂等。
+- 单服务多表 → 本地事务，不是分布式事务。
+- 单服务多数据源：优先消除多数据源；必须保留时按分布式处理，不能假设两个数据源共享事务。
+
+判定问题：
+
+1. 失败时是否必须撤销已经成功的另一侧？否 → 最终一致即可。
+2. 参与方是否都能提供可重试、幂等的补偿？否 → 先补补偿能力，再上 Saga。
+3. 业务是否能容忍中间态对外可见？否 → 先设计状态字段/查询口径，再上 Saga。
+
+### 5.2 方案选择
+
+| 方案 | 适用 | 说明 |
+| ---- | ---- | ---- |
+| 本地事务 | 单数据源多语句写 | §4 |
+| 最终一致（outbox/inbox + 重试/对账） | 跨服务写可接受短暂不一致 | 不需要协调回滚；实现简单、可用性高 |
+| DTM Saga | 跨服务写必须协调回滚 | 补偿型；分支各自本地事务 + barrier |
+| 2PC/TCC | 不采用 | 本栈无对应基础设施；TCC 需三套接口且空回滚/悬挂处理复杂；统一用 Saga |
+
+- 最终一致依赖 `gitee.com/hq_project/yomi-boot/component/common/event` 的 Outbox/Inbox（`event.outbox_enabled` / `event.inbox_enabled`）；是否启用按服务实际配置确认。
+
+### 5.3 Saga 结构与角色职责
 
 ```text
 BFF saga/          提交 DTM Saga，定义分支顺序与 payload
@@ -54,97 +302,53 @@ DTM Server           调度各分支 Action / Compensate
 domain / repo        无感知 DTM
 ```
 
-- **默认方案**：DTM Saga + 各服务本地子事务（barrier 保证幂等）+ `gitee.com/hq_project/yomi-boot/component/common/idempotency` 业务幂等。
-- **可选方案**：`gitee.com/hq_project/yomi-boot/component/common/event` Outbox/Inbox（`event.outbox_enabled` / `event.inbox_enabled` 启用时）；当前领域服务默认未开启。
+- BFF 是 Saga 的唯一编排方：负责前置校验、生成 `bizId`/`bizSubId`、组装补偿快照、提交 Saga；不操作领域 DB，不实现领域补偿。
+- 领域 Handler 提供成对的 Action/Compensate 独立入口，路由与信封细则见《微服务调用规范》§3.1.1、§3.3.2；本文不重复。
+- 领域 usecase 的 `Execute`/`Compensate` 同文件、同 struct；两者都通过 `idempotency.Execute` + `tx.Runner` 包裹，配合 barrier 保证幂等与防悬挂。
+- 只读 usecase 不提供 `Compensate`；`Compensate` 不得拆到独立文件或 `compensate/` 目录。
+- 补偿快照（如 `PreviousStatus`）由 BFF 前置查询写入 Input；领域 Compensate 不反查其他服务。
 
-### 3.2 各层事务职责
+### 5.4 分支设计
 
-| 分层 | 职责 | 禁止 |
-| ---- | ---- | ---- |
-| **BFF saga/** | 提交 Saga；组装 payload（信封 + 补偿快照）；**唯一写入口** | 操作领域 DB；直调领域写 HTTP；Facade/Direct 回退 |
-| **领域 handler** | Action 调 `Execute`；Compensate 调 `Compensate`；**仅** DTM 回调入口 | 暴露 BFF 可直调写路由；`BindAndHandle` 写接口；同一 URL `IsCallback` 分流 |
-| **领域 usecase** | `idempotency.Execute` + barrier + `tx.Runner` 本地子事务 | 跨域 HTTP；读 token |
-| **service** | 不感知事务 | 接收 `*gorm.DB` 事务参数 |
-| **repository** | `tx.Exec(ctx, r.DB)` 感知 Context 事务 | 自行 Begin/Commit |
+- **一分支一原子动作**：一个分支只完成一个领域的一次状态迁移；不要把多个领域动作塞进一个分支。
+- **分支内只做本地 DB**：RPC/HTTP、Redis、MQ、文件等移出分支事务；需要跨服务协调时增加分支或由 BFF 编排。
+- **分支要短**：按 §4.3 的时长规则执行；分支拉长会放大 DTM 重试和锁冲突。
+- **快照由编排方提供**：Compensate 需要的数据由 BFF 前置查询写入 payload；领域不从其他服务查询。
+- **空补偿合法**：Action 未执行或已补偿时，Compensate 应能安全返回成功；不要因为"没数据"报错导致 DTM 反复重试。
+- **补偿是业务逆操作**：不是数据库 rollback；它本身也是一个本地事务，必须遵守 §4 的边界与时长规则。
 
-### 3.3 本地事务（usecase 内部）
+### 5.5 幂等两道防线
 
-- 领域写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹；`txRunner` 类型为 `tx.Runner`。
-- 本地事务由装配层传入 `tx.Executor`（如 `dbplugin.FromTx(slot).Executor()`），`tx.Executor` 内嵌 `tx.Runner`，由 `gitee.com/hq_project/yomi-boot/component/common/db/tx` 管理 GORM 事务。
-- 参与 DTM Saga 分支时由装配层传入 `dtmplugin.From(slot).Runner()`；由 `plugin/builtin/dtm` 在 `dtm.enabled=true` 且 db 插件可用时构造，满足 `tx.Runner`，配合 barrier 执行。`component/common/idempotency` 与 `component/cloud/dtm` 之间没有包依赖。
-- 需要写事务的 usecase 构造函数注入 `*idempotency.Guard` 与 `tx.Runner`，不要写死具体实现。
-- `dtm.barrier_table` 指定 Barrier 表名，默认 `sys_barrier`；dtm 或 db 未启用时 `Runner()` 返回 nil，由 wire 决定是否 Fail Fast。
-- 业务结果通过闭包变量捕获，不在事务闭包内组装 HTTP Output。
-- **上述事务边界仅用于 usecase 内部**；**禁止**据此在领域 handler 再暴露一条供 BFF 直调的非 Saga 写 HTTP 路由。
+| 机制 | 键/标识 | 职责 | 不替代 |
+| ---- | ------- | ---- | ------ |
+| 业务幂等 | `(biz_id, biz_sub_id)` + `sys_biz` | 防止同一次领域写调用被重复执行（重试、超时重放） | DTM barrier |
+| DTM barrier | `gid` + `sys_barrier` | 防止同一 Saga 分支回调重复执行、防悬挂 | 业务幂等 |
 
-```go
-var created *domainresource.Resource
-err := uc.txRunner.Run(ctx, func(executeCtx context.Context) error {
-    // idempotency.Execute + 业务写
-    return nil
-})
-```
+- 业务幂等的键、生成方、`operation_type`、`Execute`/`ExecuteInTx` 的形态约束，以《微服务调用规范》§3.4 为唯一权威；本文只强调：
+  - `Execute` 只能做最外层事务边界；已在事务内用 `ExecuteInTx`；barrier 分支用 `Execute`。
+  - 分支提交 ≠ 全局提交；幂等键不得跨全局事务复用。
+  - DTM 重试同一分支时，`bizId`、`bizSubId` 必须与首次一致。
+- `idempotency` 与 `dtm` 之间没有包依赖，通过 `tx.Runner` 契约组合；`sys_biz` 与 `sys_barrier` 由各领域库分别建表。
 
-- 纯查询不包裹事务。
+### 5.6 失败语义与中间态
 
-### 3.4 DTM 子事务（Saga 分支）
+- Saga **不是 ACID**：没有隔离性，中间态对外可见（A 已扣款、B 未到账）。
+- 业务必须能容忍中间态：查询接口/状态字段要能表达"处理中"，或提供回查/对账口径。
+- 分支提交成功不等于全局成功：BFF 在 Saga 提交成功后按业务键回查，不要因为某个分支返回成功就对外宣告完成。
+- Action 失败由 DTM 重试；仍失败则触发已成功分支的 Compensate。
+- Compensate 失败由 DTM 持续重试；补偿必须可重试、幂等、允许空补偿；不要吞掉错误或依赖人工即时介入。
+- 超时/结果不确定时，靠幂等 + barrier 收敛；不要在分支里做"先查后写"的非原子判断，用唯一约束/barrier 兜底。
 
-#### 3.4.1 usecase：Execute + Compensate 同文件
+### 5.7 补偿设计
 
-参与 Saga 的写用例，在**同一文件、同一 struct** 上提供：
+- **幂等**：Compensate 可能被重复调用，必须幂等。
+- **可重试**：失败返回错误让 DTM 继续重试；不要返回成功掩盖失败。
+- **防悬挂**：barrier 保证 Compensate 不会先于 Action 生效；业务状态机也要能识别"未执行"。
+- **空补偿**：无数据可补偿时返回成功，不报错。
+- **不可补偿动作**：发邮件、调用第三方等无法撤销的动作不要放在分支里；必须放时设计成可抵消/可忽略，并接受最终不一致。
+- **补偿失败告警**：持续失败要告警并保留现场，但不能因此让 DTM 停止重试。
 
-```go
-func (uc *UpdateResourceStatusUseCase) Execute(ctx context.Context, input *UpdateResourceStatusInput) error
-func (uc *UpdateResourceStatusUseCase) Compensate(ctx context.Context, input *UpdateResourceStatusInput) error
-```
-
-- 两者均通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹，内部配合 DTM barrier 保证幂等与防悬挂。
-- `Compensate` 所需数据（如 `PreviousStatus`）由 **BFF 写入 Input**，领域不从其他服务查询。
-- 只读 usecase 不提供 `Compensate`。
-
-#### 3.4.2 handler：独立 Action / Compensate 入口
-
-```go
-// UpdateStatusAction — 仅调 Execute（示例）
-func (h *ResourceHandler) UpdateStatusAction(c *gin.Context) { ... }
-
-// UpdateStatusCompensate — 仅调 Compensate（示例）
-func (h *ResourceHandler) UpdateStatusCompensate(c *gin.Context) { ... }
-```
-
-路由成对（路径以 `/internal/v1/` 为准，资源段单数；下为**示例**）：
-
-```text
-POST /internal/v1/{resource}/update-status          → dtm.BindAndHandleAction
-POST /internal/v1/{resource}/update-status/compensate → dtm.BindAndHandleCompensate
-```
-
-**禁止**在同一 Handler 方法内根据 DTM `op` 或 `IsCallback` 分流 Action 与 BFF 直调。
-**禁止**为同一写语义同时注册 `/{resource}/status`（直调）与 `/{resource}/update-status`（Saga）两条路由。
-
-#### 3.4.3 BFF saga 编排
-
-```go
-// BFF 负责：前置校验、payload（bizId、bizSubId）、提交 Saga（示例）
-saga, err := dtmClient.NewSaga(ctx)
-if err != nil {
-    return err
-}
-resourceClient.CreateResource(ctx, saga, payload)
-saga.Submit()
-```
-
-- token 撤销等 BFF 本地副作用可作为独立 Saga 分支或 Saga 成功后同步调用 `gitee.com/hq_project/yomi-boot/component/common/token`。
-- BFF **不实现**领域状态恢复的补偿逻辑。
-
-### 3.5 事务上下文传递
-
-- GORM 事务由 `tx.Runner.Run` 内部 `gorm.DB.Transaction` 管理。
-- repository 通过 `tx.Exec(ctx, r.DB)` 获取当前事务连接。
-- 禁止将 `*gorm.DB` 作为参数在层间传递。
-- 事务闭包内使用 `executeCtx`，不用外层 `ctx` 写库。
-
-### 3.6 典型 Saga 场景（示例，非强制业务清单）
+### 5.8 典型场景（示例，非强制业务清单）
 
 | 场景（示例） | BFF saga | 领域分支 |
 | ------------ | -------- | -------- |
@@ -154,42 +358,61 @@ saga.Submit()
 | 分配角色 | 前置校验 + SubmitSaga | 角色域 assign Action/Compensate |
 | 角色删除 | SubmitSaga + revoke token | 角色域 delete Action/Compensate |
 
-### 3.7 业务幂等与 DTM 分工
-
-业务幂等（`bizId`/`bizSubId`、`gitee.com/hq_project/yomi-boot/component/common/idempotency`、`sys_biz`）与 DTM `gid`/barrier 的职责边界、执行顺序及禁止项，**一律以 [微服务调用规范](./微服务调用规范.md) §3.4、§5 为准**。
-
-本文仅强调事务层要点：
-
-- 写 usecase 通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 在 DTM barrier **同一事务闭包内**执行业务写。
-- DTM barrier 防悬挂/重复回调；**不替代** `(biz_id, biz_sub_id)` 业务幂等。
-
-### 3.8 与 IO 的边界
-
-- DTM 子事务闭包内**仅包含**本地 DB 步骤。
-- Redis token 撤销、HTTP 通知等放在 BFF 或 `Execute` 返回之后，不放入领域 DB 事务闭包与 DB 强绑定。
-- 若 IO 失败需回滚 DB，由 Saga 失败触发 Compensate，而非在单服务事务内混写 IO。
+- token 撤销等 BFF 本地副作用可作为独立 Saga 分支，或 Saga 成功后同步调用；不放进领域 DB 事务闭包。
 
 ---
 
-## 4. 检查清单
+## 6. 检查清单
 
-- [ ] 领域写 usecase 经 `idempotency.Execute` + `tx.Runner` 控制本地子事务
-- [ ] Saga 写用例同文件含 `Execute` 与 `Compensate`
-- [ ] Handler Action/Compensate 为独立方法，路由 `/compensate` 成对，且均为 DTM 入口
-- [ ] 领域无 BFF 可直调写路由
-- [ ] Compensate 输入含 BFF 提供的快照字段
-- [ ] repository 通过 Context 感知事务，不自行管理事务
-- [ ] BFF saga 只编排，不实现领域补偿
-- [ ] 业务幂等与 `gitee.com/hq_project/yomi-boot/component/common/idempotency` 符合 [微服务调用规范](./微服务调用规范.md) §3.4
+### 6.1 本地事务
+
+- [ ] 每个写动作都做了"是否开事务"的判定，而不是默认包一层
+- [ ] 事务边界等于"失败时必须一起消失的最小写集合"，能指出对应的业务不变量
+- [ ] 事务内只有本地 DB：无 RPC/HTTP、Redis、MQ、文件、大计算、等待、Output 组装
+- [ ] 一次事务只承载一次业务状态迁移；批量写已分批；长流程未占用事务
+- [ ] read-modify-write 的关键判断在事务内完成，或用条件更新/乐观锁/唯一约束兜底
+- [ ] 事务通过 `tx.Runner` 开启；嵌套时复用外层；需要独立提交时用 `RunAutonomous` 并说明语义
+- [ ] repository 通过 `tx.Exec(ctx, root)` 感知事务，签名不含 `*gorm.DB`
+- [ ] 闭包内使用 `executeCtx`；Output/响应在闭包外组装
+- [ ] 事务超时受调用方 ctx 控制，未用 `context.Background`/`WithoutCancel` 绕过（自治事务除外）
+- [ ] 缓存/消息在提交后处理，或通过 outbox 与业务写同事务落库
+
+### 6.2 分布式事务
+
+- [ ] 已确认跨服务写无法用本地事务覆盖，且确实需要协调回滚（否则选择最终一致）
+- [ ] 跨域写由 BFF `saga/` 提交 DTM Saga；领域没有 BFF 可直调的写路由
+- [ ] 每个分支 = 一个领域的一个原子动作；分支内只有本地 DB
+- [ ] Action/Compensate 成对、独立入口、同一 usecase 文件
+- [ ] 补偿快照由 BFF 前置查询写入 payload，领域补偿不反查其他服务
+- [ ] 分支使用 barrier + 本地子事务；业务幂等与 barrier 分工正确
+- [ ] Compensate 幂等、可重试、允许空补偿；失败能被 DTM 持续重试
+- [ ] Redis/token/HTTP/MQ 不在分支事务内
+- [ ] 业务能容忍 Saga 中间态；对外查询/状态字段能表达"处理中"
+- [ ] 未使用 2PC/TCC；未跨全局事务复用 `bizSubId`
 
 ---
 
-## 5. 禁止项
+## 7. 禁止项
 
-- 禁止 repository 或 service 自行开启/提交/回滚事务。
-- 禁止在 Handler 内混合 Action 与 Compensate 逻辑，或在同一写 URL 上按回调参数分流直调。
-- 禁止领域 handler 暴露非 Saga 写接口（`BindAndHandle` 写 create/update/delete 等）。
-- 禁止将 `Compensate` 写到独立 usecase 文件或 `compensate/` 目录。
-- 禁止领域 usecase 在 Compensate 中 HTTP 调其他服务获取补偿数据。
-- 禁止使用 2PC/TCC 替代 DTM Saga。
-- 禁止在事务闭包内组装 HTTP 响应对象。
+### 7.1 本地事务
+
+- 禁止把 RPC/HTTP、Redis、MQ、文件、大对象序列化、HTTP Output 组装放进事务闭包；这些操作不随数据库事务回滚，只会拉长持锁时间。
+- 禁止在事务内等待、睡眠或做重试循环；重试整个闭包，且闭包必须可重入。
+- 禁止在已有事务中静默开启一个会独立提交的事务；需要独立提交时用 `RunAutonomous` 并显式说明语义。
+- 禁止把 `*gorm.DB` 作为参数在层间传递；事务通过 Context 传递。
+- 禁止用 `context.Background`/`WithoutCancel` 绕过事务超时（自治事务除外，且必须有自己的 timeout）。
+- 禁止用一个事务包住整个请求/整个用例的所有步骤；事务只承载一次业务状态迁移。
+- 禁止在事务内做无索引的大范围扫描/全表更新；批量写必须分批、可续跑。
+- 禁止把"开事务"当作默认动作；说不清保护哪条不变量的写路径不要开事务。
+
+### 7.2 分布式事务
+
+- 禁止用本地事务包住跨服务调用，或假设外部 HTTP 能加入本地 GORM 事务。
+- 禁止 BFF 直调领域写接口；禁止领域暴露 BFF 可直调的非 Saga 写路由。
+- 禁止在同一 Handler 方法内按 DTM `op` 或 `IsCallback` 分流 Action/Compensate。
+- 禁止 Compensate 反查其他服务获取补偿数据；快照由 BFF 喂入。
+- 禁止把 Redis/token/HTTP/MQ 放进分支事务。
+- 禁止用 2PC/TCC 替代 DTM Saga。
+- 禁止跨全局事务复用 `bizSubId`；禁止不同 Saga 复用 `bizId`。
+- 禁止一个分支承载多个业务动作或长流程；分支只做一个领域的一次原子动作。
+- 禁止吞掉 Compensate 错误或返回成功掩盖失败；失败要让 DTM 重试并告警。

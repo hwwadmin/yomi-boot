@@ -315,7 +315,7 @@ Model 定义必须与数据库表设计规范保持一致：
 #### 3.4.1 职责边界
 
 - repository 只负责数据读写；入参/返回值用 domain/contract 的 Entity 和 DTO，不暴露 Model。
-- 事务由 usecase 控制；repository 通过 `tx.Exec(ctx, r.DB)` 感知事务，方法签名不含 `*gorm.DB`。
+- 事务边界按原子业务动作归属（典型为 usecase）；repository 通过 `tx.Exec(ctx, r.DB)` 感知并加入调用方事务，方法签名不含 `*gorm.DB`。
 
 #### 3.4.2 Repository 定义与实现
 
@@ -391,10 +391,10 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 事务控制规范统一收口到 [Go事务规范](./Go事务规范.md)，本文仅列出与 repository 层相关的核心约定：
 
 - Repository 嵌入 `orm.BaseRepository`，通过 `tx.Exec(ctx, r.DB)` 自动感知事务上下文——在事务闭包内自动使用事务连接，事务外使用普通连接。
-- Repository 不自行管理事务，事务边界由 usecase 通过 `tx.Runner.Run` 控制。
+- Repository 默认不自行管理事务，通过 ctx 加入调用方事务；若某个方法自身就是完整原子动作（如计数、批量 upsert、条件更新），可由它开启事务，但必须通过 `tx.Runner` 并复用 ctx 中已有事务。事务边界与开启点按原子业务动作归属，见 [Go事务规范](./Go事务规范.md) §3.4。
 - Repository 方法签名中**不出现 `*gorm.DB` 参数**，事务通过 Context 隐式传递。
 
-详细的事务执行器实现、usecase 中使用事务的示例以及分布式事务方案，请直接参考 [Go事务规范](./Go事务规范.md)。
+详细的事务执行器实现、事务边界与示例以及分布式事务方案，请直接参考 [Go事务规范](./Go事务规范.md)。
 
 ---
 
@@ -405,6 +405,6 @@ func (r *Repository) UpdateStatus(ctx context.Context, input *domainuser.UpdateS
 ## 5. 禁止项
 
 - 禁止 Entity 含 GORM tag，禁止 Model 暴露给 usecase/handler。
-- 禁止 repository 自行管理事务、向上暴露 `*gorm.DB`、直接返回 `gorm.ErrRecordNotFound`。
+- 禁止 repository 绕过 ctx 另起独立事务、向上暴露 `*gorm.DB`、直接返回 `gorm.ErrRecordNotFound`。
 - 禁止 repository 将用户输入或变量动态拼接到 SQL 片段中；固定列名的 GORM 占位符写法（如 `"status = ?"`）或原生 SQL 文件不受此限。
 - 禁止 Entity 与 Model 混写在同一文件。
