@@ -17,7 +17,7 @@ import (
 
 // testDigest 返回 Store 契约测试使用的合法答案摘要
 func testDigest(answer string) string {
-	return answerDigest(answer)
+	return answerDigest(normalizeAnswer(answer))
 }
 
 // testStoreContract 验证 Store 实现共同遵守的读写、一次性消费与并发语义

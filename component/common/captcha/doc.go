@@ -7,7 +7,7 @@
 //
 //	store, err := captcha.NewRedisStore(redisService, captcha.RedisStoreConfig{KeyPrefix: "yomi:captcha:login"})
 //	svc, err := captcha.New(store, captcha.Config{Driver: captcha.DriverDigit, Length: 4, TTL: 3 * time.Minute})
-//	challenge, err := svc.Generate(ctx) // 返回 challenge.ID 与 challenge.Image 给前端
+//	challenge, err := svc.Generate(ctx) // 返回 ID / Image / ExpiresIn 给前端
 //	err = svc.Verify(ctx, req.CaptchaID, req.CaptchaCode)
 //
 // # 安全不变量

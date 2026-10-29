@@ -170,6 +170,9 @@ func TestServiceGenerateAndVerify(t *testing.T) {
 			}
 			assertChallengeID(t, challenge.ID)
 			assertPNGDataURI(t, challenge.Image)
+			if challenge.ExpiresIn != 60 {
+				t.Fatalf("ExpiresIn = %d, 期望 60", challenge.ExpiresIn)
+			}
 
 			stored, ok := store.digest(challenge.ID)
 			if !ok || stored == "" {
@@ -237,8 +240,8 @@ func TestServiceAnswerDigest(t *testing.T) {
 	if !ok {
 		t.Fatal("Store 中未找到摘要")
 	}
-	if stored != answerDigest("AbCd") {
-		t.Fatalf("Store 存的值 = %q, 期望摘要 %q", stored, answerDigest("AbCd"))
+	if want := answerDigest(normalizeAnswer("AbCd")); stored != want {
+		t.Fatalf("Store 存的值 = %q, 期望摘要 %q", stored, want)
 	}
 	if stored == "AbCd" {
 		t.Fatal("明文答案不应写入 Store")
@@ -250,6 +253,22 @@ func TestServiceAnswerDigest(t *testing.T) {
 	}
 	if err := svc.Verify(ctx, id, "abcd"); !errors.Is(err, ErrExpired) {
 		t.Fatalf("成功后二次 Verify err = %v, 期望 ErrExpired", err)
+	}
+}
+
+// TestChallengeExpiresIn 验证有效期按 TTL 向下取整到秒
+func TestChallengeExpiresIn(t *testing.T) {
+	svc := &service{
+		driver: fixedDriver{id: "fixedid1234567890ab", answer: "1234"},
+		store:  newSpyStore(),
+		ttl:    90*time.Second + 500*time.Millisecond,
+	}
+	challenge, err := svc.Generate(context.Background())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if challenge.ExpiresIn != 90 {
+		t.Fatalf("ExpiresIn = %d, 期望 90", challenge.ExpiresIn)
 	}
 }
 
@@ -547,7 +566,7 @@ func TestServiceConcurrent(t *testing.T) {
 	answers := make([]string, total)
 	for i := range answers {
 		answers[i] = fmt.Sprintf("ans%02d", i)
-		store.setDigest(ids[i], answerDigest(answers[i]))
+		store.setDigest(ids[i], answerDigest(normalizeAnswer(answers[i])))
 	}
 
 	var wg sync.WaitGroup
@@ -584,30 +603,43 @@ func TestLineOptions(t *testing.T) {
 	}
 }
 
-// TestAnswerDigest 验证答案摘要的归一化与长度
+// TestNormalizeAnswer 验证答案归一化规则
+func TestNormalizeAnswer(t *testing.T) {
+	if got := normalizeAnswer("  abcd  "); got != "ABCD" {
+		t.Fatalf("normalizeAnswer = %q, 期望 ABCD", got)
+	}
+	if got := normalizeAnswer("1234"); got != "1234" {
+		t.Fatalf("数字答案不应改变: %q", got)
+	}
+	if got := normalizeAnswer("   "); got != "" {
+		t.Fatalf("纯空白答案应归一化为空: %q", got)
+	}
+}
+
+// TestAnswerDigest 验证摘要长度与稳定性
 func TestAnswerDigest(t *testing.T) {
-	if answerDigest("ABCD") != answerDigest(" abcd ") {
-		t.Fatal("大写与首尾空白应归一化为同一摘要")
+	digest := answerDigest(normalizeAnswer("abcd"))
+	if len(digest) != answerDigestLen {
+		t.Fatalf("摘要长度 = %d, 期望 %d", len(digest), answerDigestLen)
 	}
-	if answerDigest("abcd") == answerDigest("abce") {
-		t.Fatal("不同答案的摘要不应相同")
-	}
-	got := answerDigest("1234")
-	if len(got) != answerDigestLen {
-		t.Fatalf("摘要长度 = %d, 期望 %d", len(got), answerDigestLen)
-	}
-	if got == "1234" {
+	if digest == "abcd" || digest == "ABCD" {
 		t.Fatal("摘要不应等于明文")
+	}
+	if digest != answerDigest(normalizeAnswer(" ABCD ")) {
+		t.Fatal("归一化后相同的答案应得到相同摘要")
+	}
+	if digest == answerDigest(normalizeAnswer("abce")) {
+		t.Fatal("不同答案的摘要不应相同")
 	}
 }
 
 // TestEqualDigest 验证摘要比较
 func TestEqualDigest(t *testing.T) {
-	digest := answerDigest("abcd")
-	if !equalDigest(digest, answerDigest("ABCD")) {
+	digest := answerDigest(normalizeAnswer("abcd"))
+	if !equalDigest(digest, answerDigest(normalizeAnswer("ABCD"))) {
 		t.Fatal("同一答案的摘要应判等")
 	}
-	if equalDigest(digest, answerDigest("abce")) {
+	if equalDigest(digest, answerDigest(normalizeAnswer("abce"))) {
 		t.Fatal("不同答案的摘要不应判等")
 	}
 	if equalDigest(digest, digest[:len(digest)-1]) {

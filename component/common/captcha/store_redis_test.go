@@ -118,8 +118,8 @@ func TestRedisStoreNeverStoresPlaintext(t *testing.T) {
 	if raw == "9876" {
 		t.Fatal("Redis 中不应出现明文答案")
 	}
-	if raw != answerDigest("9876") {
-		t.Fatalf("Redis 值 = %q, 期望摘要 %q", raw, answerDigest("9876"))
+	if want := answerDigest(normalizeAnswer("9876")); raw != want {
+		t.Fatalf("Redis 值 = %q, 期望摘要 %q", raw, want)
 	}
 }
 

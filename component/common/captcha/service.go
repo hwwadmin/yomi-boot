@@ -22,8 +22,9 @@ const maxAnswerLen = 64
 
 // Challenge 表示一次验证码挑战
 type Challenge struct {
-	ID    string // ID 是校验时原样回传的标识；区分大小写
-	Image string // Image 是 data:image/png;base64,...，可直接作为 img src
+	ID        string // ID 是校验时原样回传的标识；区分大小写
+	Image     string // Image 是 data:image/png;base64,...，可直接作为 img src
+	ExpiresIn int    // ExpiresIn 是验证码剩余有效期（秒，按 TTL 向下取整），供前端做倒计时与提前刷新
 }
 
 // Service 表示验证码服务
@@ -84,7 +85,7 @@ func (s *service) Generate(ctx context.Context) (Challenge, error) {
 		return Challenge{}, err
 	}
 
-	return Challenge{ID: id, Image: image}, nil
+	return Challenge{ID: id, Image: image, ExpiresIn: int(s.ttl / time.Second)}, nil
 }
 
 // render 调用上游驱动生成 id、答案与图片；上游 panic 统一转 ErrGenerateFailed
@@ -97,7 +98,8 @@ func (s *service) render() (id, answer, image string, err error) {
 	}()
 
 	id, question, answer := s.driver.GenerateIdQuestionAnswer()
-	// id 必须与 Verify 用同一套校验，确保发出的验证码一定能被校验
+	// id 必须与 Verify 用同一套校验，确保发出的验证码一定能被校验；答案在此归一化，后续不再清洗
+	answer = normalizeAnswer(answer)
 	if !validID(id) || answer == "" || len(answer) > maxAnswerLen {
 		return "", "", "", errors.Sentinel(ErrGenerateFailed)
 	}
@@ -120,7 +122,7 @@ func (s *service) render() (id, answer, image string, err error) {
 // Verify 校验并消费验证码
 func (s *service) Verify(ctx context.Context, id, answer string) error {
 	id = strings.TrimSpace(id)
-	answer = strings.TrimSpace(answer)
+	answer = normalizeAnswer(answer)
 	if !validID(id) || answer == "" || len(answer) > maxAnswerLen {
 		return errors.Sentinel(ErrInvalidArgument)
 	}
@@ -159,10 +161,14 @@ func validID(id string) bool {
 	return true
 }
 
-// answerDigest 计算答案摘要：去首尾空白、统一大写后取 SHA-256 的小写十六进制
+// normalizeAnswer 归一化答案：去首尾空白并统一大写；生成与校验都只在入口调用一次
+func normalizeAnswer(answer string) string {
+	return strings.ToUpper(strings.TrimSpace(answer))
+}
+
+// answerDigest 计算已归一化答案的 SHA-256 摘要（小写十六进制）
 func answerDigest(answer string) string {
-	normalized := strings.ToUpper(strings.TrimSpace(answer))
-	sum := sha256.Sum256([]byte(normalized))
+	sum := sha256.Sum256([]byte(answer))
 	return hex.EncodeToString(sum[:])
 }
 
