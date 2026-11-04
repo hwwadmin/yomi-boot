@@ -30,7 +30,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.36
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.71.0
 	github.com/aws/smithy-go v1.27.8
-	github.com/coder/websocket v1.8.15
 	github.com/emmansun/gmsm v0.45.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/mojocn/base64Captcha v1.3.8
