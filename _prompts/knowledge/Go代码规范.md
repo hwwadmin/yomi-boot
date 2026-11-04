@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：作为 **github.com/hwwadmin/yomi-boot 本库及基于 github.com/hwwadmin/yomi-boot 的业务工程** Go 后端代码编写的补充规范，约束校验与编排分层、注入判空、接口实现编译期校验、Redis 访问收口和业务接口协议选型等常见问题。
-- **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md)、[Go异常规范](./Go异常规范.md) 及对应的事务、数据库、Redis 等规范。
+- **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md) 及对应的事务、Redis 等规范。
 - **适用对象**：github.com/hwwadmin/yomi-boot 本库相关封装，以及业务工程中 model、usecase、service、repository、handler 的编写与评审。
 
 ---
@@ -31,8 +31,6 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 定义 handler / usecase / contract / service / repository 分层与轻量 DDD-lite 建模 |
 | `_prompts/knowledge/Go架构规范.md` | 项目架构 | 定义 github.com/hwwadmin/yomi-boot、业务可部署单元与 bootstrap 装配 |
-| `_prompts/knowledge/Go注释规范.md` | 注释规范 | 约束 Go 代码注释口径 |
-| `_prompts/knowledge/Go异常规范.md` | 异常与出口 | Handler 经 Encoder 写出；不规定具体 JSON 形状 |
 
 ### 2.3 阅读建议
 
@@ -126,7 +124,7 @@ handler 的 `Routes` 方法也遵循同一原则：router 由 router 包在启�
 
 > **路由路径口径**：handler 的 `Routes` 内注册**相对路径**（**示例**：`/v1/{resource}/profile`），完整 URL = `router_prefix` + 相对路径。资源段使用**单数名词**。
 >
-> **领域写接口**：仅注册 Action/Compensate 成对路由，使用 `dtm.BindAndHandleAction` / `dtm.BindAndHandleCompensate`；**禁止** `handler.BindAndHandle` 暴露可被 BFF 直调的写接口。详见 [微服务调用规范](./微服务调用规范.md) §3.1.1。
+> **领域写接口**：仅注册 Action/Compensate 成对路由，使用 `dtm.BindAndHandleAction` / `dtm.BindAndHandleCompensate`；**禁止** `handler.BindAndHandle` 暴露可被 BFF 直调的写接口。见 [Go架构规范](./Go架构规范.md) §3.6。
 
 ```go
 // 正确：领域读接口（示例）
@@ -166,9 +164,9 @@ Key 命名、TTL 见 [Redis设计规范](./Redis设计规范.md)。
 | 场景 | 方法 | 规范 |
 | ---- | ---- | ---- |
 | **入口编排对外**（`router_prefix`，按端在配置中设置；**示例**：如管理端/App） | GET 或 POST | CDN/SEO 可用 GET；见 [Go架构规范](./Go架构规范.md) §3.6 |
-| **微服务间**（BFF→领域、DTM→领域） | **POST only** | 见 [微服务调用规范](./微服务调用规范.md) §3（权威） |
+| **微服务间**（BFF→领域、DTM→领域） | **POST only** | 见 [Go架构规范](./Go架构规范.md) §3.6 |
 
-业务对外接口主输入约定见 [Go架构规范](./Go架构规范.md) §3.6；出口编码见 [Go异常规范](./Go异常规范.md) §3.3。
+业务对外接口主输入约定见 [Go架构规范](./Go架构规范.md) §3.6；出口经已注册 Encoder 写出。
 
 ```go
 // 正确：业务接口使用 POST + JSON body（Routes 内为相对路径；示例资源）
@@ -206,7 +204,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 - BFF 经 `github.com/hwwadmin/yomi-boot/component/common/token` 解析 Claims 后，按下游接口 DTO **按需**写入业务字段。
 - 登出等无 Body 场景：`platformhandler.HandleVoid(c, revokeFn)`。
 
-分页 usecase 入参嵌入 `dto.PageInput`，出参结构体**内嵌** `dto.PageOutput[TItem]`（见 §3.3.2）；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页辅助方法见 [Go数据库规范](./Go数据库规范.md) §3.2.2。
+分页 usecase 入参嵌入 `dto.PageInput`，出参结构体**内嵌** `dto.PageOutput[TItem]`（见 §3.3.2）；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页查询用 `orm.ApplyPage` / `CountPage`（`github.com/hwwadmin/yomi-boot/component/common/db/orm`）。
 
 用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（boot 未指定 `Options.ResponseEncoder` 时默认注册预制实现；低层启动路径须显式 `MustRegister`）。
 

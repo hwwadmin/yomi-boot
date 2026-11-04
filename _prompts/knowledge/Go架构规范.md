@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：说明 github.com/hwwadmin/yomi-boot 的能力边界、部署形态无关性与可部署单元服务类型；约定基于 github.com/hwwadmin/yomi-boot 的进程装配、中间件链与 HTTP 路由模式。
-- **边界**：入口编排目录与跨域约束见本规范 §3.1.3、§3.2.1；入口编排分层与协作见 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务与 DTM Saga 见 [Go事务规范](./Go事务规范.md)；微服务间契约见 [微服务调用规范](./微服务调用规范.md)（**信封与幂等权威**）；**文件命名**见 [Go文件命名规范](./Go文件命名规范.md)；**数据访问**见 [Go数据库规范](./Go数据库规范.md)；**配置加载、扩展与能力裁剪**见 [Go配置规范](./Go配置规范.md)。
+- **边界**：入口编排目录与跨域约束见本规范 §3.1.3、§3.2.1；入口编排分层与协作见 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务与 DTM Saga 见 [Go事务规范](./Go事务规范.md)；**表结构与 DDL**见 [数据库表设计规范](./数据库表设计规范.md)；**配置加载、扩展与能力裁剪**见本规范 §3.4、§3.4.5。
 - **适用对象**：github.com/hwwadmin/yomi-boot 库本身，以及基于 github.com/hwwadmin/yomi-boot 的业务工程与可部署单元。业务工程为独立仓库，通过标准 `require github.com/hwwadmin/yomi-boot` 依赖本库；本库仓库内不包含业务服务代码。
 
 ---
@@ -37,16 +37,12 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 入口编排与领域各层职责、跨域协作 |
 | `_prompts/knowledge/Go事务规范.md` | 事务 | 本地子事务与 DTM Saga |
-| `_prompts/knowledge/微服务调用规范.md` | 微服务契约 | POST/JSON、Header 链路 ID、Body 信封 bizId/bizSubId |
-| `_prompts/knowledge/Go异常规范.md` | 对外 API 出口 | Handler 经 Encoder 写出；显式 `MustRegister` |
-| `_prompts/knowledge/Go数据库规范.md` | 数据访问 | repository 与 GORM 规范 |
-| `_prompts/knowledge/Go配置规范.md` | 配置 | Section 注册、严格根 key、业务扩展、**能力按需裁剪（enabled）** |
+| `_prompts/knowledge/数据库表设计规范.md` | 表结构 | 表命名、审计字段、DDL |
 | `_prompts/knowledge/Redis设计规范.md` | Redis | 令牌 Store 键设计 |
-| `_prompts/knowledge/Go注释规范.md` | 注释 | 代码注释口径 |
 
 ### 2.3 阅读建议
 
-- 先理解 github.com/hwwadmin/yomi-boot 能力边界：读 §3.1.0（部署形态无关 / 配置裁剪）与 [Go配置规范](./Go配置规范.md) 能力裁剪章节。
+- 先理解 github.com/hwwadmin/yomi-boot 能力边界：读 §3.1.0（部署形态无关 / 配置裁剪）与 §3.4.5（能力按需启用）。
 - 理解可部署服务类型：读 §3.1.2～§3.1.4 与 §3.2.1；入口编排分层与跨域协作再读 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5。
 - 装配与路由：读 §3.3 github.com/hwwadmin/yomi-boot 职责、§3.4 启动装配、§3.4.5 按需启用、§3.6 路由与中间件。
 - 建立门禁：读 §4 检查清单与 §5 禁止项（按服务类型与形态裁剪适用）。
@@ -61,7 +57,7 @@
 
 - github.com/hwwadmin/yomi-boot 是**能力库 + 插件生命周期**，不是「必须微服务」的运行时。
 - 插件在 `plugin/builtin` 根包中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `plugin/builtin/plugins.go` 与 `plugin/builtin/{lib}`）。
-- 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见 [Go配置规范](./Go配置规范.md)「能力按需裁剪」与本文 §3.4.5。
+- 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见本文 §3.4.5。
 - 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 github.com/hwwadmin/yomi-boot 的唯一用法。
 - 单体形态下：可无 Consul/DTM/Kafka/Redis Stream；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
 
@@ -199,7 +195,7 @@ services/{domain}/
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `captcha` | 图形验证码（基于 `mojocn/base64Captcha`）：`New`/`MustNew`，digit/string/math 三种驱动；`Generate` 只返回 id、data URI 与有效期秒数（`ExpiresIn`），答案归一化后只以 SHA-256 摘要写 Store（明文不落存储）；`Verify` 原子消费、一次性校验（错答案同样消费）；内置只提供 Redis 存储（多实例可直接用），TTL 由 Redis 保证；Store 故障失败关闭；不返回答案、不进插件链、不读 YAML、不做限流 |
 | `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Runner`/`Executor` 契约、`LocalRunner` 实现、Context 事务传递）、`db/dbtest` |
-| `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [微服务调用规范](./微服务调用规范.md) §3.4 |
+| `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [Go事务规范](./Go事务规范.md) §4.7、§5.5 |
 | `event` | 可选 Outbox/Inbox 事件组件（`outbox_enabled` / `inbox_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
 | `router` | `Registrar` 接口与路由注册 |
 | `handler` | `BindAndHandle` 等协议适配 |
@@ -239,7 +235,7 @@ services/{domain}/
 | `cors` | 跨域中间件 |
 | `logger` | 日志初始化与配置；`MustInit` Fail Fast；字段/正文脱敏经注入的 `masking` 服务（`log.mask_sensitive` 控制，默认 true） |
 | `masking` | 统一脱敏服务：字段名匹配（contains/exact）+ 策略应用（redact/keep_edges/phone/idcard/bankcard/email/name + 业务注册自定义），logger / httprecord / 业务出参共用；规则唯一来源是 `masking` 段配置，引擎零内置规则；安全不变量：命中即变、形状不符降级 placeholder；`masking.MustRegisterStrategy` 须在 boot.Run 前注册；YAML 绑定与插件在 `plugin/builtin/masking`，业务经 `maskingplugin.From(slot).Service()` 或 `masking.Current()` 调用 |
-| `config` | 配置加载抽象（Section/Registry/Config）、严格根 key、环境变量展开；`LoadConfig` / `MustLoadConfig` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
+| `config` | 配置加载抽象（Section/Registry/Config）、严格根 key、环境变量展开；`LoadConfig` / `MustLoadConfig` Fail Fast；业务段经 `PluginOptions.AddConfigSection` 追加；见 §3.4.2 |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
@@ -258,11 +254,11 @@ services/{domain}/
 
 #### 3.4.1 Fail Fast 约定
 
-启动 / 运行 / 关闭三阶段异常策略以 [Go异常规范](./Go异常规范.md) §3.5 为准。本文仅强调装配侧：
+装配侧 Fail Fast：
 
 - 配置加载、插件 `Init`、HTTP 装配失败走启动 Fail Fast（log + panic）；插件 `Init` 失败时由 `PluginSlot` 逆序回滚已初始化插件，再由 `boot.MustInit` panic。
 - 各 github.com/hwwadmin/yomi-boot 库对外提供 `Must*` 包装（如 `config.MustLoadConfig`）；构造函数内部假定入参已校验。
-- HTTP 请求路径的 `error` 传播与 Recovery 见 Go异常规范。
+- HTTP 请求路径的业务 `error` 经已注册 Encoder 写出；panic 由中间件链 Recovery 捕获。
 
 #### 3.4.2 启动链路
 
@@ -426,7 +422,7 @@ Consul 的注销发生在 `OnDraining`，不在 `Close`。
 | 大单体 | 上栏 + 按需 `redis` 幂等/锁、`cronjob` | 无跨进程时不必开 `consul`/`dtm`；异步消息有需求再开 `kafka` 或 `redis_stream` |
 | 分布式微服务 | `db`/`redis`/`consul`；入口编排开 `token`；跨域写开 `dtm`；异步按需 `kafka`/`redis_stream`/`event` | 按服务类型裁剪（领域通常关 `token`） |
 
-说明：开关名以各配置段为准（如 `db.enabled`、`token.enabled`、`consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
+说明：开关名以各配置段为准（如 `db.enabled`、`token.enabled`、`consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪以本节及 §3.1.0 为准。
 
 ### 3.5 业务工程依赖 github.com/hwwadmin/yomi-boot
 
@@ -453,10 +449,10 @@ require github.com/hwwadmin/yomi-boot v1.0.0
 
 - 入口编排 handler 注册**相对路径**，完整 URL = `http.router_prefix` + 相对路径。
 - **入口编排对外主输入**：默认推荐 **POST + JSON Body**；允许 GET（CDN/SEO）。若 GET 仅用 Query 承载主输入，须在该接口契约中**显式约定**（非默认）。
-- 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。详见 [微服务调用规范](./微服务调用规范.md) §3.1.1。
+- 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。
 - 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`github.com/hwwadmin/yomi-boot/component/core/traceid`），**不在** JSON Body 信封中传递。
-- 微服务间请求/响应契约见 [微服务调用规范](./微服务调用规范.md) §3（权威）。
-- 对外出口经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定（**不**规定 HTTP 方法；方法以本节约定为准），见 [Go异常规范](./Go异常规范.md) §3.3。
+- 微服务间强制 POST + JSON；对内信封由领域 client 解析，**不**走 Encoder。
+- 对外出口经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定（**不**规定 HTTP 方法；方法以本节约定为准）。
 - 路径中资源段使用**单数名词**，禁止无意义复数。
 
 ### 3.7 中间件链
@@ -473,9 +469,9 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → Recovery �
 - `token.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。
 - `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `github.com/hwwadmin/yomi-boot/component/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
-- 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [Go异常规范](./Go异常规范.md) §3.3。
-- 领域**读**（微服务间）：对内信封与 HTTP 状态见 [微服务调用规范](./微服务调用规范.md) §3.3.1。
-- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`github.com/hwwadmin/yomi-boot/component/cloud/dtm`）。
+- 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定。
+- 领域**读**（微服务间）：对内信封由领域 client 解析，HTTP 200，**不**调用 Encoder。
+- 领域 **DTM Action/Compensate**：经 `dtm.BindAndHandleAction/Compensate`；见 [Go事务规范](./Go事务规范.md) §5。
 
 ### 3.8 pprof 排障
 
@@ -613,7 +609,7 @@ kafka: ...
 - [ ] 消息/平台消费的业务逻辑在可部署单元自定义插件中实现；github.com/hwwadmin/yomi-boot 仅提供消费端点
 - [ ] 分布式形态：领域进程无跨域 HTTP、无 token 中间件
 - [ ] 入口编排含 `handler/`、`bff/`、`saga/`（若属该服务类型）
-- [ ] 跨进程契约符合 [微服务调用规范](./微服务调用规范.md) §3（若启用）
+- [ ] 跨进程调用强制 POST + JSON；链路 ID 走 Header `X-Trace-ID`（若启用）
 - [ ] 链路 ID 经 Header `X-Trace-ID` 传播，非 Body 字段
 - [ ] 启用 DTM 时 Action/Compensate 路由成对，补偿路由为正向路由 + `/compensate`
 - [ ] 业务分层符合 [Go业务分层规范](./Go业务分层规范.md)

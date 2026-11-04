@@ -16,8 +16,8 @@
 - **用途**：回答写路径上的四个问题：要不要开事务、边界画在哪、事务闭包内放什么/放多久、跨服务时用什么一致性手段。
 - **边界**：
   - Saga 编排、BFF 写入口、领域 client 见 [Go架构规范](./Go架构规范.md) §3.2.1 与 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5。
-  - 微服务信封、`bizId`/`bizSubId`、业务幂等与 DTM 分工以 [微服务调用规范](./微服务调用规范.md) §3.4、§5 为唯一权威，本文只讲事务形态的配合，不重复展开。
-  - repository 的 GORM 写法与 `tx.Exec` 事务感知见 [Go数据库规范](./Go数据库规范.md)。
+  - 业务幂等与 DTM barrier 分工见本文 §5.5；Saga 编排见 [Go架构规范](./Go架构规范.md) §3.2.1 与 [Go业务分层规范](./Go业务分层规范.md) §3.5。
+  - repository 经 `tx.Exec(ctx, r.DB)` 感知事务；GORM 执行器位于 `github.com/hwwadmin/yomi-boot/component/common/db/tx`。
   - `tx.Runner`/`tx.Executor` 实现位于 `github.com/hwwadmin/yomi-boot/component/common/db/tx`；DTM 集成位于 `github.com/hwwadmin/yomi-boot/component/cloud/dtm`。
 - **适用对象**：领域写 usecase/service/repository 的设计者、BFF `saga/` 实现者、DTM 分支 Handler、基础设施组件作者与评审者。
 
@@ -37,16 +37,12 @@
 | 文档 | 关联点 |
 | ---- | ------ |
 | [Go架构规范](./Go架构规范.md) | 入口编排目录、`saga/` 提交 Saga |
-| [Go业务分层规范](./Go业务分层规范.md) | payload 与补偿快照、跨域协作 |
-| [微服务调用规范](./微服务调用规范.md) | 信封、`bizId`/`bizSubId`、业务幂等、DTM 分支契约（权威） |
-| [Go业务分层规范](./Go业务分层规范.md) | handler/usecase/domain/service/repo 分层 |
-| [Go数据库规范](./Go数据库规范.md) | repository 事务感知、`tx.Exec` |
-| [Go异常规范](./Go异常规范.md) | 事务内异常与错误码 |
+| [Go业务分层规范](./Go业务分层规范.md) | payload 与补偿快照、跨域协作；handler/usecase/domain/service/repo 分层 |
 
 ### 2.3 阅读路径
 
 - 只写本服务数据库：读 §3、§4。
-- 跨服务/跨库写：读 §3、§5；Saga 的编排与信封细节见 [Go架构规范](./Go架构规范.md) §3.2.1、[Go业务分层规范](./Go业务分层规范.md) §3.5 与 [微服务调用规范](./微服务调用规范.md)。
+- 跨服务/跨库写：读 §3、§5；Saga 编排见 [Go架构规范](./Go架构规范.md) §3.2.1、[Go业务分层规范](./Go业务分层规范.md) §3.5。
 
 ---
 
@@ -212,7 +208,7 @@
 - **锁顺序**：多行/多表加锁按固定顺序，降低死锁概率。
 - **死锁/锁等待超时**：重试整个事务闭包，不重试单条语句；闭包必须可重入（幂等或先查后写安全）。
 - **重试边界**：重试次数、退避和超时由调用方决定；不要在事务闭包内 sleep 重试。
-- **幂等**：写入口的幂等要求以《微服务调用规范》§3.4 为准；本文只强调幂等记录必须与业务写在同一个事务里提交（见 §4.7）。
+- **幂等**：写入口用 `idempotency.Execute`；幂等记录必须与业务写在同一个事务里提交（见 §4.7）。
 
 ### 4.6 传播、嵌套与自治事务
 
@@ -232,7 +228,7 @@
 
 ### 4.7 与幂等、缓存、消息的组合
 
-- **幂等**：`idempotency.Execute` 必须是写路径最外层事务边界（要求 ctx 尚未绑定同源事务）；已在事务内时用 `ExecuteInTx`，它跟随外层事务、不写结果缓存。DTM barrier 分支用 `Execute`（barrier 的 `InTx` 为 false），分支内幂等由 `sys_barrier` 承担。细则以《微服务调用规范》§3.4 为准。
+- **幂等**：`idempotency.Execute` 必须是写路径最外层事务边界（要求 ctx 尚未绑定同源事务）；已在事务内时用 `ExecuteInTx`，它跟随外层事务、不写结果缓存。DTM barrier 分支用 `Execute`（barrier 的 `InTx` 为 false），分支内幂等由 `sys_barrier` 承担。
 - **缓存**：DB 提交后再更新/删除缓存；不要在事务闭包内写 Redis，也不要假设缓存与事务原子。幂等 Guard 的 Redis 锁/结果缓存由组件在事务闭包外管理，不违反此条。
 - **消息**：需要"DB 写 + 消息"同生共死时，用 outbox 在同一事务内写业务表和 outbox 表，提交后异步投递；消费侧用 inbox/幂等表去重。
 - **审计/日志**：必须随业务回滚的审计写放同一事务；失败也要留痕的审计用自治事务，并接受它不随主事务回滚。
@@ -254,9 +250,9 @@ if err != nil {
 ```
 
 - `runner` 类型为 `tx.Runner`；本地事务用 `tx.Executor`（如 `dbplugin.FromTx(slot).Executor()`），Saga 分支用 `dtmplugin.From(slot).Runner()`。
-- 需要写事务的用例通过构造函数注入 `tx.Runner`；按《微服务调用规范》§3.4 需要幂等的写入口再注入 `*idempotency.Guard`。不要写死具体实现。
+- 需要写事务的用例通过构造函数注入 `tx.Runner`；需要幂等的写入口再注入 `*idempotency.Guard`。不要写死具体实现。
 - `plugin/builtin/dtm` 在 `dtm.enabled=true` 且 db 插件可用时构造 Saga Runner；未启用时 `Runner()` 返回 nil，由装配层决定是否 Fail Fast。`dtm.barrier_table` 默认 `sys_barrier`。
-- 可重试写入口在外层使用 `idempotency.Execute(guard, runner, ctx, key, fn)`；事务由 `runner` 开启，幂等记录与业务写同事务提交（细则见《微服务调用规范》§3.4）。
+- 可重试写入口在外层使用 `idempotency.Execute(guard, runner, ctx, key, fn)`；事务由 `runner` 开启，幂等记录与业务写同事务提交。
 - repository 通过 `tx.Exec(ctx, r.DB)` 感知事务；方法签名不含 `*gorm.DB`。
 - 业务结果通过闭包变量捕获；不要在闭包内组装 HTTP Output。
 - 纯查询不包裹事务。
@@ -304,7 +300,7 @@ domain / repo        无感知 DTM
 ```
 
 - BFF 是 Saga 的唯一编排方：负责前置校验、生成 `bizId`/`bizSubId`、组装补偿快照、提交 Saga；不操作领域 DB，不实现领域补偿。
-- 领域 Handler 提供成对的 Action/Compensate 独立入口，路由与信封细则见《微服务调用规范》§3.1.1、§3.3.2；本文不重复。
+- 领域 Handler 提供成对的 Action/Compensate 独立入口，路由见 [Go架构规范](./Go架构规范.md) §3.6。
 - 领域 usecase 的 `Execute`/`Compensate` 同文件、同 struct；两者都通过 `idempotency.Execute` + `tx.Runner` 包裹，配合 barrier 保证幂等与防悬挂。
 - 只读 usecase 不提供 `Compensate`；`Compensate` 不得拆到独立文件或 `compensate/` 目录。
 - 补偿快照（如 `PreviousStatus`）由 BFF 前置查询写入 Input；领域 Compensate 不反查其他服务。
@@ -325,7 +321,7 @@ domain / repo        无感知 DTM
 | 业务幂等 | `(biz_id, biz_sub_id)` + `sys_biz` | 防止同一次领域写调用被重复执行（重试、超时重放） | DTM barrier |
 | DTM barrier | `gid` + `sys_barrier` | 防止同一 Saga 分支回调重复执行、防悬挂 | 业务幂等 |
 
-- 业务幂等的键、生成方、`operation_type`、`Execute`/`ExecuteInTx` 的形态约束，以《微服务调用规范》§3.4 为唯一权威；本文只强调：
+- 业务幂等的键、生成方、`operation_type`、`Execute`/`ExecuteInTx` 的形态约束：
   - `Execute` 只能做最外层事务边界；已在事务内用 `ExecuteInTx`；barrier 分支用 `Execute`。
   - 分支提交 ≠ 全局提交；幂等键不得跨全局事务复用。
   - DTM 重试同一分支时，`bizId`、`bizSubId` 必须与首次一致。
