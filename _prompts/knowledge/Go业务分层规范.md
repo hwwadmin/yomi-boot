@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：约束入口编排（`handler/bff/saga`，经 client 契约模块调用下游）与领域（`handler/usecase/domain/repo`）各层职责、依赖方向与跨域协作规则。
-- **边界**：可部署服务类型与目录模式见 [Go架构规范](./Go架构规范.md) §3.2.1；入口编排分层与跨域协作见本规范 §3.3、§3.5；事务与写幂等见 [Go事务规范](./Go事务规范.md)。
+- **边界**：可部署服务类型与目录模式见 [Go架构规范](./Go架构规范.md) §3.2.1；入口编排分层与跨域协作见本规范 §3.3、§3.5；本地事务见 [Go事务规范](./Go事务规范.md)。
 - **适用对象**：基于 github.com/hwwadmin/yomi-boot 的入口编排与领域可部署单元（含单体中对应模块）内业务代码的新增、重构与评审。
 
 ---
@@ -31,7 +31,7 @@
 | 文档 | 关联点 |
 | ---- | ------ |
 | [Go架构规范](./Go架构规范.md) | 目录与模块划分（含 §3.2.1 入口编排） |
-| [Go事务规范](./Go事务规范.md) | usecase 本地子事务与 Compensate |
+| [Go事务规范](./Go事务规范.md) | 要不要开事务、边界、闭包内容与时长 |
 | [数据库表设计规范](./数据库表设计规范.md) | 表结构与 Model 字段对齐 |
 | [Go代码规范](./Go代码规范.md) | 校验分层、依赖注入 |
 
@@ -71,7 +71,7 @@ handler/                         biz/handler/
 | 读 token / 鉴权 | ✓ github.com/hwwadmin/yomi-boot/component/common/token | ✗ |
 | 只读聚合 | ✓ bff | ✗ |
 | DTM Saga 提交 | ✓ saga | ✗ |
-| 本地 DB 事务 | ✗ | ✓ 典型为 usecase（按原子动作归属，见 Go事务规范 §3.4） |
+| 本地 DB 事务 | ✗ | ✓ 典型为 usecase（按原子动作归属，见 [Go事务规范](./Go事务规范.md)） |
 | DTM 子事务 Execute/Compensate | ✗ | ✓ usecase |
 | 领域规则 | ✗ | ✓ domain/service |
 
@@ -100,8 +100,8 @@ handler/                         biz/handler/
 - `api_types.go` 将 `{client}/{domain}/dto` 类型别名为本服务 Input/Output，避免重复定义 wire DTO。
 - **硬约束**：一个 usecase 文件仅一个用例 struct、仅一个 `Execute`；参与 Saga 的写用例在**同文件**仅增加一个对应的 `Compensate`；**禁止** `*_usecases.go` 等多用例合文件。
 - 通过 Input 获取各接口 DTO 声明的业务字段（如按需 `operatorId`、`targetUserId`），**不**从 Context 解析身份。
-- 写用例通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹业务逻辑；细则见 [Go事务规范](./Go事务规范.md) §4.7、§5.5。
-- 事务边界与开启点见 [Go事务规范](./Go事务规范.md) §3.4、§4、§5；开启点按原子业务动作归属，usecase 是典型而非强制。
+- 写用例通过 `idempotency.Execute(guard, txRunner, ctx, key, fn)` 包裹业务逻辑。
+- 事务边界与开启点见 [Go事务规范](./Go事务规范.md)；开启点按原子业务动作归属，usecase 是典型而非强制。
 - **禁止**跨域编排；**禁止**调用其他领域 HTTP；**禁止** usecase 互调。
 
 #### 3.4.3 domain/contract/
@@ -120,7 +120,7 @@ handler/                         biz/handler/
 - 接口：`repo/contract/{域}/{module}_repo_contract.go`。
 - 实现：`repo/db/{域}/` 含 `{module}_repo.go`、`{module}_model.go`、`{module}_mapper.go`。
 - 只负责数据存取；通过 `tx.Exec(ctx, r.DB)` 感知事务。
-- **禁止**业务规则；默认不自行开启事务，事务边界按原子业务动作归属（见 [Go事务规范](./Go事务规范.md) §3.4）。
+- **禁止**业务规则；默认不自行开启事务，事务边界按原子业务动作归属（见 [Go事务规范](./Go事务规范.md)）。
 
 #### 3.4.6 internal/bizerr/
 

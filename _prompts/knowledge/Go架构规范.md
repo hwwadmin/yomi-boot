@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：说明 github.com/hwwadmin/yomi-boot 的能力边界、部署形态无关性与可部署单元服务类型；约定基于 github.com/hwwadmin/yomi-boot 的进程装配、中间件链与 HTTP 路由模式。
-- **边界**：入口编排目录与跨域约束见本规范 §3.1.3、§3.2.1；入口编排分层与协作见 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务与 DTM Saga 见 [Go事务规范](./Go事务规范.md)；**表结构与 DDL**见 [数据库表设计规范](./数据库表设计规范.md)；**配置加载、扩展与能力裁剪**见本规范 §3.4、§3.4.5。
+- **边界**：入口编排目录与跨域约束见本规范 §3.1.3、§3.2.1；入口编排分层与协作见 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务见 [Go事务规范](./Go事务规范.md)；**表结构与 DDL**见 [数据库表设计规范](./数据库表设计规范.md)；**配置加载、扩展与能力裁剪**见本规范 §3.4、§3.4.5。
 - **适用对象**：github.com/hwwadmin/yomi-boot 库本身，以及基于 github.com/hwwadmin/yomi-boot 的业务工程与可部署单元。业务工程为独立仓库，通过标准 `require github.com/hwwadmin/yomi-boot` 依赖本库；本库仓库内不包含业务服务代码。
 
 ---
@@ -36,7 +36,7 @@
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 入口编排与领域各层职责、跨域协作 |
-| `_prompts/knowledge/Go事务规范.md` | 事务 | 本地子事务与 DTM Saga |
+| `_prompts/knowledge/Go事务规范.md` | 事务 | 要不要开、边界、闭包内容与时长 |
 | `_prompts/knowledge/数据库表设计规范.md` | 表结构 | 表命名、审计字段、DDL |
 | `_prompts/knowledge/Redis设计规范.md` | Redis | 令牌 Store 键设计 |
 
@@ -195,7 +195,7 @@ services/{domain}/
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `captcha` | 图形验证码（基于 `mojocn/base64Captcha`）：`New`/`MustNew`，digit/string/math 三种驱动；`Generate` 只返回 id、data URI 与有效期秒数（`ExpiresIn`），答案归一化后只以 SHA-256 摘要写 Store（明文不落存储）；`Verify` 原子消费、一次性校验（错答案同样消费）；内置只提供 Redis 存储（多实例可直接用），TTL 由 Redis 保证；Store 故障失败关闭；不返回答案、不进插件链、不读 YAML、不做限流 |
 | `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Runner`/`Executor` 契约、`LocalRunner` 实现、Context 事务传递）、`db/dbtest` |
-| `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB）；细则见 [Go事务规范](./Go事务规范.md) §4.7、§5.5 |
+| `idempotency` | `sys_biz` 模型、仓储、`Guard`、`Execute`；三层幂等（Redis + 锁 + DB） |
 | `event` | 可选 Outbox/Inbox 事件组件（`outbox_enabled` / `inbox_enabled` 任一为 true 时由插件启动）；发布侧 `eventId` 必须全局唯一（建议雪花），消费侧按 `(service_name, event_id)` 幂等 |
 | `router` | `Registrar` 接口与路由注册 |
 | `handler` | `BindAndHandle` 等协议适配 |
@@ -471,7 +471,7 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → Recovery �
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定。
 - 领域**读**（微服务间）：对内信封由领域 client 解析，HTTP 200，**不**调用 Encoder。
-- 领域 **DTM Action/Compensate**：经 `dtm.BindAndHandleAction/Compensate`；见 [Go事务规范](./Go事务规范.md) §5。
+- 领域 **DTM Action/Compensate**：经 `dtm.BindAndHandleAction/Compensate`。
 
 ### 3.8 pprof 排障
 
