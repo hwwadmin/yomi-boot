@@ -3,7 +3,7 @@
 // @author zwei
 package idempotency
 
-import "gitee.com/hq_project/yomi-boot/component/common/db/orm"
+import "github.com/hwwadmin/yomi-boot/component/common/db/orm"
 
 // 处理状态
 const (

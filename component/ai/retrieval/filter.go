@@ -7,7 +7,7 @@ package retrieval
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
 )
 
 // HitFilter 检索后置过滤器：对阈值过滤后的命中叠加域语义过滤（如文档版本治理、

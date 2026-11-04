@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/cloud/rpc"
+	"github.com/hwwadmin/yomi-boot/component/cloud/rpc"
 )
 
 // TestTestRpcService_Invoke 验证测试桩透传参数与零值可用

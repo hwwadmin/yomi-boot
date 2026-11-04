@@ -6,8 +6,8 @@ package dbplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
 const TxName = "tx"

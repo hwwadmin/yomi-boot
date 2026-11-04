@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // PublishWorkerConfig 表示 Kafka 异步发布专用工作池配置

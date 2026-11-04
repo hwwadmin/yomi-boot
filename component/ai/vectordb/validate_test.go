@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestNormalizeCollectionName 覆盖修剪、合法字符与长度边界

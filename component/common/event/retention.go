@@ -7,13 +7,13 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
-	"gitee.com/hq_project/yomi-boot/component/common/roundrobin"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	"github.com/hwwadmin/yomi-boot/component/common/roundrobin"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // RetentionCleaner 按配置清理发件箱/收件箱过期数据

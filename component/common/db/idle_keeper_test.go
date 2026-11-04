@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
 )
 
 func TestMaintainInterval(t *testing.T) {

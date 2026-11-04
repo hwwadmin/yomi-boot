@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // defaultAsyncQueueSize 是每个异步 sink 的默认队列容量（条数）

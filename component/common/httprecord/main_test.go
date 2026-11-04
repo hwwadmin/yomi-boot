@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gitee.com/hq_project/yomi-boot/component/core/response"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
 )
 
 // testResponseEncoder 测试用响应编码器：按 {code,msg} 形状解析业务码

@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )

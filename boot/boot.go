@@ -10,13 +10,13 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
-	"gitee.com/hq_project/yomi-boot/boot/server"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/response"
-	"gitee.com/hq_project/yomi-boot/component/core/router"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	"gitee.com/hq_project/yomi-boot/plugin/builtin"
+	"github.com/hwwadmin/yomi-boot/boot/lifecycle"
+	"github.com/hwwadmin/yomi-boot/boot/server"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/plugin/builtin"
 
 	"github.com/gin-gonic/gin"
 )

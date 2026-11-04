@@ -3,7 +3,7 @@ package ed25519
 import (
 	stded25519 "crypto/ed25519"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ErrVerify 表示签名校验失败

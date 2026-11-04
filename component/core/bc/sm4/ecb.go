@@ -5,8 +5,8 @@ import (
 
 	gmsm4 "github.com/emmansun/gmsm/sm4"
 
-	"gitee.com/hq_project/yomi-boot/component/core/bc/internal/pkcs7"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/bc/internal/pkcs7"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ECB SM4-ECB + PKCS7（仅遗留对接；新业务与网络场景禁止）

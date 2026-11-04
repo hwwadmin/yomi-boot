@@ -11,13 +11,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake/snowflaketest"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 	"gorm.io/gorm"
 )
 

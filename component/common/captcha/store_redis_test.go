@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"

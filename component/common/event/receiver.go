@@ -8,18 +8,18 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 )
 
 // Receiver 幂等消息队列事件接收器；消费侧按 (ServiceName, EventID) 去重，要求发布侧 EventID 全局唯一

@@ -1,20 +1,20 @@
 // Package bc 提供密码学基础设施能力簇（Core Crypto）。
 //
 // 子包一览：
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/passwd：密码单向哈希与校验（bcrypt，≤72 字节）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/random：密码学安全随机数
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/hash：MD5 / SHA-1（遗留兼容）/ SHA-256 / SHA-512 摘要（禁止用于密码）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/sm3：SM3 摘要（国密；禁止用于密码）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/hmacsha：HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/aes：AES-GCM（推荐，支持 AAD）/ AES-CBC / AES-ECB（仅遗留，新业务禁止）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/sm4：SM4-GCM（推荐，支持 AAD）/ SM4-CBC / SM4-ECB（仅遗留，国密）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/rsa：RSA PEM（PKIX/PKCS#1 公钥、证书、带密码私钥）、OAEP 加解密
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/sha256withrsa：SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/rsapss：RSASSA-PSS + SHA-256 签名验签
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/ecdsap256：ECDSA P-256 + SHA-256 签名验签与密钥 PEM（JWT ES256）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/ecdsap384：ECDSA P-384 + SHA-384 签名验签与密钥 PEM（JWT ES384）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/ed25519：Ed25519 签名验签与密钥 PEM（JWT EdDSA）
-//   - gitee.com/hq_project/yomi-boot/component/core/bc/sm2：SM2 PEM、加解密、签名验签（国密）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/passwd：密码单向哈希与校验（bcrypt，≤72 字节）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/random：密码学安全随机数
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/hash：MD5 / SHA-1（遗留兼容）/ SHA-256 / SHA-512 摘要（禁止用于密码）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/sm3：SM3 摘要（国密；禁止用于密码）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/hmacsha：HMAC-SHA1（遗留）/ HMAC-SHA256 / HMAC-SHA512 消息认证
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/aes：AES-GCM（推荐，支持 AAD）/ AES-CBC / AES-ECB（仅遗留，新业务禁止）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/sm4：SM4-GCM（推荐，支持 AAD）/ SM4-CBC / SM4-ECB（仅遗留，国密）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/rsa：RSA PEM（PKIX/PKCS#1 公钥、证书、带密码私钥）、OAEP 加解密
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/sha256withrsa：SHA256withRSA（PKCS#1 v1.5 + SHA-256）签名验签
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/rsapss：RSASSA-PSS + SHA-256 签名验签
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/ecdsap256：ECDSA P-256 + SHA-256 签名验签与密钥 PEM（JWT ES256）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/ecdsap384：ECDSA P-384 + SHA-384 签名验签与密钥 PEM（JWT ES384）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/ed25519：Ed25519 签名验签与密钥 PEM（JWT EdDSA）
+//   - github.com/hwwadmin/yomi-boot/component/core/bc/sm2：SM2 PEM、加解密、签名验签（国密）
 //
 // 红线：
 //   - 不输出业务 BizCode；不承载密码强度等业务规则。

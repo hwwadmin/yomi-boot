@@ -6,9 +6,9 @@ package event
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 )
 
 // NormalReceiver 普通消息事件接收器，允许重复消费与消息丢失

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 )
 
 // ptrTime 返回时间指针，便于构造测试数据

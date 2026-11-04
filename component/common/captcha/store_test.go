@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // testDigest 返回 Store 契约测试使用的合法答案摘要

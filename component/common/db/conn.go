@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"

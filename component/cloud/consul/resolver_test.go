@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // newHealthAgent 伪装 Consul Agent 健康查询，entriesByService 为服务名到响应 JSON 的映射，

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 )
 
 // HttpRpcClient 基于 HTTP 的 RpcService 实现

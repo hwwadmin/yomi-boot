@@ -4,7 +4,7 @@
 
 package generation
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 var (
 	// ErrInvalidArgument 请求未通过本包契约校验

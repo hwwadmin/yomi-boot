@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
 )
 
 // TestOutboxDlqRepoInsertUpdateDelete 验证死信的插入、全量更新与硬删除

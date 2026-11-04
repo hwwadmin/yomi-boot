@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"github.com/go-redsync/redsync/v4"
 	goredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"

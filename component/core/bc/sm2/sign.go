@@ -5,7 +5,7 @@ import (
 
 	gmsm "github.com/emmansun/gmsm/sm2"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Sign 使用默认 UID（1234567812345678）对原始消息签名，返回 ASN.1 编码签名

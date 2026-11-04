@@ -7,7 +7,7 @@ import (
 	"net"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Config 表示 pprof 独立 debug 端口配置

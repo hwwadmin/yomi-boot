@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/oss"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/oss"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 const (

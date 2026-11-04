@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	"github.com/hwwadmin/yomi-boot/component/common/httprecord"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
 )
 
 // newTestConfig 加载测试配置；未指定配置段时只注册 http_record

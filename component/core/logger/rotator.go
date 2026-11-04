@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 var historyNamePattern = regexp.MustCompile(`^(\d{8})-(\d{7})\.log(?:\.gz)?$`)

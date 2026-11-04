@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestTokenizeText 覆盖 ASCII 词、CJK 单字与二元词组、分隔符

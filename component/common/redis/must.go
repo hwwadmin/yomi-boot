@@ -6,7 +6,7 @@ package redis
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
 	"github.com/redis/go-redis/v9"
 )

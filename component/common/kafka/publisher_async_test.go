@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/worker"
+	"github.com/hwwadmin/yomi-boot/component/common/worker"
 )
 
 // submitTimeoutWorker 模拟工作池队列持续满员：入队等待直到超时

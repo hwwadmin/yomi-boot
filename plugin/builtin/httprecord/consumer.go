@@ -8,12 +8,12 @@ import (
 	"os"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	"github.com/hwwadmin/yomi-boot/component/common/httprecord"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
 )
 
 // MustRegisterHandler 注册 HTTP 访问记录消费处理函数，须在 OnReady 之前调用（通常在 wire 中）。

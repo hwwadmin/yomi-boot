@@ -7,9 +7,9 @@ package retrieval
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/ai/embedding"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Config 创建 Engine 的构造配置；只保留依赖，集合与运行期参数由调用传入

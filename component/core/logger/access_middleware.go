@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/shared"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
-	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
+	"github.com/hwwadmin/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 )
 
 // TestFetcherDoTask 验证抓取 PENDING 事件、标记 FETCHED 并提交发送

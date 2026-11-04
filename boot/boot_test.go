@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
-	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
-	dtmplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/dtm"
-	eventplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/event"
-	snowflakeplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/snowflake"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
+	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
+	dtmplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/dtm"
+	eventplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/event"
+	snowflakeplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/snowflake"
 )
 
 // TestMustInitPluginSlot 验证最小配置下默认插件链可初始化、可查找并可关闭

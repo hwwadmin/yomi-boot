@@ -1,4 +1,4 @@
-# golangci-lint config for gitee.com/hq_project/yomi-boot
+# golangci-lint config for github.com/hwwadmin/yomi-boot
 version: "2"
 
 run:

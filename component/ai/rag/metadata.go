@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
 )
 
 // 保留元数据键；由本包写入，Document.Metadata 不得使用

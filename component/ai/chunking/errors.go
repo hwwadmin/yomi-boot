@@ -4,7 +4,7 @@
 
 package chunking
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 // ErrInvalidArgument 配置、文本或切块输出未通过本包校验
 var ErrInvalidArgument = errors.NewNoStack("AI_CHUNKING_INVALID_ARGUMENT")

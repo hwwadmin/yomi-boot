@@ -22,7 +22,7 @@
 
 ### 2.1 适用范围
 
-- 适用于经 `gitee.com/hq_project/yomi-boot/component/core/handler` 写出的 HTTP 业务接口。
+- 适用于经 `github.com/hwwadmin/yomi-boot/component/core/handler` 写出的 HTTP 业务接口。
 - 适用于启动时确定唯一的 `response.Encoder`：`boot.Run` / `boot.RunWithOptions` 经 `Options.ResponseEncoder` 注册，未指定时默认注册 `response.DefaultEncoder`。
 - 低层启动路径（`boot.MustInit` + `server.MustBuildApp`）不经过 boot 的注册流程，须在 `main` 中显式 `response.MustRegister`。
 - **不**适用于 DTM Action/Compensate 回调、health 探活等明确走独立出口的路径。
@@ -107,7 +107,7 @@ func main() {
 | `MustReady()` | 启动路径断言已注册 |
 | `Enc()` | 取得全局 Encoder；未注册则 panic |
 
-gitee.com/hq_project/yomi-boot 提供的预制实现（如 `response.DefaultEncoder`）是 boot 的缺省值，业务可经 `Options.ResponseEncoder` 替换；**预制 ≠ 本规范定义的唯一契约**，也不得被理解为全站强制响应格式。
+github.com/hwwadmin/yomi-boot 提供的预制实现（如 `response.DefaultEncoder`）是 boot 的缺省值，业务可经 `Options.ResponseEncoder` 替换；**预制 ≠ 本规范定义的唯一契约**，也不得被理解为全站强制响应格式。
 
 ### 3.4 handler 适配收口
 
@@ -124,7 +124,7 @@ gitee.com/hq_project/yomi-boot 提供的预制实现（如 `response.DefaultEnco
 
 ### 3.5 与异常、前端的边界
 
-- **异常**：通用哨兵 `gitee.com/hq_project/yomi-boot/component/core/shared/error`；库私有就近定义；域错误在业务 `bizerr`。详见 [Go异常规范](./Go异常规范.md)。
+- **异常**：通用哨兵 `github.com/hwwadmin/yomi-boot/component/core/shared/error`；库私有就近定义；域错误在业务 `bizerr`。详见 [Go异常规范](./Go异常规范.md)。
 - **前端**：只消费**该服务已注册 Encoder** 产出的实际 JSON；对接文档/OpenAPI 必须以该实现为准，不得把预制 Encoder 的字段抄成全公司唯一标准。
 - **观测 / 集成测试解析**：走 `Enc().Parse` / `IsSuccess`；实现须能解析本实现写出的 body，或明确 `ok=false`。微服务间读响应由 `rpc` 按对内信封自行解析，与本规范无关。
 

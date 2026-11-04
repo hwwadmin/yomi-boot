@@ -2,7 +2,7 @@
 
 package plugin
 
-import "gitee.com/hq_project/yomi-boot/component/core/config"
+import "github.com/hwwadmin/yomi-boot/component/core/config"
 
 // PluginOptions 插件扩展选项；自定义插件与自定义配置段都属于插件链的一环，
 // 各能力是否启动由插件根据配置自行判断。

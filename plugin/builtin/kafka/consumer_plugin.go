@@ -3,9 +3,9 @@ package kafkaplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
 const ConsumerName = "kafka-consumer"

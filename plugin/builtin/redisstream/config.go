@@ -1,9 +1,9 @@
 package redisstreamplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // SectionKey YAML 根 key

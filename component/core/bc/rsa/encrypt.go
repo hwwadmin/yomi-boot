@@ -5,7 +5,7 @@ import (
 	stdrsa "crypto/rsa"
 	"crypto/sha256"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // EncryptOAEP 使用 OAEP + SHA-256 加密

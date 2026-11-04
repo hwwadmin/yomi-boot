@@ -3,7 +3,7 @@ package cors
 import (
 	"slices"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Config 表示跨域资源共享运行时配置

@@ -4,11 +4,11 @@ import (
 	"context"
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/response"
-	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
-	"gitee.com/hq_project/yomi-boot/component/core/utils/ginutil"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
+	sharederr "github.com/hwwadmin/yomi-boot/component/core/shared/error"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
 )

@@ -7,15 +7,15 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake/snowflaketest"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 )
 
 // TestReceiverWrapHandlerGuardBranches 覆盖幂等消费的前置校验与并发分支

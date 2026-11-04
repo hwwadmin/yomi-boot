@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"gitee.com/hq_project/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/component/core/masking"
 )
 
 // MustInit 初始化日志，失败时输出 stderr 并 panic；返回无参清理函数。

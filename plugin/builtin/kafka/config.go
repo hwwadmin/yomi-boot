@@ -1,9 +1,9 @@
 package kafkaplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // SectionKey YAML 根 key

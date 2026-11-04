@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

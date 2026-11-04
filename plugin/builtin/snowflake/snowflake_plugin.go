@@ -6,9 +6,9 @@ package snowflakeplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
 const Name = "snowflake"

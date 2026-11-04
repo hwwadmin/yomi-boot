@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/common/kafka/kafkatest"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/common/kafka/kafkatest"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestAdminMetadataAndListTopics 验证集群元数据与 topic 列表查询

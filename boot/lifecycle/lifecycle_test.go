@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestRunContextPhases 验证 Start → Ready → Drain → Release 的阶段顺序

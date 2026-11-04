@@ -6,11 +6,11 @@ package consulplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/cloud/consul"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
+	"github.com/hwwadmin/yomi-boot/component/cloud/consul"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
 )
 
 const Name = "consul"

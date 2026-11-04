@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Tool 工具门面；Spec 返回定义，Invoke 执行一次调用。

@@ -6,7 +6,7 @@ package event
 import (
 	"encoding/json"
 
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // ParseAndValidate 解析并校验消息队列事件

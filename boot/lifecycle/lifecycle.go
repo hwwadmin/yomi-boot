@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/boot/banner"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/boot/banner"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // Hook 是生命周期阶段钩子

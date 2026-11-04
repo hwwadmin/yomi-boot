@@ -12,9 +12,9 @@
 
 ## 1. 文档定位
 
-- **用途**：作为 **gitee.com/hq_project/yomi-boot 本库及基于 gitee.com/hq_project/yomi-boot 的业务工程** Go 后端代码编写的补充规范，约束校验与编排分层、注入判空、接口实现编译期校验、Redis 访问收口和业务接口协议选型等常见问题。
+- **用途**：作为 **github.com/hwwadmin/yomi-boot 本库及基于 github.com/hwwadmin/yomi-boot 的业务工程** Go 后端代码编写的补充规范，约束校验与编排分层、注入判空、接口实现编译期校验、Redis 访问收口和业务接口协议选型等常见问题。
 - **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md)、[API编码适配规范](./API编码适配规范.md) 及对应的事务、数据库、Redis 等规范。
-- **适用对象**：gitee.com/hq_project/yomi-boot 本库相关封装，以及业务工程中 model、usecase、service、repository、handler 的编写与评审。
+- **适用对象**：github.com/hwwadmin/yomi-boot 本库相关封装，以及业务工程中 model、usecase、service、repository、handler 的编写与评审。
 
 ---
 
@@ -22,7 +22,7 @@
 
 ### 2.1 适用范围
 
-- 适用于基于 gitee.com/hq_project/yomi-boot 的业务工程中各服务 `internal/biz/`（及同类分层目录）下的领域代码，以及入口编排的 `internal/handler/` 协议适配代码。
+- 适用于基于 github.com/hwwadmin/yomi-boot 的业务工程中各服务 `internal/biz/`（及同类分层目录）下的领域代码，以及入口编排的 `internal/handler/` 协议适配代码。
 - 适用于新写业务模块时的代码风格约束，以及重构既有模块时的逐层调整指引。
 
 ### 2.2 关联文档
@@ -30,7 +30,7 @@
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 定义 handler / usecase / contract / service / repository 分层与轻量 DDD-lite 建模 |
-| `_prompts/knowledge/Go架构规范.md` | 项目架构 | 定义 gitee.com/hq_project/yomi-boot、业务可部署单元与 bootstrap 装配 |
+| `_prompts/knowledge/Go架构规范.md` | 项目架构 | 定义 github.com/hwwadmin/yomi-boot、业务可部署单元与 bootstrap 装配 |
 | `_prompts/knowledge/GoBFF规范.md` | BFF | 跨域编排、喂饱参数、令牌实现 |
 | `_prompts/knowledge/Go注释规范.md` | 注释规范 | 约束 Go 代码注释口径 |
 | `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | 约束默认技术选型 |
@@ -86,7 +86,7 @@ func (s *Service) Create(ctx context.Context, input *domainuser.CreateInput) (*d
     if input.Nickname == "" {
         input.Nickname = input.Username
     }
-    hashed, err := passwd.Hash(input.Password) // gitee.com/hq_project/yomi-boot/component/core/bc/passwd
+    hashed, err := passwd.Hash(input.Password) // github.com/hwwadmin/yomi-boot/component/core/bc/passwd
     if err != nil {
         return nil, bizerr.ErrUserPasswordEncryptFailed
     }
@@ -151,15 +151,15 @@ func (h *ResourceHandler) handleUpdateStatusAction(c *gin.Context) {
 
 #### 3.2.1 Redis 访问收口
 
-- **BFF**：Redis 用于令牌 Store（session 持久化），经 `gitee.com/hq_project/yomi-boot/component/common/token` + `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService` 访问。
-- **领域服务**：`MustInit` 启用 Redis 供 `gitee.com/hq_project/yomi-boot/component/common/idempotency` 三层幂等使用；**禁止** usecase/service/handler 直接访问 Redis。
-- 禁止业务层直接使用 `*redis.Client`；读写经 `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService`（仅 gitee.com/hq_project/yomi-boot 内部组件允许）。
+- **BFF**：Redis 用于令牌 Store（session 持久化），经 `github.com/hwwadmin/yomi-boot/component/common/token` + `github.com/hwwadmin/yomi-boot/component/common/redis.RedisService` 访问。
+- **领域服务**：`MustInit` 启用 Redis 供 `github.com/hwwadmin/yomi-boot/component/common/idempotency` 三层幂等使用；**禁止** usecase/service/handler 直接访问 Redis。
+- 禁止业务层直接使用 `*redis.Client`；读写经 `github.com/hwwadmin/yomi-boot/component/common/redis.RedisService`（仅 github.com/hwwadmin/yomi-boot 内部组件允许）。
 
 | 场景 | 允许方式 | 禁止方式 |
 | ---- | -------- | -------- |
-| BFF token Store | `gitee.com/hq_project/yomi-boot/component/common/token` + `gitee.com/hq_project/yomi-boot/component/common/redis.RedisService` | 领域业务层访问 Redis |
-| 领域 idempotency | `gitee.com/hq_project/yomi-boot/component/common/idempotency.Guard`（bootstrap 注入） | usecase 直接调 Redis |
-| gitee.com/hq_project/yomi-boot/component/common/redis 实现 | `RedisHelper` 内部持有 `*redis.Client` | 业务层 import go-redis |
+| BFF token Store | `github.com/hwwadmin/yomi-boot/component/common/token` + `github.com/hwwadmin/yomi-boot/component/common/redis.RedisService` | 领域业务层访问 Redis |
+| 领域 idempotency | `github.com/hwwadmin/yomi-boot/component/common/idempotency.Guard`（bootstrap 注入） | usecase 直接调 Redis |
+| github.com/hwwadmin/yomi-boot/component/common/redis 实现 | `RedisHelper` 内部持有 `*redis.Client` | 业务层 import go-redis |
 
 Key 命名、TTL 见 [Redis设计规范](./Redis设计规范.md)。
 
@@ -183,7 +183,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 
 ### 3.3.1 handler 协议适配辅助
 
-业务 handler 的 JSON 绑定、用例执行、成功/失败响应与错误映射，统一通过 `gitee.com/hq_project/yomi-boot/component/core/handler` 完成。
+业务 handler 的 JSON 绑定、用例执行、成功/失败响应与错误映射，统一通过 `github.com/hwwadmin/yomi-boot/component/core/handler` 完成。
 
 ##### 3.3.1.1 领域 handler
 
@@ -196,7 +196,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 > 分页查询同样走 `BindAndHandle`：分页载荷由业务出参结构体内嵌 `dto.PageOutput[T]` 提供（见 §3.3.2），handler 不感知分页。
 
 - 领域 handler **禁止**从 token Context 取 userId；身份字段由 BFF 按接口 DTO 传入。
-- import 时可用别名：`platformhandler "gitee.com/hq_project/yomi-boot/component/core/handler"` 或 `handler "gitee.com/hq_project/yomi-boot/component/core/handler"`。
+- import 时可用别名：`platformhandler "github.com/hwwadmin/yomi-boot/component/core/handler"` 或 `handler "github.com/hwwadmin/yomi-boot/component/core/handler"`。
 
 ##### 3.3.1.2 BFF handler
 
@@ -205,7 +205,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 | 对外 API | `platformhandler.BindAndHandle(c, bffFn)` |
 | 登录等需 Request | `platformhandler.BindAndHandleWithRequest(c, fn)` |
 
-- BFF 经 `gitee.com/hq_project/yomi-boot/component/common/token` 解析 Claims 后，按下游接口 DTO **按需**写入业务字段。
+- BFF 经 `github.com/hwwadmin/yomi-boot/component/common/token` 解析 Claims 后，按下游接口 DTO **按需**写入业务字段。
 - 登出等无 Body 场景：`platformhandler.HandleVoid(c, revokeFn)`。
 
 分页 usecase 入参嵌入 `dto.PageInput`，出参结构体**内嵌** `dto.PageOutput[TItem]`（见 §3.3.2）；`Validate()` 中调用 `i.PageInput.ValiPage()` 校验分页参数。分页辅助方法见 [Go数据库规范](./Go数据库规范.md) §3.2.2。
@@ -213,7 +213,7 @@ router.POST("/v1/{resource}/query", h.handleQueryResources)
 用例执行失败时，由已注册的 `response.Encoder` 写出失败响应；未知错误如何映射由该 Encoder 决定（boot 未指定 `Options.ResponseEncoder` 时默认注册预制实现；低层启动路径须显式 `MustRegister`）。
 
 ```go
-// 正确：通过 gitee.com/hq_project/yomi-boot/component/core/handler 收口重复逻辑（示例）
+// 正确：通过 github.com/hwwadmin/yomi-boot/component/core/handler 收口重复逻辑（示例）
 func (h *ResourceHandler) handleGetProfile(c *gin.Context) {
     platformhandler.BindAndHandle(c, h.GetProfile.Execute)
 }
@@ -236,7 +236,7 @@ func (h *ResourceHandler) handleGetProfile(c *gin.Context) {
 
 ### 3.3.2 分页出入参（dto.PageInput / dto.PageOutput）
 
-分页 usecase 统一使用 `gitee.com/hq_project/yomi-boot/component/core/shared/dto/page.go` 中的结构体，避免在各模块重复定义 `page` / `pageSize` / `total` 字段。
+分页 usecase 统一使用 `github.com/hwwadmin/yomi-boot/component/core/shared/dto/page.go` 中的结构体，避免在各模块重复定义 `page` / `pageSize` / `total` 字段。
 
 | 类型 | 用法 | 说明 |
 | ---- | ---- | ---- |
@@ -412,7 +412,7 @@ func (s *ResourceStatus) UnmarshalJSON(data []byte) error {
 }
 
 // 正确：特殊情况无需实现，必须显式说明理由
-// BizError 为 struct 类型（`gitee.com/hq_project/yomi-boot/component/core/errors.BizError`），哨兵变量定义在各服务 `bizerr/errors.go`，无需 IsValid/UnmarshalJSON。
+// BizError 为 struct 类型（`github.com/hwwadmin/yomi-boot/component/core/errors.BizError`），哨兵变量定义在各服务 `bizerr/errors.go`，无需 IsValid/UnmarshalJSON。
 ```
 
 ### 3.6 金额字段默认使用 Decimal 类型
@@ -500,11 +500,11 @@ CREATE TABLE t_product (
 
 ### 3.7 通用工具函数统一管理
 
-跨模块复用的通用辅助函数统一收口到 `gitee.com/hq_project/yomi-boot/component/core/utils/` 对应文件中，消除各处私有重复定义。
+跨模块复用的通用辅助函数统一收口到 `github.com/hwwadmin/yomi-boot/component/core/utils/` 对应文件中，消除各处私有重复定义。
 
 ```go
-// 正确：通用函数统一收口到 gitee.com/hq_project/yomi-boot/component/core/utils/ 子包
-// gitee.com/hq_project/yomi-boot/component/core/utils/ptrutil/ptr.go
+// 正确：通用函数统一收口到 github.com/hwwadmin/yomi-boot/component/core/utils/ 子包
+// github.com/hwwadmin/yomi-boot/component/core/utils/ptrutil/ptr.go
 func PtrFromString(value string) *string { /* ... */ }
 func StringFromPtr(value *string) string { /* ... */ }
 
@@ -525,8 +525,8 @@ func StringFromPtr(value *string) string { /* ... */ }
 
 | 类型 | 定义位置 | 用途 |
 |------|----------|------|
-| `dto.JSONInt64` | `gitee.com/hq_project/yomi-boot/component/core/shared/dto/json_int64.go` | 单个 ID：接受 JSON 字符串或数字反序列化，序列化时强制输出 JSON 字符串 |
-| `dto.JSONInt64Slice` | `gitee.com/hq_project/yomi-boot/component/core/shared/dto/json_int64_slice.go` | ID 列表：接受 JSON 字符串数组或数字数组反序列化，序列化时强制输出 JSON 字符串数组 |
+| `dto.JSONInt64` | `github.com/hwwadmin/yomi-boot/component/core/shared/dto/json_int64.go` | 单个 ID：接受 JSON 字符串或数字反序列化，序列化时强制输出 JSON 字符串 |
+| `dto.JSONInt64Slice` | `github.com/hwwadmin/yomi-boot/component/core/shared/dto/json_int64_slice.go` | ID 列表：接受 JSON 字符串数组或数字数组反序列化，序列化时强制输出 JSON 字符串数组 |
 | `dto.NewJSONInt64Slice([]int64)` | 同上 | 将 `[]int64` 转为 `JSONInt64Slice` 的构造函数 |
 
 #### 3.8.3 API 出入参规范
@@ -619,7 +619,7 @@ func NewRedisHelper(client *redisv9.Client) *RedisHelper {
 
 **适用范围**：
 
-- `gitee.com/hq_project/yomi-boot/` 下的基础设施实现（见 [Go架构规范](./Go架构规范.md)）
+- `github.com/hwwadmin/yomi-boot/` 下的基础设施实现（见 [Go架构规范](./Go架构规范.md)）
 - `internal/biz/domain/service/{module}/` 对 `domain/contract` 中 `{Module}Service` 的实现
 - `internal/biz/repo/db/{module}/` 对 `repo/contract` 中 `{Module}Repository` 的实现
 - 其他对外暴露、需被替换或 mock 的接口实现（如事件 Handler、Outbox Publisher 等）
@@ -660,7 +660,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - [ ] 金额、价格、费率等精确数值字段使用 `decimal.Decimal`，未使用 `float32`/`float64`
 - [ ] 金额运算使用 `decimal.Decimal` 方法，未转换为浮点再运算
 - [ ] 数据库金额字段使用 `DECIMAL(precision, scale)` 类型
-- [ ] 通用工具函数统一收口在 `gitee.com/hq_project/yomi-boot/component/core/utils/` 对应文件中
+- [ ] 通用工具函数统一收口在 `github.com/hwwadmin/yomi-boot/component/core/utils/` 对应文件中
 - [ ] API 出入参中 id 语义字段（**示例** `id`、`{entity}Id`、`relId`）使用 `dto.JSONInt64`
 - [ ] API 出入参中 ids 语义字段（roleIds 等）使用 `dto.JSONInt64Slice`
 - [ ] 出参 ID 字段未使用 `int64` + `json:",string"` 混用模式
@@ -674,7 +674,7 @@ var _ userrepocontract.UserRepository = (*Repository)(nil)
 - 禁止 repository 层做模型字段非空、ID 有效性等业务校验。
 - 禁止各层方法在运行期对注入依赖做防御式判空，以此替代启动阶段的装配验证。
 - 禁止显式实现接口的 struct 缺少 `var _ Interface = (*Impl)(nil)` 编译期断言，导致接口方法不完整时无法被编译器拦截。
-- 禁止在 `gitee.com/hq_project/yomi-boot/component/common/redis/` 与 BFF 令牌装配之外，业务层直接使用 `*redis.Client`。
+- 禁止在 `github.com/hwwadmin/yomi-boot/component/common/redis/` 与 BFF 令牌装配之外，业务层直接使用 `*redis.Client`。
 - 禁止业务层调用 `redisplugin.Redis.Client()`；原始客户端只允许 `plugin/builtin` 内部插件在初始化期复用，连接由 redis 插件在 `Init` 内创建，经 `Service()` 对外暴露，并在插件 `Close()` 中关闭。
 - 禁止 Routes 方法内对 `router` 做 `== nil` 判空。
 - 禁止业务接口使用 GET + query 参数作为主要输入形式，除非是 health 探针或明确的 CDN/SEO 包装层。

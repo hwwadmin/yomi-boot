@@ -12,7 +12,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // PrivateKey 是 Ed25519 私钥类型别名

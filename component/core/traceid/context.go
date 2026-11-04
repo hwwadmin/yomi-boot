@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

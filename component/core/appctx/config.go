@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // DefaultTimezone 未配置 app.timezone 时的默认时区

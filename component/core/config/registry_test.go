@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
 )
 
 // testAppConfig 测试用 app 配置段

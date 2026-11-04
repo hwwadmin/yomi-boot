@@ -14,7 +14,7 @@
 
 - **用途**：约束入口编排（`handler/bff/saga`，经 client 契约模块调用下游）与领域（`handler/usecase/domain/repo`）各层职责、依赖方向与跨域协作规则。
 - **边界**：可部署服务类型与目录模式见 [Go架构规范](./Go架构规范.md)；入口编排细则见 [GoBFF规范](./GoBFF规范.md)；事务见 [Go事务规范](./Go事务规范.md)；信封与写幂等见 [微服务调用规范](./微服务调用规范.md) §3；**文件命名**见 [Go文件命名规范](./Go文件命名规范.md)。
-- **适用对象**：基于 gitee.com/hq_project/yomi-boot 的入口编排与领域可部署单元（含单体中对应模块）内业务代码的新增、重构与评审。
+- **适用对象**：基于 github.com/hwwadmin/yomi-boot 的入口编排与领域可部署单元（含单体中对应模块）内业务代码的新增、重构与评审。
 
 ---
 
@@ -65,12 +65,12 @@ handler/                         biz/handler/
                                   biz/repo/
 ```
 
-> BFF 不含 `token/` 和 `client/` 内部目录：令牌能力由 `gitee.com/hq_project/yomi-boot/component/common/token` 统一提供，下游调用经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 gitee.com/hq_project/yomi-boot）。
+> BFF 不含 `token/` 和 `client/` 内部目录：令牌能力由 `github.com/hwwadmin/yomi-boot/component/common/token` 统一提供，下游调用经**领域 client**（业务工程独立模块，路径惯例 `{client}/{domain}`，非 github.com/hwwadmin/yomi-boot）。
 
 | 能力 | BFF | 领域 |
 | ---- | --- | ---- |
 | 跨域 HTTP | ✓ 领域 client | ✗ |
-| 读 token / 鉴权 | ✓ gitee.com/hq_project/yomi-boot/component/common/token | ✗ |
+| 读 token / 鉴权 | ✓ github.com/hwwadmin/yomi-boot/component/common/token | ✗ |
 | 只读聚合 | ✓ bff | ✗ |
 | DTM Saga 提交 | ✓ saga | ✗ |
 | 本地 DB 事务 | ✗ | ✓ 典型为 usecase（按原子动作归属，见 Go事务规范 §3.4） |
@@ -87,7 +87,7 @@ handler/                         biz/handler/
 | `bff/` | 多服务只读聚合 |
 | `saga/` | 跨域写 Saga 编排 |
 
-> 令牌能力经 `gitee.com/hq_project/yomi-boot/component/common/token` 注入；下游调用经领域 client。
+> 令牌能力经 `github.com/hwwadmin/yomi-boot/component/common/token` 注入；下游调用经领域 client。
 
 ### 3.4 领域各层职责
 
@@ -129,8 +129,8 @@ handler/                         biz/handler/
 #### 3.4.6 internal/bizerr/
 
 - 本服务领域专属业务异常哨兵（如 `bizerr.ErrUserNotFound`），使用 `errors.NewBiz` / `errors.NewNoStack` 定义；返回时经 `errors.Sentinel` 拍真实调用点栈。
-- 跨库通用哨兵收口在 `gitee.com/hq_project/yomi-boot/component/core/shared/error`（`NewNoStack`）；库私有哨兵在对应库就近定义；**无** `response/code.go`。
-- 跨服务通用 dto/utils 使用 `gitee.com/hq_project/yomi-boot/component/core/shared`；跨服务枚举使用 `{client}/{domain}/enums`。
+- 跨库通用哨兵收口在 `github.com/hwwadmin/yomi-boot/component/core/shared/error`（`NewNoStack`）；库私有哨兵在对应库就近定义；**无** `response/code.go`。
+- 跨服务通用 dto/utils 使用 `github.com/hwwadmin/yomi-boot/component/core/shared`；跨服务枚举使用 `{client}/{domain}/enums`。
 
 ### 3.5 跨域协作规则
 
@@ -177,9 +177,9 @@ Client → BFF handler → saga → DTM → 单分支 Action/Compensate handler 
 
 ```text
 handler → usecase → domain/contract
-usecase → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db/tx, gitee.com/hq_project/yomi-boot/component/cloud/dtm（barrier）, gitee.com/hq_project/yomi-boot/component/common/idempotency（写幂等）
+usecase → domain/contract, github.com/hwwadmin/yomi-boot/component/common/db/tx, github.com/hwwadmin/yomi-boot/component/cloud/dtm（barrier）, github.com/hwwadmin/yomi-boot/component/common/idempotency（写幂等）
 service → domain/contract, repo/contract
-repo/db → domain/contract, gitee.com/hq_project/yomi-boot/component/common/db/orm, gitee.com/hq_project/yomi-boot/component/common/db/tx
+repo/db → domain/contract, github.com/hwwadmin/yomi-boot/component/common/db/orm, github.com/hwwadmin/yomi-boot/component/common/db/tx
 ```
 
 禁止：

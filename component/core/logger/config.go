@@ -3,7 +3,7 @@ package logger
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // LogType 文件日志类型

@@ -3,7 +3,7 @@
 // @author zwei
 package aes
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 // validAESKey 校验 AES 密钥长度是否合法
 func validAESKey(key []byte) error {

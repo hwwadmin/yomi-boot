@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ValidateRequest 校验重排请求：Query 与每条候选 trim 后非空、Docs 1~MaxDocs 条、

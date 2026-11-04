@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/dto"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/dto"
 
 	"github.com/gin-gonic/gin"
 )

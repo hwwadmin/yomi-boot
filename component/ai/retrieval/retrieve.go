@@ -9,9 +9,9 @@ import (
 	"math"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/ai/embedding"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Retrieve 在指定集合中检索最相关条目；集合不存在或为空时返回空切片与 nil

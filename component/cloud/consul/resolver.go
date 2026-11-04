@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
 	"github.com/hashicorp/consul/api"
 )

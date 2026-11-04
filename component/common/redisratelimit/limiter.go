@@ -9,9 +9,9 @@ package redisratelimit
 import (
 	"context"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // ErrRateLimited 请求触发限流

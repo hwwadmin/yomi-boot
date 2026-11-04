@@ -7,7 +7,7 @@ package generation
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ValidateRequest 校验拼接请求：Query 与每条 Context.Content trim 后非空；

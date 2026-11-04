@@ -7,11 +7,11 @@ package rag
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
-	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/component/core/bc/random"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/ai/chunking"
+	"github.com/hwwadmin/yomi-boot/component/ai/embedding"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/core/bc/random"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // chunkedDocument 切块后的文档

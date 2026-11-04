@@ -5,8 +5,8 @@
 package rag
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
+	"github.com/hwwadmin/yomi-boot/component/ai/chunking"
+	"github.com/hwwadmin/yomi-boot/component/ai/retrieval"
 )
 
 // IndexRequest 文档入库入参

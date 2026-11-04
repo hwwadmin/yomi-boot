@@ -21,13 +21,13 @@ import (
 	"encoding/json"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
 	"github.com/google/uuid"
 )

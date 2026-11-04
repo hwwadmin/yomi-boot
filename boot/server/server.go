@@ -5,14 +5,14 @@ package server
 import (
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/boot/lifecycle"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/response"
-	"gitee.com/hq_project/yomi-boot/component/core/router"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
-	routerplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/router"
+	"github.com/hwwadmin/yomi-boot/boot/lifecycle"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
+	routerplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/router"
 
 	"github.com/gin-gonic/gin"
 )

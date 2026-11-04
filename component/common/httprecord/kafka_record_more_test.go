@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/common/kafka/kafkatest"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/common/kafka/kafkatest"
 
 	kafkago "github.com/segmentio/kafka-go"
 )

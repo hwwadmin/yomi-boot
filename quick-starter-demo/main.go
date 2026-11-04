@@ -15,13 +15,13 @@ package main
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/boot"
-	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/masking"
-	"gitee.com/hq_project/yomi-boot/component/core/router"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	httprecordplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/httprecord"
+	"github.com/hwwadmin/yomi-boot/boot"
+	"github.com/hwwadmin/yomi-boot/component/common/httprecord"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	httprecordplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/httprecord"
 )
 
 // envPrefix 是传给 boot.Run 的环境变量前缀。

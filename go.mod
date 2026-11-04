@@ -1,4 +1,4 @@
-module gitee.com/hq_project/yomi-boot
+module github.com/hwwadmin/yomi-boot
 
 go 1.26.0
 

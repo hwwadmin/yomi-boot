@@ -12,10 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/component/core/response"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/token"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
 )
 
 // newE2ETokenService 构建基于内存 Redis 的真实令牌服务（多端登录模式，无需分布式锁）

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/masking"
-	"gitee.com/hq_project/yomi-boot/component/core/utils/httputil"
-	"gitee.com/hq_project/yomi-boot/component/core/utils/utf8util"
+	"github.com/hwwadmin/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/httputil"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 
 	"github.com/gin-gonic/gin"
 )

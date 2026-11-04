@@ -1,11 +1,11 @@
-// Package error 定义 gitee.com/hq_project/yomi-boot 跨库通用哨兵错误（error.Error() 即为线上 code）
+// Package error 定义 github.com/hwwadmin/yomi-boot 跨库通用哨兵错误（error.Error() 即为线上 code）
 //
 // 仅放多个库都会用到的通用错误；库私有错误请在各自包内就近定义。
 //
 // @author zwei
 package error
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 var (
 	// ErrInternal 系统内部错误

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 )
 
 // errIDGen 固定返回错误的雪花 ID 生成器桩

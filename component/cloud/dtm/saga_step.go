@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/shared"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"github.com/dtm-labs/client/dtmcli"
 )

@@ -8,8 +8,8 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/core/shared"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

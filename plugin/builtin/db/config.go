@@ -1,10 +1,10 @@
 package dbplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/common/db"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/common/db"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 )
 
 // SectionKey YAML 根 key

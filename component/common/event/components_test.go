@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake/snowflaketest"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

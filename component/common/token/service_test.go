@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )

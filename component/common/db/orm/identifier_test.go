@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestValidateSQLIdentifier 验证 SQL 标识符合法性与非法 payload 拒绝

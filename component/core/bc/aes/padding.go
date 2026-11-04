@@ -1,8 +1,8 @@
 package aes
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/core/bc/internal/pkcs7"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/bc/internal/pkcs7"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // pkcs7Pad 按 PKCS7 填充到 blockSize 整数倍

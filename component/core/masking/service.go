@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // compiledRule 规则的编译形态：keys 预先小写，策略已解析

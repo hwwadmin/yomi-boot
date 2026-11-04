@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
-	"gitee.com/hq_project/yomi-boot/component/core/masking"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
 const Name = "masking"

@@ -6,7 +6,7 @@
 // @author zwei
 package sm2
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 // ErrVerify 表示签名校验失败
 var ErrVerify = errors.NewNoStack("sm2: verify failed")

@@ -6,8 +6,8 @@ package httprecord
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/utils/utf8util"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 )
 
 // HTTP 访问记录默认值

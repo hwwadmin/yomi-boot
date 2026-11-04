@@ -7,8 +7,8 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // watchdogInterval 返回看门狗续期间隔，默认 TTL/3

@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // DocumentFilterConfig 文档版本过滤器的元数据声明；由调用方按自身写入协议提供键名

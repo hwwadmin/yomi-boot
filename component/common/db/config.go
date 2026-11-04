@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 )
 
 // DefaultSlowThresholdMs 未配置 slow_threshold_ms 时的默认慢 SQL 阈值

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // stubRedis 可配置读写失败的 Redis 服务桩

@@ -15,8 +15,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
 )
 
 // TestBodyRecordWriter_WriteString 验证 WriteString 同步采集且客户端收到完整内容

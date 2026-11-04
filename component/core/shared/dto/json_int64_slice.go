@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // JSONInt64Slice 表示可同时接受字符串和数字元素的 int64 切片

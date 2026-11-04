@@ -6,13 +6,13 @@ package idempotencyplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/idempotency"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
-	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
-	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
+	"github.com/hwwadmin/yomi-boot/component/common/idempotency"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
+	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
+	redisplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/redis"
 )
 
 const Name = "idempotency"

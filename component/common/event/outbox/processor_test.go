@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/common/event/repo"
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake/snowflaketest"
-	"gitee.com/hq_project/yomi-boot/component/common/worker"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
+	"github.com/hwwadmin/yomi-boot/component/common/worker"
 
 	"gorm.io/gorm"
 )

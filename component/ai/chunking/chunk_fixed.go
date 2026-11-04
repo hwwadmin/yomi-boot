@@ -4,7 +4,7 @@
 
 package chunking
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 // fixedChunker 按固定 rune 窗口切分，不识别词语或句末
 type fixedChunker struct {

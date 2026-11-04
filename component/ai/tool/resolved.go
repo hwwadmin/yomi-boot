@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // InputContract 定义模型 JSON 到工具 typed 入参的解析契约

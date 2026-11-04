@@ -1,7 +1,7 @@
 # yomi-boot
 
 Go **基础设施库**（能力库 + 插件生命周期），**不含业务规则**。  
-业务工程通过 `go.mod` 标准 `require gitee.com/hq_project/yomi-boot` 依赖本库，按 YAML 配置按需启用能力，可覆盖轻量单体、模块化大单体、分布式微服务等形态。
+业务工程通过 `go.mod` 标准 `require github.com/hwwadmin/yomi-boot` 依赖本库，按 YAML 配置按需启用能力，可覆盖轻量单体、模块化大单体、分布式微服务等形态。
 
 **当前底座已足够支撑绝大多数企业业务。** 默认按需裁剪（改 YAML `enabled` 等开关即可），不必一上来启用 Consul / Kafka / DTM 等分布式组件。
 
@@ -28,9 +28,9 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 package main
 
 import (
-	"gitee.com/hq_project/yomi-boot/boot"
-	"gitee.com/hq_project/yomi-boot/component/core/router"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/boot"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
+	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
 // envPrefix 是传给 boot.Run 的环境变量前缀。

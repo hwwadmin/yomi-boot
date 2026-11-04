@@ -3,7 +3,7 @@
 // @author zwei
 package event
 
-import "gitee.com/hq_project/yomi-boot/component/common/event/model"
+import "github.com/hwwadmin/yomi-boot/component/common/event/model"
 
 // Event 消息队列事件；EventID 必须全局唯一（建议使用雪花 ID）
 type Event = model.WireEvent

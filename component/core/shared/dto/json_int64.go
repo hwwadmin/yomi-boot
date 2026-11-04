@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // JSONInt64 表示可同时接受 JSON 字符串和数字的 int64 值

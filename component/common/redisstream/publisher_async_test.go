@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/worker"
+	"github.com/hwwadmin/yomi-boot/component/common/worker"
 )
 
 // stubWorker 以固定错误模拟工作池提交失败

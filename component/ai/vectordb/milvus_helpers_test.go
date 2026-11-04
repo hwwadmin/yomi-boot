@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"github.com/milvus-io/milvus/client/v2/column"
 	"github.com/milvus-io/milvus/client/v2/entity"

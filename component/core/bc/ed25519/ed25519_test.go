@@ -4,7 +4,7 @@ import (
 	stded25519 "crypto/ed25519"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestSignVerify 验证签名验签、标准库兼容性、篡改检测与密钥长度校验

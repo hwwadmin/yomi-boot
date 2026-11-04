@@ -12,7 +12,7 @@ import (
 	aliyunoss "github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aws/smithy-go"
 
-	kerrors "gitee.com/hq_project/yomi-boot/component/core/errors"
+	kerrors "github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // aliyunServiceErrorFixture 构造阿里云 SDK 服务错误

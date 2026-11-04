@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	kafkago "github.com/segmentio/kafka-go"
 )
@@ -136,7 +136,7 @@ func (b *MockBroker) Publish(ctx context.Context, topic string, msgs ...kafkago.
 	return nil
 }
 
-// ConnectionConfig 返回可用于 gitee.com/hq_project/yomi-boot kafka 组件的最小连接配置。
+// ConnectionConfig 返回可用于 github.com/hwwadmin/yomi-boot kafka 组件的最小连接配置。
 func (b *MockBroker) ConnectionConfig() kafka.ConnectionConfig {
 	return kafka.ConnectionConfig{
 		Brokers:            b.Brokers(),

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

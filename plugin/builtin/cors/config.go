@@ -1,8 +1,8 @@
 package corsplugin
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/cors"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/cors"
 )
 
 // SectionKey YAML 根 key

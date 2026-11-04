@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"

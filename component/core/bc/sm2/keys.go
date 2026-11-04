@@ -8,7 +8,7 @@ import (
 	gmsm "github.com/emmansun/gmsm/sm2"
 	"github.com/emmansun/gmsm/smx509"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // PrivateKey 是 SM2 私钥类型别名（底层 github.com/emmansun/gmsm/sm2.PrivateKey）

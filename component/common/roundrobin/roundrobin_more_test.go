@@ -14,8 +14,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
 
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 )
 
 // TestStart_executesTaskAndStops 验证 Start 启动轮询并在调度 ctx 结束后停止调度

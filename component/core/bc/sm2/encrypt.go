@@ -5,7 +5,7 @@ import (
 
 	gmsm "github.com/emmansun/gmsm/sm2"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Encrypt 使用 SM2 公钥加密，输出 C1C3C2 明文拼接格式

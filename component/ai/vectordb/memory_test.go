@@ -8,7 +8,7 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // newMemoryStoreForTest 创建测试用内存 Store

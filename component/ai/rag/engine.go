@@ -7,12 +7,12 @@ package rag
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/chunking"
-	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
-	"gitee.com/hq_project/yomi-boot/component/ai/generation"
-	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/ai/chunking"
+	"github.com/hwwadmin/yomi-boot/component/ai/embedding"
+	"github.com/hwwadmin/yomi-boot/component/ai/generation"
+	"github.com/hwwadmin/yomi-boot/component/ai/rerank"
+	"github.com/hwwadmin/yomi-boot/component/ai/retrieval"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
 )
 
 // Engine 编排两条 RAG 流程：文档入库与文档检索增强；实现须并发安全。

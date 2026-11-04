@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/shared"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

@@ -7,7 +7,7 @@ package db
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // MustOpen 校验配置并初始化数据源，失败时 log + panic

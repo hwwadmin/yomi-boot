@@ -6,10 +6,10 @@ package dbplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/component/common/db"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/plugin"
 
 	"gorm.io/gorm"
 )

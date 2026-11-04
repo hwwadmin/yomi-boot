@@ -6,10 +6,10 @@ package redisplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/plugin"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )

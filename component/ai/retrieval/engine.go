@@ -7,8 +7,8 @@ package retrieval
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/embedding"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/ai/embedding"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
 )
 
 // Retriever 检索门面接口；实现须并发安全

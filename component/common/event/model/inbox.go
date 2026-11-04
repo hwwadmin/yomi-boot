@@ -3,7 +3,7 @@
 // @author zwei
 package model
 
-import "gitee.com/hq_project/yomi-boot/component/common/db/orm"
+import "github.com/hwwadmin/yomi-boot/component/common/db/orm"
 
 // SysEventInbox 映射 sys_event_inbox 收件箱表
 type SysEventInbox struct {

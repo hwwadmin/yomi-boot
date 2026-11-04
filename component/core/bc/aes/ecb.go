@@ -4,7 +4,7 @@ import (
 	stdaes "crypto/aes"
 	"crypto/cipher"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ECB AES-ECB + PKCS7（仅遗留对接；新业务与网络场景禁止）

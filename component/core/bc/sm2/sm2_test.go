@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestSignVerify 验证默认 UID 与自定义 UID 的签名验签及篡改检测

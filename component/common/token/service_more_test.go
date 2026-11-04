@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	sharederr "github.com/hwwadmin/yomi-boot/component/core/shared/error"
 )
 
 // TestConfigValidate 验证令牌配置校验的各错误分支

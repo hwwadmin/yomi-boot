@@ -5,7 +5,7 @@
 package orm
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/shared"
 
 	"gorm.io/gorm"
 )

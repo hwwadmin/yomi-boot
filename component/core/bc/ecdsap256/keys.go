@@ -13,7 +13,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // GenerateKey 生成 P-256 私钥

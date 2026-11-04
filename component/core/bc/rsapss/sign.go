@@ -12,7 +12,7 @@ import (
 	stdrsa "crypto/rsa"
 	"crypto/sha256"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ErrVerify 表示签名校验失败

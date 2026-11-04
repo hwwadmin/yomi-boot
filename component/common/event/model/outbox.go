@@ -6,7 +6,7 @@ package model
 import (
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
+	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 )
 
 // SysEventOutbox 映射 sys_event_outbox 发件箱表

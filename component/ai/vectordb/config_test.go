@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestVectorConfigValidate 覆盖 provider、度量、超时、容量与 Milvus 参数校验

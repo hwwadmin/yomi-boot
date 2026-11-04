@@ -7,14 +7,14 @@ import (
 	"context"
 	"sync"
 
-	"gitee.com/hq_project/yomi-boot/component/common/httprecord"
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
-	redisstreamplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/common/httprecord"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	kafkaplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/kafka"
+	redisstreamplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/redisstream"
 )
 
 const Name = "httprecord"

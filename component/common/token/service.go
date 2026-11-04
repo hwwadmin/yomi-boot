@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/distlock"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
+	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	sharederr "github.com/hwwadmin/yomi-boot/component/core/shared/error"
 )
 
 // ErrTokenInvalid 令牌无效或已过期

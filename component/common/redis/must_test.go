@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 )
 
 // TestMustNewClient_MiniRedis 验证合法配置创建可用客户端

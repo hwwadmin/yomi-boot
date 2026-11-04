@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // luaConsumeCaptcha 原子读取并删除验证码；返回 nil 表示不存在

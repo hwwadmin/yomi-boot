@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/httpguard"
-	"gitee.com/hq_project/yomi-boot/component/core/router"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/httpguard"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"github.com/gin-gonic/gin"
 )

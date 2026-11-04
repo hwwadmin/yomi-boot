@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 )
 
 func TestPublisher_AddBytesAndJSON(t *testing.T) {

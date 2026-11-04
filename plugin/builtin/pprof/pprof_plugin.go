@@ -6,9 +6,9 @@ package pprofplugin
 import (
 	"context"
 
-	componentpprof "gitee.com/hq_project/yomi-boot/component/common/pprof"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/plugin"
+	componentpprof "github.com/hwwadmin/yomi-boot/component/common/pprof"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
 const Name = "pprof"

@@ -4,7 +4,7 @@
 
 package captcha
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 var (
 	// ErrInvalidArgument 配置或调用参数未通过本包校验

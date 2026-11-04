@@ -14,7 +14,7 @@ import (
 	"encoding/hex"
 	"hash"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // SHA1 计算 HMAC-SHA1（遗留兼容）；key 为空时返回 error

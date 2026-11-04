@@ -3,7 +3,7 @@
 // @author zwei
 package sm4
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 // validSM4Key 校验 SM4 密钥长度是否合法
 func validSM4Key(key []byte) error {

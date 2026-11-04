@@ -4,8 +4,8 @@ import (
 	stdaes "crypto/aes"
 	"crypto/cipher"
 
-	"gitee.com/hq_project/yomi-boot/component/core/bc/random"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/bc/random"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // CBC AES-CBC + PKCS7（兼容对接；无完整性保证，禁止用于网络或攻击者可控密文）

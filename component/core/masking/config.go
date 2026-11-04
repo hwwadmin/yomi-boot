@@ -3,7 +3,7 @@ package masking
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // 策略名常量；redact / keep_edges 由引擎内建解析，其余走注册表

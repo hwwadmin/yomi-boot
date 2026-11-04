@@ -14,9 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gitee.com/hq_project/yomi-boot/component/common/token"
-	"gitee.com/hq_project/yomi-boot/component/core/masking"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/common/token"
+	"github.com/hwwadmin/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 )
 
 // stubApp 测试用应用上下文

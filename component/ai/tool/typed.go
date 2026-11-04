@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // NewTyped 用泛型函数构造 Tool：参数解码为 In，返回值编码为 JSON。

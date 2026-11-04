@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestNewDefault 覆盖零配置默认策略

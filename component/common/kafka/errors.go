@@ -1,6 +1,6 @@
 package kafka
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 var (
 	// ErrTopicNotFound topic 不存在（DescribeTopic / DeleteTopic）

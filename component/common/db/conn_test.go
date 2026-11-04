@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 )
 
 // TestConn_CloseIdempotent 验证 Conn.Close 可重复调用，且关闭后不再持有 GORM 句柄

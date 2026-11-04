@@ -7,10 +7,10 @@ import (
 	"context"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/orm"
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
-	"gitee.com/hq_project/yomi-boot/component/common/event/model"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

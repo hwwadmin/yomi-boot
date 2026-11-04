@@ -7,9 +7,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 
-	yomikafka "gitee.com/hq_project/yomi-boot/component/common/kafka"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 )
 
 // KafkaHttpRecordService 通过 Kafka 异步发布 HTTP 访问记录

@@ -4,7 +4,7 @@
 
 ## 0. 文档信息
 - **文档名称**: Go架构规范
-- **描述**: 从 gitee.com/hq_project/yomi-boot 架构视角定义基础设施能力、配置裁剪、可部署单元服务类型（入口编排 / 领域 / 可选消费者）与装配约定；业务工程在独立仓库中组织服务，不构成本规范的硬性服务名清单。gitee.com/hq_project/yomi-boot 可按配置支撑轻量单体、大单体、分布式微服务等形态。
+- **描述**: 从 github.com/hwwadmin/yomi-boot 架构视角定义基础设施能力、配置裁剪、可部署单元服务类型（入口编排 / 领域 / 可选消费者）与装配约定；业务工程在独立仓库中组织服务，不构成本规范的硬性服务名清单。github.com/hwwadmin/yomi-boot 可按配置支撑轻量单体、大单体、分布式微服务等形态。
 - **作者**: zwei
 - **创建日期**: 2026-06-17
 
@@ -12,9 +12,9 @@
 
 ## 1. 文档定位
 
-- **用途**：说明 gitee.com/hq_project/yomi-boot 的能力边界、部署形态无关性与可部署单元服务类型；约定基于 gitee.com/hq_project/yomi-boot 的进程装配、中间件链与 HTTP 路由模式。
+- **用途**：说明 github.com/hwwadmin/yomi-boot 的能力边界、部署形态无关性与可部署单元服务类型；约定基于 github.com/hwwadmin/yomi-boot 的进程装配、中间件链与 HTTP 路由模式。
 - **边界**：BFF/入口编排细则见 [GoBFF规范](./GoBFF规范.md)；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务与 DTM Saga 见 [Go事务规范](./Go事务规范.md)；微服务间契约见 [微服务调用规范](./微服务调用规范.md)（**信封与幂等权威**）；**文件命名**见 [Go文件命名规范](./Go文件命名规范.md)；**数据访问**见 [Go数据库规范](./Go数据库规范.md)；**配置加载、扩展与能力裁剪**见 [Go配置规范](./Go配置规范.md)。
-- **适用对象**：gitee.com/hq_project/yomi-boot 库本身，以及基于 gitee.com/hq_project/yomi-boot 的业务工程与可部署单元。业务工程为独立仓库，通过标准 `require gitee.com/hq_project/yomi-boot` 依赖本库；本库仓库内不包含业务服务代码。
+- **适用对象**：github.com/hwwadmin/yomi-boot 库本身，以及基于 github.com/hwwadmin/yomi-boot 的业务工程与可部署单元。业务工程为独立仓库，通过标准 `require github.com/hwwadmin/yomi-boot` 依赖本库；本库仓库内不包含业务服务代码。
 
 ---
 
@@ -22,13 +22,13 @@
 
 ### 2.1 适用范围
 
-- 适用于 `gitee.com/hq_project/yomi-boot/`：可复用基础设施库；各能力插件统一编排，**是否真正启动以配置段 `enabled`（及同类开关）为准**，可按需裁剪。
-- 适用于基于 gitee.com/hq_project/yomi-boot 的多种部署形态（详见 §3.1.0、§3.4.5）：
+- 适用于 `github.com/hwwadmin/yomi-boot/`：可复用基础设施库；各能力插件统一编排，**是否真正启动以配置段 `enabled`（及同类开关）为准**，可按需裁剪。
+- 适用于基于 github.com/hwwadmin/yomi-boot 的多种部署形态（详见 §3.1.0、§3.4.5）：
   - **轻量单体**：单进程、单库；通常只开 `db`（及按需 `redis`/`token`），关闭 `consul`/`kafka`/`redis_stream`/`dtm`/`event` 等。
   - **大单体 / 模块化单体**：单部署单元内多业务模块分层；仍用同一套 boot/插件，按模块边界组织代码，不必拆多进程。
   - **分布式微服务**：多进程按服务类型独立部署；开 `consul`/`rpc`，跨域写按需开 `dtm`，异步按需开 `kafka` / `redis_stream` / `event`。
-- 适用于基于 gitee.com/hq_project/yomi-boot 组装的业务工程（独立 `go.mod`，经标准 `require` 引用 `gitee.com/hq_project/yomi-boot`；本地可用 `go.work` 联调）：具体服务名与业务域随产品演进，**以服务类型为准，不以某一仓库清单为准**。
-- Consul / HTTP RPC / DTM 等为**分布式路径**能力，非 gitee.com/hq_project/yomi-boot 强制依赖。
+- 适用于基于 github.com/hwwadmin/yomi-boot 组装的业务工程（独立 `go.mod`，经标准 `require` 引用 `github.com/hwwadmin/yomi-boot`；本地可用 `go.work` 联调）：具体服务名与业务域随产品演进，**以服务类型为准，不以某一仓库清单为准**。
+- Consul / HTTP RPC / DTM 等为**分布式路径**能力，非 github.com/hwwadmin/yomi-boot 强制依赖。
 - 不适用于前端工程（前端规范仅作消费者参考，本库仓无前端代码）。
 
 ### 2.2 关联文档
@@ -48,9 +48,9 @@
 
 ### 2.3 阅读建议
 
-- 先理解 gitee.com/hq_project/yomi-boot 能力边界：读 §3.1.0（部署形态无关 / 配置裁剪）与 [Go配置规范](./Go配置规范.md) 能力裁剪章节。
+- 先理解 github.com/hwwadmin/yomi-boot 能力边界：读 §3.1.0（部署形态无关 / 配置裁剪）与 [Go配置规范](./Go配置规范.md) 能力裁剪章节。
 - 理解可部署服务类型：读 §3.1.2～§3.1.4；入口编排再读 [GoBFF规范](./GoBFF规范.md)；领域再读 [Go业务分层规范](./Go业务分层规范.md)。
-- 装配与路由：读 §3.3 gitee.com/hq_project/yomi-boot 职责、§3.4 启动装配、§3.4.5 按需启用、§3.6 路由与中间件。
+- 装配与路由：读 §3.3 github.com/hwwadmin/yomi-boot 职责、§3.4 启动装配、§3.4.5 按需启用、§3.6 路由与中间件。
 - 建立门禁：读 §4 检查清单与 §5 禁止项（按服务类型与形态裁剪适用）。
 
 ---
@@ -59,27 +59,27 @@
 
 ### 3.1 核心设计原则
 
-#### 3.1.0 gitee.com/hq_project/yomi-boot 部署形态无关（配置裁剪）
+#### 3.1.0 github.com/hwwadmin/yomi-boot 部署形态无关（配置裁剪）
 
-- gitee.com/hq_project/yomi-boot 是**能力库 + 插件生命周期**，不是「必须微服务」的运行时。
+- github.com/hwwadmin/yomi-boot 是**能力库 + 插件生命周期**，不是「必须微服务」的运行时。
 - 插件在 `plugin/builtin` 根包中按固定顺序登记；**Init 是否真正启动由各自配置决定**（见 `plugin/builtin/plugins.go` 与 `plugin/builtin/{lib}`）。
 - 切换形态优先改 YAML，而不是改库代码：关未用能力的 `enabled`，需要时再打开。细则见 [Go配置规范](./Go配置规范.md)「能力按需裁剪」与本文 §3.4.5。
-- 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 gitee.com/hq_project/yomi-boot 的唯一用法。
+- 业务侧如何拆进程、拆几个可部署单元，由产品与团队决定；多服务拆分是业务仓的组织方式，不是 github.com/hwwadmin/yomi-boot 的唯一用法。
 - 单体形态下：可无 Consul/DTM/Kafka/Redis Stream；业务可仍按 handler → usecase → domain → repo 分层；跨模块调用走进程内依赖，不必强上入口编排层 / Saga。
 
-#### 3.1.1 gitee.com/hq_project/yomi-boot + 业务工程
+#### 3.1.1 github.com/hwwadmin/yomi-boot + 业务工程
 
-- 基础设施库为独立 module：`gitee.com/hq_project/yomi-boot`（本仓库根）；**不含业务规则**；能力是否启用由配置裁剪（§3.1.0）。
-- 业务工程在独立仓库中：标准 `require gitee.com/hq_project/yomi-boot <tag>`（无需 `replace`）；本地联调可用相对路径 `replace` 或 `go.work`。
+- 基础设施库为独立 module：`github.com/hwwadmin/yomi-boot`（本仓库根）；**不含业务规则**；能力是否启用由配置裁剪（§3.1.0）。
+- 业务工程在独立仓库中：标准 `require github.com/hwwadmin/yomi-boot <tag>`（无需 `replace`）；本地联调可用相对路径 `replace` 或 `go.work`。
 - 业务工程可聚合：可选的 **client 契约模块**（跨进程 HTTP DTO/客户端），以及一个或多个**可部署单元**（各自 `go.mod`、`cmd/main.go`、`internal/bootstrap/`、`config/`）。
 - 分布式形态下：进程间通信统一 **HTTP/HTTPS**；注册发现可用 **Consul**；跨域写事务可用 **DTM Saga**（由入口编排层提交）。单体形态可不启用上述组件。
-- client 契约模块依赖 gitee.com/hq_project/yomi-boot 的 Consul/RPC/DTM 等能力，供入口编排层调用下游；领域进程不反向依赖其他领域的业务包。
+- client 契约模块依赖 github.com/hwwadmin/yomi-boot 的 Consul/RPC/DTM 等能力，供入口编排层调用下游；领域进程不反向依赖其他领域的业务包。
 
 #### 3.1.2 可部署单元服务类型（抽象）
 
 规范约束的是**服务类型**，不是具体服务名。具体服务名与目录落在业务工程中。
 
-| 服务类型 | 职责 | gitee.com/hq_project/yomi-boot 典型启用 |
+| 服务类型 | 职责 | github.com/hwwadmin/yomi-boot 典型启用 |
 | -------- | ---- | ---------------- |
 | **入口编排（BFF）** | 对外 API、鉴权、跨域读聚合、跨域写编排（Saga） | `token`、按需 `db`/`redis`/`consul`/`dtm`/`kafka`/`redis_stream`/`event` |
 | **领域** | 单一业务边界内的读写与本地事务；对外提供内部 API | `db`、按需 `redis`（幂等/锁）、`consul`；通常关 `token` |
@@ -94,24 +94,24 @@
 - **跨域 HTTP 仅由入口编排层**经 client 契约模块发起。
 - 单体形态下跨模块调用走进程内依赖，不适用本条 HTTP 互调禁令。
 
-#### 3.1.4 gitee.com/hq_project/yomi-boot 只放基础设施
+#### 3.1.4 github.com/hwwadmin/yomi-boot 只放基础设施
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
 - `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、captcha、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、chunking、retrieval、rag、vectordb、rerank。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链与每个插件的初始化状态，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单放 `plugin/builtin` 根包（根包可 import 全部子包，`plugin/builtin/{lib}` 子包不得 import 根包，否则成环）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
-- `gitee.com/hq_project/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
-- `gitee.com/hq_project/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
-- `gitee.com/hq_project/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
-- `gitee.com/hq_project/yomi-boot/component/common/captcha` 提供图形验证码生成与一次性校验（digit/string/math），Store 由调用方注入（内置只提供 Redis 实现，答案只以 SHA-256 摘要落库），**不进插件链、不读 YAML**；生成与校验接口的限流由业务负责。
+- `github.com/hwwadmin/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
+- `github.com/hwwadmin/yomi-boot/component/common/token` 提供通用令牌库（Store、Claims、中间件骨架）与 `TokenService`；需要鉴权的进程（入口编排或单体入口）直接注入使用。
+- `github.com/hwwadmin/yomi-boot/component/common/redisratelimit` 提供调用式限流门面（`Allow`/`AllowN`），依赖 `RedisService`，**不进入默认中间件链**；场景配额由调用方传入 `Rule`。
+- `github.com/hwwadmin/yomi-boot/component/common/captcha` 提供图形验证码生成与一次性校验（digit/string/math），Store 由调用方注入（内置只提供 Redis 实现，答案只以 SHA-256 摘要落库），**不进插件链、不读 YAML**；生成与校验接口的限流由业务负责。
 
 ### 3.2 标准目录结构（模式）
 
-以下为**业务工程**推荐落位模式（与 gitee.com/hq_project/yomi-boot 分仓）；`{bff}`、`{domain}` 为占位符。gitee.com/hq_project/yomi-boot 本仓根目录即为 `module gitee.com/hq_project/yomi-boot`。
+以下为**业务工程**推荐落位模式（与 github.com/hwwadmin/yomi-boot 分仓）；`{bff}`、`{domain}` 为占位符。github.com/hwwadmin/yomi-boot 本仓根目录即为 `module github.com/hwwadmin/yomi-boot`。
 
 ```text
-# gitee.com/hq_project/yomi-boot 仓库（本库）
-gitee.com/hq_project/yomi-boot/                               # module: gitee.com/hq_project/yomi-boot
+# github.com/hwwadmin/yomi-boot 仓库（本库）
+github.com/hwwadmin/yomi-boot/                               # module: github.com/hwwadmin/yomi-boot
 ├── boot/                        # 启动编排（入口/初始化、server、lifecycle、banner）
 ├── component/                   # 可复用库
 │   ├── core/                    # 内核（appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、traceid、utils）
@@ -123,7 +123,7 @@ gitee.com/hq_project/yomi-boot/                               # module: gitee.co
 
 # 业务工程仓库（示例）
 {business-repo}/
-├── go.work                            # 可选；本地联调 use ./services/* 与 ../gitee.com/hq_project/yomi-boot
+├── go.work                            # 可选；本地联调 use ./services/* 与 ../github.com/hwwadmin/yomi-boot
 ├── client/                            # 可选；跨进程契约 module
 │   └── {domain}/
 └── services/
@@ -131,7 +131,7 @@ gitee.com/hq_project/yomi-boot/                               # module: gitee.co
     └── {domain}/                      # 领域服务类型（可多个）
 ```
 
-各业务服务 `go.mod`：`require gitee.com/hq_project/yomi-boot <tag>`（标准拉取，无需 `replace`）。**按服务类型套模板，不要求对齐某一固定服务名清单。**
+各业务服务 `go.mod`：`require github.com/hwwadmin/yomi-boot <tag>`（标准拉取，无需 `replace`）。**按服务类型套模板，不要求对齐某一固定服务名清单。**
 
 #### 3.2.1 入口编排（BFF）目录模式
 
@@ -170,9 +170,9 @@ services/{domain}/
 
 #### 3.2.3 带消息消费者的领域变体
 
-在 §3.2.2 基础上，于 `internal/bootstrap/` 增加自定义消费者插件（经 `AddCustomPlugin` 注册）。gitee.com/hq_project/yomi-boot 只提供消费端点能力（如 `httprecord.StartKafkaRecordConsumer` 或 `RedisStreamConsumer.Start`），**业务消费逻辑留在可部署单元内**。
+在 §3.2.2 基础上，于 `internal/bootstrap/` 增加自定义消费者插件（经 `AddCustomPlugin` 注册）。github.com/hwwadmin/yomi-boot 只提供消费端点能力（如 `httprecord.StartKafkaRecordConsumer` 或 `RedisStreamConsumer.Start`），**业务消费逻辑留在可部署单元内**。
 
-### 3.3 gitee.com/hq_project/yomi-boot 模块职责
+### 3.3 github.com/hwwadmin/yomi-boot 模块职责
 
 归属速查：
 
@@ -259,15 +259,15 @@ services/{domain}/
 | `component/ai/tool` | 协议无关的工具调用组件：`Spec`（原生 JSON Schema + `Fill` 填槽规则 + 宿主 Metadata）/ `Tool` / `Registry` / `Call` / `Result`；`NewFunc` / `NewTyped` 适配 simple tool，`NewResolved` + `InputContract` 提供 `Decode`/`Normalize`/`Validate`/`Identify` typed 入参；`Registry.Fill` 按 `Completer` 端口拼 Schema/Guidance/Example/Evidence 提示词、抽取 JSON、按契约校验并返回 `Filled`（Arguments/Input/Missing/Complete/Raw），缺槽不重试、非法 JSON/类型错误可配置重试，`IdentifierKeys` 做证据门闩；`Invoke` / `InvokeFilled` / `FillAndInvoke` / `InvokeAll` 执行，参数只做对象形态与运行时必填校验，执行层统一 panic 恢复、参数/结果上限（默认 8 MiB，可配置）、防御性拷贝与批量固定 worker（默认顺序、不 fail-fast）；对外错误统一为 `*Error`（Code/Message/Tool/CallID/Missing，不实现 Unwrap，底层原因只经 Cause 供进程内日志），工具可实现 `SafeError` 提供安全文案；`AI_TOOL_*` 独立错误码；与 ai 其他组件零依赖，不 import llm；不进插件链、不读 YAML、不做限流 |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
 
-**平台共享 DDL**（统一维护在根目录 `gitee.com/hq_project/yomi-boot/sql/` 下，按数据库分 `mysql/` 与 `pgsql/` 两个目录，同名文件字段口径一致，修改时须同步两份）：
+**平台共享 DDL**（统一维护在根目录 `github.com/hwwadmin/yomi-boot/sql/` 下，按数据库分 `mysql/` 与 `pgsql/` 两个目录，同名文件字段口径一致，修改时须同步两份）：
 
 | 文件 | 表名 | 说明 |
 | ---- | ---- | ---- |
-| `gitee.com/hq_project/yomi-boot/sql/mysql/sys_biz.sql` | `sys_biz` | 业务幂等表 |
-| `gitee.com/hq_project/yomi-boot/sql/mysql/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
-| `gitee.com/hq_project/yomi-boot/sql/mysql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
+| `github.com/hwwadmin/yomi-boot/sql/mysql/sys_biz.sql` | `sys_biz` | 业务幂等表 |
+| `github.com/hwwadmin/yomi-boot/sql/mysql/barrier.sql` | `sys_barrier` | DTM 子事务屏障表 |
+| `github.com/hwwadmin/yomi-boot/sql/mysql/sys_event.sql` | Outbox/Inbox 相关 | 可选，`event.outbox_enabled` / `event.inbox_enabled` 启用时使用 |
 
-**gitee.com/hq_project/yomi-boot 明确不包含**：业务 handler/usecase、各领域 `bizerr` 哨兵。
+**github.com/hwwadmin/yomi-boot 明确不包含**：业务 handler/usecase、各领域 `bizerr` 哨兵。
 
 ### 3.4 启动与装配
 
@@ -276,7 +276,7 @@ services/{domain}/
 启动 / 运行 / 关闭三阶段异常策略以 [Go异常规范](./Go异常规范.md) §3.5 为准。本文仅强调装配侧：
 
 - 配置加载、插件 `Init`、HTTP 装配失败走启动 Fail Fast（log + panic）；插件 `Init` 失败时由 `PluginSlot` 逆序回滚已初始化插件，再由 `boot.MustInit` panic。
-- 各 gitee.com/hq_project/yomi-boot 库对外提供 `Must*` 包装（如 `config.MustLoadConfig`）；构造函数内部假定入参已校验。
+- 各 github.com/hwwadmin/yomi-boot 库对外提供 `Must*` 包装（如 `config.MustLoadConfig`）；构造函数内部假定入参已校验。
 - HTTP 请求路径的 `error` 传播与 Recovery 见 Go异常规范。
 
 #### 3.4.2 启动链路
@@ -315,7 +315,7 @@ cmd/main.go
 
 #### 3.4.4 插件生命周期
 
-**接口**（`gitee.com/hq_project/yomi-boot/plugin`；内置实现见 `plugin/builtin/{lib}`，如 `plugin/builtin/logger`、`plugin/builtin/db`、`plugin/builtin/consul`）：
+**接口**（`github.com/hwwadmin/yomi-boot/plugin`；内置实现见 `plugin/builtin/{lib}`，如 `plugin/builtin/logger`、`plugin/builtin/db`、`plugin/builtin/consul`）：
 
 ```go
 type Plugin interface {
@@ -416,9 +416,9 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 
 **消息消费者自定义插件约定**：
 
-- gitee.com/hq_project/yomi-boot 消费端点（如 `httprecord.StartKafkaRecordConsumer`）只负责参数校验、反序列化、委托业务 `Handler`。
+- github.com/hwwadmin/yomi-boot 消费端点（如 `httprecord.StartKafkaRecordConsumer`）只负责参数校验、反序列化、委托业务 `Handler`。
 - 业务 handler、是否启用、消费者标识 / 组名等由**可部署单元内**自定义插件实现（可使用 `KafkaConsumer` 或 `RedisStreamConsumer`）。
-- 通过 `pluginOpts.AddCustomPlugin(...)` 插入启动流程，**禁止**在 `wireHandlers` 或 gitee.com/hq_project/yomi-boot 内置插件中硬编码业务消费逻辑。
+- 通过 `pluginOpts.AddCustomPlugin(...)` 插入启动流程，**禁止**在 `wireHandlers` 或 github.com/hwwadmin/yomi-boot 内置插件中硬编码业务消费逻辑。
 
 #### 3.4.5 能力按需启用
 
@@ -430,7 +430,7 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 
 各组件是否启动**一律以对应配置段为准**（如 `db.enabled`、`token.enabled`、`event.outbox_enabled` / `event.inbox_enabled`）；缺依赖时由插件 Init / 构造函数 Fail Fast。
 
-**形态裁剪参考（改配置即可，不必改 gitee.com/hq_project/yomi-boot 源码）**：
+**形态裁剪参考（改配置即可，不必改 github.com/hwwadmin/yomi-boot 源码）**：
 
 | 形态 | 建议启用 | 建议关闭 / 暂缓 |
 | ---- | -------- | --------------- |
@@ -440,15 +440,15 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 
 说明：开关名以各配置段为准（如 `db.enabled`、`token.enabled`、`consul.enabled`、`kafka.publisher_enabled` / `kafka.consumer_enabled`、`redis_stream.enabled`、`dtm.enabled`、`event.outbox_enabled` / `event.inbox_enabled`、`pprof.enabled`、`http_record.enabled`）。能力裁剪权威说明见 [Go配置规范](./Go配置规范.md)。
 
-### 3.5 业务工程依赖 gitee.com/hq_project/yomi-boot
+### 3.5 业务工程依赖 github.com/hwwadmin/yomi-boot
 
 各可部署单元 `go.mod` 标准依赖：
 
 ```go
-require gitee.com/hq_project/yomi-boot v1.0.0
+require github.com/hwwadmin/yomi-boot v1.0.0
 ```
 
-`import` 路径为 `gitee.com/hq_project/yomi-boot/...`。本地联调可用相对路径 `replace` 或根目录 `go.work`。
+`import` 路径为 `github.com/hwwadmin/yomi-boot/...`。本地联调可用相对路径 `replace` 或根目录 `go.work`。
 
 ### 3.6 HTTP 路由约定
 
@@ -466,7 +466,7 @@ require gitee.com/hq_project/yomi-boot v1.0.0
 - 入口编排 handler 注册**相对路径**，完整 URL = `http.router_prefix` + 相对路径。
 - **入口编排对外主输入**：默认推荐 **POST + JSON Body**；允许 GET（CDN/SEO）。若 GET 仅用 Query 承载主输入，须在该接口契约中**显式约定**（非默认）。
 - 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。详见 [微服务调用规范](./微服务调用规范.md) §3.1.1。
-- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`gitee.com/hq_project/yomi-boot/component/core/traceid`），**不在** JSON Body 信封中传递。
+- 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`github.com/hwwadmin/yomi-boot/component/core/traceid`），**不在** JSON Body 信封中传递。
 - 微服务间请求/响应契约见 [微服务调用规范](./微服务调用规范.md) §3（权威）。
 - 对外出口编码适配见 [API编码适配规范](./API编码适配规范.md)（**不**规定 HTTP 方法；方法以本节约定为准）。
 - 路径中资源段使用**单数名词**，禁止无意义复数。
@@ -483,11 +483,11 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard �
 
 - **顺序约束**：`httprecord.Middleware` 与 `logger.Middleware` 必须位于 `httpguard` **外侧**。`httpguard` 在 `c.Next()` 返回后才可能写出 `REQUEST_TIMEOUT`；若采集层更靠内，会在超时信封写出前落盘，造成审计/access 的 `StatusCode`/`BizCode` 失真。
 - `token.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。
-- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `gitee.com/hq_project/yomi-boot/component/cloud/rpc` 自动回填 Header。
+- `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `github.com/hwwadmin/yomi-boot/component/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
 - 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)。
 - 领域**读**（微服务间）：对内信封与 HTTP 状态见 [微服务调用规范](./微服务调用规范.md) §3.3.1。
-- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`gitee.com/hq_project/yomi-boot/component/cloud/dtm`）。
+- 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`github.com/hwwadmin/yomi-boot/component/cloud/dtm`）。
 
 ### 3.8 pprof 排障
 
@@ -500,9 +500,9 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard �
 
 ### 3.9 配置约定
 
-环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`gitee.com/hq_project/yomi-boot/component/core/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
+环境文件命名统一为 `config/local.yml`、`config/dev.yml`、`config/prod.yml`。`github.com/hwwadmin/yomi-boot/component/core/config.ResolvePath()` 默认从 `config/` 目录加载，根据 `YOMI_CONFIG`（`local`/`dev`/`prod`，**默认 `dev`**）选择文件。
 
-`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`gitee.com/hq_project/yomi-boot/component/core/config.LoadConfig` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
+`dev.yml` / `prod.yml` 中中间件连接参数（host、port、user、password 等）使用 `${YOMI_*:默认值}` 占位符；`github.com/hwwadmin/yomi-boot/component/core/config.LoadConfig` 加载时展开，未设置的环境变量取冒号后默认值。`local.yml` 仍可直接写本地默认值。
 
 ```yaml
 # 入口编排 config/local.yml 示意
@@ -533,8 +533,8 @@ kafka: ...
 
 ### 3.10 质量门禁（depguard）
 
-- `gitee.com/hq_project/yomi-boot` 不得 import 业务可部署单元代码。
-- client 契约模块不得 import 可部署单元 `internal`，也不得向 `gitee.com/hq_project/yomi-boot` 注入业务代码。
+- `github.com/hwwadmin/yomi-boot` 不得 import 业务可部署单元代码。
+- client 契约模块不得 import 可部署单元 `internal`，也不得向 `github.com/hwwadmin/yomi-boot` 注入业务代码。
 - 领域 `internal/biz` 不得 import 其他领域可部署单元代码；不得 import 入口编排层。
 - 入口编排通过 client 契约模块调用领域，不得 import 领域 `internal/biz`。
 - 分层 depguard 细则见 [Go业务分层规范](./Go业务分层规范.md) §3.8。
@@ -627,12 +627,12 @@ kafka: ...
 
 按形态裁剪适用项：单体不强制拆多进程或启用 Consul/DTM；分布式按服务类型勾选。
 
-- [ ] 业务可部署单元经标准 `require gitee.com/hq_project/yomi-boot`（本地可用 `go.work` / `replace`）引用本库；`import` 为 `gitee.com/hq_project/yomi-boot/...`
-- [ ] `gitee.com/hq_project/yomi-boot` 不依赖任何业务可部署单元代码
+- [ ] 业务可部署单元经标准 `require github.com/hwwadmin/yomi-boot`（本地可用 `go.work` / `replace`）引用本库；`import` 为 `github.com/hwwadmin/yomi-boot/...`
+- [ ] `github.com/hwwadmin/yomi-boot` 不依赖任何业务可部署单元代码
 - [ ] 每个可部署单元 `internal/bootstrap/` 以 `server.go` 为装配入口；消息消费者插件单独文件
 - [ ] 启动链路使用 `boot.Run` / `boot.RunWithOptions`（或低层 `lifecycle.Run`）；启动失败 Fail Fast（panic）
 - [ ] 未使用的基础设施能力已在 YAML 中关闭对应 `enabled`
-- [ ] 消息/平台消费的业务逻辑在可部署单元自定义插件中实现；gitee.com/hq_project/yomi-boot 仅提供消费端点
+- [ ] 消息/平台消费的业务逻辑在可部署单元自定义插件中实现；github.com/hwwadmin/yomi-boot 仅提供消费端点
 - [ ] 分布式形态：领域进程无跨域 HTTP、无 token 中间件
 - [ ] 入口编排含 `handler/`、`bff/`、`saga/`（若属该服务类型）
 - [ ] 跨进程契约符合 [微服务调用规范](./微服务调用规范.md) §3（若启用）
@@ -644,11 +644,11 @@ kafka: ...
 
 ## 5. 禁止项
 
-- 业务以独立工程 + 可部署单元组织；禁止在业务工程根目录放置业务 `internal/biz` 或业务装配入口（应落在各可部署单元内）。基于 gitee.com/hq_project/yomi-boot 的单进程部署仍属合法形态（见 §3.1.0）。
+- 业务以独立工程 + 可部署单元组织；禁止在业务工程根目录放置业务 `internal/biz` 或业务装配入口（应落在各可部署单元内）。基于 github.com/hwwadmin/yomi-boot 的单进程部署仍属合法形态（见 §3.1.0）。
 - 禁止领域进程之间 HTTP 互调（分布式形态；单体进程内模块调用不受此限）。
-- 禁止把业务签发/校验策略放入 `gitee.com/hq_project/yomi-boot/component/common/token`（gitee.com/hq_project/yomi-boot 仅提供库；鉴权方在 config 中配置 `token` 段）。
+- 禁止把业务签发/校验策略放入 `github.com/hwwadmin/yomi-boot/component/common/token`（github.com/hwwadmin/yomi-boot 仅提供库；鉴权方在 config 中配置 `token` 段）。
 - 禁止服务间默认使用 gRPC 等其他 RPC 协议替代 HTTP（分布式形态）。
 - 禁止在 JSON Body 中传递 `traceId`（统一使用 Header `X-Trace-ID`）。
 - 禁止在领域 handler/usecase 中读取 token 或 `SessionFromContext`（分布式形态下的领域服务类型）。
-- 禁止在 `wireHandlers` 或 gitee.com/hq_project/yomi-boot 内置插件中编写业务消费逻辑（应通过 `AddCustomPlugin` 注册）。
+- 禁止在 `wireHandlers` 或 github.com/hwwadmin/yomi-boot 内置插件中编写业务消费逻辑（应通过 `AddCustomPlugin` 注册）。
 - 禁止在 `internal/bootstrap/` 下存在 `wire/` 子目录或独立 `wire.go`。

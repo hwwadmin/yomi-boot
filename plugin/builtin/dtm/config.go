@@ -3,9 +3,9 @@ package dtmplugin
 import (
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/cloud/dtm"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/cloud/dtm"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // SectionKey YAML 根 key

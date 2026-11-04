@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Strategy 脱敏策略：对命中规则的字符串值生成脱敏结果。

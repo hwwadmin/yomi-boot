@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestSignVerify 验证签名验签、标准库兼容性及篡改检测

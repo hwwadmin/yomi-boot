@@ -5,8 +5,8 @@
 package rag
 
 import (
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/ai/retrieval"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
 )
 
 // newChunkFilter 装配文档域过滤器：保留键与首块主键由本包提供，

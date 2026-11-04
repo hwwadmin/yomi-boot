@@ -7,11 +7,11 @@ import (
 	"context"
 	"net/http"
 
-	"gitee.com/hq_project/yomi-boot/component/core/appctx"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/component/core/handler"
-	"gitee.com/hq_project/yomi-boot/component/core/router"
-	sharederr "gitee.com/hq_project/yomi-boot/component/core/shared/error"
+	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/handler"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
+	sharederr "github.com/hwwadmin/yomi-boot/component/core/shared/error"
 
 	"github.com/gin-gonic/gin"
 )

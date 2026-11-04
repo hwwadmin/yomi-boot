@@ -3,7 +3,7 @@ package httprecord
 import (
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/utils/utf8util"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 )
 
 func TestConfigValidate_RejectsNegativeBodySize(t *testing.T) {

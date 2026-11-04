@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // markdownChunker 按 Markdown 标题分节，超长小节再递归切分

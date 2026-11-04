@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestWrapSentinel 验证哨兵与原因同时保留；错误链风格与同族四包一致

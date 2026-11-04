@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/cloud/rpc"
+	"github.com/hwwadmin/yomi-boot/component/cloud/rpc"
 )
 
 // 编译期验证 RPC 端点解析接口实现

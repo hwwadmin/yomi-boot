@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/event/cfg"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 )
 
 // TestConfigConsumerDefaults 校验消费重试与收件箱死信重投的默认值

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/cloud/consul"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/cloud/consul"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"github.com/dtm-labs/client/dtmcli"
 )

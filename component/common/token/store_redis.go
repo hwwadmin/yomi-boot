@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/bc/hash"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/bc/hash"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
-	yomiredis "gitee.com/hq_project/yomi-boot/component/common/redis"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 )
 
 var _ Store = (*RedisStore)(nil)

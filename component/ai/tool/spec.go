@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // MaxToolNameBytes 是工具名字节上限，与主流模型服务对齐

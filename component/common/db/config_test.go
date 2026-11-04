@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/shared/enums"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 )
 
 func TestSlowThreshold(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/db/dbtest"
+	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
 )
 
 // TestCountPage_ZeroTotalClearsDest 验证 total=0 时清空调用方复用的结果切片

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // validSchema 返回一个含必填 city 的合法参数 Schema

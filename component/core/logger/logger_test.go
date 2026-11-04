@@ -16,8 +16,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/component/core/masking"
-	"gitee.com/hq_project/yomi-boot/component/core/traceid"
+	"github.com/hwwadmin/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"github.com/gin-gonic/gin"
 )

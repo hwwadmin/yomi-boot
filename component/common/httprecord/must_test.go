@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/common/redis/redistest"
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
 )
 
 // TestMustStartMemoryRecordConsumer 验证内存消费者 Fail Fast 与成功路径

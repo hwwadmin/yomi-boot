@@ -3,7 +3,7 @@
 // @author zwei
 package snowflake
 
-import "gitee.com/hq_project/yomi-boot/component/core/errors"
+import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 // maxSnowflakeWorkerID 是雪花算法工作节点 ID 的最大值
 const maxSnowflakeWorkerID = 1023

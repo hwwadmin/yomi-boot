@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Chunker 文本切块策略门面；实现须并发安全

@@ -6,11 +6,11 @@ package redisstreamplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/redisstream"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
+	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	redisplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/redis"
 )
 
 const Name = "redisstream"

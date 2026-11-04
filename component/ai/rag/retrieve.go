@@ -8,10 +8,10 @@ import (
 	"context"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/ai/generation"
-	"gitee.com/hq_project/yomi-boot/component/ai/rerank"
-	"gitee.com/hq_project/yomi-boot/component/ai/retrieval"
-	"gitee.com/hq_project/yomi-boot/component/ai/vectordb"
+	"github.com/hwwadmin/yomi-boot/component/ai/generation"
+	"github.com/hwwadmin/yomi-boot/component/ai/rerank"
+	"github.com/hwwadmin/yomi-boot/component/ai/retrieval"
+	"github.com/hwwadmin/yomi-boot/component/ai/vectordb"
 )
 
 // Retrieve 实现 Engine：检索（含域过滤）→ 精重排 → 提示词拼接

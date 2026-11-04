@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 var testKey = []byte("0123456789abcdef")

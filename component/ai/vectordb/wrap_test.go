@@ -9,7 +9,7 @@ import (
 	"io"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestVectorWrapSentinel 验证哨兵与原因同时保留

@@ -3,7 +3,7 @@ package snowflake
 import (
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/common/snowflake/snowflaketest"
+	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
 )
 
 var _ Generator = (*snowflaketest.TestGenerator)(nil)

@@ -5,8 +5,8 @@ import (
 
 	gmsm4 "github.com/emmansun/gmsm/sm4"
 
-	"gitee.com/hq_project/yomi-boot/component/core/bc/random"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/bc/random"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 const gcmNonceSize = 12

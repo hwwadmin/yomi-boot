@@ -13,7 +13,7 @@ import (
 
 	"github.com/youmark/pkcs8"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // GenerateKey 生成 RSA 私钥；bits 须 >= 2048

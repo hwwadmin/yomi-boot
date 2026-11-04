@@ -18,7 +18,7 @@
   - Saga 编排、BFF 写入口、领域 client 见 [GoBFF规范](./GoBFF规范.md)。
   - 微服务信封、`bizId`/`bizSubId`、业务幂等与 DTM 分工以 [微服务调用规范](./微服务调用规范.md) §3.4、§5 为唯一权威，本文只讲事务形态的配合，不重复展开。
   - repository 的 GORM 写法与 `tx.Exec` 事务感知见 [Go数据库规范](./Go数据库规范.md)。
-  - `tx.Runner`/`tx.Executor` 实现位于 `gitee.com/hq_project/yomi-boot/component/common/db/tx`；DTM 集成位于 `gitee.com/hq_project/yomi-boot/component/cloud/dtm`。
+  - `tx.Runner`/`tx.Executor` 实现位于 `github.com/hwwadmin/yomi-boot/component/common/db/tx`；DTM 集成位于 `github.com/hwwadmin/yomi-boot/component/cloud/dtm`。
 - **适用对象**：领域写 usecase/service/repository 的设计者、BFF `saga/` 实现者、DTM 分支 Handler、基础设施组件作者与评审者。
 
 ---
@@ -286,7 +286,7 @@ if err != nil {
 | DTM Saga | 跨服务写必须协调回滚 | 补偿型；分支各自本地事务 + barrier |
 | 2PC/TCC | 不采用 | 本栈无对应基础设施；TCC 需三套接口且空回滚/悬挂处理复杂；统一用 Saga |
 
-- 最终一致依赖 `gitee.com/hq_project/yomi-boot/component/common/event` 的 Outbox/Inbox（`event.outbox_enabled` / `event.inbox_enabled`）；是否启用按服务实际配置确认。
+- 最终一致依赖 `github.com/hwwadmin/yomi-boot/component/common/event` 的 Outbox/Inbox（`event.outbox_enabled` / `event.inbox_enabled`）；是否启用按服务实际配置确认。
 
 ### 5.3 Saga 结构与角色职责
 

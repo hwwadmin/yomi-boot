@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // DefaultCommandTimeoutMs 未配置 command_timeout_ms 时的默认指令执行最长等待时间（毫秒）

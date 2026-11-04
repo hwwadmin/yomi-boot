@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestHashAndVerify 验证密码哈希与校验及错误密码返回 ErrMismatch

@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
 
 // MustNewPublisher 创建 Kafka 生产者，失败时 log + panic

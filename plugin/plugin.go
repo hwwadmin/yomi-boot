@@ -9,7 +9,7 @@ package plugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // ErrDisabled 表示插件未启用或依赖未满足；Init 返回该值时插件被标记为跳过，

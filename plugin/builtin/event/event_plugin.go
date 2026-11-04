@@ -6,15 +6,15 @@ package eventplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/common/event"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	appctxplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/appctx"
-	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
-	kafkaplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/kafka"
-	redisplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/redis"
-	snowflakeplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/snowflake"
+	"github.com/hwwadmin/yomi-boot/component/common/event"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
+	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
+	kafkaplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/kafka"
+	redisplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/redis"
+	snowflakeplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/snowflake"
 )
 
 const Name = "event"

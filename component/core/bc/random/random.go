@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // Bytes 生成 n 字节密码学安全随机数据

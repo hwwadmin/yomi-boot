@@ -6,12 +6,12 @@ package dtmplugin
 import (
 	"context"
 
-	"gitee.com/hq_project/yomi-boot/component/cloud/dtm"
-	"gitee.com/hq_project/yomi-boot/component/common/db/tx"
-	"gitee.com/hq_project/yomi-boot/component/core/config"
-	"gitee.com/hq_project/yomi-boot/plugin"
-	consulplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/consul"
-	dbplugin "gitee.com/hq_project/yomi-boot/plugin/builtin/db"
+	"github.com/hwwadmin/yomi-boot/component/cloud/dtm"
+	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/plugin"
+	consulplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/consul"
+	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
 )
 
 const Name = "dtm"

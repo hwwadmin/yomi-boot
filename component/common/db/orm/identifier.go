@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"gitee.com/hq_project/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
