@@ -2,7 +2,7 @@
 description: 基于spec文档开始落地代码
 ---
 
-1. **全文执行** `_prompts/skills/spec落地执行.md`（《spec落地执行》）。
+1. **全文执行** `_prompts/skills/do_spec.md`（《spec落地执行》）。
 
 2. 阅读指定的需求显化文档和产品需求文档（工程根路径，如 `_feat-doc/`、`_doc/`）
 

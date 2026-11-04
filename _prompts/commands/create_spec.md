@@ -10,7 +10,7 @@ description: 需求显化文档生成
    - **分阶段小结**：每完成一个阶段，用 3–5 条记录：**本阶段假设**、**反例/边界**、**待确认项**（写入 spec §3，不得只留在对话里）。
    - **禁止**：为填模板而编造业务结论、表量、QPS、并发峰值；跳过 Skill §6（DoD）仍落盘 spec。
 
-2. 按下列顺序执行《需求显化》（`_prompts/skills/需求显化.md`），**不得跳过**所列 `knowledge` 必读：
+2. 按下列顺序执行《需求显化》（`_prompts/skills/create_spec.md`），**不得跳过**所列 `knowledge` 必读：
 
    - **阶段 A（spec 章 0–7）**：Read Skill §0–§2、§3.0–§3.2 及关联 knowledge（`knowledge/数据库表设计规范.md` 等）；产出对应 spec 章节。
    - **阶段 B（spec 章 8–11）**：Read Skill §3.3–§3.4.2、`knowledge/事务规范.md`、`knowledge/数据库表设计规范.md`；**同轮**产出 Ch10 与 Ch11 并对照事务列与 Step 1。

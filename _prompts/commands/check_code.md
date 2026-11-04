@@ -2,7 +2,7 @@
 description: 代码巡检
 ---
 
-1. **全文执行** `_prompts/skills/代码巡检.md`（《代码巡检》）。
+1. **全文执行** `_prompts/skills/check_code.md`（《代码巡检》）。
 
 2. 巡检报告必须落盘到工程根目录 `_ipc-doc/`，文件名遵循 `{YYYYMMDD}_{需求名称}-ipc.md`（与 audit 按应开发文档关联命名的规则一致：audit 为 `_feat-doc/{YYYYMMDD}_{需求名称}/audit.md`，ipc 为 `_ipc-doc/{YYYYMMDD}_{需求名称}-ipc.md`）。未关联应开发文档时使用 `_ipc-doc/{YYYYMMDD}_全项目-ipc.md`。
 
