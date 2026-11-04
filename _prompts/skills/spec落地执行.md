@@ -13,7 +13,7 @@
 
 ## 关联知识库
 
-- **执行前必读**：`knowledge/Go业务分层规范.md`、`knowledge/Go代码规范.md`、`knowledge/Go事务规范.md`
+- **执行前必读**：`knowledge/Go业务分层规范.md`、`knowledge/Go事务规范.md`
 - **按需**：`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
 
 ## 1. 目标
