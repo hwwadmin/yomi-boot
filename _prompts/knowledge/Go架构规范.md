@@ -97,7 +97,7 @@
 #### 3.1.4 github.com/hwwadmin/yomi-boot 只放基础设施
 
 - 仓库按三层组织：`component/`（可复用库，其中 `component/core` 为内核）、`plugin/`（插件契约、内置插件、插件清单与部署 YAML 绑定）、`boot/`（启动编排：初始化、server HTTP 装配、lifecycle、banner）。
-- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、captcha、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc；`component/ai/` 提供 llm、embedding、jev、chunking、retrieval、rag、vectordb、rerank。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`component/ai/*` 与 `ws` 不进默认插件链。
+- `component/core/` 提供 appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils，是内核（无业务状态、不管理外部资源；`response` 仅保留进程级 Encoder 注册）；`component/common/` 提供 snowflake、db、redis、kafka、redisstream、httprecord、token、captcha、redisratelimit、oss、pprof、idempotency、event、distlock、roundrobin、cronjob、worker、ws、testclient 等通用组件；`component/cloud/` 提供 consul、dtm、rpc。**上述能力按配置按需启用**，并非每个进程都必须全部启动；appctx、masking、logger、snowflake 以及 HTTP 服务本身属于强制启动项。`ws` 不进默认插件链。
 - `plugin/` 提供 `Plugin`、`Base`、`ErrDisabled`、`PluginSlot`、`PluginOptions`（自定义插件 / 自定义配置段）、`ReadyHook` / `DrainHook`；`PluginSlot` 除 `Config` 外只保存有序插件链与每个插件的初始化状态，插件对象自包含其创建的组件，跨插件依赖经 `slot.Plugin` / `slot.MustPlugin` 取到前序插件后调用其访问器。内置插件与各能力的 YAML 绑定统一放在 `plugin/builtin/{lib}/`（`SectionKey`、`BootConfig`、`ConfigSection`、`ToConfig`）；内置插件启动顺序与默认配置段集中在 `plugin/builtin` 根包（`DefaultPlugins()`、`DefaultConfigs()`）。`boot/` 提供启动入口 `boot`（含 `MustInit` 初始化）、server（HTTP 装配）、lifecycle、banner。
 - `component/**` 不得依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`（子包依赖 `plugin`，会成环），内置清单放 `plugin/builtin` 根包（根包可 import 全部子包，`plugin/builtin/{lib}` 子包不得 import 根包，否则成环）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import（如 token → redis、event → db），不得成环；`component/core` 不得依赖任何兄弟组件。组件库只保留运行时 `Config`，不写 `mapstructure` 标签。`cors` / `router` 的 `BootConfig` 分别在 `plugin/builtin/cors`、`plugin/builtin/router`（仅绑定，无生命周期插件实现；`cors.enabled` 默认 true，`router` 不提供 `enabled`）；`oss` 的绑定与生命周期插件都在 `plugin/builtin/oss`（`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `From(slot).Storage()` 读取）。
 - `github.com/hwwadmin/yomi-boot` 禁止反向依赖任何业务可部署单元代码。
@@ -116,8 +116,7 @@ github.com/hwwadmin/yomi-boot/                               # module: github.co
 ├── component/                   # 可复用库
 │   ├── core/                    # 内核（appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、traceid、utils）
 │   ├── common/                  # 通用组件（router、db、redis、kafka、event 等）
-│   ├── cloud/                   # 分布式组件（consul、dtm、rpc）
-│   └── ai/                      # AI 能力组件（不进插件链）
+│   └── cloud/                   # 分布式组件（consul、dtm、rpc）
 └── plugin/                      # 插件契约、内置插件、插件清单与部署 YAML 绑定
     └── builtin/                 # 根包：内置插件清单（DefaultPlugins/DefaultConfigs）；子目录：内置插件与 YAML 绑定（appctx、logger、db、redis、kafka、event、cors、router、oss 等）
 
@@ -184,9 +183,8 @@ services/{domain}/
 | `plugin/builtin/` | 根包：内置插件启动顺序 `DefaultPlugins()`、默认配置段 `DefaultConfigs()`；子目录：内置插件与各能力 YAML 绑定（`appctx`、`masking`、`logger`、`db`、`redis`、`kafka`、`redisstream`、`event` 等；包名 `{lib}plugin`） |
 | `component/common/` | `snowflake`、`db`、`redis`、`kafka`、`redisstream`、`distlock`、`event`、`httprecord`、`idempotency`、`oss`、`pprof`、`redisratelimit`、`roundrobin`、`cronjob`、`token`、`captcha`、`worker`、`ws`、`testclient` |
 | `component/cloud/` | `consul`、`dtm`、`rpc`（HTTP 传输） |
-| `component/ai/` | `llm`、`embedding`、`jev`、`chunking`、`retrieval`、`rag`、`vectordb`、`rerank`、`generation`、`tool` |
 
-依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud`、`component/ai` 依赖 `component/core` + `component/common`；`component/ai` 内部 `retrieval` 依赖 `embedding` + `vectordb`，`rag` 依赖 `chunking`/`embedding`/`retrieval`/`rerank`/`generation`/`vectordb`，`llm`/`embedding`/`jev`/`chunking`/`rerank`/`generation`/`tool` 互不依赖；`component/common` 不依赖 `component/cloud`/`component/ai`，`component/cloud` 与 `component/ai` 互不依赖；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`，`plugin/builtin` 根包可 import 全部子包（子包不得 import 根包）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/builtin` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段与访问器。
+依赖方向：`component/core` 不依赖 `boot`/`plugin`/任何兄弟组件；`component/common` 依赖 `component/core`；`component/cloud` 依赖 `component/core` + `component/common`；`component/common` 不依赖 `component/cloud`；`component/**` 不依赖 `boot/**` 或 `plugin/**`；`plugin/**` 可依赖 `component/**`，但不得依赖 `boot/**`；`plugin` 根包只依赖 `component/core` 的 `config` / `errors` / `logger`，不得 import `plugin/builtin/**`，`plugin/builtin` 根包可 import 全部子包（子包不得 import 根包）；`plugin/builtin/{lib}` 之间按依赖 DAG 单向 import；`boot` 依赖 `component/core` + `component/common` + `plugin` + `plugin/builtin` + `boot/server`；其中 `MustInit` 只负责配置加载与插件链，不涉及 HTTP 装配；`boot/server` 依赖 `boot/lifecycle`、gin、中间件与 `plugin/builtin` 的配置段与访问器。
 
 | 包 | 职责 |
 | -- | ---- |
@@ -247,16 +245,6 @@ services/{domain}/
 | `config` | 配置加载抽象（Section/Registry/Config）、严格根 key、环境变量展开；`LoadConfig` / `MustLoadConfig` Fail Fast；详见 [Go配置规范](./Go配置规范.md) |
 | `worker` | 后台 worker 工具 |
 | `testclient` | 集成测试 HTTP 客户端辅助 |
-| `component/ai/llm` | 统一大模型对话门面：Chat / 流式（OpenAI / Anthropic）；`New`/`MustNew`；一实例一模型；独立哨兵 `AI_LLM_*`；不进插件链、不读 YAML、不做限流 |
-| `component/ai/embedding` | 统一文本向量化门面：OpenAI Embeddings；`New`/`MustNew`；APIKey 可空；`Request.Dimensions` 每次调用必填（返回向量按它校验），`SendDimensions` 控制是否下发上游 dimensions 参数（不支持该参数的网关会 400）；独立哨兵 `AI_EMBEDDING_*`；与 llm / jev 零依赖；不进插件链、不读 YAML、不做限流 |
-| `component/ai/jev` | 统一 Jev 结构化决策门面：System One；`New`/`MustNew`；无流式；独立哨兵 `AI_JEV_*`；与 llm / embedding 零依赖；不进插件链、不读 YAML、不做限流 |
-| `component/ai/chunking` | 独立文本切块策略库：内置 recursive / fixed / sentence / markdown，可自定义 `Chunker`；`New` / `ChunkText`；`Normalize` 包装自定义实现，包装后的 `Chunk` 自带输出契约校验（空白块丢弃、超长块拒绝）；块长按 rune 计，单块上限 `MaxChunkSize`；独立哨兵 `AI_CHUNKING_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
-| `component/ai/retrieval` | 通用检索门面：查询向量化 + 检索策略 hybrid（默认，向量 + BM25 混合）/ vector（RRF 融合）+ 三层过滤（前置元数据 `Filter` 下推 / 阈值 `MinScore` / 后置 `HitFilter` 扩展点经 `RetrieveRequest.PostFilter` 注入，内置文档版本过滤器 `NewDocumentFilter`（元数据键可配置，旧块治理 + 可选内容完整性））；`New`/`MustNew`；组合 `component/ai/embedding` + `component/ai/vectordb`，不认识业务元数据语义；独立哨兵 `AI_RETRIEVAL_*`；不进插件链、不读 YAML、不做限流 |
-| `component/ai/rag` | RAG 流程编排库：门面 `Engine`（`Index` 文档入库 / `Retrieve` 文档检索增强，由 `New`/`MustNew` 返回），串联 5 个门面组件（`chunking.Chunker` / `embedding.Client` / `retrieval.Retriever` / `rerank.Reranker` / `generation.Generator`）与 `vectordb.Store`，各依赖经 Config 全部注入；rag 维护块主键、保留元数据键与文档版本；集合维度按 `IndexRequest.Dimensions` 创建，每篇文档经 `vectordb.Store.ReplaceByFilter` 覆盖并清理旧块，检索经 retrieval 的文档版本过滤器过滤旧块；文档删除与集合管理使用 `vectordb.Store`；同一 Engine 可服务多个集合，集合名按调用传入；哨兵 `AI_RAG_INVALID_ARGUMENT` / `AI_RAG_BAD_RESPONSE`，组件错误原样透传；不进插件链、不读 YAML、不做限流 |
-| `component/ai/vectordb` | 统一向量库门面：milvus / memory；`New`/`MustNew`；Metric 锁在 Store，向量维度按集合传入并锁定在集合上（不同集合可不同，维度一致性由 Store 校验）；动态 Create/Drop/Replace 集合与 `EnsureCollection`（带维度）；`ReplaceByFilter` 按过滤键覆盖写入并清理旧记录（同键实例内串行）；Search 按 `SearchQuery.Text` 切换纯向量 / 向量+BM25 混合检索（RRF 融合；milvus 原生全文检索要求 2.5+，memory 自带 BM25）；不进插件链、不读 YAML |
-| `component/ai/rerank` | 通用精重排门面契约：`Reranker` 接口 + 请求/结果类型，无 Engine 中间层、不含模型接入；业务实现接口接入自有模型，`ValidateRequest` / `RankScores` / `Apply` 供实现与调用方复用（契约的可执行形式），内置 PassThrough（保序返回 TOP-N）占位；单次候选上限 `MaxDocs`；独立哨兵 `AI_RERANK_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
-| `component/ai/generation` | 提示词拼接门面契约：`Generator` 接口（把用户问题与检索到的文档块拼接为最终输入提示词）+ 请求/结果类型，无 Engine 中间层、不含提示词模板与大模型接入；业务实现接口定制模板（拼接结果可配合 `component/ai/llm` 发送），`ValidateRequest` / `ValidateResponse` 供实现与调用方复用（契约的可执行形式），内置 Basic（问题 + 编号参考资料固定模板）占位；独立哨兵 `AI_GENERATION_*`；与 ai 其他组件零依赖；不进插件链、不读 YAML、不做限流 |
-| `component/ai/tool` | 协议无关的工具调用组件：`Spec`（原生 JSON Schema + `Fill` 填槽规则 + 宿主 Metadata）/ `Tool` / `Registry` / `Call` / `Result`；`NewFunc` / `NewTyped` 适配 simple tool，`NewResolved` + `InputContract` 提供 `Decode`/`Normalize`/`Validate`/`Identify` typed 入参；`Registry.Fill` 按 `Completer` 端口拼 Schema/Guidance/Example/Evidence 提示词、抽取 JSON、按契约校验并返回 `Filled`（Arguments/Input/Missing/Complete/Raw），缺槽不重试、非法 JSON/类型错误可配置重试，`IdentifierKeys` 做证据门闩；`Invoke` / `InvokeFilled` / `FillAndInvoke` / `InvokeAll` 执行，参数只做对象形态与运行时必填校验，执行层统一 panic 恢复、参数/结果上限（默认 8 MiB，可配置）、防御性拷贝与批量固定 worker（默认顺序、不 fail-fast）；对外错误统一为 `*Error`（Code/Message/Tool/CallID/Missing，不实现 Unwrap，底层原因只经 Cause 供进程内日志），工具可实现 `SafeError` 提供安全文案；`AI_TOOL_*` 独立错误码；与 ai 其他组件零依赖，不 import llm；不进插件链、不读 YAML、不做限流 |
 | `oss` | 统一对象存储抽象（RustFS / AWS S3 / 阿里云 OSS 等）：大文件上传/下载；**勿**用 `ws` 整包传大文件；YAML 绑定与插件在 `plugin/builtin/oss`，`oss.enabled=true` 时构造 `Storage` 并由插件自包含，业务经 `ossplugin.From(slot).Storage()` 读取 |
 
 **平台共享 DDL**（统一维护在根目录 `github.com/hwwadmin/yomi-boot/sql/` 下，按数据库分 `mysql/` 与 `pgsql/` 两个目录，同名文件字段口径一致，修改时须同步两份）：
@@ -606,15 +594,6 @@ kafka: ...
 | 图形验证码 | `captcha`（`New`/`MustNew`；digit/string/math；一次性消费；答案只存摘要；内置 Redis Store；不读 YAML） |
 | 加解密 / 哈希 / 密码 | `bc/*` |
 | 对象存储 | `oss`（大文件上传/下载；勿用 `ws` 整包） |
-| 调用大模型 Chat / 流式 | `component/ai/llm`（`New`/`MustNew`；OpenAI / Anthropic；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
-| 文本向量化 Embedding | `component/ai/embedding`（`New`/`MustNew`；OpenAI Embeddings；APIKey 可空；勿直引官方 SDK；不做限流） |
-| Jev 结构化决策 | `component/ai/jev`（`New`/`MustNew`；System One；业务自管配置；一实例一模型；勿直引官方 SDK；不做限流） |
-| 文本切块 | `component/ai/chunking`（`New`/`ChunkText`；内置 recursive / fixed / sentence / markdown，可注入自定义 `Chunker`；与 ai 其他组件零依赖；不读 YAML） |
-| 通用向量 / BM25 检索 | `component/ai/retrieval`（`New`/`MustNew`；hybrid 默认 / vector；对任意 vectordb 集合做通用检索，不认识业务元数据；不读 YAML） |
-| RAG 入库 / 检索 / 删除 | `component/ai/rag`（`New`/`MustNew`；同一 Engine 可服务多个集合，集合名按调用传入；切块经 `component/ai/chunking`，可注入自定义 `Chunker`；检索经 `component/ai/retrieval` 并叠加旧块过滤；基于 `component/ai/embedding` + `component/ai/vectordb`；不含问答；不读 YAML） |
-| 向量写入 / ANN 检索 / 动态索引 | `component/ai/vectordb`（`New`/`MustNew`；milvus 或 memory；Dimension/Metric 锁在 Store；勿直引 Milvus SDK；不读 YAML） |
-| 精重排 Rerank | `component/ai/rerank`（实现 `Reranker` 接口接入自有模型，`ValidateRequest` / `RankScores` 供实现复用；PassThrough 保序 TOP-N 占位；与 ai 其他组件零依赖；不读 YAML） |
-| 工具定义 / 填槽 / 执行 | `component/ai/tool`（`Spec` 原生 JSON Schema + `Fill`；`Registry` 不可变；`NewFunc` / `NewTyped` / `NewResolved`；`Fill` / `InvokeFilled` / `FillAndInvoke` / `Invoke` / `InvokeAll`；`Completer` 模型端口；缺槽 `Missing`；对外错误统一 `*Error`，底层原因只经 Cause 进内部日志；与 ai 其他组件零依赖；不读 YAML） |
 | 雪花 ID | `snowflake` |
 | 错误码 / 信封 DTO | `errors`、`shared/error`、`shared/dto` |
 | 集成测试 HTTP 调用 | `testclient` |

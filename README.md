@@ -23,7 +23,6 @@ Go **基础设施库**（能力库 + 插件生命周期），**不含业务规�
 | DTM | **1.19**（`1.19.0`，配套 `dtm-labs/client` v1.18.7） | `yedf/dtm:1.19.0` |
 | PostgreSQL | **16.15** | `postgres:16-alpine` |
 | RustFS | **1.0.1** | `rustfs/rustfs:1.0.1` |
-| Milvus | **2.6.5**（配套 `milvus/client/v2` v2.6.5） | `milvusdb/milvus:v2.6.5` |
 
 ## 快速启动
 
