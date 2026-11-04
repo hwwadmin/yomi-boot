@@ -18,7 +18,6 @@
   - `knowledge/Redis设计规范.md`：检查 `component/common/redis`、`redisratelimit`、`redisstream`、`distlock`、`captcha` 等使用 Redis 的库
   - `knowledge/数据库表设计规范.md`：检查 `component/common/db/orm`、`idempotency`、`event`、`httprecord` 等带表结构的库
   - `knowledge/事务规范.md`：检查 `component/common/db/tx`、`idempotency`、`event` 等涉及事务边界的库
-- **互补**：`skills/check_code.md` 负责业务工程的分层与业务域巡检；本 Skill 只检查基础库本身，不覆盖业务服务
 
 ---
 
@@ -27,7 +26,7 @@
 - **做什么**：对用户指定的一个基础库，逐文件通读源码，按设计合理性、逻辑正确性、编码质量、注释规范、代码风格统一、优化空间、重复与简化、封装边界八个维度检查，并单列依赖方向结论；用可执行命令验证可疑行为，输出带文件行号、影响说明、分级与修复建议的问题清单，落盘一份可复审的 IPC 报告。
 - **为什么**：基础库被业务工程广泛复用，缺陷会被成倍放大。统一检查口径可以避免“凭感觉评审”，让每个结论都能落到具体代码和可复现的验证上，也便于后续复审按同一份报告逐条回写。
 - **不做什么**：
-  - 不检查业务工程的分层、BFF、事务编排等业务维度（交给 `skills/check_code.md`）
+  - 不检查业务工程的分层、BFF、事务编排等业务维度；本 Skill 只作用于 yomi-boot 基础库
   - 不做压测、渗透测试、容量规划，不承诺性能数字
   - 不以测试覆盖率数字为目标，不为了覆盖率补无意义用例
   - 不替代 `go build`、`go vet`、`golangci-lint` 等自动工具，而是在其之上做人工审查

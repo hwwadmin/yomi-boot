@@ -5,7 +5,7 @@
 ## 0. 基础信息
 
 - **Skill 名称**: 代码巡检
-- **描述**: 对 **yomi-boot 基础库**或**业务 Go 工程**执行多维代码巡检（分层架构、BFF 编排、数据访问、事务、令牌、注释、Redis、表设计），输出问题清单与 `_ipc-doc` 报告；本母版不含前端规程
+- **描述**: 对 **业务 Go 工程**执行多维代码巡检（分层架构、BFF 编排、数据访问、事务、令牌、注释、Redis、表设计），输出问题清单与 `_ipc-doc` 报告；本母版不含前端规程，也不检查 yomi-boot 基础库
 - **作者**: zwei
 - **创建日期**: 2026-04-16（2026-10-16 合并重写）
 
@@ -15,11 +15,10 @@
 
 - **执行前必读**：`knowledge/事务规范.md`
 - **按需**：`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
-- **本仓基础库**：逐库检查使用 `skills/check_lib.md`（基础库检查），不与业务巡检混检
 
 ## 1. 目标
 
-- **做什么**：对指定 Go 代码范围执行多维度巡检——分层架构（handler / usecase / contract / service / repository）、BFF 编排、数据访问、事务控制、令牌鉴权、事件机制、注释规范、Redis 设计、数据库表设计，输出问题清单或在用户授权下直接修复。
+- **做什么**：对指定业务 Go 代码范围执行多维度巡检——分层架构（handler / usecase / contract / service / repository）、BFF 编排、数据访问、事务控制、令牌鉴权、事件机制、注释规范、Redis 设计、数据库表设计，输出问题清单或在用户授权下直接修复。
 - **为什么**：统一巡检口径，确保分层边界清晰、数据访问规范、事务可控、鉴权安全、缓存和数据库设计合理，减少 Code Review 返工和线上风险。
 - **不做什么**：不涉及前端；不做压测与渗透测试；不把 OpenSpec/SDD 文档混入输入。
 
@@ -53,7 +52,6 @@
 
 | 工作区 | 默认巡检范围 |
 | ------ | ------------ |
-| `yomi-boot` 根（本仓） | 各能力库包；逐库检查使用 [基础库检查](check_lib.md)，按维度补充上表规范 |
 | 业务 Go 工程 | 用户指定包；默认 `services/*`（或等价可部署单元），含 BFF 与领域服务 |
 
 ---
@@ -95,7 +93,7 @@
 
 | 检查项 | 检查内容 | 依据 |
 | ------ | -------- | ---- |
-| 依赖引用 | 业务单元是否标准 `require github.com/hwwadmin/yomi-boot`（或本地 `go.work` / `replace`）；`github.com/hwwadmin/yomi-boot` 不依赖业务代码 | 基础库检查 |
+| 依赖引用 | 业务单元是否标准 `require github.com/hwwadmin/yomi-boot`（或本地 `go.work` / `replace`）；`github.com/hwwadmin/yomi-boot` 不依赖业务代码 | 本 Skill |
 | bootstrap | 各服务 `internal/bootstrap/` 以 `server.go` 为入口；Kafka 消费者用 `*_consumer_plugin.go` + `AddCustomPlugin`；无 `wire/` 子目录 | |
 | BFF 目录 | 是否含 `internal/handler/`、`bff/`、`saga/`、`bizerr/`；无领域库访问/领域业务表；本服务库仅基础设施用途 | |
 | 领域目录 | `biz/handler`、`usecase` 平铺；含 `api_types.go` 别名 client DTO；无 token 中间件 | |
@@ -106,17 +104,8 @@
 | handler | 协议适配是否经 `github.com/hwwadmin/yomi-boot/component/core/handler`；领域写用 `dtm.BindAndHandleAction/Compensate` | |
 | usecase | 平铺命名；Saga 写含 `Compensate`；无跨域 HTTP | |
 | Saga Handler | Action/Compensate 是否独立入口，路由 `/compensate` 成对 | |
-| github.com/hwwadmin/yomi-boot | 是否无业务依赖；基础设施经 `plugin/` 契约 + `plugin/builtin/{lib}` 生命周期与 YAML 绑定管理；组件库不得反向依赖 boot/plugin；`component/common/event` 为可选组件 | 基础库检查 |
 | 令牌 | BFF 经 `infra.TokenService`（github.com/hwwadmin/yomi-boot/component/common/token）注入；config 使用 `token` 段 | |
 | depguard | 分层依赖方向是否符合规范 | |
-
-**yomi-boot 根目录额外检查**（巡检本仓各能力库时）：
-
-| 检查项 | 检查内容 |
-| ------ | -------- |
-| 基础库检查 | 逐库执行 [基础库检查](check_lib.md) 的八维检查与可执行验证 |
-| 依赖边界 | 本仓不引入业务域依赖、不写业务规则；能力经 `plugin` 生命周期管理 |
-| 同名能力 | 新增能力是否避免重复包、重复抽象 |
 
 ### 3.4 数据访问巡检
 
