@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：作为 **github.com/hwwadmin/yomi-boot 本库及基于 github.com/hwwadmin/yomi-boot 的业务工程** Go 后端代码编写的补充规范，约束校验与编排分层、注入判空、接口实现编译期校验、Redis 访问收口和业务接口协议选型等常见问题。
-- **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md)、[API编码适配规范](./API编码适配规范.md) 及对应的事务、数据库、Redis 等规范。
+- **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md)、[Go异常规范](./Go异常规范.md) 及对应的事务、数据库、Redis 等规范。
 - **适用对象**：github.com/hwwadmin/yomi-boot 本库相关封装，以及业务工程中 model、usecase、service、repository、handler 的编写与评审。
 
 ---
@@ -34,7 +34,7 @@
 | `_prompts/knowledge/GoBFF规范.md` | BFF | 跨域编排、喂饱参数、令牌实现 |
 | `_prompts/knowledge/Go注释规范.md` | 注释规范 | 约束 Go 代码注释口径 |
 | `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | 约束默认技术选型 |
-| `_prompts/knowledge/API编码适配规范.md` | 接口契约 | 约束 handler 经 Encoder 写出；不规定具体 JSON 形状 |
+| `_prompts/knowledge/Go异常规范.md` | 异常与出口 | Handler 经 Encoder 写出；不规定具体 JSON 形状 |
 
 ### 2.3 阅读建议
 
@@ -170,7 +170,7 @@ Key 命名、TTL 见 [Redis设计规范](./Redis设计规范.md)。
 | **入口编排对外**（`router_prefix`，按端在配置中设置；**示例**：如管理端/App） | GET 或 POST | CDN/SEO 可用 GET；见 [Go架构规范](./Go架构规范.md) §3.6 |
 | **微服务间**（BFF→领域、DTM→领域） | **POST only** | 见 [微服务调用规范](./微服务调用规范.md) §3（权威） |
 
-业务对外接口主输入约定见 [Go架构规范](./Go架构规范.md) §3.6；出口编码见 [API编码适配规范](./API编码适配规范.md)。
+业务对外接口主输入约定见 [Go架构规范](./Go架构规范.md) §3.6；出口编码见 [Go异常规范](./Go异常规范.md) §3.3。
 
 ```go
 // 正确：业务接口使用 POST + JSON body（Routes 内为相对路径；示例资源）

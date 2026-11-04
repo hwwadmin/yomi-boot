@@ -14,7 +14,7 @@
 ## 关联知识库
 
 - **执行前必读**：`knowledge/Go业务分层规范.md`、`knowledge/Go代码规范.md`、`knowledge/Go数据库规范.md`、`knowledge/Go事务规范.md`、`knowledge/Go架构规范.md`
-- **按需**：`knowledge/GoBFF规范.md`、`knowledge/Go文件命名规范.md`、`knowledge/Go集成测试规范.md`、`knowledge/Go异常规范.md`、`knowledge/微服务调用规范.md`、`knowledge/API编码适配规范.md`、`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
+- **按需**：`knowledge/GoBFF规范.md`、`knowledge/Go文件命名规范.md`、`knowledge/Go集成测试规范.md`、`knowledge/Go异常规范.md`、`knowledge/微服务调用规范.md`、`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
 
 ## 1. 目标
 

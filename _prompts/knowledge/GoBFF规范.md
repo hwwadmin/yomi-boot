@@ -35,7 +35,7 @@
 | [Go业务分层规范](./Go业务分层规范.md) | BFF 与领域职责对比 |
 | [Go事务规范](./Go事务规范.md) | Saga 编排与领域子事务 |
 | [Redis设计规范](./Redis设计规范.md) | BFF 令牌 Store 键 |
-| [API编码适配规范](./API编码适配规范.md) | BFF 对外 Encoder 适配 |
+| [Go异常规范](./Go异常规范.md) | BFF 对外 Encoder 写出 |
 | [微服务调用规范](./微服务调用规范.md) | BFF→领域 POST/JSON、信封与幂等（权威） |
 
 ---
@@ -74,7 +74,7 @@ saga/        写操作（含单域），按 usecase 平铺，提交 DTM Saga
 #### 3.2.2 微服务调用契约
 
 - 调领域**一律 POST + JSON**；信封、`bizId`/`bizSubId`、响应回显、幂等与禁止项，**以 [微服务调用规范](./微服务调用规范.md) §3 为唯一权威**（本文不展开）。
-- BFF **对外**接口可使用 GET 或 POST（CDN/SEO）；完整 URL = `http.router_prefix`（按端配置）+ handler 相对路径，见 [Go架构规范](./Go架构规范.md) §3.6；出口编码见 [API编码适配规范](./API编码适配规范.md)。
+- BFF **对外**接口可使用 GET 或 POST（CDN/SEO）；完整 URL = `http.router_prefix`（按端配置）+ handler 相对路径，见 [Go架构规范](./Go架构规范.md) §3.6；出口编码见 [Go异常规范](./Go异常规范.md) §3.3。
 
 **BFF 侧摘要**（细则见权威文档）：
 

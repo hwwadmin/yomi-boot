@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：约束 Go 后端异常的定义方式、创建函数选择、分层传播规则与 Handler 层统一处理口径，确保异常可追溯、可响应、可排查。
-- **边界**：不覆盖分布式事务的幂等错误处理（见 [Go事务规范](./Go事务规范.md) §5.5）；不覆盖微服务间调用错误的信封解析（见 [微服务调用规范](./微服务调用规范.md) §3）；HTTP 出口编码适配见 [API编码适配规范](./API编码适配规范.md)。
+- **边界**：不覆盖分布式事务的幂等错误处理（见 [Go事务规范](./Go事务规范.md) §5.5）；不覆盖微服务间调用错误的信封解析（见 [微服务调用规范](./微服务调用规范.md) §3）；HTTP 出口 Encoder 写出见本规范 §3.3。
 - **适用对象**：`github.com/hwwadmin/yomi-boot/` 本库，以及基于 github.com/hwwadmin/yomi-boot 的业务工程中涉及 error 创建、传播、处理与响应的 Go 代码。
 
 ---
@@ -36,7 +36,7 @@
 | `_prompts/knowledge/Go业务分层规范.md` | 分层职责 | handler/usecase/service/repo 各层职责 |
 | `_prompts/knowledge/Go事务规范.md` | 事务异常 | tx.Runner/barrier 内异常处理、幂等 Guard 错误 |
 | `_prompts/knowledge/微服务调用规范.md` | 微服务信封 | 下游错误传递与 BizError 构造 |
-| `_prompts/knowledge/API编码适配规范.md` | Encoder 写出 | 失败经 `EncodeFailure`；JSON 形状由已注册 Encoder 决定 |
+| `_prompts/knowledge/Go架构规范.md` | 路由与中间件 | 对外 HTTP 方法、中间件链与 Encoder 出口上下文 |
 
 ---
 
@@ -165,7 +165,7 @@ normalizeFailure(err)
 → Enc().EncodeFailure(c, out)
 ```
 
-- 写出细节（字段、HTTP 状态、如何从 `BizError`/哨兵取码）由**已注册 Encoder**决定；预制实现仅供显式选用，见 [API编码适配规范](./API编码适配规范.md)。
+- 写出细节（字段、HTTP 状态、如何从 `BizError`/哨兵取码）由**已注册 Encoder**决定；预制实现仅供显式选用。
 - Handler **禁止**自行 `c.JSON` 写业务失败响应（DTM 特例除外）。
 
 #### 3.3.2 与响应 JSON 的关系
@@ -226,7 +226,7 @@ BindAndHandle / Handle / ...
 - [ ] 包级哨兵用 `errors.NewNoStack` 定义，首次返回经 `errors.Sentinel`（禁止裸 `return ErrXxx`）
 - [ ] 框架/通用失败使用 `shared/error` 或库内哨兵，`Error()` 为 code
 - [ ] 域错误在业务 `bizerr`，未要求 github.com/hwwadmin/yomi-boot 增加权限类哨兵
-- [ ] Handler 统一经 `WriteBusinessError` → Encoder，未绕过 Encoder 手写业务响应（HTTP/JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)）
+- [ ] Handler 统一经 `WriteBusinessError` → Encoder，未绕过 Encoder 手写业务响应（HTTP/JSON 形状由 Encoder 决定，见 §3.3）
 - [ ] 启动已确定 `response.Encoder`（`boot.Options.ResponseEncoder`，为空时 boot 默认注册；低层路径须 `MustRegister`）
 - [ ] `errors.Stack` 仅用于日志
 - [ ] 中间层包装上抛时未打印日志；已拍栈 err 未再次 `Sentinel`
@@ -242,6 +242,6 @@ BindAndHandle / Handle / ...
 - 禁止裸 `return ErrXxx` / 对已 `Sentinel`/`Wrap` 的 err 再 `Sentinel`。
 - 禁止在 repository / service / usecase 内自行 `c.JSON` 写业务响应。
 - 禁止将 `errors.Stack(err)` 输出到 HTTP body。
-- 禁止在 handler/usecase 绕过 Encoder 用手写 `c.JSON` / 状态码表达业务成败；HTTP/JSON 映射由已注册 Encoder 决定（见 [API编码适配规范](./API编码适配规范.md)）。DTM 写回调走独立契约（见微服务调用规范）。
+- 禁止在 handler/usecase 绕过 Encoder 用手写 `c.JSON` / 状态码表达业务成败；HTTP/JSON 映射由已注册 Encoder 决定（见 §3.3）。DTM 写回调走独立契约（见微服务调用规范）。
 - 禁止中间层在 Wrap 上抛的同时打印日志。
 - 禁止包 `init` 静默注册 Encoder。

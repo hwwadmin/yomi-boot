@@ -40,7 +40,7 @@
 | `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | gin、gorm、Consul、DTM、HTTP 通信选型 |
 | `_prompts/knowledge/Go事务规范.md` | 事务 | 本地子事务与 DTM Saga |
 | `_prompts/knowledge/微服务调用规范.md` | 微服务契约 | POST/JSON、Header 链路 ID、Body 信封 bizId/bizSubId |
-| `_prompts/knowledge/API编码适配规范.md` | 对外 API | Encoder 显式注册与写出适配；入口编排层可用 GET/POST |
+| `_prompts/knowledge/Go异常规范.md` | 对外 API 出口 | Handler 经 Encoder 写出；显式 `MustRegister` |
 | `_prompts/knowledge/Go数据库规范.md` | 数据访问 | repository 与 GORM 规范 |
 | `_prompts/knowledge/Go配置规范.md` | 配置 | Section 注册、严格根 key、业务扩展、**能力按需裁剪（enabled）** |
 | `_prompts/knowledge/Redis设计规范.md` | Redis | 令牌 Store 键设计 |
@@ -458,7 +458,7 @@ require github.com/hwwadmin/yomi-boot v1.0.0
 - 领域**写**接口仅 Action/Compensate 成对；入口编排 **不得**直调写路径。详见 [微服务调用规范](./微服务调用规范.md) §3.1.1。
 - 链路 ID 经 HTTP Header `X-Trace-ID` 传播（`github.com/hwwadmin/yomi-boot/component/core/traceid`），**不在** JSON Body 信封中传递。
 - 微服务间请求/响应契约见 [微服务调用规范](./微服务调用规范.md) §3（权威）。
-- 对外出口编码适配见 [API编码适配规范](./API编码适配规范.md)（**不**规定 HTTP 方法；方法以本节约定为准）。
+- 对外出口经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定（**不**规定 HTTP 方法；方法以本节约定为准），见 [Go异常规范](./Go异常规范.md) §3.3。
 - 路径中资源段使用**单数名词**，禁止无意义复数。
 
 ### 3.7 中间件链
@@ -475,7 +475,7 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → Recovery �
 - `token.enabled=true`（入口编排）时校验 Bearer Token；未配置或 `false`（领域）时中间件短路放行（仍保留在链上）。
 - `traceid` 中间件从 Header `X-Trace-ID` 读取或生成 trace ID，写入 Context；出站 `github.com/hwwadmin/yomi-boot/component/cloud/rpc` 自动回填 Header。
 - 领域进程鉴权关闭后不校验令牌；身份字段由入口编排按接口 DTO 显式传入 Body（单体共进程时可按模块边界自行约定）。
-- 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [API编码适配规范](./API编码适配规范.md)。
+- 入口编排**对外**业务响应：经已注册 Encoder 写出；HTTP 状态与 JSON 形状由 Encoder 决定，见 [Go异常规范](./Go异常规范.md) §3.3。
 - 领域**读**（微服务间）：对内信封与 HTTP 状态见 [微服务调用规范](./微服务调用规范.md) §3.3.1。
 - 领域 **DTM Action/Compensate** 回调契约见 [微服务调用规范](./微服务调用规范.md) §3.3.2（`github.com/hwwadmin/yomi-boot/component/cloud/dtm`）。
 
