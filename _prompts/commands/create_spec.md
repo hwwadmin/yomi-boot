@@ -13,7 +13,7 @@ description: 需求显化文档生成
 2. 按下列顺序执行《需求显化》（`_prompts/skills/需求显化.md`），**不得跳过**所列 `knowledge` 必读：
 
    - **阶段 A（spec 章 0–7）**：Read Skill §0–§2、§3.0–§3.2 及关联 knowledge（`knowledge/数据库表设计规范.md` 等）；产出对应 spec 章节。
-   - **阶段 B（spec 章 8–11）**：Read Skill §3.3–§3.4.2、`knowledge/Go事务规范.md`、`knowledge/数据库表设计规范.md`；**同轮**产出 Ch10 与 Ch11 并对照事务列与 Step 1。
+   - **阶段 B（spec 章 8–11）**：Read Skill §3.3–§3.4.2、`knowledge/事务规范.md`、`knowledge/数据库表设计规范.md`；**同轮**产出 Ch10 与 Ch11 并对照事务列与 Step 1。
    - **阶段 C（spec 章 12–17）**：Read Skill §3.5–§3.8、Skill **§4.1 章纲**；产出剩余章节。
 
 3. 落盘前 Read Skill §6（DoD）并逐项勾选；通过后写入 `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md`。
