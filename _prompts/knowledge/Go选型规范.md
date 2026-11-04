@@ -92,7 +92,7 @@
 | 并发控制 | `context` + `sync` + `golang.org/x/sync/errgroup` | 生命周期和错误传播清晰，接近原生模型 | 自定义协程框架 |
 | 日志 | `go.uber.org/zap` | 结构化日志，控制台 + JSON 文件双路输出 | `log/slog`、`logrus` 作为默认入口 |
 | 性能剖析 | `net/http/pprof`（经 `github.com/hwwadmin/yomi-boot/component/common/pprof` 封装） | 独立 debug 端口，CPU/内存/goroutine 排障 | OpenTelemetry、`prometheus/client_golang`、黑盒观测 SDK |
-| 测试 | `testing` + `httptest` + `github.com/google/go-cmp/cmp` + `testcontainers-go` | 标准库优先，最小辅助库补齐对比和集成测试 | 大量 mock 框架作为默认测试方案 |
+| 测试 | `testing` + `httptest`；Redis 用 `alicebob/miniredis`，MySQL 用 `go-mysql-mocker`，Kafka 用 `kafka/kafkatest`（底层 `franz-go/kfake`，仅测试） | 进程内替身，不拉外部容器 | `testcontainers-go`、`go-cmp` 作为默认测试方案；大量 mock 框架 |
 | DI | 手写 Wiring，各服务 `internal/bootstrap/server.go` 组合根 | 依赖关系显式、调试简单、与 Go 风格一致 | `fx`、`dig`、`github.com/google/wire` 等 DI 框架 |
 | 服务注册发现 | Consul | 微服务注册、健康检查、HTTP 服务发现 | Eureka、Nacos 作为默认方案 |
 | 分布式事务 | DTM（Saga） | BFF 编排跨域写，领域本地子事务 + barrier | 2PC、TCC、Outbox/Inbox 作为默认方案 |
@@ -156,9 +156,9 @@
 
 #### 3.3.6 测试与质量工具
 
-- 默认选型：`testing` + `httptest` + `github.com/google/go-cmp/cmp` + `testcontainers-go`。
-- 静态检查：`golangci-lint`。
-- 不作为默认：大量 mock 框架。
+- 默认选型：`testing` + `httptest`。Redis 用 `github.com/alicebob/miniredis/v2`，MySQL 用 `github.com/hedon954/go-mysql-mocker`（`db/dbtest` 只覆盖 MySQL），Kafka 用 `kafka/kafkatest`（底层 `franz-go/kfake`，不得进入生产代码路径）。
+- 静态检查：`golangci-lint`（`errcheck`、`govet`、`staticcheck`，格式化用 `gofumpt`）。
+- 不作为默认：`testcontainers-go`、`github.com/google/go-cmp/cmp`；大量 mock 框架。
 
 #### 3.3.7 依赖注入与参数校验
 

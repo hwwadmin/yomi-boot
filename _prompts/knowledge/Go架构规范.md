@@ -114,8 +114,8 @@
 github.com/hwwadmin/yomi-boot/                               # module: github.com/hwwadmin/yomi-boot
 ├── boot/                        # 启动编排（入口/初始化、server、lifecycle、banner）
 ├── component/                   # 可复用库
-│   ├── core/                    # 内核（appctx、bc、config、cors、errors、handler、httpguard、logger、response、router、shared、traceid、utils）
-│   ├── common/                  # 通用组件（router、db、redis、kafka、event 等）
+│   ├── core/                    # 内核（appctx、bc、config、cors、errors、handler、httpguard、logger、masking、response、router、shared、traceid、utils）
+│   ├── common/                  # 通用组件（db、redis、kafka、redisstream、event 等）
 │   └── cloud/                   # 分布式组件（consul、dtm、rpc）
 └── plugin/                      # 插件契约、内置插件、插件清单与部署 YAML 绑定
     └── builtin/                 # 根包：内置插件清单（DefaultPlugins/DefaultConfigs）；子目录：内置插件与 YAML 绑定（appctx、logger、db、redis、kafka、event、cors、router、oss 等）
@@ -197,7 +197,7 @@ services/{domain}/
 | `consul` | 服务注册、注销、发现、HTTP URL 解析 |
 | `dtm` | Saga 客户端、GORM barrier、`TxRunner`（实现 `tx.Runner`，由 `plugin/builtin/dtm` 在 db 可用时构造）、`BindAndHandleAction/Compensate` |
 | `traceid` | BFF 入站中间件生成/读取 `X-Trace-ID` Header；出站 RPC 经 Header 传播 |
-| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动；进程退出时自然关闭；默认关闭 |
+| `pprof` | 独立 debug 端口暴露 `net/http/pprof`；由 `plugin/builtin/pprof` 在 `MustInit` 阶段启动，`Close` 时 `Shutdown`；默认关闭 |
 | `token` | Store、Claims、中间件骨架、`TokenService`（签发/校验/撤销） |
 | `captcha` | 图形验证码（基于 `mojocn/base64Captcha`）：`New`/`MustNew`，digit/string/math 三种驱动；`Generate` 只返回 id、data URI 与有效期秒数（`ExpiresIn`），答案归一化后只以 SHA-256 摘要写 Store（明文不落存储）；`Verify` 原子消费、一次性校验（错答案同样消费）；内置只提供 Redis 存储（多实例可直接用），TTL 由 Redis 保证；Store 故障失败关闭；不返回答案、不进插件链、不读 YAML、不做限流 |
 | `db` | 数据源：配置校验、DSN、连接池、最小空闲预热与保活、`Conn` 生命周期；子包 `db/orm`（`BaseModel`、`BaseRepository`、分页/LIKE/SQL 标识符校验）、`db/tx`（`Runner`/`Executor` 契约、`LocalRunner` 实现、Context 事务传递）、`db/dbtest` |
@@ -372,32 +372,35 @@ func (p *myConsumerPlugin) Close(ctx context.Context) error { ... }
 
 | 序号 | 插件 | 启动条件 |
 | ---- | ---- | -------- |
-| 1 | app | 始终（提供 `AppCtx`） |
-| 2 | logger | 始终（依赖 app 插件） |
-| 3 | pprof | `pprof.enabled=true` 时启动（默认 false） |
-| 4 | db | `db.enabled=true`（提供 `DB` 与 `DbType`） |
-| 5 | redis | `redis.enabled=true`（提供 `Client` / `RedisService` / `DistLockFactory`） |
-| 6 | redisratelimit | 始终启动（未启用时 `Limiter` 为 Noop） |
-| 7 | kafka-publisher | `kafka.publisher_enabled=true` |
-| 8 | kafka-consumer | `kafka.consumer_enabled=true` |
-| 9 | redisstream | `redis_stream.enabled=true`（依赖 redis 插件 `Client`） |
-| 10 | snowflake | 始终 |
-| 11 | oss | `oss.enabled=true` |
-| 12 | tx | db 插件已启用 |
-| 13 | consul | `consul.enabled=true`（Ready 阶段注册、Drain 阶段注销） |
-| 14 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活；db 可用时构造 `tx.Runner`（供 Saga 分支 usecase 注入） |
-| 15 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
-| 16 | token | `token.enabled=true`（依赖 redis 插件） |
-| 17 | httprecord | `http_record.enabled=true` 时按 provider 装配生产端，并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 `consumer.enabled` 控制）；Kafka 消费重试默认 3 次、超限直接丢弃（`consumer.max_retry`）；未配置 `consumer.group_id` 时按 `app.name + "-httprecord"` 派生；记录投递使用 200ms 独立短预算，队列满超时丢弃、不阻塞请求；handler 由业务在 wire 注入，未启用时不创建服务（中间件短路） |
-| 18 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；须在依赖 Inbox 的消费者之前） |
-| 19 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可经 slot 依赖内置插件；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
+| 1 | app | 始终（提供 `AppCtx`，并按 `app.timezone` 锁定进程时区） |
+| 2 | masking | 始终（按 `masking` 段构造脱敏服务并注入全局默认实例；空规则即全透传） |
+| 3 | logger | 始终（依赖 app、masking 插件；`log.mask_sensitive=false` 时不脱敏） |
+| 4 | pprof | `pprof.enabled=true` 时启动（默认 false） |
+| 5 | db | `db.enabled=true`（提供 `DB` 与 `DbType`） |
+| 6 | redis | `redis.enabled=true`（提供 `Client` / `RedisService` / `DistLockFactory`） |
+| 7 | redisratelimit | 始终启动（未启用时 `Limiter` 为 Noop；启用时依赖 redis 插件） |
+| 8 | kafka-publisher | `kafka.publisher_enabled=true` |
+| 9 | kafka-consumer | `kafka.consumer_enabled=true` |
+| 10 | redisstream | `redis_stream.enabled=true`（依赖 redis 插件 `Client`） |
+| 11 | snowflake | 始终 |
+| 12 | oss | `oss.enabled=true` |
+| 13 | tx | db 插件已启用 |
+| 14 | consul | `consul.enabled=true`（Ready 阶段注册、Drain 阶段注销） |
+| 15 | dtm | 始终构造客户端（注入 consul 插件 `Client`）；`dtm.enabled=true` 时探活；db 可用时构造 `tx.Runner`（供 Saga 分支 usecase 注入） |
+| 16 | idempotency | `idempotency.stale_cleaner_enabled=true`（依赖 app/db/redis 插件） |
+| 17 | token | `token.enabled=true` 时启动服务；middleware 始终挂载，受 `token.enabled` 控制（依赖 redis 插件） |
+| 18 | httprecord | `http_record.enabled=true` 时按 provider 装配生产端，并在 OnReady 启动消费端（memory 恒消费，kafka/redis_stream 由 `consumer.enabled` 控制）；Kafka 消费重试默认 3 次、超限直接丢弃（`consumer.max_retry`）；未配置 `consumer.group_id` 时按 `app.name + "-httprecord"` 派生；记录投递使用 200ms 独立短预算，队列满超时丢弃、不阻塞请求；handler 由业务在 wire 注入，未启用时不创建服务（中间件短路） |
+| 19 | event | `outbox_enabled` / `inbox_enabled` 任一为 true（按侧组装 Publisher/Receiver；传输侧只接 Kafka；须在依赖 Inbox 的消费者之前） |
+| 20 | custom | `PluginOptions.AddCustomPlugin` 注册的服务自定义插件（可经 slot 依赖内置插件；可实现 ReadyHook / DrainHook；Close 时先于 event 停止） |
 
-**插件 Close 语义**：
+**插件 Close 语义**（以各内置插件的 `Close` 实现为准）：
 
-| 需优雅 Close | noop / 尽力 |
-| ------------ | ----------- |
-| event、kafka-publisher、kafka-consumer、redisstream、logger、consul、idempotency stale cleaner | db、redis、snowflake、oss、tx、token、httprecord（发布端）、dtm、pprof |
+| Close 会释放资源 | Close 为空 |
+| ---------------- | ---------- |
+| db（关连接池）、redis（关客户端）、pprof（`Shutdown`）、logger（刷缓冲、关文件）、kafka-publisher、kafka-consumer、redisstream（停发布/消费，不关 Redis client）、httprecord（停消费端并释放生产端）、event、idempotency（停超时清理） | app、masking、snowflake、oss、tx、token、redisratelimit、dtm、consul |
 | 服务自定义插件（如 Stop 消息消费者） | — |
+
+Consul 的注销发生在 `OnDraining`，不在 `Close`。
 
 `Close` 应尽快返回；框架会按上限等待，超时视为该插件未关干净（记 Warn 后继续关闭前序插件），但不会中断仍在执行的 `Close`。
 
@@ -463,7 +466,7 @@ require github.com/hwwadmin/yomi-boot v1.0.0
 `server.DefaultMiddlewares` 统一装配下列链；`cors.Middleware` / `token.Middleware` / `httprecord.Middleware` / `logger.Middleware` 均在中间件内按各自 `enabled` 决定是否生效。
 
 ```text
-CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard → Recovery → token.Middleware → handler
+CORS → traceid → httprecord.Middleware → logger.Middleware → Recovery → httpguard → token.Middleware → handler
 ```
 
 中间件始终挂载；`cors.enabled` 由 BootConfig 映射为 `cors.Config.MiddlewareEnabled`，`http_record.enabled` / `token.enabled` 由插件映射为运行时 `MiddlewareEnabled`；关闭时由中间件在组件内短路放行，不在 `boot` 层动态增删中间件。
@@ -479,7 +482,7 @@ CORS → traceid → httprecord.Middleware → logger.Middleware → httpguard �
 ### 3.8 pprof 排障
 
 - 配置项：`pprof.enabled`（默认 `false`）、`pprof.addr`（独立 debug 端口，由各可部署单元自行配置，避免端口冲突）。
-- 由 `plugin/builtin/pprof` 在 `MustInit` 阶段按配置启动；进程退出时随进程自然关闭，无需显式释放。
+- 由 `plugin/builtin/pprof` 在 `MustInit` 阶段按配置启动；插件 `Close` 时调用 `Server.Stop`（`Shutdown`，超时后强制关闭）。
 - 常用命令：
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/profile?seconds=30`
   - `go tool pprof http://{host}:{pprof_port}/debug/pprof/heap`
