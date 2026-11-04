@@ -14,7 +14,8 @@
 ## 关联知识库
 
 - **执行前必读**：`knowledge/事务规范.md`
-- **按需**：`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`、`knowledge/Go基础库检查规范.md`（本仓巡检主依据）
+- **按需**：`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
+- **本仓基础库**：逐库检查使用 `skills/check_lib.md`（基础库检查），不与业务巡检混检
 
 ## 1. 目标
 
@@ -45,7 +46,6 @@
 | `_prompts/knowledge/事务规范.md` | 全文 | 要不要开事务、边界、闭包内容与时长 |
 | `_prompts/knowledge/数据库表设计规范.md` | §3.1–§3.4 | 表命名、主键设计、审计字段、字段类型、索引设计 |
 | `_prompts/knowledge/Redis设计规范.md` | §3.1–§3.3 | Key 命名、TTL、数据结构、缓存策略、分布式锁与敏感数据约束 |
-| `_prompts/knowledge/Go基础库检查规范.md` | 全文 | github.com/hwwadmin/yomi-boot 下基础库逐库检查标准；本仓巡检主依据 |
 
 > 关联点列指所引文档的章节；规范细则以所引文档为准。
 
@@ -53,7 +53,7 @@
 
 | 工作区 | 默认巡检范围 |
 | ------ | ------------ |
-| `yomi-boot` 根（本仓） | 各能力库包；以 [Go基础库检查规范](../knowledge/Go基础库检查规范.md) 为主，按维度补充上表规范 |
+| `yomi-boot` 根（本仓） | 各能力库包；逐库检查使用 [基础库检查](check_lib.md)，按维度补充上表规范 |
 | 业务 Go 工程 | 用户指定包；默认 `services/*`（或等价可部署单元），含 BFF 与领域服务 |
 
 ---
@@ -95,8 +95,8 @@
 
 | 检查项 | 检查内容 | 依据 |
 | ------ | -------- | ---- |
-| 依赖引用 | 业务单元是否标准 `require github.com/hwwadmin/yomi-boot`（或本地 `go.work` / `replace`）；`github.com/hwwadmin/yomi-boot` 不依赖业务代码 | Go基础库检查规范 |
-| bootstrap | 各服务 `internal/bootstrap/` 以 `server.go` 为入口；Kafka 消费者用 `*_consumer_plugin.go` + `AddCustomPlugin`；无 `wire/` 子目录 | Go基础库检查规范 |
+| 依赖引用 | 业务单元是否标准 `require github.com/hwwadmin/yomi-boot`（或本地 `go.work` / `replace`）；`github.com/hwwadmin/yomi-boot` 不依赖业务代码 | 基础库检查 |
+| bootstrap | 各服务 `internal/bootstrap/` 以 `server.go` 为入口；Kafka 消费者用 `*_consumer_plugin.go` + `AddCustomPlugin`；无 `wire/` 子目录 | |
 | BFF 目录 | 是否含 `internal/handler/`、`bff/`、`saga/`、`bizerr/`；无领域库访问/领域业务表；本服务库仅基础设施用途 | |
 | 领域目录 | `biz/handler`、`usecase` 平铺；含 `api_types.go` 别名 client DTO；无 token 中间件 | |
 | 领域零互调 | 领域服务是否无 HTTP 调其他领域 | |
@@ -106,7 +106,7 @@
 | handler | 协议适配是否经 `github.com/hwwadmin/yomi-boot/component/core/handler`；领域写用 `dtm.BindAndHandleAction/Compensate` | |
 | usecase | 平铺命名；Saga 写含 `Compensate`；无跨域 HTTP | |
 | Saga Handler | Action/Compensate 是否独立入口，路由 `/compensate` 成对 | |
-| github.com/hwwadmin/yomi-boot | 是否无业务依赖；基础设施经 `plugin/` 契约 + `plugin/builtin/{lib}` 生命周期与 YAML 绑定管理；组件库不得反向依赖 boot/plugin；`component/common/event` 为可选组件 | Go基础库检查规范 |
+| github.com/hwwadmin/yomi-boot | 是否无业务依赖；基础设施经 `plugin/` 契约 + `plugin/builtin/{lib}` 生命周期与 YAML 绑定管理；组件库不得反向依赖 boot/plugin；`component/common/event` 为可选组件 | 基础库检查 |
 | 令牌 | BFF 经 `infra.TokenService`（github.com/hwwadmin/yomi-boot/component/common/token）注入；config 使用 `token` 段 | |
 | depguard | 分层依赖方向是否符合规范 | |
 
@@ -114,7 +114,7 @@
 
 | 检查项 | 检查内容 |
 | ------ | -------- |
-| 基础库检查规范 | 逐库对照 [Go基础库检查规范](../knowledge/Go基础库检查规范.md) 的静态检查标准 |
+| 基础库检查 | 逐库执行 [基础库检查](check_lib.md) 的八维检查与可执行验证 |
 | 依赖边界 | 本仓不引入业务域依赖、不写业务规则；能力经 `plugin` 生命周期管理 |
 | 同名能力 | 新增能力是否避免重复包、重复抽象 |
 
