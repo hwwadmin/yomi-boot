@@ -30,9 +30,7 @@
 
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
-| `_prompts/knowledge/Go架构规范.md` | github.com/hwwadmin/yomi-boot 模块职责 | 定义每个 github.com/hwwadmin/yomi-boot 子模块的职责边界，作为设计合理性判断的依据 |
 | `_prompts/knowledge/Go代码规范.md` | 编码规范 | 依赖注入、编译期校验、接口实现等编码约束 |
-| `_prompts/knowledge/Go架构规范.md` | §3.3、§3.11 | 能力库职责与第三方依赖选型、基础库优先使用（强制） |
 | `_prompts/skills/代码巡检.md` | 业务代码巡检 | 业务服务层的巡检维度，与本规范形成互补 |
 
 ### 2.3 阅读建议
@@ -94,7 +92,7 @@
 
 | 检查项 | 检查内容 | 判断口径 |
 | ------ | -------- | -------- |
-| 职责边界 | 该库的公开 API 是否与 Go架构规范中定义的模块职责一致 | 对照 [Go架构规范](./Go架构规范.md) §3.3 github.com/hwwadmin/yomi-boot 模块职责表；生命周期框架为 `plugin/`，内置实现与 YAML 绑定为 `plugin/builtin/{lib}`，插件清单与默认配置段为 `plugin/builtin` 根包；`boot` 只做启动编排与初始化（`MustInit`），`boot/server` 只做 HTTP 装配；组件库不得含 `plugin/` 子包；运行时 `Config` 不得含 `mapstructure`；`SectionKey`/`BootConfig`/`ConfigSection` 仅允许在 `plugin/builtin/{lib}` |
+| 职责边界 | 该库的公开 API 是否与本仓模块职责一致 | 生命周期框架为 `plugin/`，内置实现与 YAML 绑定为 `plugin/builtin/{lib}`，插件清单与默认配置段为 `plugin/builtin` 根包；`boot` 只做启动编排与初始化（`MustInit`），`boot/server` 只做 HTTP 装配；组件库不得含 `plugin/` 子包；运行时 `Config` 不得含 `mapstructure`；`SectionKey`/`BootConfig`/`ConfigSection` 仅允许在 `plugin/builtin/{lib}` |
 | 接口粒度 | 对外接口是否提供了恰当的抽象级别，是否暴露了实现细节 | 接口方法数量是否合理（通常 3–8 个方法）；接口参数类型是否为领域概念而非底层实现类型 |
 | 抽象层次 | 是否引入了不必要的间接层，或者缺少应有的抽象 | 是否存在仅转发调用、无任何逻辑增强的包装函数；是否需要接口来支持多种实现 |
 | 扩展性 | 新增功能是否需要修改当前库的代码 | 是否需要"开闭原则"判断：当前库是否允许通过新增实现（而非修改现有代码）来扩展能力 |

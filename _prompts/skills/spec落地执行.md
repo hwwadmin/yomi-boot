@@ -13,7 +13,7 @@
 
 ## 关联知识库
 
-- **执行前必读**：`knowledge/Go业务分层规范.md`、`knowledge/Go代码规范.md`、`knowledge/Go事务规范.md`、`knowledge/Go架构规范.md`
+- **执行前必读**：`knowledge/Go业务分层规范.md`、`knowledge/Go代码规范.md`、`knowledge/Go事务规范.md`
 - **按需**：`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
 
 ## 1. 目标
@@ -26,7 +26,7 @@
 
 ## 2. 规则
 
-1. 涉及基础设施必须先读 `_prompts/knowledge/Go架构规范.md` §3.3（模块职责）与 §3.11（基础库优先使用（强制））：有候选读源码，满足则必须使用对应能力包；无候选或需新增时先按 A/B/C 选择新增方式并获用户确认。
+1. 涉及基础设施：有 github.com/hwwadmin/yomi-boot 对应能力则读源码，满足则必须使用；无候选或需新增时先按 A/B/C 选择新增方式并获用户确认。
 2. 分层遵循 spec「本项目结构约定」；事务与幂等遵循《Go事务规范》；业务失败经已注册 Encoder 写出，哨兵用 `shared/error` / 库内 / `bizerr`。
 3. **yomi-boot 根目录**：仅允许基础库与演示改动，禁止实现产品业务域。
 
@@ -45,7 +45,7 @@
 ## 4. 约束
 
 - 不得绕过 spec 中的事务与 API 契约（事务落点见 spec 第十一章；HTTP 出口以本服务已注册 Encoder 为准）。
-- 不得在业务仓重复实现已有基础库能力（对照《Go架构规范》§3.3 模块职责）。
+- 不得在业务仓重复实现已有基础库能力。
 - 装配惯例：`internal/bootstrap/` 手写装配（`server.go`；Kafka 消费者按需 `*_consumer_plugin.go` + `AddCustomPlugin`）；Handler 经 `github.com/hwwadmin/yomi-boot/component/core/handler` 协议适配、以 `Routes(router)` 注册相对路径。
 - 仅修改当前任务相关文件；源文件后缀与分层目录一致。
 

@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：作为 **github.com/hwwadmin/yomi-boot 本库及基于 github.com/hwwadmin/yomi-boot 的业务工程** Go 后端代码编写的补充规范，约束校验与编排分层、注入判空、接口实现编译期校验、Redis 访问收口和业务接口协议选型等常见问题。
-- **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go架构规范](./Go架构规范.md)、[Go业务分层规范](./Go业务分层规范.md) 及对应的事务、Redis 等规范。
+- **边界**：不覆盖目录结构、路由注册、事务、事件、数据库、缓存、日志等基础设施设计；相关内容应分别参考 [Go业务分层规范](./Go业务分层规范.md) 及对应的事务、Redis 等规范。
 - **适用对象**：github.com/hwwadmin/yomi-boot 本库相关封装，以及业务工程中 model、usecase、service、repository、handler 的编写与评审。
 
 ---
@@ -30,7 +30,6 @@
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 定义 handler / usecase / contract / service / repository 分层与轻量 DDD-lite 建模 |
-| `_prompts/knowledge/Go架构规范.md` | 项目架构 | 定义 github.com/hwwadmin/yomi-boot、业务可部署单元与 bootstrap 装配 |
 
 ### 2.3 阅读建议
 
@@ -124,7 +123,7 @@ handler 的 `Routes` 方法也遵循同一原则：router 由 router 包在启�
 
 > **路由路径口径**：handler 的 `Routes` 内注册**相对路径**（**示例**：`/v1/{resource}/profile`），完整 URL = `router_prefix` + 相对路径。资源段使用**单数名词**。
 >
-> **领域写接口**：仅注册 Action/Compensate 成对路由，使用 `dtm.BindAndHandleAction` / `dtm.BindAndHandleCompensate`；**禁止** `handler.BindAndHandle` 暴露可被 BFF 直调的写接口。见 [Go架构规范](./Go架构规范.md) §3.6。
+> **领域写接口**：仅注册 Action/Compensate 成对路由，使用 `dtm.BindAndHandleAction` / `dtm.BindAndHandleCompensate`；**禁止** `handler.BindAndHandle` 暴露可被 BFF 直调的写接口。
 
 ```go
 // 正确：领域读接口（示例）
@@ -163,10 +162,10 @@ Key 命名、TTL 见 [Redis设计规范](./Redis设计规范.md)。
 
 | 场景 | 方法 | 规范 |
 | ---- | ---- | ---- |
-| **入口编排对外**（`router_prefix`，按端在配置中设置；**示例**：如管理端/App） | GET 或 POST | CDN/SEO 可用 GET；见 [Go架构规范](./Go架构规范.md) §3.6 |
-| **微服务间**（BFF→领域、DTM→领域） | **POST only** | 见 [Go架构规范](./Go架构规范.md) §3.6 |
+| **入口编排对外**（`router_prefix`，按端在配置中设置；**示例**：如管理端/App） | GET 或 POST | CDN/SEO 可用 GET；主输入默认推荐 POST + JSON Body，GET 仅用 Query 须显式约定 |
+| **微服务间**（BFF→领域、DTM→领域） | **POST only** | JSON Body |
 
-业务对外接口主输入约定见 [Go架构规范](./Go架构规范.md) §3.6；出口经已注册 Encoder 写出。
+业务对外接口出口经已注册 Encoder 写出。
 
 ```go
 // 正确：业务接口使用 POST + JSON body（Routes 内为相对路径；示例资源）
@@ -615,7 +614,7 @@ func NewRedisHelper(client *redisv9.Client) *RedisHelper {
 
 **适用范围**：
 
-- `github.com/hwwadmin/yomi-boot/` 下的基础设施实现（见 [Go架构规范](./Go架构规范.md)）
+- `github.com/hwwadmin/yomi-boot/` 下的基础设施实现
 - `internal/biz/domain/service/{module}/` 对 `domain/contract` 中 `{Module}Service` 的实现
 - `internal/biz/repo/db/{module}/` 对 `repo/contract` 中 `{Module}Repository` 的实现
 - 其他对外暴露、需被替换或 mock 的接口实现（如事件 Handler、Outbox Publisher 等）
