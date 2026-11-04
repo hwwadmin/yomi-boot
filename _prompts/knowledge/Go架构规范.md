@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：说明 github.com/hwwadmin/yomi-boot 的能力边界、部署形态无关性与可部署单元服务类型；约定基于 github.com/hwwadmin/yomi-boot 的进程装配、中间件链与 HTTP 路由模式。
-- **边界**：BFF/入口编排细则见 [GoBFF规范](./GoBFF规范.md)；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务与 DTM Saga 见 [Go事务规范](./Go事务规范.md)；微服务间契约见 [微服务调用规范](./微服务调用规范.md)（**信封与幂等权威**）；**文件命名**见 [Go文件命名规范](./Go文件命名规范.md)；**数据访问**见 [Go数据库规范](./Go数据库规范.md)；**配置加载、扩展与能力裁剪**见 [Go配置规范](./Go配置规范.md)。
+- **边界**：入口编排目录与跨域约束见本规范 §3.1.3、§3.2.1；入口编排分层与协作见 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5；领域分层见 [Go业务分层规范](./Go业务分层规范.md)；本地事务与 DTM Saga 见 [Go事务规范](./Go事务规范.md)；微服务间契约见 [微服务调用规范](./微服务调用规范.md)（**信封与幂等权威**）；**文件命名**见 [Go文件命名规范](./Go文件命名规范.md)；**数据访问**见 [Go数据库规范](./Go数据库规范.md)；**配置加载、扩展与能力裁剪**见 [Go配置规范](./Go配置规范.md)。
 - **适用对象**：github.com/hwwadmin/yomi-boot 库本身，以及基于 github.com/hwwadmin/yomi-boot 的业务工程与可部署单元。业务工程为独立仓库，通过标准 `require github.com/hwwadmin/yomi-boot` 依赖本库；本库仓库内不包含业务服务代码。
 
 ---
@@ -35,9 +35,7 @@
 
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
-| `_prompts/knowledge/GoBFF规范.md` | 入口编排 | 跨域调用、Body 信封、Saga、令牌注入 |
-| `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 入口编排与领域各层职责 |
-| `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | gin、gorm、Consul、DTM、HTTP 通信选型 |
+| `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 入口编排与领域各层职责、跨域协作 |
 | `_prompts/knowledge/Go事务规范.md` | 事务 | 本地子事务与 DTM Saga |
 | `_prompts/knowledge/微服务调用规范.md` | 微服务契约 | POST/JSON、Header 链路 ID、Body 信封 bizId/bizSubId |
 | `_prompts/knowledge/Go异常规范.md` | 对外 API 出口 | Handler 经 Encoder 写出；显式 `MustRegister` |
@@ -49,7 +47,7 @@
 ### 2.3 阅读建议
 
 - 先理解 github.com/hwwadmin/yomi-boot 能力边界：读 §3.1.0（部署形态无关 / 配置裁剪）与 [Go配置规范](./Go配置规范.md) 能力裁剪章节。
-- 理解可部署服务类型：读 §3.1.2～§3.1.4；入口编排再读 [GoBFF规范](./GoBFF规范.md)；领域再读 [Go业务分层规范](./Go业务分层规范.md)。
+- 理解可部署服务类型：读 §3.1.2～§3.1.4 与 §3.2.1；入口编排分层与跨域协作再读 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5。
 - 装配与路由：读 §3.3 github.com/hwwadmin/yomi-boot 职责、§3.4 启动装配、§3.4.5 按需启用、§3.6 路由与中间件。
 - 建立门禁：读 §4 检查清单与 §5 禁止项（按服务类型与形态裁剪适用）。
 

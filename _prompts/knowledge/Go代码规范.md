@@ -31,9 +31,7 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 定义 handler / usecase / contract / service / repository 分层与轻量 DDD-lite 建模 |
 | `_prompts/knowledge/Go架构规范.md` | 项目架构 | 定义 github.com/hwwadmin/yomi-boot、业务可部署单元与 bootstrap 装配 |
-| `_prompts/knowledge/GoBFF规范.md` | BFF | 跨域编排、喂饱参数、令牌实现 |
 | `_prompts/knowledge/Go注释规范.md` | 注释规范 | 约束 Go 代码注释口径 |
-| `_prompts/knowledge/Go选型规范.md` | 技术栈基线 | 约束默认技术选型 |
 | `_prompts/knowledge/Go异常规范.md` | 异常与出口 | Handler 经 Encoder 写出；不规定具体 JSON 形状 |
 
 ### 2.3 阅读建议

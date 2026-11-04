@@ -13,7 +13,7 @@
 ## 1. 文档定位
 
 - **用途**：作为 github.com/hwwadmin/yomi-boot 本库及基于 github.com/hwwadmin/yomi-boot 的业务工程中 Go 注释口径的单一事实来源，统一注释写法、落位和最小覆盖范围。
-- **边界**：不覆盖业务架构设计、分层职责和接口契约设计，相关内容由 [Go业务分层规范](./Go业务分层规范.md)、[GoBFF规范](./GoBFF规范.md) 和 [Go数据库规范](./Go数据库规范.md) 约束。
+- **边界**：不覆盖业务架构设计、分层职责和接口契约设计，相关内容由 [Go业务分层规范](./Go业务分层规范.md)、[Go架构规范](./Go架构规范.md) 和 [Go数据库规范](./Go数据库规范.md) 约束。
 - **适用对象**：Go 后端开发、重构、代码评审和巡检场景。
 
 ---
@@ -33,8 +33,6 @@
 | `_prompts/knowledge/Go业务分层规范.md` | 业务分层 | 约束注释所在文件的目录结构和分层职责 |
 | `_prompts/knowledge/Go架构规范.md` | 项目架构 | 约束 cmd、bootstrap、platform 目录结构 |
 | `_prompts/knowledge/Go数据库规范.md` | 数据库访问 | 约束 Model 和 Repository 的注释口径 |
-| `_prompts/knowledge/Go选型规范.md` | 技术栈 | 约束默认库和第三方库的注释约定 |
-| `_prompts/knowledge/Go集成测试规范.md` | 集成测试注释 | 约束集成测试方法注释为一行测试目的说明 |
 
 ### 2.3 阅读建议
 

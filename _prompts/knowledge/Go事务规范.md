@@ -15,7 +15,7 @@
 
 - **用途**：回答写路径上的四个问题：要不要开事务、边界画在哪、事务闭包内放什么/放多久、跨服务时用什么一致性手段。
 - **边界**：
-  - Saga 编排、BFF 写入口、领域 client 见 [GoBFF规范](./GoBFF规范.md)。
+  - Saga 编排、BFF 写入口、领域 client 见 [Go架构规范](./Go架构规范.md) §3.2.1 与 [Go业务分层规范](./Go业务分层规范.md) §3.3、§3.5。
   - 微服务信封、`bizId`/`bizSubId`、业务幂等与 DTM 分工以 [微服务调用规范](./微服务调用规范.md) §3.4、§5 为唯一权威，本文只讲事务形态的配合，不重复展开。
   - repository 的 GORM 写法与 `tx.Exec` 事务感知见 [Go数据库规范](./Go数据库规范.md)。
   - `tx.Runner`/`tx.Executor` 实现位于 `github.com/hwwadmin/yomi-boot/component/common/db/tx`；DTM 集成位于 `github.com/hwwadmin/yomi-boot/component/cloud/dtm`。
@@ -36,7 +36,8 @@
 
 | 文档 | 关联点 |
 | ---- | ------ |
-| [GoBFF规范](./GoBFF规范.md) | BFF `saga/` 提交 Saga、payload 与补偿快照 |
+| [Go架构规范](./Go架构规范.md) | 入口编排目录、`saga/` 提交 Saga |
+| [Go业务分层规范](./Go业务分层规范.md) | payload 与补偿快照、跨域协作 |
 | [微服务调用规范](./微服务调用规范.md) | 信封、`bizId`/`bizSubId`、业务幂等、DTM 分支契约（权威） |
 | [Go业务分层规范](./Go业务分层规范.md) | handler/usecase/domain/service/repo 分层 |
 | [Go数据库规范](./Go数据库规范.md) | repository 事务感知、`tx.Exec` |
@@ -45,7 +46,7 @@
 ### 2.3 阅读路径
 
 - 只写本服务数据库：读 §3、§4。
-- 跨服务/跨库写：读 §3、§5；Saga 的编排与信封细节转到 [GoBFF规范](./GoBFF规范.md) 与 [微服务调用规范](./微服务调用规范.md)。
+- 跨服务/跨库写：读 §3、§5；Saga 的编排与信封细节见 [Go架构规范](./Go架构规范.md) §3.2.1、[Go业务分层规范](./Go业务分层规范.md) §3.5 与 [微服务调用规范](./微服务调用规范.md)。
 
 ---
 
