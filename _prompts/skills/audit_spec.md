@@ -23,7 +23,7 @@
 
 ## 本 Skill 用法（与 audit_spec command 一致）
 
-- **门禁**：§3、§5、§6；思维与口径、PRD 边界以 `commands/audit_spec.md` 第 1 步为准。
+- **门禁**：§3、§5、§6；全程基于第一性原理与对抗性审查、白话表述；产品口径以 `_doc/` PRD 为准，`_prompts/knowledge/` 不是产品 PRD。
 - **落盘前**：按本文 §6（DoD）自检并勾选。
 - **分阶段 Read**：阶段 0 按需 → §3.1.1；写 audit → **本文 §4.1 章纲**。
 
