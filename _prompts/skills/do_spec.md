@@ -14,7 +14,7 @@
 ## 关联知识库
 
 - **执行前必读**：`knowledge/事务设计规范.md`
-- **按需**：`knowledge/MySql设计规范.md`、`knowledge/Redis设计规范.md`
+- **按需**：`knowledge/Redis设计规范.md`
 
 ## 1. 目标
 

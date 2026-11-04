@@ -65,8 +65,7 @@
 | ---- | ------ | ---- |
 | `_prompts/knowledge/事务设计规范.md` | 全文 | 按两步法审核：先核对全部写数据动作的开否，再核对边界与闭包内容/时长；缺失/颠倒按严重门禁 |
 | `_prompts/knowledge/事务设计规范.md` | §3 | 验证幂等记录是否与业务写同事务；Redis 锁/缓存不进闭包 |
-| `_prompts/knowledge/MySql设计规范.md` | §3.1–§3.4 | 验证表命名、雪花 ID、审计字段、索引命名；并结合查询谓词审核索引是否可服务（左前缀、联合顺序、覆盖等原则） |
-| `_prompts/knowledge/Redis设计规范.md` | 全文 | 验证 Key、TTL、锁与限流；对照阶段 0「允许策略」与多实例互斥需求 |
+| `_prompts/knowledge/Redis设计规范.md` | 全文 | 验证 Key 命名 |
 
 > 关联点列指所引文档的章节；规范细则以所引文档为准。
 
@@ -312,18 +311,18 @@ Kafka Consumer / cron / 库导出方法等 **不进第一轴**；属第二轴（
 | -------- | -------- | ---------- |
 | 业务分层 | — | 依赖方向、跨域编排归 usecase、同域编排归 service、usecase 互不依赖 |
 | 项目架构 | — | `internal/bootstrap` 手写装配、github.com/hwwadmin/yomi-boot 插件化启动（`MustInit` / `AddCustomPlugin`）、多入口编排结构 |
-| DDL 设计 | `MySql设计规范.md` | 表名是否符合前缀约定；审计字段是否完整；雪花 ID 是否使用 `bigint`；索引命名是否规范 |
-| Entity/Model 建模 | `MySql设计规范.md` | Entity 为领域对象；Model 为包内私有持久化对象并与表字段对齐；Mapper 收口转换 |
+| DDL 设计 | 本 Skill / 需求显化 §6.1 | 表名是否符合前缀约定；审计字段是否完整；雪花 ID 是否使用 `bigint`；索引命名是否规范 |
+| Entity/Model 建模 | 本 Skill | Entity 为领域对象；Model 为包内私有持久化对象并与表字段对齐；Mapper 收口转换 |
 | 领域建模 | — | 默认贫血模型，规则归 domain/service；仅在复杂状态机/不变量场景按需充血；Entity 方法不访问 repo、不跨 Entity 编排 |
 | Repository 结构 | `事务设计规范.md` | 接口与实现是否分离；是否通过 `tx.Exec(ctx, r.DB)` 获取 GORM 执行器；对外返回 Entity；目录由业务仓自定 |
-| Repository/SQL 可服务性 | `MySql设计规范.md` + 阶段 0 表量 | 见下方「Repository/SQL 可服务性检查清单」；无表/无持久化则整维跳过 |
+| Repository/SQL 可服务性 | 本 Skill + 阶段 0 表量 | 见下方「Repository/SQL 可服务性检查清单」；无表/无持久化则整维跳过 |
 | 事务控制 | `事务设计规范.md` | 见下方「事务控制强制检查清单」；不得仅以「写了需要事务」判通过 |
 | 跨域写 | `事务设计规范.md` | 跨域写是否由 BFF DTM Saga 编排；领域 Execute/Compensate 是否同文件；Action/Compensate 是否成对独立路由；补偿快照是否由 BFF 喂入；是否存在直调写/Facade 回退 |
 | 业务幂等 | `事务设计规范.md` | `bizId`/`bizSubId` 与 `github.com/hwwadmin/yomi-boot/component/common/idempotency` 是否声明；是否与 DTM barrier 职责混淆 |
 | API 设计 | — | ① 是否 `MustRegister` Encoder；② 是否仅经 `Write*`/`BindAndHandle*` → Encoder；③ 错误哨兵落点；④ 入口编排对外可用 GET/POST、微服务间 POST；**禁止以预制实现字段冒充强制契约** |
 | 文件命名 | — | 文件名是否与分层目录一致（如 `_handler`、`_usecase`、`_service`、`_repo`） |
-| 缓存策略 | `Redis设计规范.md` | 缓存键命名、TTL、缓存更新策略是否符合规范；建议不得违反阶段 0「允许策略」 |
-| 并发与吞吐适配 | 阶段 0 假设 + `Redis设计规范.md` + `事务设计规范.md` | **细则见本 Skill §3.4「并发与吞吐审核」**（接口轴 + 非接口轴）；本表不重复展开；无阶段 0 确认不得打星 |
+| 缓存策略 | `Redis设计规范.md` + 本 Skill | Key 命名对照 Redis 规范；TTL/回源/失效/刷新与阶段 0「允许策略」对照本 Skill |
+| 并发与吞吐适配 | 阶段 0 假设 + `事务设计规范.md` | **细则见本 Skill §3.4「并发与吞吐审核」**（接口轴 + 非接口轴）；本表不重复展开；无阶段 0 确认不得打星 |
 
 **执行规则**：
 
@@ -391,7 +390,7 @@ Kafka Consumer / cron / 库导出方法等 **不进第一轴**；属第二轴（
 **并发与吞吐审核**（两轴分审、分表打星，禁止混行）：
 
 1. **正确性**（可不依赖峰值/强度）：
-   - 接口轴：丢更新、重复写、幂等与唯一约束、多实例互斥（对照 Redis 锁条款与阶段 0 部署）。
+   - 接口轴：丢更新、重复写、幂等与唯一约束、多实例互斥（对照阶段 0 部署）。
    - 非接口轴·方法：竞态、锁误用、多实例双执行、导出方法内无界扇出、并发契约是否写清。
    - 非接口轴·流程：多实例双跑/抢分片、步骤幂等与顺序、背压、流程级互斥位置是否盖住并发面。
    - 不得把「用了锁」等同于设计合理。

@@ -15,8 +15,7 @@
 
 - **执行前必读**：本 Skill 自包含基础库检查口径，不依赖外部规范文档
 - **按需**：
-  - `knowledge/Redis设计规范.md`：检查 `component/common/redis`、`redisratelimit`、`redisstream`、`distlock`、`captcha` 等使用 Redis 的库
-  - `knowledge/MySql设计规范.md`：检查 `component/common/db/orm`、`idempotency`、`event`、`httprecord` 等带表结构的库
+  - `knowledge/Redis设计规范.md`：检查使用 Redis 的库时核对 Key 命名
   - `knowledge/事务设计规范.md`：检查 `component/common/db/tx`、`idempotency`、`event` 等涉及事务边界的库
 
 ---
@@ -54,8 +53,7 @@
 
 | 文档 | 关联点 | 说明 |
 | ---- | ------ | ---- |
-| `_prompts/knowledge/Redis设计规范.md` | 全文 | 仅检查使用 Redis 的库时加载 |
-| `_prompts/knowledge/MySql设计规范.md` | §3.1–§3.4 | 仅检查带表结构或 ORM 映射的库时加载 |
+| `_prompts/knowledge/Redis设计规范.md` | 全文 | 仅检查使用 Redis 的库时加载，核对 Key 命名 |
 | `_prompts/knowledge/事务设计规范.md` | 全文 | 仅检查涉及事务边界的库时加载 |
 
 > 关联点列指所引文档的章节；规范细则以所引文档为准。未加载某文档时，不得用该文档的条款作为判罚依据。
