@@ -13,8 +13,8 @@
 
 ## 关联知识库
 
-- **执行前必读**：`knowledge/事务规范.md`
-- **按需**：`knowledge/数据库表设计规范.md`、`knowledge/Redis设计规范.md`
+- **执行前必读**：`knowledge/事务设计规范.md`
+- **按需**：`knowledge/MySql设计规范.md`、`knowledge/Redis设计规范.md`
 
 ## 1. 目标
 
@@ -27,7 +27,7 @@
 ## 2. 规则
 
 1. 涉及基础设施：有 github.com/hwwadmin/yomi-boot 对应能力则读源码，满足则必须使用；无候选或需新增时先按 A/B/C 选择新增方式并获用户确认。
-2. 分层遵循 spec「本项目结构约定」；事务与幂等遵循《事务规范》；业务失败经已注册 Encoder 写出，哨兵用 `shared/error` / 库内 / `bizerr`。
+2. 分层遵循 spec「本项目结构约定」；事务与幂等遵循《事务设计规范》；业务失败经已注册 Encoder 写出，哨兵用 `shared/error` / 库内 / `bizerr`。
 3. **yomi-boot 根目录**：仅允许基础库与演示改动，禁止实现产品业务域。
 
 ---
