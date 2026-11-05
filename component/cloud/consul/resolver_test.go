@@ -427,3 +427,147 @@ func TestRevalidateRecoversAfterOutage(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// TestCallerCancelDoesNotPoisonDiscovery 验证调用方取消只失败自己：
+// 同一次合并查询的其他请求仍拿到实例，这次取消也不进入负缓存
+func TestCallerCancelDoesNotPoisonDiscovery(t *testing.T) {
+	t.Parallel()
+
+	agent, state, hits := newSwitchableAgent(t,
+		`[{"Node":{"Address":"10.0.0.1"},"Service":{"Address":"10.0.0.1","Port":8080}}]`)
+	defer agent.Close()
+	state.mu.Lock()
+	state.latency = 300 * time.Millisecond
+	state.mu.Unlock()
+
+	client := newResilientClient(t, agent.URL, time.Minute, time.Second, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := client.ResolveHTTPBase(ctx, "svc", "/a")
+		errCh <- err
+	}()
+
+	waitForAgentHit(t, hits)
+	cancel()
+
+	got, err := client.ResolveHTTPBase(context.Background(), "svc", "/a")
+	if err != nil || got != "10.0.0.1:8080/a" {
+		t.Fatalf("取消进行中的查询时，其他请求应拿到实例，实际 %q err=%v", got, err)
+	}
+	if err := <-errCh; !errors.Is(err, context.Canceled) {
+		t.Fatalf("被取消的请求应返回 context.Canceled，实际 %v", err)
+	}
+
+	// 清掉一级缓存后若负缓存里是这次取消，下一次会直接返回取消且不再查 Agent
+	client.l1Cache.delete("svc")
+	got, err = client.ResolveHTTPBase(context.Background(), "svc", "/a")
+	if err != nil || got != "10.0.0.1:8080/a" {
+		t.Fatalf("取消不应写入负缓存，实际 %q err=%v", got, err)
+	}
+	if gotHits := hits(); gotHits != 2 {
+		t.Fatalf("取消未写入负缓存时，清缓存后应再查一次 Agent，实际 %d 次", gotHits)
+	}
+}
+
+// TestCallerDeadlineDoesNotFailWaiters 验证超时更短的请求不会失败同一次合并查询，也不会写入负缓存
+func TestCallerDeadlineDoesNotFailWaiters(t *testing.T) {
+	t.Parallel()
+
+	agent, state, hits := newSwitchableAgent(t,
+		`[{"Node":{"Address":"10.0.0.1"},"Service":{"Address":"10.0.0.1","Port":8080}}]`)
+	defer agent.Close()
+	state.mu.Lock()
+	state.latency = 400 * time.Millisecond
+	state.mu.Unlock()
+
+	client := newResilientClient(t, agent.URL, time.Minute, time.Second, 0)
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	shortErrCh := make(chan error, 1)
+	type resolveResult struct {
+		base string
+		err  error
+	}
+	longCh := make(chan resolveResult, 1)
+	go func() {
+		_, err := client.ResolveHTTPBase(shortCtx, "svc", "/a")
+		shortErrCh <- err
+	}()
+	go func() {
+		base, err := client.ResolveHTTPBase(context.Background(), "svc", "/a")
+		longCh <- resolveResult{base: base, err: err}
+	}()
+
+	shortErr := <-shortErrCh
+	long := <-longCh
+	if !errors.Is(shortErr, context.DeadlineExceeded) {
+		t.Fatalf("更短超时的请求应返回 context.DeadlineExceeded，实际 %v", shortErr)
+	}
+	if long.err != nil || long.base != "10.0.0.1:8080/a" {
+		t.Fatalf("仍在等待的请求应拿到实例，实际 %q err=%v", long.base, long.err)
+	}
+	if gotHits := hits(); gotHits != 1 {
+		t.Fatalf("并发请求应合并为一次 Agent 查询，实际 %d 次", gotHits)
+	}
+
+	client.l1Cache.delete("svc")
+	got, err := client.ResolveHTTPBase(context.Background(), "svc", "/a")
+	if err != nil || got != "10.0.0.1:8080/a" {
+		t.Fatalf("调用方到期不应写入负缓存，实际 %q err=%v", got, err)
+	}
+	if gotHits := hits(); gotHits != 2 {
+		t.Fatalf("到期未写入负缓存时，清缓存后应再查一次 Agent，实际 %d 次", gotHits)
+	}
+}
+
+// TestRealFailureStillNegativeCachedAfterCallerCancel 验证调用方取消后，共享查询的真实失败仍写入负缓存
+func TestRealFailureStillNegativeCachedAfterCallerCancel(t *testing.T) {
+	t.Parallel()
+
+	agent, state, hits := newSwitchableAgent(t, `[]`)
+	defer agent.Close()
+	state.mu.Lock()
+	state.fail = true
+	state.latency = 200 * time.Millisecond
+	state.mu.Unlock()
+
+	client := newResilientClient(t, agent.URL, time.Minute, 2*time.Second, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := client.ResolveHTTPBase(ctx, "svc", "/a")
+		errCh <- err
+	}()
+
+	waitForAgentHit(t, hits)
+	cancel()
+	if err := <-errCh; !errors.Is(err, context.Canceled) {
+		t.Fatalf("被取消的请求应返回 context.Canceled，实际 %v", err)
+	}
+
+	// 等共享查询结束。负缓存记下的应是 Agent 失败，而不是这次取消
+	time.Sleep(800 * time.Millisecond)
+	if _, err := client.ResolveHTTPBase(context.Background(), "svc", "/a"); err == nil || errors.Is(err, context.Canceled) {
+		t.Fatalf("真实失败应留在负缓存，实际 %v", err)
+	}
+	if gotHits := hits(); gotHits != 1 {
+		t.Fatalf("负缓存应挡住重复探测，实际 %d 次", gotHits)
+	}
+}
+
+// waitForAgentHit 等到伪装 Agent 收到至少一次查询
+func waitForAgentHit(t *testing.T, hits func() int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for hits() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("共享查询未到达 Agent")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

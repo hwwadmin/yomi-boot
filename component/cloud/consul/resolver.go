@@ -46,8 +46,8 @@ func (c *Client) ResolveHTTPBase(ctx context.Context, serviceName, pathSuffix st
 
 // instances 返回指定服务的健康实例列表。
 // 优先一级缓存；过期条目在 stale-if-error 窗口内可直接兜底（转后台再验证刷新）；
-// 无陈旧可用时经 singleflight 合并并发查询，失败结果短暂负缓存，避免断连期间
-// 每个请求都阻塞在 Agent 查询上
+// 无陈旧可用时经 singleflight 合并并发查询。合并查询不继承调用方的取消和到期，
+// 真实失败短暂负缓存，避免断连期间每个请求都阻塞在 Agent 查询上
 func (c *Client) instances(ctx context.Context, serviceName string) ([]ServiceInstance, error) {
 	if instances, ok := c.l1Cache.get(serviceName); ok {
 		return instances, nil
@@ -61,15 +61,40 @@ func (c *Client) instances(ctx context.Context, serviceName string) ([]ServiceIn
 	if err, ok := c.negCache.get(serviceName); ok {
 		return nil, err
 	}
-	v, err, _ := c.sfGroup.Do(serviceName, func() (any, error) {
-		return c.fetchAndCache(ctx, serviceName)
-	})
-	if err != nil {
-		c.negCache.set(serviceName, err)
+	// 已取消或已到期的请求不参与合并查询，避免把它的 ctx 带进共享调用
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	instances, _ := v.([]ServiceInstance)
-	return instances, nil
+	ch := c.sfGroup.DoChan(serviceName, func() (any, error) {
+		return c.fetchDetached(ctx, serviceName)
+	})
+	select {
+	case <-ctx.Done():
+		// 取消只属于这次请求；共享查询继续，结果留给仍在等待的调用方
+		return nil, ctx.Err()
+	case res := <-ch:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		instances, _ := res.Val.([]ServiceInstance)
+		return instances, nil
+	}
+}
+
+// fetchDetached 在脱离调用方取消的上下文里查询 Agent。
+// 调用方取消或提前到期不会变成共享结果，也不会写入负缓存；
+// Agent 错误、无健康实例，以及发现自身超时仍写入负缓存
+func (c *Client) fetchDetached(ctx context.Context, serviceName string) (any, error) {
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.httpTimeout)
+	defer cancel()
+	v, err := c.fetchAndCache(probeCtx, serviceName)
+	if err != nil {
+		c.negCache.set(serviceName, err)
+	}
+	return v, err
 }
 
 // fetchAndCache 查询 Agent 并写入一级缓存；先查缓存去重，与后台再验证共用 singleflight 自然合并
@@ -86,7 +111,7 @@ func (c *Client) fetchAndCache(ctx context.Context, serviceName string) (any, er
 }
 
 // revalidateAsync 后台重新解析以刷新陈旧列表；经 negativeCache 限频，
-// 故障期间探测频率不超过每窗口一次。成功静默刷新缓存，失败记录负缓存；
+// 故障期间探测频率不超过每窗口一次。成功静默刷新缓存，失败由共享查询写入负缓存；
 // 确认无健康实例时清除陈旧条目，让后续请求快速失败而不是路由到已下线实例
 func (c *Client) revalidateAsync(ctx context.Context, serviceName string) {
 	if _, ok := c.negCache.get(serviceName); ok {
@@ -99,17 +124,14 @@ func (c *Client) revalidateAsync(ctx context.Context, serviceName string) {
 					"service", serviceName, "panic", r)
 			}
 		}()
-		// 探测不绑定调用方 ctx：调用方返回后仍要完成刷新
-		probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.httpTimeout)
-		defer cancel()
+		// 与同步发现共用 singleflight；取消和超时由 fetchDetached 与调用方 ctx 隔开
 		_, err, _ := c.sfGroup.Do(serviceName, func() (any, error) {
-			return c.fetchAndCache(probeCtx, serviceName)
+			return c.fetchDetached(ctx, serviceName)
 		})
 		if err == nil {
 			logger.Info(ctx, "consul 发现再验证成功，实例列表已刷新", "service", serviceName)
 			return
 		}
-		c.negCache.set(serviceName, err)
 		if errors.Is(err, errNoHealthyInstances) {
 			c.l1Cache.delete(serviceName)
 			logger.Warn(ctx, "consul 发现确认无健康实例，陈旧列表已失效", "service", serviceName)
