@@ -2,6 +2,6 @@
 description: 代码巡检
 ---
 
-执行 `_prompts/skills/check_code.md`，仅用于业务 Go 工程；yomi-boot 基础库用 `check_lib`。报告落盘 `_ipc-doc/{YYYYMMDD}_{需求名称}-ipc.md`；未关联需求文档用 `_ipc-doc/{YYYYMMDD}_全项目-ipc.md`，修复后复审回写同一份报告。
+执行 `_prompts/skills/check_code.md`。对调用方指定的代码模块做检查，不区分业务模块还是基础库。报告落盘 `_ipc-doc/{YYYYMMDD}_{模块名}-ipc.md`，默认只检不修，修复后复审回写同一份报告。
 
 基于第一性原理和对抗性审查，用白话表述问题、影响与改法。
