@@ -14,9 +14,12 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/token"
 	"github.com/hwwadmin/yomi-boot/component/core/appctx"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/handler"
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
 	"github.com/hwwadmin/yomi-boot/component/core/masking"
 	"github.com/hwwadmin/yomi-boot/component/core/response"
+	sharederr "github.com/hwwadmin/yomi-boot/component/core/shared/error"
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 	"github.com/hwwadmin/yomi-boot/component/core/utils/ginutil"
 	"github.com/hwwadmin/yomi-boot/component/core/utils/httputil"
@@ -27,6 +30,9 @@ import (
 
 // truncatedSuffix 是请求体或响应体超出采集限制时的截断标记
 const truncatedSuffix = "...[truncated]"
+
+// requestBodyReadFailed 是采集请求体失败时写入记录的正文
+const requestBodyReadFailed = "读body失败"
 
 // HttpRecordMiddleware 表示 HTTP 访问记录采集中间件实例
 type HttpRecordMiddleware struct {
@@ -51,10 +57,21 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 
 		start := time.Now()
 		requestAt := start
+		blw := newBodyRecordWriter(c.Writer, m.cfg.MaxResponseBodySizeOrDefault())
+		c.Writer = blw
+
 		var requestBody string
 		var requestBodyTruncated bool
 		if m.cfg.RecordRequestBody {
-			requestBody, requestBodyTruncated = readRequestBodyForRecord(c.Request, m.cfg.MaxRequestBodySizeOrDefault())
+			var err error
+			requestBody, requestBodyTruncated, err = readRequestBodyForRecord(c.Request, m.cfg.MaxRequestBodySizeOrDefault())
+			if err != nil {
+				logger.Warn(ctx, "读取请求体失败", "error", err)
+				handler.WriteBusinessError(c, errors.Sentinel(sharederr.ErrInvalidBody))
+				c.Abort()
+				m.safeInvoke(ctx, m.buildRecord(c, requestAt, time.Since(start), requestBody, false, blw))
+				return
+			}
 			// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文
 			if requestBodyTruncated {
 				requestBody = ""
@@ -62,9 +79,6 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 				requestBody = m.mask.MaskJSON(requestBody)
 			}
 		}
-
-		blw := newBodyRecordWriter(c.Writer, m.cfg.MaxResponseBodySizeOrDefault())
-		c.Writer = blw
 
 		c.Next()
 
@@ -172,14 +186,15 @@ func normalizePath(requestPath string) string {
 	return currentPath
 }
 
-// readRequestBodyForRecord 读取并还原请求体，返回用于记录输出的内容与是否截断标记
-// maxSize == utf8util.Unlimited 时读取完整 body；否则仅读取 maxSize+1 字节用于判断是否截断
-func readRequestBodyForRecord(r *http.Request, maxSize int) (string, bool) {
+// readRequestBodyForRecord 读取并还原请求体，返回用于记录输出的内容、是否截断，以及读取错误。
+// maxSize == utf8util.Unlimited 时读取完整 body；否则仅读取 maxSize+1 字节用于判断是否截断。
+// 读取失败时关闭 original 并返回错误，不把 body 替换成 http.NoBody。
+func readRequestBodyForRecord(r *http.Request, maxSize int) (string, bool, error) {
 	if r == nil || r.Body == nil {
-		return "", false
+		return "", false, nil
 	}
 	if maxSize == 0 {
-		return "", false
+		return "", false, nil
 	}
 
 	original := r.Body
@@ -194,20 +209,19 @@ func readRequestBodyForRecord(r *http.Request, maxSize int) (string, bool) {
 	}
 	if err != nil {
 		_ = original.Close()
-		r.Body = http.NoBody
-		return "", false
+		return requestBodyReadFailed, false, err
 	}
 	httputil.ReplayRequestBody(r, original, recorded, replayMax)
 
 	if len(recorded) == 0 {
-		return "", false
+		return "", false, nil
 	}
 
 	cut, truncated := utf8util.Cut(recorded, maxSize)
 	if truncated {
-		return string(cut) + truncatedSuffix, true
+		return string(cut) + truncatedSuffix, true, nil
 	}
-	return string(cut), false
+	return string(cut), false, nil
 }
 
 // bodyRecordWriter 包装 gin.ResponseWriter，在写回客户端的同时采集响应体

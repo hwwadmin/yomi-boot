@@ -22,7 +22,10 @@ func TestReadRequestBodyForRecord_NoTruncate(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api", original)
 	req.Body = original
 
-	got, truncated := readRequestBodyForRecord(req, 4096)
+	got, truncated, err := readRequestBodyForRecord(req, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if truncated {
 		t.Fatal("want not truncated")
 	}
@@ -54,7 +57,10 @@ func TestReadRequestBodyForRecord_Truncate(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api", original)
 	req.Body = original
 
-	got, truncated := readRequestBodyForRecord(req, 16)
+	got, truncated, err := readRequestBodyForRecord(req, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !truncated {
 		t.Fatal("want truncated")
 	}
@@ -87,7 +93,10 @@ func TestReadRequestBodyForRecord_UTF8Boundary(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api", original)
 	req.Body = original
 
-	got, truncated := readRequestBodyForRecord(req, 5)
+	got, truncated, err := readRequestBodyForRecord(req, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !truncated {
 		t.Fatal("want truncated")
 	}
@@ -117,7 +126,10 @@ func TestReadRequestBodyForRecord_Unlimited(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api", original)
 	req.Body = original
 
-	got, truncated := readRequestBodyForRecord(req, -1)
+	got, truncated, err := readRequestBodyForRecord(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if truncated {
 		t.Fatal("unlimited should not truncate")
 	}

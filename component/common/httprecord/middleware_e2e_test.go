@@ -16,6 +16,7 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/token"
 	"github.com/hwwadmin/yomi-boot/component/core/masking"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 )
 
@@ -294,6 +295,32 @@ func TestMiddlewareNilService(t *testing.T) {
 	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-svc", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("无服务时请求应正常完成，实际 %d", w.Code)
+	}
+}
+
+// TestMiddlewareRecordsBodyReadFailure 验证采集请求体失败时记为读失败、返回 INVALID_BODY，且不进入业务
+func TestMiddlewareRecordsBodyReadFailure(t *testing.T) {
+	response.RegisterDefaultForTest(t)
+	rec := &recorderService{}
+	cfg := Config{MiddlewareEnabled: true, RecordRequestBody: true, RecordResponseBody: true}
+	engine := newTestEngine(t, cfg, rec, nil)
+	called := false
+	engine.POST("/api", func(c *gin.Context) {
+		called = true
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api", errBody{}))
+	if called {
+		t.Fatal("读 body 失败不应进入业务处理")
+	}
+	if !strings.Contains(w.Body.String(), `"code":"INVALID_BODY"`) {
+		t.Fatalf("应返回 INVALID_BODY，实际 %d %s", w.Code, w.Body.String())
+	}
+	records := waitForRecords(t, rec, 1)
+	if records[0].RequestBody != requestBodyReadFailed || records[0].RequestBodyTruncated {
+		t.Fatalf("请求体应记为 %q，实际 %q truncated=%v", requestBodyReadFailed, records[0].RequestBody, records[0].RequestBodyTruncated)
 	}
 }
 

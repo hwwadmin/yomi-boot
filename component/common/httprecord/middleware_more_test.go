@@ -71,20 +71,21 @@ func (errBody) Close() error { return nil }
 
 // TestReadRequestBodyForRecord_Guards 验证空请求、空 body 与读取失败的兜底
 func TestReadRequestBodyForRecord_Guards(t *testing.T) {
-	if got, truncated := readRequestBodyForRecord(nil, 10); got != "" || truncated {
-		t.Fatalf("nil 请求应返回空: %q %v", got, truncated)
+	if got, truncated, err := readRequestBodyForRecord(nil, 10); got != "" || truncated || err != nil {
+		t.Fatalf("nil 请求应返回空: %q %v %v", got, truncated, err)
 	}
 	req := httptest.NewRequest("POST", "/x", nil)
 	req.Body = nil
-	if got, truncated := readRequestBodyForRecord(req, 10); got != "" || truncated {
-		t.Fatalf("nil body 应返回空: %q %v", got, truncated)
+	if got, truncated, err := readRequestBodyForRecord(req, 10); got != "" || truncated || err != nil {
+		t.Fatalf("nil body 应返回空: %q %v %v", got, truncated, err)
 	}
 	req2 := httptest.NewRequest("POST", "/x", errBody{})
-	if got, truncated := readRequestBodyForRecord(req2, 10); got != "" || truncated {
-		t.Fatalf("读取失败应返回空: %q %v", got, truncated)
+	got, truncated, err := readRequestBodyForRecord(req2, 10)
+	if err == nil || got != requestBodyReadFailed || truncated {
+		t.Fatalf("读取失败应记为 %q 并返回错误，实际 %q %v %v", requestBodyReadFailed, got, truncated, err)
 	}
-	if req2.Body != http.NoBody {
-		t.Fatal("读取失败后 body 应重置为 NoBody")
+	if req2.Body == http.NoBody {
+		t.Fatal("读取失败不应替换为 NoBody")
 	}
 }
 
