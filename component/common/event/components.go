@@ -13,6 +13,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/outbox"
 	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
@@ -29,6 +30,7 @@ type Deps struct {
 	TxExecutor      tx.Executor
 	KafkaPublisher  yomikafka.PublisherService
 	DistLockFactory distlock.DistLockFactory
+	Redis           yomiredis.RedisService
 	IDGenerator     snowflake.Generator
 	DbType          enums.DbType
 	AppName         string
@@ -97,9 +99,12 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 		if deps.DistLockFactory == nil {
 			return nil, errors.New("event: 分布式锁工厂未初始化")
 		}
+		if deps.Redis == nil {
+			return nil, errors.New("event: Redis 服务未初始化")
+		}
 		inboxDlqRepo := repo.NewInboxDlqRepo(deps.DB)
 		c.Receiver = NewReceiver(
-			inboxRepo, inboxDlqRepo, deps.TxExecutor, deps.DistLockFactory, runtime, deps.IDGenerator,
+			inboxRepo, inboxDlqRepo, deps.TxExecutor, deps.DistLockFactory, deps.Redis, runtime, deps.IDGenerator,
 		)
 		c.inboxDlqHandler = NewInboxDlqHandler(runtime, inboxDlqRepo, inboxRepo, deps.KafkaPublisher)
 		c.NormalReceiver = NewNormalReceiver()

@@ -81,8 +81,13 @@ func (p *Event) Init(_ context.Context, slot *plugin.PluginSlot) error {
 			return errors.New("event: 发布侧需要 redis 插件提供 DistLockFactory")
 		}
 	}
-	if cfg.InboxEnabled && redis.DistLockFactory() == nil {
-		return errors.New("event: 消费侧需要 redis 插件提供 DistLockFactory")
+	if cfg.InboxEnabled {
+		if redis.DistLockFactory() == nil {
+			return errors.New("event: 消费侧需要 redis 插件提供 DistLockFactory")
+		}
+		if redis.Service() == nil {
+			return errors.New("event: 消费侧需要 redis 插件提供 RedisService")
+		}
 	}
 
 	components, err := event.NewComponents(event.Deps{
@@ -90,6 +95,7 @@ func (p *Event) Init(_ context.Context, slot *plugin.PluginSlot) error {
 		TxExecutor:      tx.Executor(),
 		KafkaPublisher:  kafka.Service(),
 		DistLockFactory: redis.DistLockFactory(),
+		Redis:           redis.Service(),
 		IDGenerator:     ids.Generator(),
 		DbType:          db.Type(),
 		AppName:         app.Name(),

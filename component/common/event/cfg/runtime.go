@@ -4,6 +4,7 @@
 package cfg
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,6 +40,13 @@ type Runtime struct {
 // LockKey 返回消息队列事件消费侧分布式锁 Redis Key
 func (c Runtime) LockKey(eventID string) string {
 	return "event:receiver:lock:" + c.ServiceName + ":" + eventID
+}
+
+// RetryCountKey 返回单条 Kafka 消息的消费失败次数 Redis Key。
+// 键按位点区分：死信重投会生成新偏移量，并重新获得一份重试额度。
+func (c Runtime) RetryCountKey(topic string, partition int, offset int64) string {
+	return "event:receiver:retry:" + c.ServiceName + ":" + topic + ":" +
+		strconv.Itoa(partition) + ":" + strconv.FormatInt(offset, 10)
 }
 
 // RoundRobinName 构造轮询任务名

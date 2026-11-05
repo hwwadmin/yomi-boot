@@ -11,6 +11,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
 	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
@@ -72,6 +73,14 @@ func newTestLockFactory(t *testing.T) distlock.DistLockFactory {
 	return factory
 }
 
+// newTestRedisService 启动内存 Redis 并返回常用读写服务
+func newTestRedisService(t *testing.T) yomiredis.RedisService {
+	t.Helper()
+	client, cleanup := redistest.NewClient(t)
+	t.Cleanup(cleanup)
+	return yomiredis.NewRedisHelper(client)
+}
+
 // TestNewComponentsValidation 覆盖装配阶段的依赖校验分支
 func TestNewComponentsValidation(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t,
@@ -83,6 +92,7 @@ func TestNewComponentsValidation(t *testing.T) {
 	executor := passthroughExecutor{}
 	idGen := snowflaketest.NewTestGenerator()
 	factory := newTestLockFactory(t)
+	redisSvc := newTestRedisService(t)
 
 	buildDeps := func(mutate func(*Deps)) Deps {
 		deps := Deps{
@@ -90,6 +100,7 @@ func TestNewComponentsValidation(t *testing.T) {
 			TxExecutor:      executor,
 			KafkaPublisher:  pub,
 			DistLockFactory: factory,
+			Redis:           redisSvc,
 			IDGenerator:     idGen,
 			DbType:          enums.MySQL,
 			AppName:         "app",
@@ -116,6 +127,9 @@ func TestNewComponentsValidation(t *testing.T) {
 	if _, err := NewComponents(buildDeps(func(d *Deps) { d.DistLockFactory = nil }), Config{InboxEnabled: true}); err == nil {
 		t.Fatal("消费侧启用但分布式锁工厂缺失应返回错误")
 	}
+	if _, err := NewComponents(buildDeps(func(d *Deps) { d.Redis = nil }), Config{InboxEnabled: true}); err == nil {
+		t.Fatal("消费侧启用但 Redis 服务缺失应返回错误")
+	}
 }
 
 // TestNewComponentsAndClose 验证按开关装配出全部子组件并可安全关闭
@@ -129,6 +143,7 @@ func TestNewComponentsAndClose(t *testing.T) {
 			TxExecutor:      passthroughExecutor{},
 			KafkaPublisher:  &stubPublisher{},
 			DistLockFactory: newTestLockFactory(t),
+			Redis:           newTestRedisService(t),
 			IDGenerator:     snowflaketest.NewTestGenerator(),
 			DbType:          enums.MySQL,
 			AppName:         "app",
@@ -179,6 +194,7 @@ func TestComponentsResetDlqRequiresOutbox(t *testing.T) {
 			TxExecutor:      passthroughExecutor{},
 			KafkaPublisher:  &stubPublisher{},
 			DistLockFactory: newTestLockFactory(t),
+			Redis:           newTestRedisService(t),
 			IDGenerator:     snowflaketest.NewTestGenerator(),
 			DbType:          enums.MySQL,
 			AppName:         "app",

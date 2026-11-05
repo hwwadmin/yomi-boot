@@ -5,7 +5,6 @@ package event
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
@@ -14,6 +13,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
 	"github.com/hwwadmin/yomi-boot/component/core/appctx"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -28,6 +28,7 @@ type Receiver struct {
 	inboxDlqRepo *repo.InboxDlqRepo
 	txExecutor   tx.Executor
 	lockFactory  distlock.DistLockFactory
+	redis        yomiredis.RedisService
 	cfg          cfg.Runtime
 	idGen        snowflake.Generator
 }
@@ -38,6 +39,7 @@ func NewReceiver(
 	inboxDlqRepo *repo.InboxDlqRepo,
 	txExecutor tx.Executor,
 	lockFactory distlock.DistLockFactory,
+	redisService yomiredis.RedisService,
 	runtime cfg.Runtime,
 	idGen snowflake.Generator,
 ) *Receiver {
@@ -46,6 +48,7 @@ func NewReceiver(
 		inboxDlqRepo: inboxDlqRepo,
 		txExecutor:   txExecutor,
 		lockFactory:  lockFactory,
+		redis:        redisService,
 		cfg:          runtime,
 		idGen:        idGen,
 	}
@@ -70,8 +73,20 @@ const inboxDlqInsertTimeout = 5 * time.Second
 // inboxDlqErrorMsgLimit 是收件箱死信错误信息的最大字符数，避免超过 text 列上限
 const inboxDlqErrorMsgLimit = 4000
 
+// inboxRetryCountTTL 是单条消息失败次数在 Redis 中的存活时间，每次失败都会刷新。
+// 分区被抢走或进程重启后计数仍在；消息被确认后会主动删除，删除失败也靠这段时间回收。
+const inboxRetryCountTTL = 7 * 24 * time.Hour
+
+// luaInboxRetryIncr 原子累加失败次数并刷新过期时间。
+// KEYS[1] = 计数键，ARGV[1] = 过期时间（毫秒），返回累加后的尝试次数。
+const luaInboxRetryIncr = `
+local n = redis.call('INCR', KEYS[1])
+redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[1]))
+return n
+`
+
 // WrapHandler 将业务处理函数包装为 Kafka 消费 handler。
-// 业务失败达到 InboxDlqMaxRetry 后写入 sys_event_inbox_dlq 并 ack；
+// 业务失败次数记在 Redis，跨进程累加；达到 InboxDlqMaxRetry 后写入 sys_event_inbox_dlq 并 ack。
 // Kafka 的 MaxHandlerRetries 必须为 -1 或不小于该值，否则 Kafka 会先丢弃消息。
 func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yomikafka.ConsumeHandler {
 	if fn == nil {
@@ -81,8 +96,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 		}
 	}
 
-	trackRetries := r.inboxDlqRepo != nil && r.cfg.InboxDlqMaxRetry >= 0
-	retryTracker := newMessageRetryTracker()
+	trackRetries := r.trackInboxRetries()
 	return func(ctx context.Context, msg yomikafka.Message) yomikafka.ConsumeResult {
 		if len(msg.Value) == 0 {
 			logger.Warn(ctx, "[消息队列事件]消息为空，已被抛弃")
@@ -93,7 +107,6 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 		if !ok {
 			return yomikafka.AckDrop()
 		}
-		retryKey := messageRetryKey{topic: msg.Topic, partition: msg.Partition, offset: msg.Offset}
 
 		// 启用看门狗续期（默认 TTL 30s），覆盖长链路业务
 		lock := r.lockFactory.GetLock(r.cfg.LockKey(evt.EventID), distlock.WithWatchdog(true))
@@ -111,7 +124,9 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 				return yomikafka.Retry()
 			}
 			if exists {
-				retryTracker.reset(retryKey)
+				if trackRetries {
+					r.resetInboxRetry(ctx, msg)
+				}
 				logger.Warn(ctx, "[消息队列事件]重复且已入 inbox",
 					"eventId", evt.EventID, "topic", evt.Topic)
 				return yomikafka.AckOK()
@@ -177,7 +192,12 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 				errors.Is(txErr, context.DeadlineExceeded) {
 				return yomikafka.Retry()
 			}
-			retryCount := retryTracker.increment(retryKey) - 1
+			retryCount, countErr := r.incrementInboxRetry(ctx, msg)
+			if countErr != nil {
+				logger.Error(ctx, "[消息队列事件]累计重试次数失败",
+					"eventId", evt.EventID, "topic", evt.Topic, "error", countErr)
+				return yomikafka.Retry()
+			}
 			if !r.shouldMoveToInboxDlq(retryCount) {
 				return yomikafka.Retry()
 			}
@@ -187,7 +207,7 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 					"retryCount", retryCount, "error", dlqErr)
 				return yomikafka.Retry()
 			}
-			retryTracker.reset(retryKey)
+			r.resetInboxRetry(ctx, msg)
 			logger.Error(ctx, "[消息队列事件]重试次数已超限，已转入收件箱死信",
 				"eventId", evt.EventID, "topic", evt.Topic,
 				"retryCount", retryCount, "error", txErr)
@@ -196,11 +216,15 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 
 		switch result {
 		case receiveSuccess:
-			retryTracker.reset(retryKey)
+			if trackRetries {
+				r.resetInboxRetry(ctx, msg)
+			}
 			logger.Info(ctx, "[消息队列事件]接收成功", "eventId", evt.EventID, "topic", evt.Topic)
 			return yomikafka.AckOK()
 		case receiveDuplicate:
-			retryTracker.reset(retryKey)
+			if trackRetries {
+				r.resetInboxRetry(ctx, msg)
+			}
 			logger.Warn(ctx, "[消息队列事件]重复", "eventId", evt.EventID, "topic", evt.Topic)
 			return yomikafka.AckOK()
 		default:
@@ -219,9 +243,60 @@ func invokeEventHandler(fn func(ctx context.Context, evt Event) error, ctx conte
 	return fn(ctx, evt)
 }
 
+// trackInboxRetries 返回是否需要累计业务失败次数。负数表示无限重试，不访问 Redis。
+func (r *Receiver) trackInboxRetries() bool {
+	return r.inboxDlqRepo != nil && r.cfg.InboxDlqMaxRetry >= 0
+}
+
 // shouldMoveToInboxDlq 判断当前失败次数是否已达到转入收件箱死信的条件
 func (r *Receiver) shouldMoveToInboxDlq(retryCount int) bool {
-	return r.inboxDlqRepo != nil && r.cfg.InboxDlqMaxRetry >= 0 && retryCount >= r.cfg.InboxDlqMaxRetry
+	return r.trackInboxRetries() && retryCount >= r.cfg.InboxDlqMaxRetry
+}
+
+// incrementInboxRetry 累加该 Kafka 消息的失败次数，返回不含首次处理的重试次数。
+// Redis 不可用时返回错误，调用方应继续重试，不能据此转入死信。
+func (r *Receiver) incrementInboxRetry(ctx context.Context, msg yomikafka.Message) (int, error) {
+	if r.redis == nil {
+		return 0, errors.New("event: Redis 服务未初始化")
+	}
+	result, err := r.redis.OpsScript4Eval(
+		ctx,
+		luaInboxRetryIncr,
+		[]string{r.cfg.RetryCountKey(msg.Topic, msg.Partition, msg.Offset)},
+		inboxRetryCountTTL.Milliseconds(),
+	)
+	if err != nil {
+		return 0, err
+	}
+	attempts, err := redisInteger(result)
+	if err != nil {
+		return 0, err
+	}
+	return attempts - 1, nil
+}
+
+// resetInboxRetry 删除该 Kafka 消息的失败次数。删除失败只记日志，键会按 TTL 过期。
+func (r *Receiver) resetInboxRetry(ctx context.Context, msg yomikafka.Message) {
+	if r.redis == nil {
+		return
+	}
+	key := r.cfg.RetryCountKey(msg.Topic, msg.Partition, msg.Offset)
+	if err := r.redis.OpsKey4Delete(ctx, key); err != nil {
+		logger.Error(ctx, "[消息队列事件]清除重试计数失败",
+			"topic", msg.Topic, "partition", msg.Partition, "offset", msg.Offset, "error", err)
+	}
+}
+
+// redisInteger 解析 Lua 数值返回值
+func redisInteger(result any) (int, error) {
+	switch value := result.(type) {
+	case int64:
+		return int(value), nil
+	case int:
+		return value, nil
+	default:
+		return 0, errors.Newf("event: 重试计数返回类型异常: %T", result)
+	}
 }
 
 // moveToInboxDlq 将超过重试上限的事件写入收件箱死信
@@ -258,37 +333,4 @@ func truncateInboxDlqError(err error) string {
 		return string(runes)
 	}
 	return string(runes[:inboxDlqErrorMsgLimit]) + "...[truncated]"
-}
-
-// messageRetryKey 是同一条 Kafka 消息的重试计数键
-type messageRetryKey struct {
-	topic     string
-	partition int
-	offset    int64
-}
-
-// messageRetryTracker 记录同一条 Kafka 消息的失败重试次数
-type messageRetryTracker struct {
-	mu     sync.Mutex
-	counts map[messageRetryKey]int
-}
-
-// newMessageRetryTracker 创建消息重试计数器
-func newMessageRetryTracker() *messageRetryTracker {
-	return &messageRetryTracker{counts: make(map[messageRetryKey]int)}
-}
-
-// increment 增加并返回指定消息的失败次数
-func (t *messageRetryTracker) increment(key messageRetryKey) int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.counts[key]++
-	return t.counts[key]
-}
-
-// reset 清除指定消息的失败次数
-func (t *messageRetryTracker) reset(key messageRetryKey) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	delete(t.counts, key)
 }

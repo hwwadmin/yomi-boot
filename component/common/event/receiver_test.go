@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
@@ -16,6 +17,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/common/snowflake"
 
@@ -54,19 +56,58 @@ func TestReceiverShouldMoveToInboxDlq(t *testing.T) {
 	}
 }
 
-// TestMessageRetryTracker 验证同一消息的失败计数与重置
-func TestMessageRetryTracker(t *testing.T) {
-	tracker := newMessageRetryTracker()
-	key := messageRetryKey{topic: "topic", partition: 1, offset: 10}
+// TestInboxRetryCountInRedis 验证失败次数按 Kafka 位点累加，重置后从零开始，并带有过期时间
+func TestInboxRetryCountInRedis(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
-	for i := 1; i <= 3; i++ {
-		if got := tracker.increment(key); got != i {
-			t.Fatalf("第 %d 次 increment 期望 %d，实际 %d", i, i, got)
+	receiver := &Receiver{
+		redis: yomiredis.NewRedisHelper(client),
+		cfg:   cfg.Runtime{ServiceName: "svc"},
+	}
+	msg := yomikafka.Message{Topic: "topic", Partition: 1, Offset: 10}
+	key := receiver.cfg.RetryCountKey(msg.Topic, msg.Partition, msg.Offset)
+	if key != "event:receiver:retry:svc:topic:1:10" {
+		t.Fatalf("重试计数键不符: %s", key)
+	}
+
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		got, err := receiver.incrementInboxRetry(ctx, msg)
+		if err != nil {
+			t.Fatalf("第 %d 次累加失败: %v", i+1, err)
+		}
+		if got != i {
+			t.Fatalf("第 %d 次累加期望重试次数 %d，实际 %d", i+1, i, got)
 		}
 	}
-	tracker.reset(key)
-	if got := tracker.increment(key); got != 1 {
-		t.Fatalf("reset 后 increment 期望 1，实际 %d", got)
+
+	ttl, err := client.TTL(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("读取重试计数 TTL 失败: %v", err)
+	}
+	if ttl <= 6*24*time.Hour || ttl > inboxRetryCountTTL {
+		t.Fatalf("重试计数 TTL 应接近 7 天，实际 %s", ttl)
+	}
+
+	receiver.resetInboxRetry(ctx, msg)
+	exists, err := client.Exists(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("检查重试计数键失败: %v", err)
+	}
+	if exists != 0 {
+		t.Fatal("重置后重试计数键应被删除")
+	}
+	got, err := receiver.incrementInboxRetry(ctx, msg)
+	if err != nil {
+		t.Fatalf("重置后累加失败: %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("重置后第一次累加期望 0，实际 %d", got)
+	}
+
+	if _, err := (&Receiver{cfg: receiver.cfg}).incrementInboxRetry(ctx, msg); err == nil {
+		t.Fatal("Redis 未初始化时累加应返回错误")
 	}
 }
 
@@ -158,6 +199,7 @@ func TestReceiverMovesToInboxDlqAfterRetryExhausted(t *testing.T) {
 		repo.NewInboxDlqRepo(gormDB),
 		tx.NewLocalRunner(gormDB),
 		factory,
+		yomiredis.NewRedisHelper(client),
 		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 2},
 		gen,
 	)
@@ -201,5 +243,183 @@ func TestReceiverMovesToInboxDlqAfterRetryExhausted(t *testing.T) {
 	}
 	if inboxCount != 0 {
 		t.Fatalf("业务事务应回滚，inbox 期望 0 条，实际 %d 条", inboxCount)
+	}
+	exists, err := client.Exists(ctx, "event:receiver:retry:svc:topic:0:1").Result()
+	if err != nil {
+		t.Fatalf("检查重试计数键失败: %v", err)
+	}
+	if exists != 0 {
+		t.Fatal("转入死信后应清除重试计数")
+	}
+}
+
+// TestReceiverRetryCountSharedAcrossReceivers 验证分区换到另一个接收器后失败次数继续累加
+func TestReceiverRetryCountSharedAcrossReceivers(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t,
+		dbtest.WithTables(model.SysEventInbox{}, model.SysEventInboxDlq{}),
+	)
+	defer cleanup()
+
+	client, redisCleanup := redistest.NewClient(t)
+	defer redisCleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("创建分布式锁工厂失败: %v", err)
+	}
+	redisSvc := yomiredis.NewRedisHelper(client)
+	runtime := cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 2}
+	newReceiver := func() *Receiver {
+		t.Helper()
+		gen, genErr := snowflake.NewGenerator(1)
+		if genErr != nil {
+			t.Fatalf("创建雪花 ID 生成器失败: %v", genErr)
+		}
+		return NewReceiver(
+			repo.NewInboxRepo(gormDB),
+			repo.NewInboxDlqRepo(gormDB),
+			tx.NewLocalRunner(gormDB),
+			factory,
+			redisSvc,
+			runtime,
+			gen,
+		)
+	}
+
+	fail := func(context.Context, Event) error { return fmt.Errorf("business failed") }
+	msg := yomikafka.Message{
+		Topic:     "topic",
+		Partition: 0,
+		Offset:    7,
+		Value:     []byte(`{"eventId":"event-shared","topic":"topic","payload":"payload-1"}`),
+	}
+	ctx := context.Background()
+
+	if result := newReceiver().WrapHandler(fail)(ctx, msg); result.Ack {
+		t.Fatal("第一个接收器的首次失败不应 ack")
+	}
+	if result := newReceiver().WrapHandler(fail)(ctx, msg); result.Ack {
+		t.Fatal("第二个接收器接手前不应 ack")
+	}
+	if result := newReceiver().WrapHandler(fail)(ctx, msg); !result.Ack {
+		t.Fatal("跨接收器累加到上限后应 ack 并转入死信")
+	}
+
+	var count int64
+	if err := gormDB.Model(&model.SysEventInboxDlq{}).Count(&count).Error; err != nil {
+		t.Fatalf("查询收件箱死信失败: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("期望 1 条死信，实际 %d 条", count)
+	}
+}
+
+// TestReceiverRetryCountRedisFailureStaysRetry 验证计数写入失败时不进死信、不提交
+func TestReceiverRetryCountRedisFailureStaysRetry(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t,
+		dbtest.WithTables(model.SysEventInbox{}, model.SysEventInboxDlq{}),
+	)
+	defer cleanup()
+
+	live, liveCleanup := redistest.NewClient(t)
+	defer liveCleanup()
+	factory, err := distlock.NewFactory(live)
+	if err != nil {
+		t.Fatalf("创建分布式锁工厂失败: %v", err)
+	}
+	dead, deadCleanup := redistest.NewClient(t)
+	deadCleanup()
+
+	gen, err := snowflake.NewGenerator(1)
+	if err != nil {
+		t.Fatalf("创建雪花 ID 生成器失败: %v", err)
+	}
+	receiver := NewReceiver(
+		repo.NewInboxRepo(gormDB),
+		repo.NewInboxDlqRepo(gormDB),
+		tx.NewLocalRunner(gormDB),
+		factory,
+		yomiredis.NewRedisHelper(dead),
+		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 0},
+		gen,
+	)
+	handler := receiver.WrapHandler(func(context.Context, Event) error {
+		return fmt.Errorf("business failed")
+	})
+	msg := yomikafka.Message{
+		Topic:     "topic",
+		Partition: 0,
+		Offset:    8,
+		Value:     []byte(`{"eventId":"event-redis-down","topic":"topic","payload":"payload-1"}`),
+	}
+	if result := handler(context.Background(), msg); result.Ack {
+		t.Fatal("Redis 计数失败时不应 ack")
+	}
+
+	var count int64
+	if err := gormDB.Model(&model.SysEventInboxDlq{}).Count(&count).Error; err != nil {
+		t.Fatalf("查询收件箱死信失败: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Redis 计数失败时不应写死信，实际 %d 条", count)
+	}
+}
+
+// TestCanceledFailureDoesNotConsumeRetryBudget 验证停机或重平衡造成的取消不消耗重试额度
+func TestCanceledFailureDoesNotConsumeRetryBudget(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t,
+		dbtest.WithTables(model.SysEventInbox{}, model.SysEventInboxDlq{}),
+	)
+	defer cleanup()
+
+	client, redisCleanup := redistest.NewClient(t)
+	defer redisCleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("创建分布式锁工厂失败: %v", err)
+	}
+	gen, err := snowflake.NewGenerator(1)
+	if err != nil {
+		t.Fatalf("创建雪花 ID 生成器失败: %v", err)
+	}
+	receiver := NewReceiver(
+		repo.NewInboxRepo(gormDB),
+		repo.NewInboxDlqRepo(gormDB),
+		tx.NewLocalRunner(gormDB),
+		factory,
+		yomiredis.NewRedisHelper(client),
+		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 1},
+		gen,
+	)
+	canceled := true
+	handler := receiver.WrapHandler(func(context.Context, Event) error {
+		if canceled {
+			return context.Canceled
+		}
+		return fmt.Errorf("business failed")
+	})
+	msg := yomikafka.Message{
+		Topic:     "topic",
+		Partition: 0,
+		Offset:    9,
+		Value:     []byte(`{"eventId":"event-cancel","topic":"topic","payload":"payload-1"}`),
+	}
+	ctx := context.Background()
+	if result := handler(ctx, msg); result.Ack {
+		t.Fatal("上下文取消不应 ack")
+	}
+	exists, err := client.Exists(ctx, "event:receiver:retry:svc:topic:0:9").Result()
+	if err != nil {
+		t.Fatalf("检查重试计数键失败: %v", err)
+	}
+	if exists != 0 {
+		t.Fatal("上下文取消不应写入重试计数")
+	}
+
+	canceled = false
+	if result := handler(ctx, msg); result.Ack {
+		t.Fatal("取消之后的首次业务失败不应 ack")
+	}
+	if result := handler(ctx, msg); !result.Ack {
+		t.Fatal("第二次业务失败应达到上限并 ack")
 	}
 }

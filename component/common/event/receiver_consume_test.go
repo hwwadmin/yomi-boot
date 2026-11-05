@@ -29,6 +29,7 @@ func TestReceiverWrapHandlerGuardBranches(t *testing.T) {
 		repo.NewInboxDlqRepo(gormDB),
 		passthroughExecutor{},
 		newTestLockFactory(t),
+		newTestRedisService(t),
 		cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 3},
 		snowflaketest.NewTestGenerator(),
 	)
@@ -81,6 +82,7 @@ func TestReceiverWrapHandlerGuardBranches(t *testing.T) {
 			repo.NewInboxDlqRepo(gormDB),
 			passthroughExecutor{},
 			factory,
+			newTestRedisService(t),
 			cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 3},
 			snowflaketest.NewTestGenerator(),
 		)
@@ -125,6 +127,7 @@ func TestReceiverWrapHandlerGuardBranches(t *testing.T) {
 			repo.NewInboxDlqRepo(gormDB),
 			passthroughExecutor{},
 			factory,
+			nil,
 			cfg.Runtime{ServiceName: "svc", InboxDlqMaxRetry: 3},
 			snowflaketest.NewTestGenerator(),
 		)
