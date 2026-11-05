@@ -7,6 +7,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/token"
 	"github.com/hwwadmin/yomi-boot/component/core/config"
 	"github.com/hwwadmin/yomi-boot/component/core/cors"
+	"github.com/hwwadmin/yomi-boot/component/core/handler"
 	"github.com/hwwadmin/yomi-boot/component/core/httpguard"
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
@@ -35,7 +36,7 @@ func DefaultMiddlewares(slot *plugin.PluginSlot) []gin.HandlerFunc {
 		traceid.Middleware(),
 		httprecord.Middleware(httprecordplugin.From(slot).Service(), httpRecordCfg, appctxplugin.From(slot).AppCtx(), maskingplugin.From(slot).Service()),
 		logger.Middleware(logCfg.Access),
-		gin.Recovery(),
+		handler.Recovery(),
 		httpguard.Middleware(httpCfg),
 		token.Middleware(tokenplugin.From(slot).Service(), tokenCfg),
 	}
