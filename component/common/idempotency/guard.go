@@ -91,6 +91,9 @@ type snapshot[T any] struct {
 // txRunner 由调用方注入，且必须是本次调用的最外层事务边界：传入的 ctx 已绑定同源事务时
 // 返回 ErrNestedTx fail-fast——最外层形态的时序承诺（事务提交后才写缓存、抢占行对其他连接
 // 可见）只有自己的提交点才能兑现；已处于事务内时改用 ExecuteInTx。
+//
+// 事务已经提交，或回放的是已提交结果时，持锁丢失仍返回业务结果，锁丢失只记日志。
+// 幂等真源是已提交的 sys_biz，这个错误不表示业务回滚。提交前锁丢失仍返回错误，事务回滚。
 func Execute[T any](
 	g *Guard,
 	txRunner tx.Runner,
@@ -103,6 +106,7 @@ func Execute[T any](
 
 // ExecuteInTx 执行幂等保护（嵌套复用形态）：调用方 ctx 已绑定同源事务时使用，
 // 抢占、业务与完成标记全部跟随外层事务提交，本函数没有自己的提交点。
+// 持锁在返回前丢失时仍返回 ErrLockLost，由外层回滚；记录尚未提交，不能当成成功。
 //
 // 与 Execute 的编排完全一致，唯一差异是不写结果缓存：嵌套形态「Run 返回 ≠ 提交」，
 // 回写缓存会跑在真实提交之前，外层回滚后会留下宣告成功而实际回滚的假成功缓存；
@@ -168,12 +172,16 @@ func execute[T any](
 	lock := g.distLockFactory.GetLock(lockRedisKey(key), distlock.WithWatchdog(true))
 
 	var result T
+	// committed 表示结果已经落定：命中已提交的缓存/快照，或最外层事务已提交。
+	// 嵌套形态的 Run 没有提交点，不能置位。
+	committed := false
 	err := distlock.RunWithLock(ctx, lock, func(runCtx context.Context) error {
 		// Step 3: 锁内 double-check，避免并发 miss 重复走后续流程
 		if cached, found, err := loadFromRedis[T](g, runCtx, rk); err != nil {
 			return err
 		} else if found {
 			result = cached
+			committed = true
 			return nil
 		}
 
@@ -185,7 +193,9 @@ func execute[T any](
 		}
 		if snap != nil {
 			result = snap.result
+			// 最外层不在事务内，能读到的完成记录都已提交。嵌套形态可能读到本事务未提交的行。
 			if !nested {
+				committed = true
 				writeCache(g, runCtx, rk, snap.data)
 			}
 			return nil
@@ -205,11 +215,19 @@ func execute[T any](
 		// Step 6: 非嵌套形态事务已提交，回写缓存供后续重复请求读取；
 		// 嵌套形态没有提交点，不回写（防外层回滚后留下假成功缓存）
 		if !nested {
+			committed = true
 			writeCache(g, runCtx, rk, snap.data)
 		}
 		return nil
 	})
 	if err != nil {
+		// RunWithLock 在回调返回 nil 后，持锁上下文已取消时仍返回 ErrLockLost。
+		// 结果已经提交时，这个错误不代表业务回滚。
+		if committed && isOnlyLockLost(err) {
+			logger.Warn(ctx, "[幂等]业务已提交，锁丢失不改变结果",
+				"bizId", key.BizID, "bizSubId", key.BizSubID, "operationType", key.OperationType, "error", err)
+			return result, nil
+		}
 		return zero, err
 	}
 	return result, nil
@@ -318,6 +336,29 @@ func loadFromRedis[T any](g *Guard, ctx context.Context, rk string) (T, bool, er
 		return zero, false, err
 	}
 	return result, true, nil
+}
+
+// isOnlyLockLost 判断错误链里是否只有锁丢失。
+// 回调返回 nil 后，RunWithLock 会因持锁上下文取消补上 ErrLockLost，释放时也可能再合并一次。
+// 链上还有业务错误时，说明事务未按成功提交，必须原样返回。
+func isOnlyLockLost(err error) bool {
+	if err == nil {
+		return false
+	}
+	if multi, ok := err.(interface{ Unwrap() []error }); ok {
+		found := false
+		for _, part := range multi.Unwrap() {
+			if part == nil {
+				continue
+			}
+			if !isOnlyLockLost(part) {
+				return false
+			}
+			found = true
+		}
+		return found
+	}
+	return errors.Is(err, distlock.ErrLockLost)
 }
 
 // writeCache 将响应快照字节写入结果缓存；失败仅告警——缓存只是快路径，

@@ -472,3 +472,154 @@ func TestRunBusinessOnce_ConflictReplaysCompleted(t *testing.T) {
 		t.Fatalf("应回放历史快照且业务不执行: snap=%v, calls=%d", snap, calls)
 	}
 }
+
+// lockLostOnRecheck 在 RunWithLock 于回调返回后再次读取持锁上下文时取消锁。
+// 第一次 HeldContext 留给 BindHeldContext，业务执行期间锁仍有效。
+type lockLostOnRecheck struct {
+	held   context.Context
+	cancel context.CancelFunc
+	reads  int
+}
+
+func newLockLostOnRecheck() *lockLostOnRecheck {
+	held, cancel := context.WithCancel(context.Background())
+	return &lockLostOnRecheck{held: held, cancel: cancel}
+}
+
+func (l *lockLostOnRecheck) Lock(context.Context) error { return nil }
+func (l *lockLostOnRecheck) TryLock(context.Context) (bool, error) {
+	return true, nil
+}
+func (l *lockLostOnRecheck) TryLockWithTimeout(context.Context, time.Duration) (bool, error) {
+	return true, nil
+}
+func (l *lockLostOnRecheck) Unlock(context.Context) error { return nil }
+func (l *lockLostOnRecheck) Key() string                  { return "test-lock-lost-on-recheck" }
+func (l *lockLostOnRecheck) HeldContext() context.Context {
+	l.reads++
+	if l.reads >= 2 {
+		l.cancel()
+	}
+	return l.held
+}
+
+// fixedLockFactory 每次都返回同一把锁，用来把锁丢失时机固定在测试里
+type fixedLockFactory struct {
+	lock distlock.Lock
+}
+
+func (f fixedLockFactory) GetLock(string, ...distlock.LockOption) distlock.Lock { return f.lock }
+
+func newGuardWithLock(env *testEnv, lock distlock.Lock) *Guard {
+	return NewGuard(env.guard.repo, env.guard.idGenerator, env.guard.redisService, fixedLockFactory{lock: lock})
+}
+
+// TestExecute_LockLostAfterCommitReturnsResult 验证最外层事务提交后锁丢失仍返回业务结果，
+// 缓存清掉后的回放同样返回历史结果，业务不重复执行
+func TestExecute_LockLostAfterCommitReturnsResult(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	calls := 0
+	fn := func(context.Context) (string, error) {
+		calls++
+		return "committed-under-lost-lock", nil
+	}
+	key := testKey("lost-commit")
+
+	got, err := Execute(newGuardWithLock(env, newLockLostOnRecheck()), env.runner, ctx, key, fn)
+	if err != nil || got != "committed-under-lost-lock" || calls != 1 {
+		t.Fatalf("提交后锁丢失应返回业务结果: got=%q, calls=%d, err=%v", got, calls, err)
+	}
+	var row SysBiz
+	if err = env.db.Where("biz_id = ? AND biz_sub_id = ?", key.BizID, key.BizSubID).First(&row).Error; err != nil {
+		t.Fatalf("查询幂等记录失败: %v", err)
+	}
+	if row.Status != StatusCompleted {
+		t.Fatalf("幂等记录应已完成, status=%d", row.Status)
+	}
+
+	if err = env.client.FlushDB(ctx).Err(); err != nil {
+		t.Fatalf("清空结果缓存失败: %v", err)
+	}
+	got, err = Execute(newGuardWithLock(env, newLockLostOnRecheck()), env.runner, ctx, key, fn)
+	if err != nil || got != "committed-under-lost-lock" || calls != 1 {
+		t.Fatalf("回放时锁丢失应返回历史结果: got=%q, calls=%d, err=%v", got, calls, err)
+	}
+}
+
+// TestExecute_BusinessErrorWithLockLostRollsBack 验证业务失败与锁丢失同时出现时事务回滚，不返回成功
+func TestExecute_BusinessErrorWithLockLostRollsBack(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	bizErr := errors.New("业务失败")
+	calls := 0
+	fn := func(context.Context) (string, error) {
+		calls++
+		return "", bizErr
+	}
+	_, err := Execute(newGuardWithLock(env, newLockLostOnRecheck()), env.runner, context.Background(), testKey("lost-rollback"), fn)
+	if !errors.Is(err, bizErr) || !errors.Is(err, distlock.ErrLockLost) {
+		t.Fatalf("应同时返回业务错误和锁丢失, err=%v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("业务应执行一次, calls=%d", calls)
+	}
+	var count int64
+	env.db.Model(&SysBiz{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("失败后幂等记录应回滚, count=%d", count)
+	}
+}
+
+// TestExecuteInTx_LockLostBeforeOuterCommitReturnsError 验证嵌套形态尚未提交时锁丢失仍返回错误，外层回滚
+func TestExecuteInTx_LockLostBeforeOuterCommitReturnsError(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	calls := 0
+	fn := func(context.Context) (string, error) {
+		calls++
+		return "nested", nil
+	}
+	err := env.runner.Run(context.Background(), func(txCtx context.Context) error {
+		_, err := ExecuteInTx(newGuardWithLock(env, newLockLostOnRecheck()), env.runner, txCtx, testKey("lost-nested"), fn)
+		return err
+	})
+	if !errors.Is(err, distlock.ErrLockLost) {
+		t.Fatalf("嵌套形态锁丢失应返回 ErrLockLost, err=%v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("业务应已在外层事务内执行, calls=%d", calls)
+	}
+	var count int64
+	env.db.Model(&SysBiz{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("外层应回滚幂等记录, count=%d", count)
+	}
+}
+
+// TestIsOnlyLockLost 验证只有锁丢失的错误链才被识别，混有业务错误时必须原样返回
+func TestIsOnlyLockLost(t *testing.T) {
+	bizErr := errors.New("业务失败")
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "空错误", err: nil, want: false},
+		{name: "哨兵", err: errors.Sentinel(distlock.ErrLockLost), want: true},
+		{name: "合并两次锁丢失", err: errors.Join(distlock.ErrLockLost, errors.Sentinel(distlock.ErrLockLost)), want: true},
+		{name: "合并业务错误", err: errors.Join(distlock.ErrLockLost, bizErr), want: false},
+		{name: "其他错误", err: errors.New("释放分布式锁失败"), want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isOnlyLockLost(tc.err); got != tc.want {
+				t.Fatalf("isOnlyLockLost()=%v, want %v, err=%v", got, tc.want, tc.err)
+			}
+		})
+	}
+}
