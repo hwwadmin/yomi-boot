@@ -322,6 +322,11 @@ func (failingStore) DeleteByTokenHash(context.Context, string, string) error { r
 // DeleteByUserID 空实现
 func (failingStore) DeleteByUserID(context.Context, string, int64) error { return nil }
 
+// ReplaceUserSession 返回预设错误
+func (failingStore) ReplaceUserSession(context.Context, string, string, *TokenSession, time.Duration) error {
+	return errors.New("store down")
+}
+
 // TestIssueFailurePaths 验证生成器与存储故障时签发错误透传
 func TestIssueFailurePaths(t *testing.T) {
 	ctx := context.Background()
@@ -338,6 +343,68 @@ func TestIssueFailurePaths(t *testing.T) {
 	}, nil)
 	if _, err := failingSave.Issue(ctx, &TokenSession{UserID: 1}); err == nil {
 		t.Fatal("存储故障应返回错误")
+	}
+}
+
+// replaceSpyStore 记录单点登录路径实际打到存储的写操作
+type replaceSpyStore struct {
+	failingStore
+	replaceCalls    int
+	deleteUserCalls int
+	saveCalls       int
+}
+
+// ReplaceUserSession 记录调用并返回错误
+func (s *replaceSpyStore) ReplaceUserSession(context.Context, string, string, *TokenSession, time.Duration) error {
+	s.replaceCalls++
+	return errors.New("replace down")
+}
+
+// DeleteByUserID 记录调用
+func (s *replaceSpyStore) DeleteByUserID(context.Context, string, int64) error {
+	s.deleteUserCalls++
+	return nil
+}
+
+// Save 记录调用并返回错误
+func (s *replaceSpyStore) Save(context.Context, string, string, *TokenSession, time.Duration) error {
+	s.saveCalls++
+	return errors.New("store down")
+}
+
+// TestIssueTokenSingleLoginUsesAtomicReplace 验证单点登录只走一次原子替换，失败时不会先删旧会话
+func TestIssueTokenSingleLoginUsesAtomicReplace(t *testing.T) {
+	store := &replaceSpyStore{}
+	service := &Service{
+		generator:  NewUUIDGenerator(),
+		store:      store,
+		authConfig: Config{AllowMultiLogin: false, StorePrefix: "yomi:test:token", TokenTTLMinutes: 30},
+		ttl:        30 * time.Minute,
+	}
+
+	if _, err := service.issueToken(context.Background(), &TokenSession{UserID: 1}); err == nil {
+		t.Fatal("替换失败应返回错误")
+	}
+	if store.replaceCalls != 1 || store.deleteUserCalls != 0 || store.saveCalls != 0 {
+		t.Fatalf("应只调用一次原子替换，replace=%d delete=%d save=%d", store.replaceCalls, store.deleteUserCalls, store.saveCalls)
+	}
+}
+
+// TestIssueTokenGeneratorFailureSkipsStore 验证生成令牌失败时不会改动已有会话
+func TestIssueTokenGeneratorFailureSkipsStore(t *testing.T) {
+	store := &replaceSpyStore{}
+	service := &Service{
+		generator:  errGenerator{},
+		store:      store,
+		authConfig: Config{AllowMultiLogin: false, StorePrefix: "yomi:test:token", TokenTTLMinutes: 30},
+		ttl:        30 * time.Minute,
+	}
+
+	if _, err := service.issueToken(context.Background(), &TokenSession{UserID: 1}); err == nil {
+		t.Fatal("生成器故障应返回错误")
+	}
+	if store.replaceCalls != 0 || store.deleteUserCalls != 0 || store.saveCalls != 0 {
+		t.Fatal("生成令牌失败时不应访问存储")
 	}
 }
 

@@ -52,6 +52,34 @@ end
 return 1
 `
 
+// luaReplaceUserTokenSession 一次提交内先写入新会话，再删除该用户其余旧令牌并重建索引。
+// 新会话未写入就失败时，旧会话保持不变。
+// KEYS[1] = 用户令牌索引键，KEYS[2] = 新令牌会话键
+// ARGV[1] = 令牌存储前缀，ARGV[2] = 新令牌存储哈希，ARGV[3] = 会话 JSON，ARGV[4] = 过期时间（毫秒，0 表示不过期）
+const luaReplaceUserTokenSession = `
+-- luaReplaceUserTokenSession
+local oldTokens = redis.call('SMEMBERS', KEYS[1])
+local prefix = ARGV[1]
+local storageToken = ARGV[2]
+local ttl = tonumber(ARGV[4])
+if ttl > 0 then
+    redis.call('SET', KEYS[2], ARGV[3], 'PX', ttl)
+else
+    redis.call('SET', KEYS[2], ARGV[3])
+end
+for i = 1, #oldTokens do
+    if oldTokens[i] ~= storageToken then
+        redis.call('DEL', prefix .. ':' .. oldTokens[i])
+    end
+end
+redis.call('DEL', KEYS[1])
+redis.call('SADD', KEYS[1], storageToken)
+if ttl > 0 then
+    redis.call('PEXPIRE', KEYS[1], ttl)
+end
+return 1
+`
+
 // luaDeleteByUserID 原子删除指定用户的全部令牌会话与索引
 // KEYS[1] = 用户令牌索引键，ARGV[1] = 令牌存储前缀
 const luaDeleteByUserID = `
@@ -120,6 +148,47 @@ func (s *RedisStore) Save(ctx context.Context, storePrefix string, token string,
 		ttl.Milliseconds(),
 	); err != nil {
 		return errors.Wrap(err, "保存令牌会话失败")
+	}
+
+	return nil
+}
+
+// ReplaceUserSession 用一次 Lua 写入新会话并删除该用户其余旧令牌；新会话未写入时旧会话保持不变
+func (s *RedisStore) ReplaceUserSession(ctx context.Context, storePrefix string, token string, session *TokenSession, ttl time.Duration) error {
+	if session == nil {
+		return errors.New("令牌会话不能为空")
+	}
+
+	key, err := s.tokenKey(storePrefix, token)
+	if err != nil {
+		return err
+	}
+	userTokensKey, err := s.userTokensKey(storePrefix, session.UserID)
+	if err != nil {
+		return err
+	}
+	prefix, err := s.storePrefixValue(storePrefix)
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(session)
+	if err != nil {
+		return errors.Wrap(err, "序列化令牌会话失败")
+	}
+
+	tokenValue := strings.TrimSpace(token)
+	storageToken := s.hashToken(tokenValue)
+	if _, err := s.redisService.OpsScript4Eval(
+		ctx,
+		luaReplaceUserTokenSession,
+		[]string{userTokensKey, key},
+		prefix,
+		storageToken,
+		string(payload),
+		ttl.Milliseconds(),
+	); err != nil {
+		return errors.Wrap(err, "替换用户令牌会话失败")
 	}
 
 	return nil

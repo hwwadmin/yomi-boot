@@ -111,18 +111,21 @@ func (s *Service) Issue(ctx context.Context, session *TokenSession) (string, err
 	return tokenValue, nil
 }
 
-// issueToken 删除旧会话、生成新令牌并持久化；单点登录场景下须由调用方持 userID 锁
+// issueToken 生成新令牌并持久化。
+// 单点登录把写新会话和删旧会话放进同一次 Lua 提交，新会话未写入时不会清掉旧会话；调用方须持有 userID 锁。
 func (s *Service) issueToken(ctx context.Context, session *TokenSession) (string, error) {
-	if !s.authConfig.AllowMultiLogin {
-		if err := s.store.DeleteByUserID(ctx, s.authConfig.StorePrefix, session.UserID); err != nil {
-			return "", err
-		}
-	}
-
 	tokenValue, err := s.generator.NewToken()
 	if err != nil {
 		return "", err
 	}
+
+	if !s.authConfig.AllowMultiLogin {
+		if err := s.store.ReplaceUserSession(ctx, s.authConfig.StorePrefix, tokenValue, session, s.ttl); err != nil {
+			return "", err
+		}
+		return tokenValue, nil
+	}
+
 	if err := s.store.Save(ctx, s.authConfig.StorePrefix, tokenValue, session, s.ttl); err != nil {
 		return "", err
 	}

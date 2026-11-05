@@ -5,6 +5,7 @@ package token
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -349,6 +350,136 @@ func TestNewServiceFailFast(t *testing.T) {
 	cfgMulti.AllowMultiLogin = true
 	if NewService(NewUUIDGenerator(), store, cfgMulti, nil) == nil {
 		t.Fatal("多端登录模式下应允许 nil 锁工厂")
+	}
+}
+
+// scriptFailRedis 在替换脚本上返回错误，其余命令交给真实 Redis
+type scriptFailRedis struct {
+	yomiredis.RedisService
+	failReplace bool
+}
+
+// OpsScript4Eval 拦截单点登录替换脚本，模拟提交失败且不改动已有会话
+func (r *scriptFailRedis) OpsScript4Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
+	if r.failReplace && strings.Contains(script, "luaReplaceUserTokenSession") {
+		return nil, errors.New("脚本执行失败")
+	}
+	return r.RedisService.OpsScript4Eval(ctx, script, keys, args...)
+}
+
+// TestRedisStore_ReplaceUserSessionDropsPreviousTokens 验证一次替换会写上新会话，并清掉该用户其余旧令牌
+func TestRedisStore_ReplaceUserSessionDropsPreviousTokens(t *testing.T) {
+	store, client, cleanup := newTestRedisStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prefix := "yomi:test:token"
+	userID := int64(8008)
+	otherUserID := int64(8009)
+	ttl := 5 * time.Minute
+	now := time.Now()
+
+	for _, token := range []string{"old-a", "old-b"} {
+		session := &TokenSession{UserID: userID, IssuedAt: now, ExpireAt: now.Add(ttl)}
+		if err := store.Save(ctx, prefix, token, session, ttl); err != nil {
+			t.Fatalf("Save %s 失败: %v", token, err)
+		}
+	}
+	other := &TokenSession{UserID: otherUserID, IssuedAt: now, ExpireAt: now.Add(ttl)}
+	if err := store.Save(ctx, prefix, "other-token", other, ttl); err != nil {
+		t.Fatalf("Save other 失败: %v", err)
+	}
+
+	fresh := &TokenSession{UserID: userID, IssuedAt: now, ExpireAt: now.Add(ttl)}
+	if err := store.ReplaceUserSession(ctx, prefix, "new-token", fresh, ttl); err != nil {
+		t.Fatalf("ReplaceUserSession 失败: %v", err)
+	}
+
+	for _, token := range []string{"old-a", "old-b"} {
+		loaded, err := store.Load(ctx, prefix, token)
+		if err != nil {
+			t.Fatalf("Load %s 失败: %v", token, err)
+		}
+		if loaded != nil {
+			t.Fatalf("旧令牌 %s 应被删除", token)
+		}
+	}
+
+	loaded, err := store.Load(ctx, prefix, "new-token")
+	if err != nil {
+		t.Fatalf("Load new-token 失败: %v", err)
+	}
+	if loaded == nil || loaded.UserID != userID {
+		t.Fatalf("新令牌会话不符合预期: %+v", loaded)
+	}
+
+	otherLoaded, err := store.Load(ctx, prefix, "other-token")
+	if err != nil {
+		t.Fatalf("Load other-token 失败: %v", err)
+	}
+	if otherLoaded == nil || otherLoaded.UserID != otherUserID {
+		t.Fatalf("其他用户令牌不应被替换: %+v", otherLoaded)
+	}
+
+	tokens, err := store.ListByUserID(ctx, prefix, userID)
+	if err != nil {
+		t.Fatalf("ListByUserID 失败: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].TokenHash != store.hashToken("new-token") {
+		t.Fatalf("用户索引应只剩新令牌，实际 %+v", tokens)
+	}
+
+	indexKey, err := store.userTokensKey(prefix, userID)
+	if err != nil {
+		t.Fatalf("userTokensKey 失败: %v", err)
+	}
+	indexTTL, err := client.PTTL(ctx, indexKey).Result()
+	if err != nil {
+		t.Fatalf("PTTL 失败: %v", err)
+	}
+	if indexTTL <= 0 {
+		t.Fatalf("替换后索引 SET 应设置 TTL，实际 PTTL=%v", indexTTL)
+	}
+}
+
+// TestService_IssueReplaceFailureKeepsPreviousToken 验证单点登录替换提交失败时，旧令牌仍然有效
+func TestService_IssueReplaceFailureKeepsPreviousToken(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	gate := &scriptFailRedis{RedisService: yomiredis.NewRedisHelper(client)}
+	store := NewRedisStore(gate)
+	lockFactory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory 失败: %v", err)
+	}
+	service := NewService(NewUUIDGenerator(), store, Config{
+		TokenTTLMinutes: 30,
+		AllowMultiLogin: false,
+		StorePrefix:     "yomi:test:token",
+	}, lockFactory)
+
+	ctx := context.Background()
+	userID := int64(9009)
+	firstToken, err := service.Issue(ctx, &TokenSession{UserID: userID})
+	if err != nil {
+		t.Fatalf("首次 Issue 失败: %v", err)
+	}
+
+	gate.failReplace = true
+	if _, err := service.Issue(ctx, &TokenSession{UserID: userID}); err == nil {
+		t.Fatal("替换提交失败应返回错误")
+	}
+	if _, err := service.Validate(ctx, firstToken); err != nil {
+		t.Fatalf("替换失败时旧令牌应仍然有效: %v", err)
+	}
+
+	tokens, err := service.ListByUserID(ctx, userID)
+	if err != nil {
+		t.Fatalf("ListByUserID 失败: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].TokenHash != store.hashToken(firstToken) {
+		t.Fatalf("替换失败后应仍只有旧令牌，实际 %+v", tokens)
 	}
 }
 

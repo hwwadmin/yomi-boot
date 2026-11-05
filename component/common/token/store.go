@@ -12,6 +12,8 @@ import (
 type Store interface {
 	// Save 保存令牌与会话快照
 	Save(ctx context.Context, storePrefix string, token string, session *TokenSession, ttl time.Duration) error
+	// ReplaceUserSession 用一次 Lua 写入新会话并删除该用户其余旧令牌；新会话未写入时旧会话保持不变
+	ReplaceUserSession(ctx context.Context, storePrefix string, token string, session *TokenSession, ttl time.Duration) error
 	// Load 读取令牌对应的会话快照
 	Load(ctx context.Context, storePrefix string, token string) (*TokenSession, error)
 	// ListByUserID 读取指定用户的全部令牌会话
