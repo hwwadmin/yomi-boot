@@ -12,13 +12,13 @@
 
 核心原则：**审核不通过，不写一行代码**。主闭环在 `do_spec` 结束；其后可用可选指令做代码巡检。
 
-`_prompts` 分三层：**指令**（`commands/`，IDE 入口）→ **Skill**（`skills/`，执行型工作流）→ **知识库**（`knowledge/`，静态规范）；执行时 AI 按指令直接加载对应 Skill 与其声明的知识文档，不设 Agent / 规则 / 索引中间层。
+`_prompts` 分两层：**指令**（`commands/`，IDE 入口）→ **Skill**（`skills/`，执行型工作流）；执行时 AI 按指令直接加载对应 Skill，不设 Agent / 规则 / 索引中间层。
 
 ---
 
 ## 提示词工程如何使用
 
-业务工程直接把本仓 `_prompts/` **整体拷入工程根目录**即可，无外部查找：`_prompts/skills/`、`_prompts/knowledge/` 均相对工程根；PRD、spec、tasks 等产物（`_doc/`、`_feat-doc/`、`_task-doc/`、`_ipc-doc/`）同样落在工程根。
+业务工程直接把本仓 `_prompts/` **整体拷入工程根目录**即可，无外部查找：`_prompts/skills/` 相对工程根；PRD、spec、tasks 等产物（`_doc/`、`_feat-doc/`、`_task-doc/`、`_ipc-doc/`）同样落在工程根。
 
 ---
 
@@ -43,7 +43,7 @@
 prd_spec
 ```
 
-AI 基于当前会话中已确认的需求、决策与补充说明生成产品业务需求文档，并参考 `_prompts/knowledge/` 中已有文档保持业务口径一致。产物保存到：
+AI 基于当前会话中已确认的需求、决策与补充说明生成产品业务需求文档。产物保存到：
 
 > `_doc/{YYYYMMDD}_{需求名称}-prd.md`
 
@@ -62,7 +62,7 @@ create_spec：{功能名称}
 需求来源：_doc/{文档名}.md
 ```
 
-AI 自动加载项目规范文档，生成技术方案到：
+AI 按 `create_spec` Skill 生成技术方案到：
 
 > `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md`
 
@@ -94,7 +94,7 @@ AI 生成的 spec 是初稿，你需要审阅并指引修订：
 audit_spec _feat-doc/{YYYYMMDD}_{需求名称}/spec.md
 ```
 
-AI 按项目规范全面审核，生成同目录下的 `audit.md`。
+AI 按 `audit_spec` Skill 审核，生成同目录下的 `audit.md`。
 
 问题分三级：
 
