@@ -31,7 +31,6 @@ type MiddlewareFactory func(slot *plugin.PluginSlot) []gin.HandlerFunc
 
 // Options 是启动选项。
 type Options struct {
-	EnvPrefix       string               // 环境变量前缀，可为空
 	ConfigPath      string               // 配置文件路径，为空时使用 config.ResolvePath()
 	Plugin          plugin.PluginOptions // 默认插件链的扩展项；PluginSet 优先
 	PluginSet       *PluginSet           // 完全自定义插件链与配置段；设置后优先于默认链
@@ -57,8 +56,8 @@ type PluginSet struct {
 }
 
 // Run 使用默认配置和默认中间件启动 HTTP 服务，阻塞至进程退出。
-func Run(envPrefix string, wire WireFunc) {
-	RunWithOptions(Options{EnvPrefix: envPrefix}, wire)
+func Run(wire WireFunc) {
+	RunWithOptions(Options{}, wire)
 }
 
 // RunWithOptions 按 opts 初始化基础设施并启动 HTTP 服务，阻塞至进程退出。
@@ -137,7 +136,7 @@ func MustInit(ctx context.Context, opts Options) *plugin.PluginSlot {
 	}
 
 	// 加载配置文件
-	cfg := config.MustLoadConfig(opts.ConfigPath, opts.EnvPrefix, reg)
+	cfg := config.MustLoadConfig(opts.ConfigPath, reg)
 
 	// 创建插件插槽并初始化插件
 	slot := plugin.NewPluginSlot(cfg, plugins)

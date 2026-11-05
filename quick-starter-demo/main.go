@@ -24,9 +24,6 @@ import (
 	httprecordplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/httprecord"
 )
 
-// envPrefix 是传给 boot.Run 的环境变量前缀。
-const envPrefix = "YOMI_DEMO"
-
 // init 演示业务自定义脱敏策略：须在 boot.Run 之前注册，
 // masking 段即可按名引用（见 config/dev.yml 的 plate_no 规则）。
 func init() {
@@ -41,7 +38,7 @@ func init() {
 }
 
 func main() {
-	boot.Run(envPrefix, wire)
+	boot.Run(wire)
 }
 
 // wire 是路由装配入口；示例无业务，仅演示注入 HTTP 访问记录消费处理函数。

@@ -32,7 +32,7 @@ func newTestConfig(t *testing.T, content string, sections ...config.Section) *co
 	}
 	reg := config.NewRegistry()
 	reg.Register(sections...)
-	return config.MustLoadConfig(path, "", reg)
+	return config.MustLoadConfig(path, reg)
 }
 
 // mustPanic 断言 fn 触发 panic

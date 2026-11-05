@@ -37,10 +37,8 @@ import (
 	"github.com/hwwadmin/yomi-boot/plugin"
 )
 
-const envPrefix = "YOMI_DEMO"
-
 func main() {
-	boot.Run(envPrefix, wire)
+	boot.Run(wire)
 }
 
 // wire 是路由装配入口；示例无业务，返回空注册器列表。

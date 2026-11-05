@@ -55,7 +55,7 @@ snowflake:
 unknown_biz:
   foo: 1
 `)
-	_, err := config.LoadConfig(path, "YOMI_TEST", testRegistry())
+	_, err := config.LoadConfig(path, testRegistry())
 	if err == nil {
 		t.Fatal("期望未注册根 key 失败")
 	}
@@ -75,7 +75,7 @@ http:
 snowflake:
   worker_id: 1
 `)
-	cfg, err := config.LoadConfig(path, "YOMI_TEST", testRegistry())
+	cfg, err := config.LoadConfig(path, testRegistry())
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
@@ -107,7 +107,7 @@ biz:
 	const bizSectionKey = "biz"
 	biz := &bizConfig{}
 	reg := testRegistry().Register(config.NewSection(bizSectionKey, biz, nil))
-	cfg, err := config.LoadConfig(path, "YOMI_TEST", reg)
+	cfg, err := config.LoadConfig(path, reg)
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
@@ -121,7 +121,7 @@ biz:
 func TestLoadConfig_EmptyRegistry(t *testing.T) {
 	path := writeTempYAML(t, "{}\n")
 
-	cfg, err := config.LoadConfig(path, "", config.NewRegistry())
+	cfg, err := config.LoadConfig(path, config.NewRegistry())
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}

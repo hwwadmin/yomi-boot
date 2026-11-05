@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
@@ -13,7 +12,7 @@ import (
 )
 
 // LoadConfig 按注册表加载配置：严格根 key → Bind → Validate
-func LoadConfig(configPath, envPrefix string, reg *Registry) (*Config, error) {
+func LoadConfig(configPath string, reg *Registry) (*Config, error) {
 	if reg == nil {
 		return nil, errors.New("配置注册表不能为空")
 	}
@@ -21,9 +20,6 @@ func LoadConfig(configPath, envPrefix string, reg *Registry) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(configPath)
 	v.SetConfigType("yml")
-	v.SetEnvPrefix(envPrefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
 
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
