@@ -268,17 +268,18 @@ func (s *PluginSlot) ReadyHooks() []func(context.Context) error {
 	return hooks
 }
 
-// DrainHooks 按 Init 逆序返回已初始化插件的排空钩子。
+// DrainHooks 按 Init 顺序返回已初始化插件的排空钩子。
+// lifecycle 停机时再逆序调用，因此实际排空是后启动的先执行。
 func (s *PluginSlot) DrainHooks() []func(context.Context) error {
 	if s == nil {
 		return nil
 	}
 	var hooks []func(context.Context) error
-	for i := len(s.chain) - 1; i >= 0; i-- {
+	for i, p := range s.chain {
 		if !s.states[i].initialized {
 			continue
 		}
-		if h, ok := s.chain[i].(DrainHook); ok {
+		if h, ok := p.(DrainHook); ok {
 			hooks = append(hooks, h.OnDraining)
 		}
 	}

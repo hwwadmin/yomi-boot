@@ -3,17 +3,22 @@ package boot
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/hwwadmin/yomi-boot/boot/lifecycle"
+	"github.com/hwwadmin/yomi-boot/boot/server"
 	"github.com/hwwadmin/yomi-boot/component/core/config"
 	"github.com/hwwadmin/yomi-boot/plugin"
 	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
 	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
 	dtmplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/dtm"
 	eventplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/event"
+	routerplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/router"
 	snowflakeplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/snowflake"
 )
 
@@ -216,6 +221,47 @@ func TestMustInitPluginSetAllowsEmptySet(t *testing.T) {
 	}
 }
 
+// TestMustBuildAppDrainOrder 验证排空钩子经 MustBuildApp 交给 RunContext 后按 Init 逆序执行。
+func TestMustBuildAppDrainOrder(t *testing.T) {
+	var order []string
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	first := &orderPlugin{Base: plugin.NewBase("first"), order: &order}
+	skipped := &orderPlugin{Base: plugin.NewBase("skipped"), order: &order, disabled: true}
+	second := &readyOrderPlugin{
+		orderPlugin: orderPlugin{Base: plugin.NewBase("second"), order: &order},
+		cancel:      cancel,
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("监听失败: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	if err := ln.Close(); err != nil {
+		t.Fatalf("释放端口失败: %v", err)
+	}
+
+	registerResponseEncoder(nil)
+	slot := MustInit(context.Background(), Options{
+		ConfigPath: writeBootConfig(t, fmt.Sprintf("http:\n  port: %d\n", port)),
+		PluginSet: &PluginSet{
+			Plugins: []plugin.Plugin{first, skipped, second},
+			Configs: []config.Section{routerplugin.ConfigSection()},
+		},
+	})
+	closeSlot(t, slot)
+
+	app := server.MustBuildApp(slot, nil, nil)
+	if err := lifecycle.RunContext(ctx, func(context.Context) *lifecycle.App { return app }); err != nil {
+		t.Fatalf("RunContext 返回错误: %v", err)
+	}
+	if want := []string{"second", "first"}; !slices.Equal(order, want) {
+		t.Fatalf("排空顺序 = %v, want %v", order, want)
+	}
+}
+
 // testPlugin 是仅用于 PluginSet 测试的最小插件
 type testPlugin struct {
 	plugin.Base
@@ -230,6 +276,38 @@ func (p *testPlugin) Init(context.Context, *plugin.PluginSlot) error {
 }
 
 func (p *testPlugin) Close(context.Context) error {
+	return nil
+}
+
+// orderPlugin 记录排空顺序；disabled 时 Init 返回 ErrDisabled。
+type orderPlugin struct {
+	plugin.Base
+	order    *[]string
+	disabled bool
+}
+
+func (p *orderPlugin) Init(context.Context, *plugin.PluginSlot) error {
+	if p.disabled {
+		return plugin.ErrDisabled
+	}
+	return nil
+}
+
+func (p *orderPlugin) Close(context.Context) error { return nil }
+
+func (p *orderPlugin) OnDraining(context.Context) error {
+	*p.order = append(*p.order, p.Name())
+	return nil
+}
+
+// readyOrderPlugin 在就绪时取消进程 ctx，从而进入排空。
+type readyOrderPlugin struct {
+	orderPlugin
+	cancel context.CancelFunc
+}
+
+func (p *readyOrderPlugin) OnReady(context.Context) error {
+	p.cancel()
 	return nil
 }
 

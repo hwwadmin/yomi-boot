@@ -231,7 +231,7 @@ func TestPluginSlotInitAfterClose(t *testing.T) {
 	}
 }
 
-// TestPluginSlotHooks 验证 hook 收集顺序、逆序与跳过插件过滤。
+// TestPluginSlotHooks 验证 hook 按 Init 顺序收集，并跳过未初始化插件。
 func TestPluginSlotHooks(t *testing.T) {
 	var readyCalls []string
 	var drainCalls []string
@@ -273,8 +273,8 @@ func TestPluginSlotHooks(t *testing.T) {
 			t.Fatalf("Drain hook 执行失败: %v", err)
 		}
 	}
-	if want := []string{"e", "c", "b"}; !slices.Equal(drainCalls, want) {
-		t.Fatalf("Drain 顺序 = %v, want %v", drainCalls, want)
+	if want := []string{"b", "c", "e"}; !slices.Equal(drainCalls, want) {
+		t.Fatalf("Drain 收集顺序 = %v, want %v", drainCalls, want)
 	}
 }
 
