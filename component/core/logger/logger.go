@@ -380,3 +380,9 @@ func currentMasking() *masking.Service {
 	}
 	return hub.maskSvc
 }
+
+// MaskQuery 用当前日志脱敏服务处理 query string，与 access 日志同一套服务。
+// 未初始化或未开启脱敏时原样返回。
+func MaskQuery(raw string) string {
+	return currentMasking().MaskQuery(raw)
+}

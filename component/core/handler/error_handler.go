@@ -86,7 +86,7 @@ func logFailure(c *gin.Context, err error) {
 			"clientIP", ginutil.ClientIP(c),
 		}, keysAndValues...)
 		if r.URL.RawQuery != "" {
-			keysAndValues = append(keysAndValues, "query", r.URL.RawQuery)
+			keysAndValues = append(keysAndValues, "query", logger.MaskQuery(r.URL.RawQuery))
 		}
 	}
 	logger.Error(logCtx, "接口请求异常", keysAndValues...)
