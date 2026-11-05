@@ -21,13 +21,13 @@ func BindJSON(c *gin.Context, input any) bool {
 	return true
 }
 
-// JSONBindError 将 JSON 绑定错误映射为业务异常
+// JSONBindError 将 JSON 绑定错误映射为框架哨兵。对外 Error() 仍是哨兵，原因链保留字段路径。
 func JSONBindError(err error) error {
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
-		return errors.Sentinel(sharederr.ErrRequestBodyTooLarge)
+		return errors.WithCode(sharederr.ErrRequestBodyTooLarge, err)
 	}
-	return errors.Sentinel(sharederr.ErrInvalidBody)
+	return errors.WithCode(sharederr.ErrInvalidBody, err)
 }
 
 // Handle 执行返回数据的用例并输出成功响应
