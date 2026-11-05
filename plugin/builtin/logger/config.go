@@ -21,7 +21,7 @@ type RotationBootConfig struct {
 // AccessBootConfig 文件 access 中间件配置的 YAML 绑定
 type AccessBootConfig struct {
 	Enabled       *bool    `mapstructure:"enabled"`         // nil 默认开启
-	SkipPaths     []string `mapstructure:"skip_paths"`      // 不记录的路径前缀/精确路径
+	SkipPaths     []string `mapstructure:"skip_paths"`      // 不记录的精确路径
 	MaxBodyBytes  int      `mapstructure:"max_body_bytes"`  // body 采集上限
 	MaxFieldBytes int      `mapstructure:"max_field_bytes"` // 单字段（如 header 值）上限
 	RecordBody    bool     `mapstructure:"record_body"`     // 是否采集 body

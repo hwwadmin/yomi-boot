@@ -42,7 +42,7 @@ func (r RotationConfig) CompressOrDefault() bool {
 // AccessConfig 文件 access 中间件配置（与 httprecord Kafka 审计无关）
 type AccessConfig struct {
 	Enabled       *bool    // nil 默认开启
-	SkipPaths     []string // 不记录的路径前缀/精确路径
+	SkipPaths     []string // 不记录的精确路径
 	MaxBodyBytes  int      // body 采集上限
 	MaxFieldBytes int      // 单字段（如 header 值）上限
 	RecordBody    bool     // 是否采集 body
