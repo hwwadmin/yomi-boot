@@ -35,19 +35,19 @@ end
 return 1
 `
 
-// luaDeleteTokenSession 原子删除令牌会话及其在用户索引中的引用
+// luaDeleteTokenSession 原子删除令牌会话及其在用户索引中的引用。
+// user_id 取 JSON 里的十进制原文再拼索引键，与 Go 的 FormatInt 对齐。
+// cjson.decode 再 tonumber 会把雪花 ID 收成双精度，tostring 变成科学计数法，SREM 打不到索引。
 // KEYS[1] = 令牌会话键，ARGV[1] = 令牌值，ARGV[2] = 令牌存储前缀
 const luaDeleteTokenSession = `
 local payload = redis.call('GET', KEYS[1])
-local userID = nil
-if payload then
-    local session = cjson.decode(payload)
-    userID = tonumber(session.user_id)
-end
 redis.call('DEL', KEYS[1])
-if userID and userID > 0 then
-    local indexKey = ARGV[2] .. ':user:' .. tostring(userID) .. ':tokens'
-    redis.call('SREM', indexKey, ARGV[1])
+if payload then
+    local userID = string.match(payload, '"user_id"%s*:%s*(%d+)')
+    if userID and not string.match(userID, '^0') then
+        local indexKey = ARGV[2] .. ':user:' .. userID .. ':tokens'
+        redis.call('SREM', indexKey, ARGV[1])
+    end
 end
 return 1
 `

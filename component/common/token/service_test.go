@@ -5,6 +5,7 @@ package token
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -268,6 +269,98 @@ func TestService_ValidateZeroExpireAt(t *testing.T) {
 	_, err := service.Validate(ctx, plainToken)
 	if !errors.Is(err, ErrTokenInvalid) {
 		t.Fatalf("期望 ErrTokenInvalid，实际 %v", err)
+	}
+}
+
+// TestRedisStore_DeleteLargeUserIDRemovesIndexMember 验证大整数 user_id 撤销时能摘掉用户索引。
+// 10^14 在 Lua tostring 里会变成科学计数法；2^53+1 经双精度还会丢精度。
+func TestRedisStore_DeleteLargeUserIDRemovesIndexMember(t *testing.T) {
+	store, client, cleanup := newTestRedisStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prefix := "yomi:test:token"
+	otherID := int64(1001)
+	otherToken := "other-user-token"
+	otherSession := &TokenSession{
+		UserID:   otherID,
+		IssuedAt: time.Now(),
+		ExpireAt: time.Now().Add(time.Hour),
+	}
+	if err := store.Save(ctx, prefix, otherToken, otherSession, time.Hour); err != nil {
+		t.Fatalf("保存对照用户失败: %v", err)
+	}
+
+	cases := []int64{
+		100000000000000,
+		9007199254740993,
+	}
+	for _, userID := range cases {
+		t.Run(strconv.FormatInt(userID, 10), func(t *testing.T) {
+			tokenA := "token-a-" + strconv.FormatInt(userID, 10)
+			tokenB := "token-b-" + strconv.FormatInt(userID, 10)
+			session := &TokenSession{
+				UserID:   userID,
+				IssuedAt: time.Now(),
+				ExpireAt: time.Now().Add(time.Hour),
+			}
+			if err := store.Save(ctx, prefix, tokenA, session, time.Hour); err != nil {
+				t.Fatalf("Save A 失败: %v", err)
+			}
+			if err := store.Save(ctx, prefix, tokenB, session, time.Hour); err != nil {
+				t.Fatalf("Save B 失败: %v", err)
+			}
+
+			if err := store.Delete(ctx, prefix, tokenA); err != nil {
+				t.Fatalf("Delete 失败: %v", err)
+			}
+
+			loaded, err := store.Load(ctx, prefix, tokenA)
+			if err != nil {
+				t.Fatalf("Load 失败: %v", err)
+			}
+			if loaded != nil {
+				t.Fatal("已删除令牌不应再读到会话")
+			}
+
+			indexKey, err := store.userTokensKey(prefix, userID)
+			if err != nil {
+				t.Fatalf("userTokensKey 失败: %v", err)
+			}
+			members, err := client.SMembers(ctx, indexKey).Result()
+			if err != nil {
+				t.Fatalf("SMEMBERS 失败: %v", err)
+			}
+			hashA := store.hashToken(tokenA)
+			hashB := store.hashToken(tokenB)
+			seenA, seenB := false, false
+			for _, member := range members {
+				if member == hashA {
+					seenA = true
+				}
+				if member == hashB {
+					seenB = true
+				}
+			}
+			if seenA {
+				t.Fatalf("已撤销令牌仍留在用户索引: %v", members)
+			}
+			if !seenB {
+				t.Fatalf("未撤销令牌应留在用户索引: %v", members)
+			}
+		})
+	}
+
+	otherKey, err := store.userTokensKey(prefix, otherID)
+	if err != nil {
+		t.Fatalf("对照用户索引键失败: %v", err)
+	}
+	otherMembers, err := client.SMembers(ctx, otherKey).Result()
+	if err != nil {
+		t.Fatalf("读取对照用户索引失败: %v", err)
+	}
+	if len(otherMembers) != 1 || otherMembers[0] != store.hashToken(otherToken) {
+		t.Fatalf("对照用户索引被改动: %v", otherMembers)
 	}
 }
 
