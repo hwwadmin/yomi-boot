@@ -25,7 +25,10 @@ func LoadConfig(configPath string, reg *Registry) (*Config, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "加载配置文件失败")
 	}
-	expanded := ExpandEnvDefaults(string(raw))
+	expanded, err := ExpandEnvDefaults(string(raw))
+	if err != nil {
+		return nil, errors.Wrap(err, "展开配置占位符失败")
+	}
 
 	if err := v.ReadConfig(bytes.NewReader([]byte(expanded))); err != nil {
 		return nil, errors.Wrap(err, "加载配置文件失败")
