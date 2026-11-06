@@ -38,7 +38,7 @@ const (
 type PublishWorkerConfig struct {
 	WorkNum              int // WorkNum 是并发 worker 数，0 表示使用默认值
 	Size                 int // Size 是任务队列容量，0 表示使用默认值
-	SubmitTimeoutSeconds int // SubmitTimeoutSeconds 是入队等待超时秒数，0 表示使用 worker 默认值
+	SubmitTimeoutSeconds int // SubmitTimeoutSeconds 是入队等待超时秒数。队列满时最多等待该时长，超时后本次发布失败，0 表示使用 worker 默认值
 }
 
 // Config 表示 Redis Stream 能力配置

@@ -22,13 +22,14 @@ type PublisherService interface {
 	AddBytes(ctx context.Context, stream string, payload []byte) (id string, err error)
 	// AddJSON 将对象序列化为 JSON 后写入默认字段并追加
 	AddJSON(ctx context.Context, stream string, value any) (id string, err error)
-	// AddAsync 异步入队发布；成功表示任务已进入工作池，不代表 Redis 已确认
+	// AddAsync 异步入队发布；成功表示任务已进入工作池，不代表 Redis 已确认。入队失败直接返回错误
 	AddAsync(ctx context.Context, stream string, values map[string]string) error
 	// AddBytesAsync 异步入队字节载荷发布
 	AddBytesAsync(ctx context.Context, stream string, payload []byte) error
 	// AddJSONAsync 序列化 JSON 后异步入队发布
 	AddJSONAsync(ctx context.Context, stream string, value any) error
-	// Close 释放发布侧资源（当前为幂等空操作，保留对称关闭语义）
+	// Close 幂等关闭发布者，之后的发布调用返回错误；不关闭底层 Redis 客户端。
+	// NewPublisher 只标记关闭。NewComponents 返回的实现会先排空发布工作池，再标记关闭。
 	Close() error
 }
 
@@ -122,7 +123,7 @@ func (p *Publisher) AddJSONAsync(ctx context.Context, stream string, value any) 
 	return err
 }
 
-// Close 幂等关闭发布者
+// Close 幂等标记发布者已关闭，之后的发布调用返回错误；不关闭 Redis 客户端
 func (p *Publisher) Close() error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()

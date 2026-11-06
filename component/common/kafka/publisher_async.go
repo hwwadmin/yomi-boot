@@ -3,7 +3,6 @@ package kafka
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/common/worker"
@@ -12,7 +11,9 @@ import (
 
 var _ PublisherService = (*asyncPublisher)(nil)
 
-// asyncPublisher 通过工作池异步调度底层同步发布；入队等待受 submit_timeout 约束，等待超时、队列满或工作池不可用时降级为同步发送
+// asyncPublisher 通过工作池异步调度底层同步发布。
+// 入队失败（队列满、等待超时、工作池未启动或已停止）直接返回错误，不改为同步发送。
+// 未提供工作池时，异步方法用调用方 ctx 当场发送。
 type asyncPublisher struct {
 	sync        PublisherService
 	worker      worker.WorkerService
@@ -43,20 +44,18 @@ func (p *asyncPublisher) PublishJSON(ctx context.Context, topic string, key stri
 	return p.sync.PublishJSON(ctx, topic, key, value)
 }
 
-// PublishAsync 异步入队发布；入队等待受 submit_timeout 约束，调用方 ctx 结束会中断等待并返回其错误，等待超时或工作池不可用时降级为同步 Publish
+// PublishAsync 异步入队发布。成功仅表示任务已入队，不代表 Kafka 已确认。入队失败直接返回错误。
 func (p *asyncPublisher) PublishAsync(ctx context.Context, req PublishRequest) error {
 	if err := validatePublishRequest(req); err != nil {
 		return err
 	}
 	cloned := clonePublishRequest(req)
-	return p.enqueueOrSync(
-		ctx,
-		func(sendCtx context.Context) error { return p.sync.Publish(sendCtx, cloned) },
-		func(callCtx context.Context) error { return p.sync.Publish(callCtx, cloned) },
-	)
+	return p.enqueue(ctx, func(sendCtx context.Context) error {
+		return p.sync.Publish(sendCtx, cloned)
+	})
 }
 
-// PublishBatchAsync 异步入队批量发布；入队与降级策略同 PublishAsync
+// PublishBatchAsync 异步入队批量发布；入队失败直接返回错误，策略同 PublishAsync
 func (p *asyncPublisher) PublishBatchAsync(ctx context.Context, reqs []PublishRequest) error {
 	if len(reqs) == 0 {
 		return nil
@@ -68,14 +67,12 @@ func (p *asyncPublisher) PublishBatchAsync(ctx context.Context, reqs []PublishRe
 		}
 		cloned[i] = clonePublishRequest(req)
 	}
-	return p.enqueueOrSync(
-		ctx,
-		func(sendCtx context.Context) error { return p.sync.PublishBatch(sendCtx, cloned) },
-		func(callCtx context.Context) error { return p.sync.PublishBatch(callCtx, cloned) },
-	)
+	return p.enqueue(ctx, func(sendCtx context.Context) error {
+		return p.sync.PublishBatch(sendCtx, cloned)
+	})
 }
 
-// PublishJSONAsync 序列化 JSON 后异步入队发布；入队与降级策略同 PublishAsync
+// PublishJSONAsync 序列化 JSON 后异步入队发布；入队失败直接返回错误，策略同 PublishAsync
 func (p *asyncPublisher) PublishJSONAsync(ctx context.Context, topic string, key string, value any) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -106,41 +103,17 @@ func (p *asyncPublisher) Close() error {
 	return nil
 }
 
-// enqueueOrSync 尝试异步入队，入队等待受 submit_timeout 约束；等待超时、队列满或工作池不可用时降级为同步发送
-func (p *asyncPublisher) enqueueOrSync(
-	ctx context.Context,
-	asyncSend func(context.Context) error,
-	syncSend func(context.Context) error,
-) error {
+// enqueue 把发送任务放入工作池。没有工作池时用调用方 ctx 当场发送。
+// 入队失败原样返回，不改为同步发送。发送预算在任务执行时起算，入队等待不消耗发送超时。
+func (p *asyncPublisher) enqueue(ctx context.Context, send func(context.Context) error) error {
 	if p.worker == nil {
-		return syncSend(ctx)
+		return send(ctx)
 	}
-
-	// 发送预算在任务执行时起算，入队等待不消耗发送超时
-	err := p.worker.SubmitContext(ctx, func(_ context.Context) error {
+	return p.worker.SubmitContext(ctx, func(_ context.Context) error {
 		sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.sendTimeout)
 		defer cancel()
-		return asyncSend(sendCtx)
+		return send(sendCtx)
 	})
-	if err == nil {
-		return nil
-	}
-	if shouldFallbackSync(err) {
-		return syncSend(ctx)
-	}
-	return err
-}
-
-// shouldFallbackSync 判断异步入队失败是否应降级为同步发送
-func shouldFallbackSync(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, ".queue_full") ||
-		strings.Contains(msg, ".not_run") ||
-		strings.Contains(msg, ".stopped") ||
-		strings.Contains(msg, ".submit_timeout")
 }
 
 // clonePublishRequest 深拷贝发布请求，避免异步执行时与调用方共享底层字节切片

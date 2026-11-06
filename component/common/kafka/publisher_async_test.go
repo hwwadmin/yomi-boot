@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,41 +112,20 @@ func (p *recordingPublisher) PublishJSONAsync(_ context.Context, _ string, _ str
 // Close 实现 Close 接口（测试桩）
 func (p *recordingPublisher) Close() error { return nil }
 
-// TestShouldFallbackSync 验证工作池错误是否应触发同步降级
-func TestShouldFallbackSync(t *testing.T) {
-	cases := []struct {
-		err  error
-		want bool
-	}{
-		{nil, false},
-		{errors.New("worker.kafka.publish.queue_full"), true},
-		{errors.New("worker.kafka.publish.not_run"), true},
-		{errors.New("worker.kafka.publish.stopped"), true},
-		{errors.New("worker.kafka.publish.submit_timeout"), true},
-		{errors.New("other"), false},
-		{context.Canceled, false},
-	}
-	for _, tc := range cases {
-		if got := shouldFallbackSync(tc.err); got != tc.want {
-			t.Fatalf("shouldFallbackSync(%v) = %v, want %v", tc.err, got, tc.want)
-		}
-	}
-}
-
-// TestPublishAsync_FallbackToSyncWhenSubmitWaitTimeout 验证入队等待超时后降级调用同步 Publish
-func TestPublishAsync_FallbackToSyncWhenSubmitWaitTimeout(t *testing.T) {
+// TestPublishAsync_SubmitTimeoutReturnsError 验证入队等待超时后直接失败，不改为同步发送
+func TestPublishAsync_SubmitTimeoutReturnsError(t *testing.T) {
 	recorder := &recordingPublisher{}
 	asyncPub := newAsyncPublisher(recorder, &submitTimeoutWorker{}, time.Second)
 
-	ctx := context.Background()
-	if err := asyncPub.PublishAsync(ctx, PublishRequest{
+	err := asyncPub.PublishAsync(context.Background(), PublishRequest{
 		Topic: "topic",
 		Value: []byte("payload"),
-	}); err != nil {
-		t.Fatalf("PublishAsync: %v", err)
+	})
+	if err == nil || err.Error() != "worker.kafka.publish.submit_timeout" {
+		t.Fatalf("PublishAsync err = %v, want submit_timeout", err)
 	}
-	if recorder.publishCalls != 1 {
-		t.Fatalf("sync publish calls = %d, want 1", recorder.publishCalls)
+	if recorder.publishCalls != 0 {
+		t.Fatalf("入队超时不应改为同步发送，calls=%d", recorder.publishCalls)
 	}
 }
 
@@ -185,7 +165,7 @@ func TestPublishAsync_ReturnsErrorWhenCallerCtxCanceled(t *testing.T) {
 	}
 }
 
-// TestPublishAsync_SubmitWaitTimeoutWithRealWorker 验证真实工作池下入队等待超时后降级为同步发送
+// TestPublishAsync_SubmitWaitTimeoutWithRealWorker 验证真实工作池下入队等待超时后直接失败
 func TestPublishAsync_SubmitWaitTimeoutWithRealWorker(t *testing.T) {
 	recorder := &recordingPublisher{}
 
@@ -225,17 +205,18 @@ func TestPublishAsync_SubmitWaitTimeoutWithRealWorker(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := asyncPub.PublishAsync(context.Background(), PublishRequest{
+	err = asyncPub.PublishAsync(context.Background(), PublishRequest{
 		Topic: "topic",
 		Value: []byte("payload"),
-	}); err != nil {
-		t.Fatalf("PublishAsync: %v", err)
+	})
+	if err == nil || !strings.Contains(err.Error(), "submit_timeout") {
+		t.Fatalf("PublishAsync err = %v, want submit_timeout", err)
 	}
 	if elapsed := time.Since(start); elapsed < 40*time.Millisecond {
 		t.Fatalf("PublishAsync 未等待入队超时即返回，耗时 %v", elapsed)
 	}
-	if recorder.publishCalls != 1 {
-		t.Fatalf("sync publish calls = %d, want 1", recorder.publishCalls)
+	if recorder.publishCalls != 0 {
+		t.Fatalf("入队超时不应改为同步发送，calls=%d", recorder.publishCalls)
 	}
 }
 

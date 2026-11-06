@@ -6,6 +6,7 @@ package redisstream
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,51 +71,31 @@ func (p *recordingPublisher) AddJSONAsync(_ context.Context, _ string, _ any) er
 
 func (p *recordingPublisher) Close() error { return nil }
 
-func TestShouldFallbackSync(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		err  error
-		want bool
-	}{
-		{nil, false},
-		{errors.New("worker.redisstream.publish.queue_full"), true},
-		{errors.New("worker.redisstream.publish.not_run"), true},
-		{errors.New("worker.redisstream.publish.stopped"), true},
-		{errors.New("worker.redisstream.publish.submit_timeout"), true},
-		{errors.New("other"), false},
-	}
-	for _, tc := range cases {
-		if got := shouldFallbackSync(tc.err); got != tc.want {
-			t.Fatalf("shouldFallbackSync(%v) = %v, want %v", tc.err, got, tc.want)
-		}
-	}
-}
-
-func TestAddAsync_FallbackToSyncWhenQueueFull(t *testing.T) {
+func TestAddAsync_QueueFullReturnsError(t *testing.T) {
 	t.Parallel()
 	recorder := &recordingPublisher{}
 	asyncPub := NewAsyncPublisher(recorder, &stubWorker{err: errors.New("worker.redisstream.publish.queue_full")}, time.Second)
 
-	ctx := context.Background()
-	if err := asyncPub.AddAsync(ctx, "orders", map[string]string{"k": "v"}); err != nil {
-		t.Fatalf("AddAsync: %v", err)
+	err := asyncPub.AddAsync(context.Background(), "orders", map[string]string{"k": "v"})
+	if err == nil || err.Error() != "worker.redisstream.publish.queue_full" {
+		t.Fatalf("AddAsync err = %v, want queue_full", err)
 	}
-	if recorder.addCalls != 1 {
-		t.Fatalf("sync add calls = %d, want 1", recorder.addCalls)
+	if recorder.addCalls != 0 {
+		t.Fatalf("入队失败不应改为同步发送，calls=%d", recorder.addCalls)
 	}
 }
 
-func TestAddAsync_FallbackToSyncWhenSubmitTimeout(t *testing.T) {
+func TestAddAsync_SubmitTimeoutReturnsError(t *testing.T) {
 	t.Parallel()
 	recorder := &recordingPublisher{}
 	asyncPub := NewAsyncPublisher(recorder, &stubWorker{err: errors.New("worker.redisstream.publish.submit_timeout")}, time.Second)
 
-	ctx := context.Background()
-	if err := asyncPub.AddAsync(ctx, "orders", map[string]string{"k": "v"}); err != nil {
-		t.Fatalf("AddAsync: %v", err)
+	err := asyncPub.AddAsync(context.Background(), "orders", map[string]string{"k": "v"})
+	if err == nil || err.Error() != "worker.redisstream.publish.submit_timeout" {
+		t.Fatalf("AddAsync err = %v, want submit_timeout", err)
 	}
-	if recorder.addCalls != 1 {
-		t.Fatalf("sync add calls = %d, want 1", recorder.addCalls)
+	if recorder.addCalls != 0 {
+		t.Fatalf("入队超时不应改为同步发送，calls=%d", recorder.addCalls)
 	}
 }
 
@@ -147,7 +128,7 @@ func TestAddAsync_CanceledCtxFailsWithoutSyncFallback(t *testing.T) {
 	}
 }
 
-func TestAddAsync_SubmitTimeoutTakesEffectThenFallbackToSync(t *testing.T) {
+func TestAddAsync_SubmitTimeoutReturnsWithoutSyncSend(t *testing.T) {
 	t.Parallel()
 	gate := make(chan struct{})
 	pool, err := worker.NewWorker(worker.WorkConfig{
@@ -189,14 +170,15 @@ func TestAddAsync_SubmitTimeoutTakesEffectThenFallbackToSync(t *testing.T) {
 	asyncPub := NewAsyncPublisher(recorder, pool, time.Second)
 
 	begin := time.Now()
-	if err := asyncPub.AddAsync(context.Background(), "orders", map[string]string{"k": "v"}); err != nil {
-		t.Fatalf("AddAsync: %v", err)
+	err = asyncPub.AddAsync(context.Background(), "orders", map[string]string{"k": "v"})
+	if err == nil || !strings.Contains(err.Error(), "submit_timeout") {
+		t.Fatalf("AddAsync err = %v, want submit_timeout", err)
 	}
 	if elapsed := time.Since(begin); elapsed < 100*time.Millisecond {
 		t.Fatalf("expected submit wait of at least 100ms, elapsed=%v", elapsed)
 	}
-	if recorder.addCalls != 1 {
-		t.Fatalf("sync add calls after submit timeout = %d, want 1", recorder.addCalls)
+	if recorder.addCalls != 0 {
+		t.Fatalf("入队超时不应改为同步发送，calls=%d", recorder.addCalls)
 	}
 }
 

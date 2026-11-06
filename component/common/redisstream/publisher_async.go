@@ -15,8 +15,9 @@ import (
 
 var _ PublisherService = (*asyncPublisher)(nil)
 
-// asyncPublisher 通过工作池异步调度底层同步发布；队列满时按工作池 submit_timeout 等待空位，
-// 等待超时或工作池不可用时自动降级为同步发送
+// asyncPublisher 通过工作池异步调度底层同步发布。
+// 入队失败（队列满、等待超时、工作池未启动或已停止）直接返回错误，不改为同步发送。
+// 未提供工作池时，异步方法用调用方 ctx 当场发送。
 type asyncPublisher struct {
 	sync        PublisherService
 	worker      worker.WorkerService
@@ -50,7 +51,7 @@ func (p *asyncPublisher) AddJSON(ctx context.Context, stream string, value any) 
 	return p.sync.AddJSON(ctx, stream, value)
 }
 
-// AddAsync 异步入队发布；队列满时按 submit_timeout 等待空位，等待超时或工作池不可用时降级为同步 Add
+// AddAsync 异步入队发布。成功表示任务已进入工作池，不代表 Redis 已确认。入队失败直接返回错误。
 func (p *asyncPublisher) AddAsync(ctx context.Context, stream string, values map[string]string) error {
 	stream = strings.TrimSpace(stream)
 	if stream == "" {
@@ -61,20 +62,13 @@ func (p *asyncPublisher) AddAsync(ctx context.Context, stream string, values map
 	}
 	clonedStream := stream
 	clonedValues := cloneStringMap(values)
-	return p.enqueueOrSync(
-		ctx,
-		func(sendCtx context.Context) error {
-			_, err := p.sync.Add(sendCtx, clonedStream, clonedValues)
-			return err
-		},
-		func(callCtx context.Context) error {
-			_, err := p.sync.Add(callCtx, clonedStream, clonedValues)
-			return err
-		},
-	)
+	return p.enqueue(ctx, func(sendCtx context.Context) error {
+		_, err := p.sync.Add(sendCtx, clonedStream, clonedValues)
+		return err
+	})
 }
 
-// AddBytesAsync 异步入队字节载荷发布；队列满时按 submit_timeout 等待空位，等待超时或工作池不可用时降级为同步 AddBytes
+// AddBytesAsync 异步入队字节载荷发布；入队失败直接返回错误
 func (p *asyncPublisher) AddBytesAsync(ctx context.Context, stream string, payload []byte) error {
 	if payload == nil {
 		return errors.New("redisstream: payload 不能为 nil")
@@ -82,7 +76,7 @@ func (p *asyncPublisher) AddBytesAsync(ctx context.Context, stream string, paylo
 	return p.AddAsync(ctx, stream, map[string]string{PayloadField: string(payload)})
 }
 
-// AddJSONAsync 序列化 JSON 后异步入队发布；队列满时按 submit_timeout 等待空位，等待超时或工作池不可用时降级为同步 AddJSON
+// AddJSONAsync 序列化 JSON 后异步入队发布；入队失败直接返回错误
 func (p *asyncPublisher) AddJSONAsync(ctx context.Context, stream string, value any) error {
 	if value == nil {
 		return errors.New("redisstream: value 不能为 nil")
@@ -106,45 +100,18 @@ func (p *asyncPublisher) Close() error {
 	return nil
 }
 
-// enqueueOrSync 尝试异步入队；队列满时按工作池 submit_timeout 等待空位，
-// 等待超时或工作池不可用时降级为同步发送，调用方 ctx 取消/到期则直接失败不降级
-func (p *asyncPublisher) enqueueOrSync(
-	ctx context.Context,
-	asyncSend func(context.Context) error,
-	syncSend func(context.Context) error,
-) error {
+// enqueue 把发送任务放入工作池。没有工作池时用调用方 ctx 当场发送。
+// 入队失败原样返回，不改为同步发送。
+func (p *asyncPublisher) enqueue(ctx context.Context, send func(context.Context) error) error {
 	if p.worker == nil {
-		return syncSend(ctx)
+		return send(ctx)
 	}
-
-	err := p.worker.SubmitContext(ctx, func(workerCtx context.Context) error {
+	return p.worker.SubmitContext(ctx, func(workerCtx context.Context) error {
 		// 发送 ctx 与工作池自身 ctx 解耦：工作池停机排空时会取消自身 ctx，排队任务仍须以独立超时完成发送
 		sendCtx, cancel := context.WithTimeout(context.WithoutCancel(workerCtx), p.sendTimeout)
 		defer cancel()
-		return asyncSend(sendCtx)
+		return send(sendCtx)
 	})
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return err
-	}
-	if shouldFallbackSync(err) {
-		return syncSend(ctx)
-	}
-	return err
-}
-
-// shouldFallbackSync 判断异步入队失败是否应降级为同步发送
-func shouldFallbackSync(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, ".queue_full") ||
-		strings.Contains(msg, ".not_run") ||
-		strings.Contains(msg, ".stopped") ||
-		strings.Contains(msg, ".submit_timeout")
 }
 
 // cloneStringMap 拷贝字符串 map，避免异步执行时与调用方共享底层数据
