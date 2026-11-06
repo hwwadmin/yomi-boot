@@ -550,3 +550,60 @@ func TestIsNotFound(t *testing.T) {
 		t.Fatal("普通错误不应判为未找到")
 	}
 }
+
+// scriptCmdHook 记录经过客户端的命令名，用来确认固定脚本走 EVALSHA
+type scriptCmdHook struct {
+	names []string
+}
+
+func (scriptCmdHook) DialHook(next redisv9.DialHook) redisv9.DialHook { return next }
+
+func (scriptCmdHook) ProcessPipelineHook(next redisv9.ProcessPipelineHook) redisv9.ProcessPipelineHook {
+	return next
+}
+
+func (h *scriptCmdHook) ProcessHook(next redisv9.ProcessHook) redisv9.ProcessHook {
+	return func(ctx context.Context, cmd redisv9.Cmder) error {
+		h.names = append(h.names, cmd.Name())
+		return next(ctx, cmd)
+	}
+}
+
+// TestRedisHelper_FixedScriptsUseEvalSha 验证 Hash 写入和限流第二次起走 EVALSHA
+func TestRedisHelper_FixedScriptsUseEvalSha(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	hook := &scriptCmdHook{}
+	client.AddHook(hook)
+	helper := NewRedisHelper(client)
+	ctx := context.Background()
+
+	if err := helper.OpsHash4Set(ctx, "yomi:test:sha:hash", map[string]any{"f": "v"}, time.Minute); err != nil {
+		t.Fatalf("第一次 Hash 写入失败: %v", err)
+	}
+	if err := helper.OpsHash4Set(ctx, "yomi:test:sha:hash", map[string]any{"f": "v2"}, time.Minute); err != nil {
+		t.Fatalf("第二次 Hash 写入失败: %v", err)
+	}
+	allowed, err := helper.OpsRateLimit4Allow(ctx, "yomi:test:sha:rl", 10, 1, time.Minute)
+	if err != nil || !allowed {
+		t.Fatalf("第一次限流应放行，实际 %v,%v", allowed, err)
+	}
+	allowed, err = helper.OpsRateLimit4Allow(ctx, "yomi:test:sha:rl", 10, 1, time.Minute)
+	if err != nil || !allowed {
+		t.Fatalf("第二次限流应放行，实际 %v,%v", allowed, err)
+	}
+
+	evalCount, evalShaCount := 0, 0
+	for _, name := range hook.names {
+		switch name {
+		case "eval":
+			evalCount++
+		case "evalsha":
+			evalShaCount++
+		}
+	}
+	if evalShaCount < 4 || evalCount < 2 {
+		t.Fatalf("固定脚本应先 EVALSHA，未缓存时再 EVAL；实际 eval=%d evalsha=%d cmds=%v", evalCount, evalShaCount, hook.names)
+	}
+}

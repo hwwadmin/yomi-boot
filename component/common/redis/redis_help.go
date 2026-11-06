@@ -19,6 +19,13 @@ import (
 // defaultCommandTimeout 单条指令执行的最长等待时间默认值
 const defaultCommandTimeout = time.Duration(DefaultCommandTimeoutMs) * time.Millisecond
 
+// 固定脚本走 EVALSHA。第一次服务端没有缓存时，驱动收到 NOSCRIPT 会再发一次 EVAL。
+// 调用方临时传入的脚本仍由 OpsScript4Eval 用 EVAL 发送。
+var (
+	hashSetWithExpireScript = redisv9.NewScript(luaHashSetWithExpire)
+	rateLimitAllowScript    = redisv9.NewScript(luaRateLimitAllow)
+)
+
 // RedisService 表示 Redis 常用读写能力接口
 type RedisService interface {
 	// OpsStr4Set 写入 Redis String 值，并按需设置过期时间；TTL 小于 0 时返回错误
@@ -201,7 +208,7 @@ func (h *RedisHelper) OpsHash4Set(ctx context.Context, key string, fields map[st
 	ctx, cancel := h.commandContext(ctx)
 	defer cancel()
 
-	if _, err := h.client.Eval(ctx, luaHashSetWithExpire, []string{key}, args...).Result(); err != nil {
+	if _, err := hashSetWithExpireScript.Run(ctx, h.client, []string{key}, args...).Result(); err != nil {
 		return errors.Wrap(err, "写入 Redis Hash 失败")
 	}
 
@@ -369,17 +376,20 @@ func (h *RedisHelper) OpsRateLimit4Allow(ctx context.Context, key string, limit,
 		return false, errors.New("限流 window 转换为毫秒后必须大于 0")
 	}
 
-	result, err := h.OpsScript4Eval(
+	ctx, cancel := h.commandContext(ctx)
+	defer cancel()
+
+	result, err := rateLimitAllowScript.Run(
 		ctx,
-		luaRateLimitAllow,
+		h.client,
 		[]string{key},
 		limit,
 		n,
 		windowMs,
 		uuid.NewString(),
-	)
+	).Result()
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "执行 Redis Lua 脚本失败")
 	}
 
 	switch v := result.(type) {

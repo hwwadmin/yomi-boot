@@ -40,6 +40,16 @@ func TestConfigValidate_RejectsNegativeCommandTimeout(t *testing.T) {
 	}
 }
 
+// TestConfigValidate_RejectsNegativeDB 验证负数库编号被拒绝
+func TestConfigValidate_RejectsNegativeDB(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{Addr: "127.0.0.1:6379", DB: -1}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("期望 db 为负数时校验失败")
+	}
+}
+
 // TestConfigValidate_MissingAddr 验证空地址被拒绝
 func TestConfigValidate_MissingAddr(t *testing.T) {
 	for _, addr := range []string{"", "   "} {

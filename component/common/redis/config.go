@@ -17,7 +17,7 @@ const DefaultCommandTimeoutMs = 3000
 type Config struct {
 	Addr             string // Addr 是 Redis 地址
 	Password         string // Password 是 Redis 密码
-	DB               int    // DB 是 Redis 数据库编号
+	DB               int    // DB 是 Redis 数据库编号，小于 0 非法
 	CommandTimeoutMs int    // CommandTimeoutMs 是单条指令执行的最长等待时间(毫秒)，未配置或 <=0 时默认 3000
 }
 
@@ -37,6 +37,9 @@ func (c Config) Validate() error {
 	}
 	if c.CommandTimeoutMs < 0 {
 		return errors.New("command_timeout_ms 不能小于 0")
+	}
+	if c.DB < 0 {
+		return errors.New("db 不能小于 0")
 	}
 	return nil
 }
