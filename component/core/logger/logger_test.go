@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -87,6 +88,46 @@ func TestConfig_Normalize_ReservedFields(t *testing.T) {
 	}
 	if err := cfg.Normalize(); err == nil {
 		t.Fatal("expected reserved field error")
+	}
+}
+
+// TestInitLogger_AccessCreateFailureStopsSink 验证 access 目录创建失败时返回错误并停掉已启动的控制台协程
+func TestInitLogger_AccessCreateFailureStopsSink(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	before := runtime.NumGoroutine()
+	hubBefore := defaultHub.Load()
+	closeFn, err := InitLogger("test-svc", "test", Config{
+		Dir:      blocker,
+		Level:    "info",
+		Rotation: testRotation(),
+	}, nil)
+	if err == nil {
+		if closeFn != nil {
+			_ = closeFn()
+		}
+		t.Fatal("期望 access 目录创建失败")
+	}
+	if !strings.Contains(err.Error(), "初始化 access 日志失败") {
+		t.Fatalf("错误应说明 access 初始化失败，实际 %v", err)
+	}
+	if closeFn != nil {
+		t.Fatal("失败时不应返回清理函数")
+	}
+	if defaultHub.Load() != hubBefore {
+		t.Fatal("失败的初始化替换了当前日志枢纽")
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for runtime.NumGoroutine() != before {
+		if time.Now().After(deadline) {
+			t.Fatalf("控制台协程未停：之前 %d，现在 %d", before, runtime.NumGoroutine())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

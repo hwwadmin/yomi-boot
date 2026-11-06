@@ -163,6 +163,8 @@ func newLogHub(serviceName, env string, cfg Config, maskSvc *masking.Service) (*
 
 	accessRot, err := makeRot(LogTypeAccess)
 	if err != nil {
+		// 控制台 sink 已启动；失败必须先停掉，再把错误交回启动流程
+		hub.abort()
 		return nil, errors.Wrap(err, "初始化 access 日志失败")
 	}
 	hub.rotators = append(hub.rotators, accessRot)
