@@ -5,6 +5,7 @@ package kafka_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -226,4 +227,47 @@ func TestMustNewAdmin(t *testing.T) {
 		}
 	}()
 	kafka.MustNewAdmin(context.Background(), kafka.ConnectionConfig{})
+}
+
+// TestPublisherSameKeySamePartition 验证相同消息键进入同一分区
+func TestPublisherSameKeySamePartition(t *testing.T) {
+	const topic = "e2e-key-partition"
+	broker := kafkatest.NewMockBroker(t, kafkatest.SeedTopics(4, topic))
+	publisher := kafkatest.NewPublisher(t, broker)
+	manager := kafkatest.NewConsumerManager(t, broker)
+
+	collector := &consumeCollector{}
+	if err := manager.Start(
+		context.Background(),
+		"key-partition",
+		broker.ConsumerConfig([]string{topic}, "group-key-partition"),
+		collector.handle(kafka.AckOK()),
+	); err != nil {
+		t.Fatalf("启动消费者失败: %v", err)
+	}
+
+	keys := []string{"alpha", "beta", "alpha", "gamma", "beta", "alpha"}
+	ctx := context.Background()
+	for i, key := range keys {
+		if err := publisher.Publish(ctx, kafka.PublishRequest{
+			Topic: topic,
+			Key:   []byte(key),
+			Value: []byte(fmt.Sprintf("%s-%d", key, i)),
+		}); err != nil {
+			t.Fatalf("发布 %s 失败: %v", key, err)
+		}
+	}
+
+	msgs := waitForCount(t, collector, len(keys))
+	partitions := map[string]int{}
+	for _, msg := range msgs {
+		key := string(msg.Key)
+		if prev, ok := partitions[key]; ok && prev != msg.Partition {
+			t.Fatalf("键 %s 进入了不同分区: %d 和 %d", key, prev, msg.Partition)
+		}
+		partitions[key] = msg.Partition
+	}
+	if len(partitions) != 3 {
+		t.Fatalf("应收到 3 个键，实际 %v", partitions)
+	}
 }

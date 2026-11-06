@@ -207,3 +207,15 @@ func TestValidateKafkaSASLCredentials(t *testing.T) {
 		t.Fatal("机制非法应返回错误")
 	}
 }
+
+// TestBuildWriterUsesHashBalancer 验证生产者按消息键哈希选分区
+func TestBuildWriterUsesHashBalancer(t *testing.T) {
+	writer, err := buildWriter(PublisherConfig{}, []string{"127.0.0.1:9092"})
+	if err != nil {
+		t.Fatalf("buildWriter: %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+	if _, ok := writer.Balancer.(*kafkago.Hash); !ok {
+		t.Fatalf("Balancer = %T，期望 *kafka.Hash", writer.Balancer)
+	}
+}

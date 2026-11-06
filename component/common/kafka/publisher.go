@@ -16,7 +16,7 @@ import (
 
 // PublisherService 表示 Kafka 消息发布能力接口
 type PublisherService interface {
-	// Publish 向指定主题发布一条消息
+	// Publish 向指定主题发布一条消息。相同内容的消息键进入同一分区；nil 键按轮询分散
 	Publish(ctx context.Context, req PublishRequest) error
 	// PublishBatch 批量发布多条消息
 	PublishBatch(ctx context.Context, reqs []PublishRequest) error
@@ -169,8 +169,10 @@ func (p *syncPublisher) Close() error {
 // buildWriter 根据生产者配置创建 Kafka Writer
 func buildWriter(cfg PublisherConfig, brokers []string) (*kafkago.Writer, error) {
 	writer := &kafkago.Writer{
-		Addr:         kafkago.TCP(brokers...),
-		Balancer:     &kafkago.LeastBytes{},
+		Addr: kafkago.TCP(brokers...),
+		// Hash 按消息键计算分区，相同的键进入同一分区；nil 键走内部轮询。
+		// 计算只依赖键和分区数量，一个实例可以服务多个主题。
+		Balancer:     &kafkago.Hash{},
 		RequiredAcks: requiredAcksFromConfig(cfg.RequiredAcksOrDefault()),
 	}
 	if cfg.BatchSize > 0 {

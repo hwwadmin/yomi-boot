@@ -2,8 +2,12 @@ package kafka
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
+
+	kafkago "github.com/segmentio/kafka-go"
 )
 
 // TestInvokeConsumeHandler 验证 handler panic 被捕获并按 Retry 处理
@@ -255,4 +259,89 @@ func TestBuildReaderConfigMinMaxBytes(t *testing.T) {
 			t.Fatalf("MinBytes/MaxBytes = %d/%d, want 1/10000000", readerCfg.MinBytes, readerCfg.MaxBytes)
 		}
 	})
+}
+
+// scriptedReader 按预设结果提交偏移量，并记录提交发生的时刻
+type scriptedReader struct {
+	commitErr error
+	onCommit  func()
+}
+
+func (r *scriptedReader) FetchMessage(context.Context) (kafkago.Message, error) {
+	return kafkago.Message{}, errors.New("未使用")
+}
+
+func (r *scriptedReader) CommitMessages(context.Context, ...kafkago.Message) error {
+	if r.onCommit != nil {
+		r.onCommit()
+	}
+	return r.commitErr
+}
+
+func (r *scriptedReader) Close() error { return nil }
+
+// TestDropLogFollowsCommit 验证丢弃日志在提交成功之后，提交失败时不报已丢弃
+func TestDropLogFollowsCommit(t *testing.T) {
+	msg := Message{Topic: "orders", Partition: 1, Offset: 7}
+	kafkaMsg := kafkago.Message{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset}
+
+	var order []string
+	consumeLogObserver = func(kind string) {
+		order = append(order, kind)
+	}
+	t.Cleanup(func() { consumeLogObserver = nil })
+
+	t.Run("drop logs after commit", func(t *testing.T) {
+		order = nil
+		reader := &scriptedReader{onCommit: func() { order = append(order, "commit") }}
+		c := &consumer{reader: reader, maxHandlerRetries: -1}
+		err := c.processMessageWithRetry(context.Background(), func(context.Context, Message) ConsumeResult {
+			return AckDrop()
+		}, msg, kafkaMsg)
+		if err != nil {
+			t.Fatalf("提交成功应返回 nil: %v", err)
+		}
+		if got, want := joinOrder(order), "commit,drop"; got != want {
+			t.Fatalf("顺序 = %s，期望 %s", got, want)
+		}
+	})
+
+	t.Run("retry exhausted logs after commit", func(t *testing.T) {
+		order = nil
+		reader := &scriptedReader{onCommit: func() { order = append(order, "commit") }}
+		c := &consumer{reader: reader, maxHandlerRetries: 0}
+		err := c.processMessageWithRetry(context.Background(), func(context.Context, Message) ConsumeResult {
+			return Retry()
+		}, msg, kafkaMsg)
+		if err != nil {
+			t.Fatalf("提交成功应返回 nil: %v", err)
+		}
+		if got, want := joinOrder(order), "commit,drop-exceeded"; got != want {
+			t.Fatalf("顺序 = %s，期望 %s", got, want)
+		}
+	})
+
+	t.Run("commit failure does not log dropped", func(t *testing.T) {
+		order = nil
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		reader := &scriptedReader{
+			commitErr: context.Canceled,
+			onCommit:  func() { order = append(order, "commit") },
+		}
+		c := &consumer{reader: reader, maxHandlerRetries: 0}
+		err := c.processMessageWithRetry(ctx, func(context.Context, Message) ConsumeResult {
+			return AckDrop()
+		}, msg, kafkaMsg)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("提交失败应返回上下文错误: %v", err)
+		}
+		if got, want := joinOrder(order), "commit,commit-failed"; got != want {
+			t.Fatalf("顺序 = %s，期望 %s", got, want)
+		}
+	})
+}
+
+func joinOrder(order []string) string {
+	return strings.Join(order, ",")
 }

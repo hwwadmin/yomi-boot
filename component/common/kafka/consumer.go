@@ -33,13 +33,23 @@ type consumerRuntime struct {
 	dialer      *kafkago.Dialer // dialer 是带 SASL/TLS 能力的连接拨号器
 }
 
+// kafkaReader 是消费者使用的拉取、提交与关闭能力
+type kafkaReader interface {
+	FetchMessage(ctx context.Context) (kafkago.Message, error)
+	CommitMessages(ctx context.Context, msgs ...kafkago.Message) error
+	Close() error
+}
+
 // consumer 封装单个 Kafka 消费者实例
 type consumer struct {
-	reader            *kafkago.Reader // reader 是底层 Kafka 消费者
-	maxHandlerRetries int             // maxHandlerRetries 是 handler 返回 Retry 时的最大重试次数，-1 表示无限
-	closeMu           sync.Mutex      // closeMu 保护 closed 并发调用
-	closed            bool            // closed 标记是否已关闭
+	reader            kafkaReader // reader 是底层 Kafka 消费者
+	maxHandlerRetries int         // maxHandlerRetries 是 handler 返回 Retry 时的最大重试次数，-1 表示无限
+	closeMu           sync.Mutex  // closeMu 保护 closed 并发调用
+	closed            bool        // closed 标记是否已关闭
 }
+
+// consumeLogObserver 非空时在丢弃或提交失败日志写出前被调用，供测试确认日志与提交的先后
+var consumeLogObserver func(kind string)
 
 // consumerManager 管理多个消费者实例的启动、停止与释放
 type consumerManager struct {
@@ -282,15 +292,23 @@ func (c *consumer) processMessageWithRetry(
 	for {
 		result := normalizeConsumeResult(ctx, invokeConsumeHandler(ctx, handler, msg))
 		if result.Ack {
+			if err := c.commitMessageWithRetry(ctx, kafkaMsg); err != nil {
+				logConsumeCommitFailed(ctx, msg, err)
+				return err
+			}
 			if result.Status == ConsumeStatusDrop {
 				logConsumeDrop(ctx, msg, result)
 			}
-			return c.commitMessageWithRetry(ctx, kafkaMsg)
+			return nil
 		}
 
 		if c.maxHandlerRetries >= 0 && retries >= c.maxHandlerRetries {
+			if err := c.commitMessageWithRetry(ctx, kafkaMsg); err != nil {
+				logConsumeCommitFailed(ctx, msg, err)
+				return err
+			}
 			logConsumeDropExceeded(ctx, msg, retries, c.maxHandlerRetries)
-			return c.commitMessageWithRetry(ctx, kafkaMsg)
+			return nil
 		}
 
 		logConsumeRetry(ctx, msg, result)
@@ -464,8 +482,9 @@ func logConsumeRetry(ctx context.Context, msg Message, result ConsumeResult) {
 	)
 }
 
-// logConsumeDrop 记录消息丢弃日志，偏移量提交后将跳过当前消息
+// logConsumeDrop 记录消息丢弃日志。只在偏移量提交成功后调用
 func logConsumeDrop(ctx context.Context, msg Message, result ConsumeResult) {
+	notifyConsumeLog("drop")
 	logger.Warn(ctx,
 		"Kafka 消息已丢弃，偏移量已提交",
 		"status", result.Status,
@@ -475,8 +494,9 @@ func logConsumeDrop(ctx context.Context, msg Message, result ConsumeResult) {
 	)
 }
 
-// logConsumeDropExceeded 记录 handler 重试超限后自动丢弃的告警日志
+// logConsumeDropExceeded 记录 handler 重试超限后自动丢弃的告警日志。只在偏移量提交成功后调用
 func logConsumeDropExceeded(ctx context.Context, msg Message, retries int, maxRetries int) {
+	notifyConsumeLog("drop-exceeded")
 	logger.Error(ctx,
 		"Kafka 消息重试次数已超限，已自动丢弃",
 		"topic", msg.Topic,
@@ -485,6 +505,25 @@ func logConsumeDropExceeded(ctx context.Context, msg Message, retries int, maxRe
 		"retries", retries,
 		"max_handler_retries", maxRetries,
 	)
+}
+
+// logConsumeCommitFailed 记录偏移量提交失败。此时消息尚未跳过，还会被再次投递
+func logConsumeCommitFailed(ctx context.Context, msg Message, err error) {
+	notifyConsumeLog("commit-failed")
+	logger.Error(ctx,
+		"Kafka 偏移量提交失败，消息未跳过",
+		"error", err,
+		"topic", msg.Topic,
+		"partition", msg.Partition,
+		"offset", msg.Offset,
+	)
+}
+
+// notifyConsumeLog 通知测试观察者。生产路径上观察者为空
+func notifyConsumeLog(kind string) {
+	if consumeLogObserver != nil {
+		consumeLogObserver(kind)
+	}
 }
 
 // fromKafkaMessage 将 kafka-go 消息转换为业务消息结构

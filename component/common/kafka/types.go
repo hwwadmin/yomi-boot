@@ -14,7 +14,7 @@ type Header struct {
 // PublishRequest 表示单条消息发布请求
 type PublishRequest struct {
 	Topic   string   // Topic 是目标主题
-	Key     []byte   // Key 是消息键，可为空
+	Key     []byte   // Key 是消息键，可为 nil。相同内容的键进入同一分区；nil 键按轮询分散，不固定分区
 	Value   []byte   // Value 是消息体
 	Headers []Header // Headers 是可选消息头
 }
