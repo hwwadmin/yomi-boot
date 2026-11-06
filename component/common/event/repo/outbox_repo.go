@@ -267,7 +267,8 @@ func (r *OutboxRepo) FindByIDs(ctx context.Context, ids []int64) ([]model.SysEve
 	return rows, nil
 }
 
-// DeleteBatch 按主键批量硬删除
+// DeleteBatch 按主键批量硬删除。超过 idChunkSize 时分批执行。
+// 未在事务中时，任一分片失败后已执行的分片不会回滚。
 func (r *OutboxRepo) DeleteBatch(ctx context.Context, ids []int64) error {
 	if err := hardDeleteByIDs(ctx, r.DB, ids, &model.SysEventOutbox{}); err != nil {
 		return errors.Wrap(err, "批量删除发件箱记录失败")

@@ -44,6 +44,7 @@ func uniqueIDs(ids []int64) []int64 {
 }
 
 // hardDeleteByIDs 按主键分批硬删除，跳过 GORM 软删除。调用方负责包装错误。
+// 未在事务中时，任一分片失败后已执行的分片不会回滚。
 func hardDeleteByIDs(ctx context.Context, db *gorm.DB, ids []int64, row any) error {
 	if len(ids) == 0 {
 		return nil

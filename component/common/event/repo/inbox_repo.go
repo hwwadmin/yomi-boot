@@ -49,7 +49,8 @@ func (r *InboxRepo) Insert(ctx context.Context, row *model.SysEventInbox) error 
 	return nil
 }
 
-// DeleteBatch 按主键批量硬删除
+// DeleteBatch 按主键批量硬删除。超过 idChunkSize 时分批执行。
+// 未在事务中时，任一分片失败后已执行的分片不会回滚。
 func (r *InboxRepo) DeleteBatch(ctx context.Context, ids []int64) error {
 	if err := hardDeleteByIDs(ctx, r.DB, ids, &model.SysEventInbox{}); err != nil {
 		return errors.Wrap(err, "批量删除收件箱记录失败")
