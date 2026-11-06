@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
 	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
@@ -152,8 +151,8 @@ func TestExecute_ProcessingRowFailsFast(t *testing.T) {
 	// 直接种一条提交态的处理中记录（正常编排不可见，属防御场景）
 	repo := NewRepository(env.db)
 	claimed, err := repo.TryInsert(ctx, &SysBiz{
+		ID:    900,
 		BizID: "biz-k6", BizSubID: "sub-k6", OperationType: "TEST_OP", Status: StatusProcessing,
-		BaseModel: orm.BaseModel{ID: 900},
 	})
 	if err != nil || !claimed {
 		t.Fatalf("造数失败, claimed=%v, err=%v", claimed, err)
@@ -450,8 +449,8 @@ func TestRunBusinessOnce_ConflictReplaysCompleted(t *testing.T) {
 	// 预置一条提交态已完成记录，模拟并发方已提交完成
 	repo := NewRepository(env.db)
 	if claimed, err := repo.TryInsert(ctx, &SysBiz{
+		ID:    910,
 		BizID: "biz-k12", BizSubID: "sub-k12", OperationType: "TEST_OP", Status: StatusProcessing,
-		BaseModel: orm.BaseModel{ID: 910},
 	}); err != nil || !claimed {
 		t.Fatalf("造数失败, claimed=%v, err=%v", claimed, err)
 	}

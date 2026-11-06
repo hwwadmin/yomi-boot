@@ -194,7 +194,7 @@ func escapeDSNValue(value string) string {
 }
 
 // withMySQLDefaults 为 MySQL 参数补齐 parseTime=true 与 loc=Local（未显式配置时），
-// 避免 orm.BaseModel 的 time.Time 列因缺少 parseTime 读取失败或按 UTC 解析导致时区错位
+// 避免 time.Time 列因缺少 parseTime 读取失败或按 UTC 解析导致时区错位
 func withMySQLDefaults(params string) string {
 	params = strings.TrimLeft(params, "?&")
 

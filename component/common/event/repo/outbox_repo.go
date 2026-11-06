@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -38,17 +37,17 @@ LIMIT ?`
 
 // OutboxRepo 发件箱仓储
 type OutboxRepo struct {
-	orm.BaseRepository
+	DB *gorm.DB
 }
 
 // NewOutboxRepo 创建发件箱仓储
 func NewOutboxRepo(dbConn *gorm.DB) *OutboxRepo {
-	return &OutboxRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
+	return &OutboxRepo{DB: dbConn}
 }
 
 // Insert 插入发件箱记录
 func (r *OutboxRepo) Insert(ctx context.Context, row *model.SysEventOutbox) error {
-	if err := r.Create(ctx, row); err != nil {
+	if err := tx.Exec(ctx, r.DB).Create(row).Error; err != nil {
 		return errors.Wrap(err, "插入发件箱记录失败")
 	}
 	return nil
@@ -87,7 +86,7 @@ func (r *OutboxRepo) FetchFetchedTimeout(ctx context.Context, serviceName string
 //
 // 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/MarkPendingBatch/MarkSentSuccess/MarkSentFail。
 func (r *OutboxRepo) Update(ctx context.Context, row *model.SysEventOutbox) error {
-	if err := r.UpdateAll(ctx, row); err != nil {
+	if err := tx.Exec(ctx, r.DB).Save(row).Error; err != nil {
 		return errors.Wrap(err, "更新发件箱记录失败")
 	}
 	return nil
@@ -102,8 +101,8 @@ func (r *OutboxRepo) UpdateBatch(ctx context.Context, rows []model.SysEventOutbo
 	}
 	for start := 0; start < len(rows); start += outboxUpdateBatchSize {
 		end := min(start+outboxUpdateBatchSize, len(rows))
-		if err := r.UpdateAllBatch(ctx, rows[start:end]); err != nil {
-			return err
+		if err := tx.Exec(ctx, r.DB).Save(rows[start:end]).Error; err != nil {
+			return errors.Wrap(err, "批量全量更新发件箱记录失败")
 		}
 	}
 	return nil
@@ -247,9 +246,31 @@ func (r *OutboxRepo) ListSentSuccessBefore(
 
 // FindByIDs 按主键批量查询
 func (r *OutboxRepo) FindByIDs(ctx context.Context, ids []int64) ([]model.SysEventOutbox, error) {
-	var rows []model.SysEventOutbox
-	if err := r.BaseRepository.FindByIDs(ctx, ids, &model.SysEventOutbox{}, &rows); err != nil {
-		return nil, errors.Wrap(err, "批量查询发件箱记录失败")
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if len(ids) > idChunkSize {
+		ids = uniqueIDs(ids)
+	}
+	rows := make([]model.SysEventOutbox, 0, len(ids))
+	err := forEachIDChunk(ids, func(chunk []int64) error {
+		var part []model.SysEventOutbox
+		if err := tx.Exec(ctx, r.DB).Model(&model.SysEventOutbox{}).Where("id IN ?", chunk).Find(&part).Error; err != nil {
+			return errors.Wrap(err, "批量查询发件箱记录失败")
+		}
+		rows = append(rows, part...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return rows, nil
+}
+
+// DeleteBatch 按主键批量硬删除
+func (r *OutboxRepo) DeleteBatch(ctx context.Context, ids []int64) error {
+	if err := hardDeleteByIDs(ctx, r.DB, ids, &model.SysEventOutbox{}); err != nil {
+		return errors.Wrap(err, "批量删除发件箱记录失败")
+	}
+	return nil
 }

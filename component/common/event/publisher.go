@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db"
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
@@ -52,14 +51,12 @@ func (p *Publisher) Publish(ctx context.Context, evt Event) error {
 		return err
 	}
 	row := &model.SysEventOutbox{
+		ID:          id,
 		ServiceName: p.cfg.ServiceName,
 		EventID:     evt.EventID,
 		Topic:       evt.Topic,
 		Payload:     evt.Payload,
 		Status:      model.OutboxStatusPending,
-		BaseModel: orm.BaseModel{
-			ID: id,
-		},
 	}
 	if err := p.repo.Insert(ctx, row); err != nil {
 		if db.IsDuplicateKey(err, p.dbType) {

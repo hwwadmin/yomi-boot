@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 
 	"gorm.io/driver/postgres"
@@ -28,9 +27,9 @@ func TestRepository_TryInsert(t *testing.T) {
 
 	newRow := func(id int64, bizID, bizSubID string) *SysBiz {
 		return &SysBiz{
+			ID:    id,
 			BizID: bizID, BizSubID: bizSubID,
 			OperationType: "TEST_OP", Status: StatusProcessing,
-			BaseModel: orm.BaseModel{ID: id},
 		}
 	}
 
@@ -59,16 +58,16 @@ func TestRepository_TryInsert_TxAliveAfterConflict(t *testing.T) {
 
 	err := runner.Run(context.Background(), func(txCtx context.Context) error {
 		claimed, err := repo.TryInsert(txCtx, &SysBiz{
+			ID:    10,
 			BizID: "b2", BizSubID: "s2", OperationType: "TEST_OP", Status: StatusProcessing,
-			BaseModel: orm.BaseModel{ID: 10},
 		})
 		if err != nil || !claimed {
 			t.Errorf("事务内首插应抢占成功, claimed=%v, err=%v", claimed, err)
 			return nil
 		}
 		claimed, err = repo.TryInsert(txCtx, &SysBiz{
+			ID:    11,
 			BizID: "b2", BizSubID: "s2", OperationType: "TEST_OP", Status: StatusProcessing,
-			BaseModel: orm.BaseModel{ID: 11},
 		})
 		if err != nil || claimed {
 			t.Errorf("事务内同键应判定冲突且不报错, claimed=%v, err=%v", claimed, err)
@@ -96,8 +95,8 @@ func TestRepository_DeleteStaleProcessing(t *testing.T) {
 	seed := func(id int64, bizID string) {
 		t.Helper()
 		claimed, err := repo.TryInsert(ctx, &SysBiz{
+			ID:    id,
 			BizID: bizID, BizSubID: "s", OperationType: "TEST_OP", Status: StatusProcessing,
-			BaseModel: orm.BaseModel{ID: id},
 		})
 		if err != nil || !claimed {
 			t.Fatalf("造数失败 id=%d, claimed=%v, err=%v", id, claimed, err)
@@ -139,8 +138,8 @@ func TestRepository_DeleteStaleProcessing(t *testing.T) {
 // TestTryInsert_DialectSQLShape 校验两个方言生成的 SQL 都满足「冲突不报错、事务不中止」
 func TestTryInsert_DialectSQLShape(t *testing.T) {
 	row := &SysBiz{
+		ID:    1,
 		BizID: "b", BizSubID: "s", OperationType: "OP", Status: StatusProcessing,
-		BaseModel: orm.BaseModel{ID: 1},
 	}
 	buildSQL := func(db *gorm.DB) string {
 		return db.ToSQL(func(conn *gorm.DB) *gorm.DB {

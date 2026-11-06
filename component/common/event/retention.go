@@ -9,7 +9,6 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
-	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
 	"github.com/hwwadmin/yomi-boot/component/common/roundrobin"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -110,7 +109,7 @@ func (c *RetentionCleaner) cleanOutbox(ctx context.Context) error {
 			return c.outboxRepo.ListSentSuccessBefore(ctx, c.cfg.ServiceName, cutoff, limit)
 		},
 		func(ctx context.Context, ids []int64) error {
-			return c.outboxRepo.DeleteBatch(ctx, ids, &model.SysEventOutbox{})
+			return c.outboxRepo.DeleteBatch(ctx, ids)
 		},
 	)
 }
@@ -122,7 +121,7 @@ func (c *RetentionCleaner) cleanInbox(ctx context.Context) error {
 			return c.inboxRepo.ListConsumedBefore(ctx, c.cfg.ServiceName, cutoff, limit)
 		},
 		func(ctx context.Context, ids []int64) error {
-			return c.inboxRepo.DeleteBatch(ctx, ids, &model.SysEventInbox{})
+			return c.inboxRepo.DeleteBatch(ctx, ids)
 		},
 	)
 }

@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
@@ -166,13 +165,11 @@ func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yo
 				return idErr
 			}
 			inbox := &model.SysEventInbox{
+				ID:          inboxID,
 				ServiceName: r.cfg.ServiceName,
 				EventID:     evt.EventID,
 				Topic:       evt.Topic,
 				Payload:     evt.Payload,
-				BaseModel: orm.BaseModel{
-					ID: inboxID,
-				},
 			}
 			if err := r.inboxRepo.Insert(txCtx, inbox); err != nil {
 				return err
@@ -311,15 +308,13 @@ func (r *Receiver) moveToInboxDlq(ctx context.Context, evt Event, cause error, r
 	dlqCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxDlqInsertTimeout)
 	defer cancel()
 	return r.inboxDlqRepo.Insert(dlqCtx, &model.SysEventInboxDlq{
+		ID:          id,
 		ServiceName: r.cfg.ServiceName,
 		EventID:     evt.EventID,
 		Topic:       evt.Topic,
 		Payload:     evt.Payload,
 		ErrorMsg:    truncateInboxDlqError(cause),
 		RetryCount:  retryCount,
-		BaseModel: orm.BaseModel{
-			ID: id,
-		},
 	})
 }
 

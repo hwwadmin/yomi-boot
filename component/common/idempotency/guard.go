@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
 	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
@@ -249,13 +248,11 @@ func runBusinessOnce[T any](
 		return nil, err
 	}
 	row := &SysBiz{
+		ID:            id,
 		BizID:         key.BizID,
 		BizSubID:      key.BizSubID,
 		OperationType: key.OperationType,
 		Status:        StatusProcessing,
-		BaseModel: orm.BaseModel{
-			ID: id,
-		},
 	}
 
 	// 以「冲突即空操作」语义抢占处理权：冲突说明已有请求在处理或已完成，

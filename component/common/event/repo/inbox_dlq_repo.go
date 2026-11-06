@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -18,12 +17,12 @@ import (
 
 // InboxDlqRepo 收件箱死信仓储
 type InboxDlqRepo struct {
-	orm.BaseRepository
+	DB *gorm.DB
 }
 
 // NewInboxDlqRepo 创建收件箱死信仓储
 func NewInboxDlqRepo(dbConn *gorm.DB) *InboxDlqRepo {
-	return &InboxDlqRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
+	return &InboxDlqRepo{DB: dbConn}
 }
 
 // Insert 插入收件箱死信记录；同一服务下 eventId 已存在时保持原记录不变
@@ -62,11 +61,14 @@ func (r *InboxDlqRepo) UpdateRetry(
 	lastTime time.Time,
 	afterTime time.Time,
 ) error {
-	err := r.UpdateByID(ctx, id, &model.SysEventInboxDlq{}, map[string]any{
-		"retry_count":      retryCount,
-		"retry_last_time":  lastTime,
-		"retry_after_time": afterTime,
-	})
+	err := tx.Exec(ctx, r.DB).
+		Model(&model.SysEventInboxDlq{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"retry_count":      retryCount,
+			"retry_last_time":  lastTime,
+			"retry_after_time": afterTime,
+		}).Error
 	if err != nil {
 		return errors.Wrap(err, "更新收件箱死信重投记录失败")
 	}
@@ -75,7 +77,7 @@ func (r *InboxDlqRepo) UpdateRetry(
 
 // Delete 硬删除收件箱死信记录
 func (r *InboxDlqRepo) Delete(ctx context.Context, id int64) error {
-	if err := r.DeleteByID(ctx, id, &model.SysEventInboxDlq{}); err != nil {
+	if err := tx.Exec(ctx, r.DB).Unscoped().Where("id = ?", id).Delete(&model.SysEventInboxDlq{}).Error; err != nil {
 		return errors.Wrap(err, "删除收件箱死信记录失败")
 	}
 	return nil

@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -17,17 +16,17 @@ import (
 
 // OutboxDlqRepo 发件箱死信仓储
 type OutboxDlqRepo struct {
-	orm.BaseRepository
+	DB *gorm.DB
 }
 
 // NewOutboxDlqRepo 创建发件箱死信仓储
 func NewOutboxDlqRepo(dbConn *gorm.DB) *OutboxDlqRepo {
-	return &OutboxDlqRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
+	return &OutboxDlqRepo{DB: dbConn}
 }
 
 // Insert 插入死信记录
 func (r *OutboxDlqRepo) Insert(ctx context.Context, row *model.SysEventOutboxDlq) error {
-	if err := r.Create(ctx, row); err != nil {
+	if err := tx.Exec(ctx, r.DB).Create(row).Error; err != nil {
 		return errors.Wrap(err, "插入发件箱死信记录失败")
 	}
 	return nil
@@ -57,7 +56,7 @@ func (r *OutboxDlqRepo) Fetch(ctx context.Context, serviceName string, size int,
 
 // Update 全量更新死信记录
 func (r *OutboxDlqRepo) Update(ctx context.Context, row *model.SysEventOutboxDlq) error {
-	if err := r.UpdateAll(ctx, row); err != nil {
+	if err := tx.Exec(ctx, r.DB).Save(row).Error; err != nil {
 		return errors.Wrap(err, "更新发件箱死信记录失败")
 	}
 	return nil
@@ -65,7 +64,7 @@ func (r *OutboxDlqRepo) Update(ctx context.Context, row *model.SysEventOutboxDlq
 
 // Delete 硬删除死信记录
 func (r *OutboxDlqRepo) Delete(ctx context.Context, id int64) error {
-	if err := r.DeleteByID(ctx, id, &model.SysEventOutboxDlq{}); err != nil {
+	if err := tx.Exec(ctx, r.DB).Unscoped().Where("id = ?", id).Delete(&model.SysEventOutboxDlq{}).Error; err != nil {
 		return errors.Wrap(err, "删除发件箱死信记录失败")
 	}
 	return nil

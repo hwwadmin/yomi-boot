@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -34,18 +33,26 @@ LIMIT ?`
 
 // InboxRepo 收件箱仓储
 type InboxRepo struct {
-	orm.BaseRepository
+	DB *gorm.DB
 }
 
 // NewInboxRepo 创建收件箱仓储
 func NewInboxRepo(dbConn *gorm.DB) *InboxRepo {
-	return &InboxRepo{BaseRepository: orm.BaseRepository{DB: dbConn}}
+	return &InboxRepo{DB: dbConn}
 }
 
 // Insert 插入收件箱记录
 func (r *InboxRepo) Insert(ctx context.Context, row *model.SysEventInbox) error {
-	if err := r.Create(ctx, row); err != nil {
+	if err := tx.Exec(ctx, r.DB).Create(row).Error; err != nil {
 		return errors.Wrap(err, "插入收件箱记录失败")
+	}
+	return nil
+}
+
+// DeleteBatch 按主键批量硬删除
+func (r *InboxRepo) DeleteBatch(ctx context.Context, ids []int64) error {
+	if err := hardDeleteByIDs(ctx, r.DB, ids, &model.SysEventInbox{}); err != nil {
+		return errors.Wrap(err, "批量删除收件箱记录失败")
 	}
 	return nil
 }

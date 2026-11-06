@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/common/db/orm"
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
@@ -64,12 +63,10 @@ func (d *DlqHandler) Enqueue(ctx context.Context, row model.SysEventOutbox, caus
 		return err
 	}
 	dlq := &model.SysEventOutboxDlq{
+		ID:            id,
 		ServiceName:   row.ServiceName,
 		EventOutboxID: row.ID,
 		ErrorMsg:      coreErrorMessage(cause),
-		BaseModel: orm.BaseModel{
-			ID: id,
-		},
 	}
 	return d.dlqRepo.Insert(ctx, dlq)
 }
