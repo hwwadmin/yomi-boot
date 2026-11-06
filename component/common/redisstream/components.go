@@ -48,10 +48,11 @@ func NewComponents(cfg Config, client *redisv9.Client) (*Components, error) {
 		"count", runtime.Count,
 		"publish_worker_num", publishWorkerCfg.WorkNum,
 		"publish_worker_size", publishWorkerCfg.Size,
+		"publish_send_timeout_ms", cfg.PublishWorker.SendTimeout().Milliseconds(),
 	)
 
 	return &Components{
-		Publisher: NewAsyncPublisher(syncPublisher, publishWorker, defaultPublishSendTimeout),
+		Publisher: NewAsyncPublisher(syncPublisher, publishWorker, cfg.PublishWorker.SendTimeout()),
 		Consumer:  NewConsumerManager(client, runtime),
 	}, nil
 }

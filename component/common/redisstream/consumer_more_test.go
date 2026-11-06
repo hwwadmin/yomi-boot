@@ -521,6 +521,76 @@ func TestBuildPublishWorkerConfigDefaults(t *testing.T) {
 	}
 }
 
+// xaddDeadlineHook 记下异步 XADD 使用的上下文截止时间
+type xaddDeadlineHook struct {
+	mu       sync.Mutex
+	deadline time.Time
+	ok       bool
+	seen     chan struct{}
+}
+
+func (h *xaddDeadlineHook) DialHook(next redisv9.DialHook) redisv9.DialHook { return next }
+
+func (h *xaddDeadlineHook) ProcessPipelineHook(next redisv9.ProcessPipelineHook) redisv9.ProcessPipelineHook {
+	return next
+}
+
+func (h *xaddDeadlineHook) ProcessHook(next redisv9.ProcessHook) redisv9.ProcessHook {
+	return func(ctx context.Context, cmd redisv9.Cmder) error {
+		if cmd.Name() == "xadd" {
+			if deadline, ok := ctx.Deadline(); ok {
+				h.mu.Lock()
+				h.deadline = deadline
+				h.ok = true
+				h.mu.Unlock()
+			}
+			select {
+			case <-h.seen:
+			default:
+				close(h.seen)
+			}
+		}
+		return next(ctx, cmd)
+	}
+}
+
+// TestNewComponentsUsesConfiguredSendTimeout 验证装配把 send_timeout_seconds 用到异步 XADD
+func TestNewComponentsUsesConfiguredSendTimeout(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	defer func() { _ = client.Close() }()
+
+	hook := &xaddDeadlineHook{seen: make(chan struct{})}
+	client.AddHook(hook)
+
+	components, err := NewComponents(Config{
+		PublishWorker: PublishWorkerConfig{WorkNum: 1, Size: 8, SendTimeoutSeconds: 2},
+	}, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	if err := components.Publisher.AddAsync(context.Background(), "orders", map[string]string{"k": "v"}); err != nil {
+		t.Fatalf("AddAsync: %v", err)
+	}
+	select {
+	case <-hook.seen:
+	case <-time.After(2 * time.Second):
+		t.Fatal("未观察到异步 XADD")
+	}
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+	if !hook.ok {
+		t.Fatal("异步 XADD 没有截止时间")
+	}
+	remaining := time.Until(hook.deadline)
+	if remaining < time.Second || remaining > 2*time.Second+200*time.Millisecond {
+		t.Fatalf("XADD 剩余时间 %v，期望接近配置的 2 秒", remaining)
+	}
+}
+
 // TestConfigValidatePrefixWarningBranch 验证前缀与负值校验分支
 func TestConfigValidatePrefixWarningBranch(t *testing.T) {
 	negative := int64(-1)

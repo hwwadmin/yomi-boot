@@ -39,6 +39,7 @@ type PublishWorkerConfig struct {
 	WorkNum              int // WorkNum 是并发 worker 数，0 表示使用默认值
 	Size                 int // Size 是任务队列容量，0 表示使用默认值
 	SubmitTimeoutSeconds int // SubmitTimeoutSeconds 是入队等待超时秒数。队列满时最多等待该时长，超时后本次发布失败，0 表示使用 worker 默认值
+	SendTimeoutSeconds   int // SendTimeoutSeconds 是入队之后单次 XADD 的超时秒数，0 表示 3 秒
 }
 
 // Config 表示 Redis Stream 能力配置
@@ -97,7 +98,18 @@ func (c PublishWorkerConfig) Validate() error {
 	if c.SubmitTimeoutSeconds < 0 {
 		return errors.New("publish_worker.submit_timeout_seconds 不能小于 0")
 	}
+	if c.SendTimeoutSeconds < 0 {
+		return errors.New("publish_worker.send_timeout_seconds 不能小于 0")
+	}
 	return nil
+}
+
+// SendTimeout 返回入队之后单次 XADD 的超时；0 使用 3 秒
+func (c PublishWorkerConfig) SendTimeout() time.Duration {
+	if c.SendTimeoutSeconds <= 0 {
+		return defaultPublishSendTimeout
+	}
+	return time.Duration(c.SendTimeoutSeconds) * time.Second
 }
 
 // KeyPrefixOrDefault 返回规范化后的 key 前缀（不做自动补 ':'，由配置自行带分隔符）

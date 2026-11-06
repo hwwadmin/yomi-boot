@@ -14,6 +14,7 @@ type PublishWorkerBootConfig struct {
 	WorkNum              int `mapstructure:"work_num"`               // WorkNum 是并发 worker 数，0 表示使用默认值
 	Size                 int `mapstructure:"size"`                   // Size 是任务队列容量，0 表示使用默认值
 	SubmitTimeoutSeconds int `mapstructure:"submit_timeout_seconds"` // SubmitTimeoutSeconds 是入队等待超时秒数。队列满时最多等待该时长，超时后本次发布失败，0 表示使用 worker 默认值
+	SendTimeoutSeconds   int `mapstructure:"send_timeout_seconds"`   // SendTimeoutSeconds 是入队之后单次 XADD 的超时秒数，0 表示 3 秒
 }
 
 // BootConfig 表示 redis_stream 配置段的 YAML 绑定
@@ -48,6 +49,7 @@ func (c BootConfig) ToConfig() redisstream.Config {
 			WorkNum:              c.PublishWorker.WorkNum,
 			Size:                 c.PublishWorker.Size,
 			SubmitTimeoutSeconds: c.PublishWorker.SubmitTimeoutSeconds,
+			SendTimeoutSeconds:   c.PublishWorker.SendTimeoutSeconds,
 		},
 	}
 }

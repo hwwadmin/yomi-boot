@@ -3,7 +3,10 @@
 // @author zwei
 package redisstream
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestConfigValidate_ZeroConfig(t *testing.T) {
 	t.Parallel()
@@ -49,5 +52,18 @@ func TestPublishWorkerConfigValidate(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error for negative publish_worker.work_num")
+	}
+}
+
+func TestPublishWorkerSendTimeout(t *testing.T) {
+	t.Parallel()
+	if got := (PublishWorkerConfig{}).SendTimeout(); got != defaultPublishSendTimeout {
+		t.Fatalf("未配置发送超时 = %v, want %v", got, defaultPublishSendTimeout)
+	}
+	if got := (PublishWorkerConfig{SendTimeoutSeconds: 8}).SendTimeout(); got != 8*time.Second {
+		t.Fatalf("发送超时 = %v, want 8s", got)
+	}
+	if err := (PublishWorkerConfig{SendTimeoutSeconds: -1}).Validate(); err == nil {
+		t.Fatal("send_timeout_seconds 为负应返回错误")
 	}
 }

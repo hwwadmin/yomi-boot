@@ -177,6 +177,7 @@ redis_stream:
     work_num: 2
     size: 128
     submit_timeout_seconds: 3
+    send_timeout_seconds: 3
 
 oss:
   enabled: true
