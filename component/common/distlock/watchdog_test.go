@@ -3,6 +3,7 @@ package distlock
 import (
 	"context"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,10 +14,44 @@ import (
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
-// TestWatchdog_KeepsLockBeyondTTL 验证看门狗续期使锁在 TTL 外仍被持有
+// countEvalHook 统计成功的 EVAL / EVALSHA，用来确认看门狗确实发出了续期。
+type countEvalHook struct {
+	n *atomic.Int32
+}
+
+// DialHook 实现 DialHook（测试桩 hook）
+func (h *countEvalHook) DialHook(next redisv9.DialHook) redisv9.DialHook { return next }
+
+// ProcessHook 在续期脚本成功后计数（测试桩 hook）
+func (h *countEvalHook) ProcessHook(next redisv9.ProcessHook) redisv9.ProcessHook {
+	return func(ctx context.Context, cmd redisv9.Cmder) error {
+		err := next(ctx, cmd)
+		if err != nil {
+			return err
+		}
+		switch cmd.Name() {
+		case "eval", "evalsha":
+			h.n.Add(1)
+		}
+		return nil
+	}
+}
+
+// ProcessPipelineHook 实现 ProcessPipelineHook（测试桩 hook）
+func (h *countEvalHook) ProcessPipelineHook(next redisv9.ProcessPipelineHook) redisv9.ProcessPipelineHook {
+	return next
+}
+
+// TestWatchdog_KeepsLockBeyondTTL 验证看门狗续期使锁在 TTL 外仍被持有。
+// miniredis 不按墙钟过期，只在 FastForward 时减少 TTL；PEXPIRE 会把剩余时间拨回整段 TTL。
+// 每次确认出现一次新的续期后再推进不到一个 TTL，累计推进超过 TTL。不续期时 Key 会被删掉。
 func TestWatchdog_KeepsLockBeyondTTL(t *testing.T) {
-	client, cleanup := redistest.NewClient(t)
-	defer cleanup()
+	mr := miniredis.RunT(t)
+	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	defer func() { _ = client.Close() }()
+
+	var extends atomic.Int32
+	client.AddHook(&countEvalHook{n: &extends})
 
 	factory, err := NewFactory(client)
 	if err != nil {
@@ -24,12 +59,12 @@ func TestWatchdog_KeepsLockBeyondTTL(t *testing.T) {
 	}
 	ctx := context.Background()
 	key := "test:watchdog-keep"
-	ttl := 800 * time.Millisecond
+	ttl := 600 * time.Millisecond
 
 	holder := factory.GetLock(key,
 		WithTTL(ttl),
 		WithWatchdog(true),
-		WithWatchdogInterval(200*time.Millisecond),
+		WithWatchdogInterval(80*time.Millisecond),
 	)
 	waiter := factory.GetLock(key, WithTTL(ttl))
 
@@ -38,11 +73,33 @@ func TestWatchdog_KeepsLockBeyondTTL(t *testing.T) {
 	}
 	defer func() { _ = holder.Unlock(ctx) }()
 
-	time.Sleep(2 * ttl)
+	waitExtend := func(after int32) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for extends.Load() <= after {
+			if time.Now().After(deadline) {
+				t.Fatalf("等待看门狗续期超过 %d 次超时，实际 %d", after, extends.Load())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 
-	ok, err := waiter.TryLock(ctx)
-	if err != nil || ok {
-		t.Fatalf("看门狗续期时期望 false,nil，实际 %v,%v", ok, err)
+	step := ttl / 3
+	var forwarded time.Duration
+	for forwarded < 2*ttl {
+		seen := extends.Load()
+		waitExtend(seen)
+		mr.FastForward(step)
+		forwarded += step
+
+		ok, tryErr := waiter.TryLock(ctx)
+		if tryErr != nil || ok {
+			t.Fatalf("累计推进 %s 后看门狗仍应持有锁，实际 ok=%v err=%v extends=%d",
+				forwarded, ok, tryErr, extends.Load())
+		}
+	}
+	if extends.Load() < 2 {
+		t.Fatalf("应观察到多次续期，实际 %d", extends.Load())
 	}
 }
 
