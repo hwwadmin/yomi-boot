@@ -28,11 +28,11 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		store := newStore(t)
 		ctx := context.Background()
 		digest := testDigest("answer-1")
-		if err := store.Save(ctx, "id-1", digest, time.Minute); err != nil {
+		if err := store.Save(ctx, "id1", digest, time.Minute); err != nil {
 			t.Fatalf("Save: %v", err)
 		}
 
-		got, found, err := store.Consume(ctx, "id-1")
+		got, found, err := store.Consume(ctx, "id1")
 		if err != nil {
 			t.Fatalf("Consume: %v", err)
 		}
@@ -40,7 +40,7 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 			t.Fatalf("Consume = (%q, %v), 期望 (%q, true)", got, found, digest)
 		}
 
-		if _, found, err := store.Consume(ctx, "id-1"); err != nil || found {
+		if _, found, err := store.Consume(ctx, "id1"); err != nil || found {
 			t.Fatalf("二次 Consume = (_, %v, %v), 期望未找到", found, err)
 		}
 	})
@@ -59,15 +59,15 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 	t.Run("overwrite", func(t *testing.T) {
 		store := newStore(t)
 		ctx := context.Background()
-		if err := store.Save(ctx, "id-1", testDigest("first"), time.Minute); err != nil {
+		if err := store.Save(ctx, "id1", testDigest("first"), time.Minute); err != nil {
 			t.Fatalf("Save first: %v", err)
 		}
 		second := testDigest("second")
-		if err := store.Save(ctx, "id-1", second, time.Minute); err != nil {
+		if err := store.Save(ctx, "id1", second, time.Minute); err != nil {
 			t.Fatalf("Save second: %v", err)
 		}
 
-		got, found, err := store.Consume(ctx, "id-1")
+		got, found, err := store.Consume(ctx, "id1")
 		if err != nil || !found || got != second {
 			t.Fatalf("Consume = (%q, %v, %v), 期望 (%q, true, nil)", got, found, err, second)
 		}
@@ -82,10 +82,15 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		}{
 			{name: "空 id", id: "", digest: testDigest("a"), ttl: time.Minute},
 			{name: "空白 id", id: "   ", digest: testDigest("a"), ttl: time.Minute},
+			{name: "id 含冒号", id: "login:abc", digest: testDigest("a"), ttl: time.Minute},
+			{name: "id 含横线", id: "id-1", digest: testDigest("a"), ttl: time.Minute},
+			{name: "id 含空格", id: "id 1", digest: testDigest("a"), ttl: time.Minute},
 			{name: "空摘要", id: "id", digest: "", ttl: time.Minute},
 			{name: "摘要过短", id: "id", digest: "abc", ttl: time.Minute},
 			{name: "明文答案", id: "id", digest: "1234", ttl: time.Minute},
 			{name: "摘要过长", id: "id", digest: strings.Repeat("b", answerDigestLen+1), ttl: time.Minute},
+			{name: "大写摘要", id: "id", digest: strings.Repeat("A", answerDigestLen), ttl: time.Minute},
+			{name: "非十六进制摘要", id: "id", digest: strings.Repeat("g", answerDigestLen), ttl: time.Minute},
 			{name: "ttl 为 0", id: "id", digest: testDigest("a"), ttl: 0},
 			{name: "ttl 为负", id: "id", digest: testDigest("a"), ttl: -time.Second},
 			{name: "id 过长", id: strings.Repeat("a", maxIDLen+1), digest: testDigest("a"), ttl: time.Minute},
@@ -111,6 +116,8 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		}{
 			{name: "空 id", id: ""},
 			{name: "空白 id", id: "   "},
+			{name: "id 含冒号", id: "login:abc"},
+			{name: "id 含横线", id: "id-1"},
 			{name: "id 过长", id: strings.Repeat("a", maxIDLen+1)},
 		}
 		for _, tt := range tests {
@@ -145,7 +152,7 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		store := newStore(t)
 		ctx := context.Background()
 		digest := testDigest("answer-1")
-		if err := store.Save(ctx, "id-1", digest, time.Minute); err != nil {
+		if err := store.Save(ctx, "id1", digest, time.Minute); err != nil {
 			t.Fatalf("Save: %v", err)
 		}
 
@@ -158,7 +165,7 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 			go func() {
 				defer wg.Done()
 				<-start
-				got, found, err := store.Consume(ctx, "id-1")
+				got, found, err := store.Consume(ctx, "id1")
 				if err == nil && found && got == digest {
 					hits.Add(1)
 				}
@@ -177,10 +184,10 @@ func testStoreContract(t *testing.T, newStore func(t *testing.T) Store) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		if err := store.Save(ctx, "id-1", testDigest("answer-1"), time.Minute); !errors.Is(err, context.Canceled) {
+		if err := store.Save(ctx, "id1", testDigest("answer-1"), time.Minute); !errors.Is(err, context.Canceled) {
 			t.Fatalf("Save err = %v, 期望 context.Canceled", err)
 		}
-		if _, _, err := store.Consume(ctx, "id-1"); !errors.Is(err, context.Canceled) {
+		if _, _, err := store.Consume(ctx, "id1"); !errors.Is(err, context.Canceled) {
 			t.Fatalf("Consume err = %v, 期望 context.Canceled", err)
 		}
 	})

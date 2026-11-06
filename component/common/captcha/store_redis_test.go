@@ -46,20 +46,20 @@ func TestRedisStoreTTL(t *testing.T) {
 	ctx := context.Background()
 
 	digestA := testDigest("a")
-	if err := store.Save(ctx, "before-expiry", digestA, time.Minute); err != nil {
+	if err := store.Save(ctx, "beforeexpiry", digestA, time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	mr.FastForward(59 * time.Second)
-	answer, found, err := store.Consume(ctx, "before-expiry")
+	answer, found, err := store.Consume(ctx, "beforeexpiry")
 	if err != nil || !found || answer != digestA {
 		t.Fatalf("未到期 Consume = (%q, %v, %v), 期望命中", answer, found, err)
 	}
 
-	if err := store.Save(ctx, "after-expiry", testDigest("b"), time.Minute); err != nil {
+	if err := store.Save(ctx, "afterexpiry", testDigest("b"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	mr.FastForward(61 * time.Second)
-	if _, found, err := store.Consume(ctx, "after-expiry"); err != nil || found {
+	if _, found, err := store.Consume(ctx, "afterexpiry"); err != nil || found {
 		t.Fatalf("到期 Consume = (_, %v, %v), 期望未找到", found, err)
 	}
 }
@@ -93,10 +93,10 @@ func TestNewRedisStoreConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRedisStore: %v", err)
 	}
-	if err := store.Save(context.Background(), "id-1", testDigest("answer-1"), time.Minute); err != nil {
+	if err := store.Save(context.Background(), "id1", testDigest("answer-1"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if !mr.Exists(defaultKeyPrefix + ":id-1") {
+	if !mr.Exists(defaultKeyPrefix + ":id1") {
 		t.Fatalf("默认前缀键不存在，现有键: %v", mr.Keys())
 	}
 }
@@ -140,14 +140,47 @@ func TestRedisStorePrefixIsolation(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := storeA.Save(ctx, "id-1", testDigest("answer-1"), time.Minute); err != nil {
+	if err := storeA.Save(ctx, "id1", testDigest("answer-1"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, found, err := storeB.Consume(ctx, "id-1"); err != nil || found {
+	if _, found, err := storeB.Consume(ctx, "id1"); err != nil || found {
 		t.Fatalf("另一个前缀不应读到记录: found=%v err=%v", found, err)
 	}
-	answer, found, err := storeA.Consume(ctx, "id-1")
+	answer, found, err := storeA.Consume(ctx, "id1")
 	if err != nil || !found || answer != testDigest("answer-1") {
 		t.Fatalf("原前缀 Consume = (%q, %v, %v), 期望命中", answer, found, err)
+	}
+}
+
+// TestRedisStoreRejectsDelimitedID 验证 id 中的冒号不能把两个前缀拼成同一个键
+func TestRedisStoreRejectsDelimitedID(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	helper := yomiredis.NewRedisHelper(client)
+
+	storeA, err := NewRedisStore(helper, RedisStoreConfig{KeyPrefix: "yomi:captcha"})
+	if err != nil {
+		t.Fatalf("NewRedisStore A: %v", err)
+	}
+	storeB, err := NewRedisStore(helper, RedisStoreConfig{KeyPrefix: "yomi:captcha:login"})
+	if err != nil {
+		t.Fatalf("NewRedisStore B: %v", err)
+	}
+
+	ctx := context.Background()
+	digest := testDigest("answer-1")
+	if err := storeA.Save(ctx, "login:abc", digest, time.Minute); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("带冒号的 id 应拒绝写入: %v", err)
+	}
+	if _, _, err := storeA.Consume(ctx, "login:abc"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("带冒号的 id 应拒绝读取: %v", err)
+	}
+	got, found, err := storeB.Consume(ctx, "abc")
+	if err != nil || found || got != "" {
+		t.Fatalf("更长前缀不应读到被拒绝的写入: (%q, %v, %v)", got, found, err)
+	}
+	if keys := mr.Keys(); len(keys) != 0 {
+		t.Fatalf("非法 id 不应留下 Redis 键: %v", keys)
 	}
 }
