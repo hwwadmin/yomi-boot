@@ -19,6 +19,17 @@ func TestConfigValidate(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("合法配置不应报错: %v", err)
 	}
+	withRoot := Config{TokenTTLMinutes: 30, StorePrefix: "yomi:token", SkipValidatePaths: []string{"/"}}
+	if err := withRoot.Validate(); err != nil {
+		t.Fatalf("根路径 / 应合法: %v", err)
+	}
+	atLimit := Config{TokenTTLMinutes: int(maxTokenTTLMinutes), StorePrefix: "yomi:token"}
+	if err := atLimit.Validate(); err != nil {
+		t.Fatalf("上限分钟数应合法: %v", err)
+	}
+	if atLimit.TokenTTL() <= 0 {
+		t.Fatalf("上限分钟数换算后应为正数: %v", atLimit.TokenTTL())
+	}
 
 	cases := []struct {
 		name string
@@ -26,8 +37,11 @@ func TestConfigValidate(t *testing.T) {
 	}{
 		{name: "TTL 为 0", cfg: Config{TokenTTLMinutes: 0, StorePrefix: "p"}},
 		{name: "TTL 为负", cfg: Config{TokenTTLMinutes: -1, StorePrefix: "p"}},
+		{name: "TTL 溢出", cfg: Config{TokenTTLMinutes: int(maxTokenTTLMinutes) + 1, StorePrefix: "p"}},
 		{name: "store_prefix 为空", cfg: Config{TokenTTLMinutes: 30}},
 		{name: "skip 路径含首尾空格", cfg: Config{TokenTTLMinutes: 30, StorePrefix: "p", SkipValidatePaths: []string{" /public"}}},
+		{name: "skip 路径为空", cfg: Config{TokenTTLMinutes: 30, StorePrefix: "p", SkipValidatePaths: []string{""}}},
+		{name: "skip 路径为点", cfg: Config{TokenTTLMinutes: 30, StorePrefix: "p", SkipValidatePaths: []string{"."}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -40,7 +54,7 @@ func TestConfigValidate(t *testing.T) {
 
 // TestShouldSkipValidate 验证跳过校验路径的规范化匹配
 func TestShouldSkipValidate(t *testing.T) {
-	m := &TokenMiddleware{authConfig: Config{SkipValidatePaths: []string{"/public", " /health ", "/", "."}}}
+	m := &TokenMiddleware{authConfig: Config{SkipValidatePaths: []string{"/public", " /health ", "/"}}}
 
 	cases := []struct {
 		path string
@@ -50,6 +64,8 @@ func TestShouldSkipValidate(t *testing.T) {
 		{path: "/public/", want: true},
 		{path: "/health", want: true},
 		{path: "/", want: true},
+		{path: "", want: false},
+		{path: ".", want: false},
 		{path: "/api/secure", want: false},
 		{path: "/public/other", want: false},
 	}
@@ -57,6 +73,11 @@ func TestShouldSkipValidate(t *testing.T) {
 		if got := m.shouldSkipValidate(tc.path); got != tc.want {
 			t.Fatalf("shouldSkipValidate(%q) 期望 %v，实际 %v", tc.path, tc.want, got)
 		}
+	}
+
+	blank := &TokenMiddleware{authConfig: Config{SkipValidatePaths: []string{"", "."}}}
+	if blank.shouldSkipValidate("/") {
+		t.Fatal("空字符串和 . 不能当作根路径 /")
 	}
 }
 
@@ -325,6 +346,22 @@ func (failingStore) DeleteByUserID(context.Context, string, int64) error { retur
 // ReplaceUserSession 返回预设错误
 func (failingStore) ReplaceUserSession(context.Context, string, string, *TokenSession, time.Duration) error {
 	return errors.New("store down")
+}
+
+// TestIssueRejectsOverflowTTL 验证分钟数溢出时拒绝签发，且不会把非正 TTL 写成不过期的键
+func TestIssueRejectsOverflowTTL(t *testing.T) {
+	store := &replaceSpyStore{}
+	service := NewService(NewUUIDGenerator(), store, Config{
+		TokenTTLMinutes: int(maxTokenTTLMinutes) + 1,
+		AllowMultiLogin: true,
+		StorePrefix:     "yomi:test:token",
+	}, nil)
+	if _, err := service.Issue(context.Background(), &TokenSession{UserID: 1}); err == nil {
+		t.Fatal("溢出的有效期应拒绝签发")
+	}
+	if store.saveCalls != 0 || store.replaceCalls != 0 {
+		t.Fatalf("溢出的有效期不应写入存储，save=%d replace=%d", store.saveCalls, store.replaceCalls)
+	}
 }
 
 // TestIssueFailurePaths 验证生成器与存储故障时签发错误透传

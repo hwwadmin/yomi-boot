@@ -15,7 +15,7 @@ type BootConfig struct {
 	TokenTTLMinutes   int      `mapstructure:"token_ttl_minutes"`   // TokenTTLMinutes 是令牌有效期分钟数
 	AllowMultiLogin   bool     `mapstructure:"allow_multi_login"`   // AllowMultiLogin 表示是否允许并发登录
 	StorePrefix       string   `mapstructure:"store_prefix"`        // StorePrefix 是令牌存储前缀标识
-	SkipValidatePaths []string `mapstructure:"skip_validate_paths"` // SkipValidatePaths 是无需执行令牌校验的接口地址列表，按请求路径填写
+	SkipValidatePaths []string `mapstructure:"skip_validate_paths"` // SkipValidatePaths 是无需执行令牌校验的接口地址列表，按请求路径填写；根路径只写 "/"
 }
 
 // EnabledOrDefault 返回是否启用令牌服务，未配置默认 false

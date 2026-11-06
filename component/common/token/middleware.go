@@ -63,24 +63,20 @@ func Middleware(tokenService TokenService, authConfig Config) gin.HandlerFunc {
 	}).Handler()
 }
 
-// shouldSkipValidate 判断请求路径是否需要跳过令牌校验
+// shouldSkipValidate 判断请求路径是否需要跳过令牌校验。根路径只认 "/"，空字符串和 "." 不是根路径。
 func (m *TokenMiddleware) shouldSkipValidate(requestPath string) bool {
-	currentPath := path.Clean(strings.TrimSpace(requestPath))
-	if currentPath == "." || currentPath == "/" {
-		currentPath = "/"
-	}
-
+	currentPath := cleanSkipPath(requestPath)
 	for _, skipPath := range m.authConfig.SkipValidatePaths {
-		normalizedPath := path.Clean(strings.TrimSpace(skipPath))
-		if normalizedPath == "." || normalizedPath == "/" {
-			normalizedPath = "/"
-		}
-		if normalizedPath == currentPath {
+		if cleanSkipPath(skipPath) == currentPath {
 			return true
 		}
 	}
-
 	return false
+}
+
+// cleanSkipPath 去掉首尾空白并规范化路径。空字符串和 "." 保持为 "."，不收成 "/"。
+func cleanSkipPath(raw string) string {
+	return path.Clean(strings.TrimSpace(raw))
 }
 
 // extractToken 从 Authorization 请求头中提取 Bearer Token

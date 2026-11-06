@@ -9,11 +9,11 @@ import (
 // SectionKey YAML 根 key
 const SectionKey = "ratelimit"
 
-// BootConfig 表示 ratelimit 配置段的 YAML 绑定
+// BootConfig 表示 ratelimit 配置段的 YAML 绑定。
+// Redis 故障策略不在配置段里，由调用方每次传入的 Rule 决定，空白默认 fail_closed。
 type BootConfig struct {
-	Enabled          *bool  `mapstructure:"enabled"`            // Enabled 是否启用限流组件，未配置默认 false
-	KeyPrefix        string `mapstructure:"key_prefix"`         // KeyPrefix 是 Redis 限流 Key 前缀
-	RedisErrorPolicy string `mapstructure:"redis_error_policy"` // RedisErrorPolicy 是 Redis 故障策略：fail_open / fail_closed
+	Enabled   *bool  `mapstructure:"enabled"`    // Enabled 是否启用限流组件，未配置默认 false
+	KeyPrefix string `mapstructure:"key_prefix"` // KeyPrefix 是 Redis 限流 Key 前缀
 }
 
 // EnabledOrDefault 返回是否启用限流，未配置默认 false
@@ -24,8 +24,7 @@ func (c BootConfig) EnabledOrDefault() bool {
 // ToConfig 转换为运行时配置
 func (c BootConfig) ToConfig() redisratelimit.Config {
 	return redisratelimit.Config{
-		KeyPrefix:        c.KeyPrefix,
-		RedisErrorPolicy: c.RedisErrorPolicy,
+		KeyPrefix: c.KeyPrefix,
 	}
 }
 

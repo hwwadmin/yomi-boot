@@ -10,20 +10,14 @@ import (
 )
 
 const (
-	// RedisErrorPolicyFailOpen Redis 故障时放行
-	RedisErrorPolicyFailOpen = "fail_open"
-	// RedisErrorPolicyFailClosed Redis 故障时拒绝
-	RedisErrorPolicyFailClosed = "fail_closed"
-
-	defaultRateLimitKeyPrefix        = "yomi:rl"
-	defaultRateLimitRedisErrorPolicy = RedisErrorPolicyFailOpen
-	maxRateLimitKeyPrefixLen         = 64
+	defaultRateLimitKeyPrefix = "yomi:rl"
+	maxRateLimitKeyPrefixLen  = 64
 )
 
 // Config 表示调用式限流配置（不包含 Redis 连接；连接沿用 redis 段）
+// Redis 故障策略不在这里，由每次调用的 Rule 决定。
 type Config struct {
-	KeyPrefix        string // KeyPrefix 是 Redis 限流 Key 前缀
-	RedisErrorPolicy string // RedisErrorPolicy 是 Redis 故障策略：fail_open / fail_closed
+	KeyPrefix string // KeyPrefix 是 Redis 限流 Key 前缀
 }
 
 // KeyPrefixOrDefault 返回限流 Key 前缀
@@ -35,26 +29,9 @@ func (c Config) KeyPrefixOrDefault() string {
 	return prefix
 }
 
-// RedisErrorPolicyOrDefault 返回 Redis 故障策略
-func (c Config) RedisErrorPolicyOrDefault() string {
-	policy := strings.TrimSpace(strings.ToLower(c.RedisErrorPolicy))
-	if policy == "" {
-		return defaultRateLimitRedisErrorPolicy
-	}
-	return policy
-}
-
 // Validate 校验限流配置语义
 func (c Config) Validate() error {
-	prefix := c.KeyPrefixOrDefault()
-	if err := validateRateLimitKeyPrefix(prefix); err != nil {
-		return err
-	}
-	policy := c.RedisErrorPolicyOrDefault()
-	if policy != RedisErrorPolicyFailOpen && policy != RedisErrorPolicyFailClosed {
-		return errors.New("redis_error_policy 仅支持 fail_open 或 fail_closed")
-	}
-	return nil
+	return validateRateLimitKeyPrefix(c.KeyPrefixOrDefault())
 }
 
 // validateRateLimitKeyPrefix 校验限流 Key 前缀格式

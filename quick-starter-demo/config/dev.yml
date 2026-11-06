@@ -134,8 +134,7 @@ redis:
 
 ratelimit:
   enabled: true
-  key_prefix: "quick_starter_demo:ratelimit:" # 仅允许小写字母、数字、冒号、下划线
-  redis_error_policy: fail_open               # Redis 故障策略：fail_open / fail_closed
+  key_prefix: "quick_starter_demo:ratelimit:" # 仅允许小写字母、数字、冒号、下划线。Redis 故障策略在调用时的 Rule 上，空白默认 fail_closed
 
 kafka:
   publisher_enabled: true

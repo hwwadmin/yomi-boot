@@ -1,7 +1,8 @@
 // Package redisratelimit 提供调用式分布式限流能力
 //
-// 依赖现有 boot/redis.RedisService（OpsRateLimit4Allow），不新建 Redis 连接。
+// 依赖 component/common/redis.RedisService（OpsRateLimit4Allow），不新建 Redis 连接。
 // 用法：在 usecase 入口显式调用 Allow/AllowN；超限返回 ErrRateLimited。
+// Redis 故障策略写在 Rule 上，空白默认 fail_closed。
 //
 // @author zwei
 package redisratelimit
@@ -19,17 +20,19 @@ var ErrRateLimited = errors.NewNoStack("RATE_LIMITED")
 
 // LimitService 调用式限流门面
 type LimitService interface {
-	// Allow 尝试消耗 1 次配额；超限返回 ErrRateLimited
+	// Allow 尝试消耗 1 次配额；超限返回 ErrRateLimited。
+	// 调用方 ctx 已取消或已过截止时间时返回该错误。
 	Allow(ctx context.Context, key string, rule Rule) error
-	// AllowN 尝试消耗 n 次配额；超限返回 ErrRateLimited；n 的单次上限由 redis 原语层校验，超过时返回错误
+	// AllowN 尝试消耗 n 次配额；超限返回 ErrRateLimited。
+	// n 超过 redis 原语单次上限时返回错误，不按故障策略放行。
+	// 调用方 ctx 已取消或已过截止时间时返回该错误，不按故障策略放行。
 	AllowN(ctx context.Context, key string, n int64, rule Rule) error
 }
 
 // limiter 基于 Redis 的限流实现
 type limiter struct {
-	redis    yomiredis.RedisService
-	prefix   string
-	failOpen bool
+	redis  yomiredis.RedisService
+	prefix string
 }
 
 // noopLimiter 未启用时的空实现，Allow/AllowN 恒成功
@@ -44,9 +47,8 @@ func New(redisService yomiredis.RedisService, cfg Config) LimitService {
 		panic("redisratelimit: " + err.Error())
 	}
 	return &limiter{
-		redis:    redisService,
-		prefix:   cfg.KeyPrefixOrDefault(),
-		failOpen: cfg.RedisErrorPolicyOrDefault() == RedisErrorPolicyFailOpen,
+		redis:  redisService,
+		prefix: cfg.KeyPrefixOrDefault(),
 	}
 }
 
@@ -71,14 +73,23 @@ func (l *limiter) AllowN(ctx context.Context, key string, n int64, rule Rule) er
 	if err := rule.Validate(); err != nil {
 		return err
 	}
+	if n > yomiredis.MaxRateLimitN {
+		return errors.Newf("redisratelimit: n 超过单次上限 %d", yomiredis.MaxRateLimitN)
+	}
 	fullKey, err := buildFullKey(l.prefix, key)
 	if err != nil {
+		return err
+	}
+	if err := contextErr(ctx); err != nil {
 		return err
 	}
 
 	allowed, err := l.redis.OpsRateLimit4Allow(ctx, fullKey, rule.Limit, n, rule.Window)
 	if err != nil {
-		if l.failOpen {
+		if ctxErr := contextErr(ctx); ctxErr != nil {
+			return ctxErr
+		}
+		if rule.RedisErrorPolicyOrDefault() == RedisErrorPolicyFailOpen {
 			logger.Warn(ctx, "redisratelimit redis 故障，按 fail_open 放行", "key", fullKey, "error", err)
 			return nil
 		}
@@ -88,6 +99,14 @@ func (l *limiter) AllowN(ctx context.Context, key string, n int64, rule Rule) er
 		return errors.Sentinel(ErrRateLimited)
 	}
 	return nil
+}
+
+// contextErr 返回调用方 ctx 已经结束的原因。nil ctx 没有调用方取消信号。
+func contextErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
 }
 
 // Allow 实现 LimitService.Allow（Noop）

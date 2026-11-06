@@ -189,11 +189,11 @@ func TestRedisHelper_OpsRateLimit4Allow_MaxN(t *testing.T) {
 	ctx := context.Background()
 	key := "yomi:test:rl:maxn"
 
-	if _, err := helper.OpsRateLimit4Allow(ctx, key, 100, maxRateLimitN+1, time.Minute); err == nil {
+	if _, err := helper.OpsRateLimit4Allow(ctx, key, 100, MaxRateLimitN+1, time.Minute); err == nil {
 		t.Fatal("n 超过单次上限应返回错误")
 	}
 
-	allowed, err := helper.OpsRateLimit4Allow(ctx, key, maxRateLimitN*2, maxRateLimitN, time.Minute)
+	allowed, err := helper.OpsRateLimit4Allow(ctx, key, MaxRateLimitN*2, MaxRateLimitN, time.Minute)
 	if err != nil || !allowed {
 		t.Fatalf("n 恰好等于上限应放行，实际 %v,%v", allowed, err)
 	}

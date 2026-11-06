@@ -73,6 +73,9 @@ func NewService(
 
 // Issue 签发新的访问令牌
 func (s *Service) Issue(ctx context.Context, session *TokenSession) (string, error) {
+	if err := validateTokenTTLMinutes(s.authConfig.TokenTTLMinutes); err != nil {
+		return "", err
+	}
 	if session == nil {
 		session = &TokenSession{}
 	}
