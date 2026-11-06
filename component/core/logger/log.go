@@ -3,7 +3,6 @@ package logger
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hwwadmin/yomi-boot/component/core/shared"
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
@@ -12,7 +11,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Debug 输出 Debug 级别日志，traceID 从 ctx 读取
+// Debug 输出 Debug 级别日志。有链路时写入 traceparent。
 func Debug(ctx context.Context, msg string, keysAndValues ...any) {
 	write(ctx, zapcore.DebugLevel, msg, keysAndValues...)
 }
@@ -22,7 +21,7 @@ func DebugWithoutCtx(msg string, keysAndValues ...any) {
 	write(context.Background(), zapcore.DebugLevel, msg, keysAndValues...)
 }
 
-// Info 输出 Info 级别日志，traceID 从 ctx 读取
+// Info 输出 Info 级别日志。有链路时写入 traceparent。
 func Info(ctx context.Context, msg string, keysAndValues ...any) {
 	write(ctx, zapcore.InfoLevel, msg, keysAndValues...)
 }
@@ -32,7 +31,7 @@ func InfoWithoutCtx(msg string, keysAndValues ...any) {
 	write(context.Background(), zapcore.InfoLevel, msg, keysAndValues...)
 }
 
-// Warn 输出 Warn 级别日志，traceID 从 ctx 读取
+// Warn 输出 Warn 级别日志。有链路时写入 traceparent。
 func Warn(ctx context.Context, msg string, keysAndValues ...any) {
 	write(ctx, zapcore.WarnLevel, msg, keysAndValues...)
 }
@@ -42,7 +41,7 @@ func WarnWithoutCtx(msg string, keysAndValues ...any) {
 	write(context.Background(), zapcore.WarnLevel, msg, keysAndValues...)
 }
 
-// Error 输出 Error 级别日志，traceID 从 ctx 读取
+// Error 输出 Error 级别日志。有链路时写入 traceparent。
 func Error(ctx context.Context, msg string, keysAndValues ...any) {
 	write(ctx, zapcore.ErrorLevel, msg, keysAndValues...)
 }
@@ -59,7 +58,7 @@ func Access(ctx context.Context, msg string, keysAndValues ...any) {
 	accessLogger().Info(msg, fields...)
 }
 
-// write 写入指定级别日志，自动注入 trace_id / span_id，并按注入的脱敏服务处理业务字段
+// write 写入指定级别日志。有链路时注入 traceparent，并按脱敏服务处理业务字段。
 func write(ctx context.Context, level zapcore.Level, msg string, keysAndValues ...any) {
 	keysAndValues = currentMasking().MaskKV(keysAndValues...)
 	fields := injectTraceFields(ctx, withoutMetaFields(kvToFields(keysAndValues...))...)
@@ -78,36 +77,23 @@ func write(ctx context.Context, level zapcore.Level, msg string, keysAndValues .
 	}
 }
 
-// injectTraceFields 从 ctx 注入 trace_id / span_id（及非空 parent_span_id）
+// injectTraceFields 有链路时注入 traceparent。没有链路时不写这个字段。
 func injectTraceFields(ctx context.Context, extra ...zap.Field) []zap.Field {
-	sc := traceid.SpanFromContext(ctx)
-	traceID := strings.TrimSpace(sc.TraceID)
-	if traceID == "" {
-		traceID = shared.MissingTraceID
+	tp := traceid.FromContext(ctx)
+	if tp == "" {
+		return extra
 	}
-	spanID := strings.TrimSpace(sc.SpanID)
-	if spanID == "" {
-		spanID = shared.MissingSpanID
-	}
-	fields := []zap.Field{
-		zap.String(shared.TraceID, traceID),
-		zap.String(shared.SpanID, spanID),
-	}
-	if parent := strings.TrimSpace(sc.ParentSpanID); parent != "" {
-		fields = append(fields, zap.String(shared.ParentSpanID, parent))
-	}
-	return append(fields, extra...)
+	return append([]zap.Field{zap.String(shared.Traceparent, tp)}, extra...)
 }
 
-// withoutMetaFields 过滤调用方误传的系统元数据字段（如 trace_id / span_id）
+// withoutMetaFields 丢掉调用方误传的 traceparent，避免盖掉系统写入的值。
 func withoutMetaFields(fields []zap.Field) []zap.Field {
 	if len(fields) == 0 {
 		return nil
 	}
 	filtered := make([]zap.Field, 0, len(fields))
 	for _, field := range fields {
-		switch field.Key {
-		case shared.TraceID, shared.SpanID, shared.ParentSpanID:
+		if field.Key == shared.Traceparent {
 			continue
 		}
 		filtered = append(filtered, field)

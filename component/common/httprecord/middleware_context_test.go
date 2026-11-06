@@ -53,6 +53,6 @@ func TestMiddlewareHandleContextAlive(t *testing.T) {
 		t.Fatalf("Handle 收到的 ctx 已结束: %v", svc.ctxErr)
 	}
 	if svc.traceID == "" {
-		t.Fatal("Handle 收到的 ctx 缺少 TraceID")
+		t.Fatal("Handle 收到的 ctx 缺少 traceparent")
 	}
 }

@@ -15,11 +15,11 @@ func TestMemoryHttpRecordService_QueueFullDrops(t *testing.T) {
 	svc := NewMemoryHttpRecordService(1)
 	defer svc.Close()
 
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "a", Path: "/a", Method: "GET"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "a", Path: "/a", Method: "GET"})
 
 	done := make(chan struct{})
 	go func() {
-		svc.Handle(context.Background(), &HttpRecord{TraceID: "b", Path: "/b", Method: "GET"})
+		svc.Handle(context.Background(), &HttpRecord{TraceParent: "b", Path: "/b", Method: "GET"})
 		close(done)
 	}()
 
@@ -45,7 +45,7 @@ func TestStartMemoryRecordConsumer(t *testing.T) {
 	defer cancel()
 
 	err := StartMemoryRecordConsumer(ctx, svc, MemoryRecordConsumerConfig{Workers: 2}, func(_ context.Context, record *HttpRecord) RecordHandleResult {
-		if record.TraceID == "ok" {
+		if record.TraceParent == "ok" {
 			got.Add(1)
 			wg.Done()
 		}
@@ -55,7 +55,7 @@ func TestStartMemoryRecordConsumer(t *testing.T) {
 		t.Fatalf("StartMemoryRecordConsumer() error = %v", err)
 	}
 
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "ok", Path: "/ok", Method: "GET"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "ok", Path: "/ok", Method: "GET"})
 
 	waitDone := make(chan struct{})
 	go func() {

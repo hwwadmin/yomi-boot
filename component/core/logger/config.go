@@ -17,8 +17,7 @@ const (
 // reservedFieldKeys 禁止出现在 log.fields 中的保留键
 var reservedFieldKeys = map[string]struct{}{
 	"time": {}, "level": {}, "log_type": {}, "service": {}, "env": {},
-	"message": {}, "msg": {}, "trace_id": {}, "traceID": {},
-	"span_id": {}, "parent_span_id": {},
+	"message": {}, "msg": {}, "traceparent": {},
 	"caller": {}, "stack": {}, "name": {},
 }
 

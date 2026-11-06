@@ -53,7 +53,7 @@ func (s *RedisStreamHttpRecordService) Handle(ctx context.Context, record *HttpR
 		logger.Warn(ctx, "HTTP 访问记录 Redis Stream 发布失败",
 			"error", err,
 			"stream", s.stream,
-			"traceId", wire.TraceID,
+			"traceparent", wire.TraceParent,
 		)
 	}
 }

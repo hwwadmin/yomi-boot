@@ -5,43 +5,69 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
-
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
-// spanContextKey context 中存储 SpanContext 的键类型
 type spanContextKey struct{}
 
-// SpanContext 链路元数据：trace 与 span 成对存储、语义独立
+// SpanContext 是内部链路。写出日志和 HTTP 头时只使用 Traceparent()。
 type SpanContext struct {
-	TraceID      string
-	SpanID       string
-	ParentSpanID string // 可选；入站 traceparent 的 span 可作为 parent
+	TraceID      string // 32 位十六进制追踪号
+	SpanID       string // 16 位十六进制，本跳 span
+	ParentSpanID string // 入站调用方的 span；可空
+	Flags        string // 2 位十六进制
+	Tracestate   string // 原样转发；可空
 }
 
-// ContextWithSpanContext 将完整链路元数据写入上下文
+// Traceparent 拼出本跳的 W3C traceparent。字段不合法时返回空字符串。
+func (sc SpanContext) Traceparent() string {
+	traceID := strings.ToLower(strings.TrimSpace(sc.TraceID))
+	spanID := strings.ToLower(strings.TrimSpace(sc.SpanID))
+	flags := strings.ToLower(strings.TrimSpace(sc.Flags))
+	if flags == "" {
+		flags = traceFlagsRecorded
+	}
+	if !validTraceID(traceID) || !validSpanID(spanID) || !validFlags(flags) {
+		return ""
+	}
+	return traceparentVersion + "-" + traceID + "-" + spanID + "-" + flags
+}
+
+// ContextWithSpanContext 写入一条已经规范的链路。追踪号或本跳 span 不合法时不写入。
 func ContextWithSpanContext(ctx context.Context, sc SpanContext) context.Context {
 	ctx = orBackground(ctx)
-	sc.TraceID = strings.TrimSpace(sc.TraceID)
-	sc.SpanID = strings.TrimSpace(sc.SpanID)
-	sc.ParentSpanID = strings.TrimSpace(sc.ParentSpanID)
-	if sc.TraceID == "" {
+	sc.TraceID = strings.ToLower(strings.TrimSpace(sc.TraceID))
+	sc.SpanID = strings.ToLower(strings.TrimSpace(sc.SpanID))
+	sc.ParentSpanID = strings.ToLower(strings.TrimSpace(sc.ParentSpanID))
+	sc.Flags = strings.ToLower(strings.TrimSpace(sc.Flags))
+	sc.Tracestate = strings.TrimSpace(sc.Tracestate)
+	if !validFlags(sc.Flags) {
+		sc.Flags = traceFlagsRecorded
+	}
+	if sc.Traceparent() == "" {
 		return ctx
 	}
-	if sc.SpanID == "" {
-		sc.SpanID = newSpanID()
+	if sc.ParentSpanID != "" && !validSpanID(sc.ParentSpanID) {
+		sc.ParentSpanID = ""
 	}
 	return context.WithValue(ctx, spanContextKey{}, sc)
 }
 
-// ContextWithTraceID 将链路 ID 写入上下文，并确保带有 root span_id（兼容旧调用）
-func ContextWithTraceID(ctx context.Context, traceID string) context.Context {
-	return ContextWithSpanContext(ctx, SpanContext{TraceID: traceID, SpanID: newSpanID()})
+// ContextWithTraceparent 把一条本服务发出的 traceparent 恢复进上下文。
+// 头里的 parent-id 视为本跳 span。非法时不写入。
+func ContextWithTraceparent(ctx context.Context, header string) context.Context {
+	parsed, ok := parseTraceparent(header)
+	if !ok {
+		return orBackground(ctx)
+	}
+	return ContextWithSpanContext(ctx, SpanContext{
+		TraceID: parsed.traceID,
+		SpanID:  parsed.spanID,
+		Flags:   parsed.flags,
+	})
 }
 
-// SpanFromContext 从上下文读取链路元数据；不存在时返回零值
+// SpanFromContext 读取内部链路；不存在时返回零值。
 func SpanFromContext(ctx context.Context) SpanContext {
 	if ctx == nil {
 		return SpanContext{}
@@ -53,81 +79,27 @@ func SpanFromContext(ctx context.Context) SpanContext {
 	return sc
 }
 
-// FromContext 从上下文读取链路 ID，不存在时返回空字符串
+// FromContext 返回本跳 traceparent。没有链路时返回空字符串。
 func FromContext(ctx context.Context) string {
-	return SpanFromContext(ctx).TraceID
+	return SpanFromContext(ctx).Traceparent()
 }
 
-// GetTraceID 从请求上下文读取当前链路 ID
-func GetTraceID(c *gin.Context) string {
+// GetTraceparent 从 Gin 请求上下文读取本跳 traceparent。
+func GetTraceparent(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""
 	}
 	return FromContext(c.Request.Context())
 }
 
-// SetTraceID 在出站 HTTP 请求头中写入链路上下文（traceparent / X-Trace-ID / X-Request-ID）
-// 使用 ctx 中当前的 span_id，保证与日志一致；缺失 span 时临时生成（不回写 ctx）
-func SetTraceID(ctx context.Context, req *http.Request) {
+// SetTraceparent 给出站请求写入 traceparent。有 tracestate 时原样带上。没有链路时不写头。
+func SetTraceparent(ctx context.Context, req *http.Request) {
 	if req == nil {
 		return
 	}
-	sc := SpanFromContext(ctx)
-	if sc.TraceID == "" {
-		return
-	}
-	spanID := sc.SpanID
-	if spanID == "" {
-		spanID = newSpanID()
-	}
-	writeTraceHeadersTo(req.Header, sc.TraceID, spanID)
+	writeTraceparent(req.Header, SpanFromContext(ctx))
 }
 
-// resolveTraceID 按规范优先级解析链路 ID
-func resolveTraceID(r *http.Request) string {
-	if r == nil {
-		return newTraceID()
-	}
-	if id, _ := parseTraceparent(r.Header.Get(shared.TraceParentHeader)); id != "" {
-		return id
-	}
-	if id := strings.TrimSpace(r.Header.Get(shared.TraceIDHeader)); id != "" {
-		return id
-	}
-	return newTraceID()
-}
-
-// parseTraceparent 从 W3C traceparent 解析 trace-id 与 parent span-id；非法返回空
-func parseTraceparent(raw string) (traceID, parentSpanID string) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", ""
-	}
-	parts := strings.Split(raw, "-")
-	if len(parts) < 4 {
-		return "", ""
-	}
-	traceID = strings.ToLower(parts[1])
-	if len(traceID) != 32 || !isHex(traceID) {
-		return "", ""
-	}
-	// 全 0 非法
-	if traceID == "00000000000000000000000000000000" {
-		return "", ""
-	}
-	parentSpanID = strings.ToLower(parts[2])
-	if len(parentSpanID) != 16 || !isHex(parentSpanID) || parentSpanID == "0000000000000000" {
-		parentSpanID = ""
-	}
-	return traceID, parentSpanID
-}
-
-// newTraceID 生成 32 hex 链路 ID（UUID 去横线）
-func newTraceID() string {
-	return strings.ReplaceAll(uuid.New().String(), "-", "")
-}
-
-// orBackground 将 nil context 归一化为 Background，避免派生 context 时 panic
 func orBackground(ctx context.Context) context.Context {
 	if ctx == nil {
 		return context.Background()

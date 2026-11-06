@@ -113,7 +113,7 @@ func (f *fakeRedisStreamConsumer) StopAll() error { return nil }
 // Close 空实现
 func (f *fakeRedisStreamConsumer) Close() error { return nil }
 
-// TestMemoryConsumerRoundTrip 验证 memory provider 自动启动消费并注入 TraceID
+// TestMemoryConsumerRoundTrip 验证 memory provider 自动启动消费并注入 TraceParent
 func TestMemoryConsumerRoundTrip(t *testing.T) {
 	cfg := newTestConfig(t, "http_record:\n  enabled: true\n  provider: memory\n  memory:\n    workers: 1\n")
 	p := NewHttpRecord()
@@ -125,8 +125,8 @@ func TestMemoryConsumerRoundTrip(t *testing.T) {
 
 	records := make(chan *httprecord.HttpRecord, 1)
 	p.MustRegisterHandler(func(ctx context.Context, record *httprecord.HttpRecord) httprecord.RecordHandleResult {
-		if got := traceid.FromContext(ctx); got != record.TraceID {
-			t.Errorf("消费上下文 TraceID = %q，期望 %q", got, record.TraceID)
+		if got := traceid.FromContext(ctx); got != record.TraceParent {
+			t.Errorf("消费上下文 TraceParent = %q，期望 %q", got, record.TraceParent)
 		}
 		records <- record
 		return httprecord.HandleOK()
@@ -135,11 +135,12 @@ func TestMemoryConsumerRoundTrip(t *testing.T) {
 		t.Fatalf("OnReady() error = %v", err)
 	}
 
-	p.Service().Handle(ctx, &httprecord.HttpRecord{TraceID: "trace-1", Path: "/demo"})
+	const sampleTP = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	p.Service().Handle(ctx, &httprecord.HttpRecord{TraceParent: sampleTP, Path: "/demo"})
 	select {
 	case record := <-records:
-		if record.TraceID != "trace-1" {
-			t.Fatalf("消费记录 TraceID = %q，期望 trace-1", record.TraceID)
+		if record.TraceParent != sampleTP {
+			t.Fatalf("消费记录 TraceParent = %q，期望 %s", record.TraceParent, sampleTP)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("内存消费者未处理记录")

@@ -35,10 +35,10 @@ func TestMustStartMemoryRecordConsumer(t *testing.T) {
 				return HandleOK()
 			})
 
-		svc.Handle(context.Background(), &HttpRecord{TraceID: "mem-1", Method: "GET", Path: "/mem"})
+		svc.Handle(context.Background(), &HttpRecord{TraceParent: "mem-1", Method: "GET", Path: "/mem"})
 		select {
 		case record := <-collected:
-			if record.TraceID != "mem-1" {
+			if record.TraceParent != "mem-1" {
 				t.Fatalf("消费记录不符: %+v", record)
 			}
 		case <-time.After(3 * time.Second):
@@ -79,11 +79,11 @@ func TestMustStartRedisStreamRecordConsumer(t *testing.T) {
 			})
 
 		svc := NewRedisStreamHttpRecordService(components.Publisher, "httprecord.must")
-		svc.Handle(context.Background(), &HttpRecord{TraceID: "rs-1", Method: "GET", Path: "/rs"})
+		svc.Handle(context.Background(), &HttpRecord{TraceParent: "rs-1", Method: "GET", Path: "/rs"})
 
 		select {
 		case record := <-collected:
-			if record.TraceID != "rs-1" {
+			if record.TraceParent != "rs-1" {
 				t.Fatalf("消费记录不符: %+v", record)
 			}
 		case <-time.After(5 * time.Second):

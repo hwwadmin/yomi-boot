@@ -49,7 +49,7 @@ func wire(slot *plugin.PluginSlot) []router.Registrar {
 			"method", record.Method,
 			"path", record.Path,
 			"statusCode", record.StatusCode,
-			"traceId", record.TraceID,
+			"traceparent", record.TraceParent,
 		)
 		return httprecord.HandleOK()
 	})

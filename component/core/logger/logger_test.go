@@ -84,7 +84,7 @@ func TestAccessConfig_SampleRateOrDefault(t *testing.T) {
 func TestConfig_Normalize_ReservedFields(t *testing.T) {
 	cfg := Config{
 		Rotation: testRotation(),
-		Fields:   map[string]string{"trace_id": "x"},
+		Fields:   map[string]string{"traceparent": "x"},
 	}
 	if err := cfg.Normalize(); err == nil {
 		t.Fatal("expected reserved field error")
@@ -171,12 +171,12 @@ func TestFileSplit_ELKFieldsAndStaticFields(t *testing.T) {
 
 	assertJSONField(t, infoPath, "message", "business event")
 	assertJSONField(t, infoPath, "level", "info")
-	assertJSONField(t, infoPath, "trace_id", "-1")
-	assertJSONField(t, infoPath, "span_id", "-1")
+	assertFileNotContains(t, infoPath, `"traceparent"`)
+	assertFileNotContains(t, infoPath, `"trace_id"`)
+	assertFileNotContains(t, infoPath, `"span_id"`)
 	assertJSONField(t, infoPath, "country_code", "pk")
 	assertJSONField(t, infoPath, "instance_id", "i-test")
 	assertFileNotContains(t, infoPath, `"msg"`)
-	assertFileNotContains(t, infoPath, `"traceID"`)
 	assertFileNotContains(t, infoPath, "empty_skip")
 }
 
@@ -266,11 +266,11 @@ func TestMiddleware_InboundOutboundPair(t *testing.T) {
 		t.Fatalf("response password should be redacted: %s", lines[1])
 	}
 	for i, line := range lines {
-		if !strings.Contains(line, `"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736"`) {
-			t.Fatalf("line%d missing trace_id: %s", i, line)
+		if !strings.Contains(line, `"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"`) {
+			t.Fatalf("line%d missing traceparent: %s", i, line)
 		}
-		if !strings.Contains(line, `"span_id":"00f067aa0ba902b7"`) {
-			t.Fatalf("line%d missing shared root span_id: %s", i, line)
+		if strings.Contains(line, `"request_id"`) || strings.Contains(line, `"trace_id"`) || strings.Contains(line, `"span_id"`) {
+			t.Fatalf("line%d 不应再拆追踪字段: %s", i, line)
 		}
 	}
 	assertFileNotContains(t, filepath.Join(dir, "info", "info.log"), "http inbound")

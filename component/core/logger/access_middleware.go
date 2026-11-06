@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
-	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 	"github.com/hwwadmin/yomi-boot/component/core/utils/ginutil"
 
 	"github.com/gin-gonic/gin"
@@ -47,10 +45,6 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 
 		mask := currentMasking()
 		ctx := requestContext(c)
-		requestID := traceid.FromContext(ctx)
-		if strings.TrimSpace(requestID) == "" {
-			requestID = shared.MissingTraceID
-		}
 		method := ""
 		var ua, query string
 		if c.Request != nil {
@@ -71,7 +65,6 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 		// —— 入站快照：先缓冲，不落盘 ——
 		inboundKV := []any{
 			"direction", DirectionInbound,
-			"request_id", requestID,
 			"method", method,
 			"path", reqPath,
 			"client_ip", clientIP,
@@ -133,7 +126,6 @@ func Middleware(cfg AccessConfig) gin.HandlerFunc {
 
 		outboundKV := []any{
 			"direction", DirectionOutbound,
-			"request_id", requestID,
 			"method", method,
 			"path", reqPath,
 			"route", route,

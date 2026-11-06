@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hwwadmin/yomi-boot/component/core/shared"
@@ -11,113 +12,137 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TestResolveTraceID_Priority 验证 traceparent 优先于 X-Trace-ID 解析链路 ID
-func TestResolveTraceID_Priority(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(shared.TraceIDHeader, "x-trace-id-value")
-	req.Header.Set(shared.TraceParentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+const sampleTP = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
-	got := resolveTraceID(req)
-	if got != "4bf92f3577b34da6a3ce929d0e0e4736" {
-		t.Fatalf("want traceparent id, got %q", got)
-	}
-}
-
-// TestResolveTraceID_XTraceID 验证 X-Trace-ID 解析链路 ID
-func TestResolveTraceID_XTraceID(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(shared.TraceIDHeader, "my-trace-001")
-	got := resolveTraceID(req)
-	if got != "my-trace-001" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-// TestResolveTraceID_GenerateWhenMissing 验证无入站头时自动生成 32 位 hex 链路 ID
-func TestResolveTraceID_GenerateWhenMissing(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	got := resolveTraceID(req)
-	if len(got) != 32 {
-		t.Fatalf("want 32-hex generated id, got %q", got)
-	}
-}
-
-// TestMiddleware_WritesStandardHeadersAndSpanInCtx 验证中间件写入标准响应头并在 ctx 保存 span
-func TestMiddleware_WritesStandardHeadersAndSpanInCtx(t *testing.T) {
+func TestMiddleware_ContinuesTraceparent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(Middleware())
-	var gotSC SpanContext
+	var got SpanContext
 	r.GET("/ping", func(c *gin.Context) {
-		gotSC = SpanFromContext(c.Request.Context())
-		c.String(200, "ok")
+		got = SpanFromContext(c.Request.Context())
+		c.String(http.StatusOK, "ok")
 	})
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	req.Header.Set(shared.TraceParentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	req.Header.Set(shared.Traceparent, sampleTP)
+	req.Header.Set(shared.Tracestate, "vendor=opaque")
+	req.Header.Set("X-Trace-ID", "order-42")
 	r.ServeHTTP(w, req)
 
-	if gotSC.TraceID != "4bf92f3577b34da6a3ce929d0e0e4736" {
-		t.Fatalf("ctx trace=%q", gotSC.TraceID)
+	if got.TraceID != "4bf92f3577b34da6a3ce929d0e0e4736" {
+		t.Fatalf("trace=%q", got.TraceID)
 	}
-	if len(gotSC.SpanID) != 16 {
-		t.Fatalf("ctx span=%q", gotSC.SpanID)
+	if got.ParentSpanID != "00f067aa0ba902b7" {
+		t.Fatalf("parent=%q", got.ParentSpanID)
 	}
-	if gotSC.ParentSpanID != "00f067aa0ba902b7" {
-		t.Fatalf("parent span=%q", gotSC.ParentSpanID)
+	if got.SpanID == got.ParentSpanID || len(got.SpanID) != 16 {
+		t.Fatalf("本跳 span=%q", got.SpanID)
 	}
-	if got := w.Header().Get(shared.TraceIDHeader); got != gotSC.TraceID {
-		t.Fatalf("X-Trace-ID=%q want %q", got, gotSC.TraceID)
+	if got.Flags != "01" || got.Tracestate != "vendor=opaque" {
+		t.Fatalf("flags=%q tracestate=%q", got.Flags, got.Tracestate)
 	}
-	if got := w.Header().Get(shared.RequestIDHeader); got != gotSC.TraceID {
-		t.Fatalf("X-Request-ID=%q", got)
+	want := got.Traceparent()
+	if got := w.Header().Get(shared.Traceparent); got != want {
+		t.Fatalf("响应 traceparent=%q，期望 %q", got, want)
 	}
-	tp := w.Header().Get(shared.TraceParentHeader)
-	wantTP := formatTraceparent(gotSC.TraceID, gotSC.SpanID)
-	if tp != wantTP {
-		t.Fatalf("traceparent=%q want %q (must reuse ctx span)", tp, wantTP)
+	if got := w.Header().Get(shared.Tracestate); got != "vendor=opaque" {
+		t.Fatalf("响应 tracestate=%q", got)
+	}
+	if w.Header().Get("X-Trace-ID") != "" || w.Header().Get("X-Request-ID") != "" {
+		t.Fatalf("不应再写自定义追踪头: %v", w.Header())
+	}
+	if strings.Contains(want, "order-42") {
+		t.Fatalf("非标准头不应进入 traceparent: %s", want)
 	}
 }
 
-// TestSetTraceID_OutboundHeadersReuseCtxSpan 验证出站请求头复用 ctx 中的 span_id
-func TestSetTraceID_OutboundHeadersReuseCtxSpan(t *testing.T) {
-	ctx := ContextWithSpanContext(context.TODO(), SpanContext{
-		TraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
-		SpanID:  "aabbccddeeff0011",
+func TestMiddleware_InvalidTraceparentStartsNew(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Middleware())
+	var got string
+	r.GET("/ping", func(c *gin.Context) {
+		got = FromContext(c.Request.Context())
+		c.Status(http.StatusOK)
 	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set(shared.Traceparent, "00-zzzz-00f067aa0ba902b7-01")
+	req.Header.Set(shared.Tracestate, "vendor=drop")
+	r.ServeHTTP(w, req)
+
+	if got == "" || !strings.HasPrefix(got, "00-") || !strings.HasSuffix(got, "-01") {
+		t.Fatalf("应新开一条 traceparent，实际 %q", got)
+	}
+	if strings.Contains(got, "zzzz") {
+		t.Fatalf("非法头不应被沿用: %s", got)
+	}
+	if w.Header().Get(shared.Tracestate) != "" {
+		t.Fatal("非法 traceparent 时不应转发 tracestate")
+	}
+	if w.Header().Get(shared.Traceparent) != got {
+		t.Fatalf("响应头 %q 与上下文 %q 不一致", w.Header().Get(shared.Traceparent), got)
+	}
+}
+
+func TestSetTraceparent_ReusesContext(t *testing.T) {
+	ctx := ContextWithTraceparent(context.Background(), sampleTP)
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/api", nil)
-	SetTraceID(ctx, req)
-	if req.Header.Get(shared.TraceIDHeader) != "4bf92f3577b34da6a3ce929d0e0e4736" {
-		t.Fatalf("X-Trace-ID=%q", req.Header.Get(shared.TraceIDHeader))
+	SetTraceparent(ctx, req)
+	if got := req.Header.Get(shared.Traceparent); got != sampleTP {
+		t.Fatalf("traceparent=%q", got)
 	}
-	tp := req.Header.Get(shared.TraceParentHeader)
-	if tp != "00-4bf92f3577b34da6a3ce929d0e0e4736-aabbccddeeff0011-01" {
-		t.Fatalf("traceparent=%q", tp)
-	}
-	if req.Header.Get(shared.RequestIDHeader) == "" {
-		t.Fatal("X-Request-ID empty")
+	if req.Header.Get("X-Trace-ID") != "" || req.Header.Get("X-Request-ID") != "" {
+		t.Fatal("出站不应写自定义追踪头")
 	}
 }
 
-// TestContextWithTraceID_AlwaysHasRootSpan 验证 ContextWithTraceID 始终写入 root span_id
-func TestContextWithTraceID_AlwaysHasRootSpan(t *testing.T) {
-	ctx := ContextWithTraceID(context.TODO(), "abc123")
-	sc := SpanFromContext(ctx)
-	if sc.TraceID != "abc123" {
-		t.Fatalf("trace=%q", sc.TraceID)
+func TestSetTraceparent_ForwardsTracestate(t *testing.T) {
+	ctx := ContextWithSpanContext(context.Background(), SpanContext{
+		TraceID:    "4bf92f3577b34da6a3ce929d0e0e4736",
+		SpanID:     "00f067aa0ba902b7",
+		Flags:      "00",
+		Tracestate: "vendor=opaque",
+	})
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	SetTraceparent(ctx, req)
+	if got := req.Header.Get(shared.Traceparent); got != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00" {
+		t.Fatalf("traceparent=%q", got)
 	}
-	if len(sc.SpanID) != 16 {
-		t.Fatalf("span=%q", sc.SpanID)
+	if got := req.Header.Get(shared.Tracestate); got != "vendor=opaque" {
+		t.Fatalf("tracestate=%q", got)
 	}
 }
 
-// TestParseTraceparent_Invalid 验证非法 traceparent 解析返回空
-func TestParseTraceparent_Invalid(t *testing.T) {
-	if tid, _ := parseTraceparent(""); tid != "" {
-		t.Fatal("empty")
+func TestContextWithTraceparent_RejectsInvalid(t *testing.T) {
+	ctx := ContextWithTraceparent(context.Background(), "order-42")
+	if FromContext(ctx) != "" {
+		t.Fatalf("非法头不应写入上下文: %q", FromContext(ctx))
 	}
-	if tid, _ := parseTraceparent("00-00000000000000000000000000000000-00f067aa0ba902b7-01"); tid != "" {
-		t.Fatal("all-zero trace")
+	if _, ok := parseTraceparent("00-00000000000000000000000000000000-00f067aa0ba902b7-01"); ok {
+		t.Fatal("全 0 追踪号应拒绝")
+	}
+}
+
+func TestParseTraceparent_Version00KeepsExtraFields(t *testing.T) {
+	raw := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra"
+	parsed, ok := parseTraceparent(raw)
+	if !ok {
+		t.Fatal("版本 00 尾部多出来的字段应忽略")
+	}
+	if parsed.traceID != "4bf92f3577b34da6a3ce929d0e0e4736" || parsed.spanID != "00f067aa0ba902b7" || parsed.flags != "01" {
+		t.Fatalf("parsed = %+v", parsed)
+	}
+	if _, ok := parseTraceparent("01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"); ok {
+		t.Fatal("非 00 版本应拒绝")
+	}
+}
+
+func TestFromContext_EmptyWithoutSpan(t *testing.T) {
+	if got := FromContext(context.Background()); got != "" {
+		t.Fatalf("没有链路时应为空，实际 %q", got)
 	}
 }

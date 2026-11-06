@@ -126,7 +126,7 @@ func (m *HttpRecordMiddleware) buildRecord(
 	record := &HttpRecord{
 		ServiceType:           m.serviceType(),
 		ServiceVersion:        m.serviceVersion(),
-		TraceID:               traceid.FromContext(c.Request.Context()),
+		TraceParent:           traceid.FromContext(c.Request.Context()),
 		RequestAt:             requestAt,
 		Duration:              duration,
 		Method:                r.Method,

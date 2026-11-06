@@ -7,7 +7,7 @@ import "time"
 
 // wireRecord 是 Kafka 消息序列化结构
 type wireRecord struct {
-	TraceID               string            `json:"traceId"`
+	TraceParent           string            `json:"traceparent"`
 	ServiceType           string            `json:"serviceType"`
 	ServiceVersion        string            `json:"serviceVersion"`
 	RequestAt             int64             `json:"requestAt"`
@@ -36,7 +36,7 @@ func toWireRecord(record *HttpRecord) wireRecord {
 		return wireRecord{}
 	}
 	return wireRecord{
-		TraceID:               record.TraceID,
+		TraceParent:           record.TraceParent,
 		ServiceType:           record.ServiceType,
 		ServiceVersion:        record.ServiceVersion,
 		RequestAt:             record.RequestAt.UnixMilli(),
@@ -62,11 +62,11 @@ func toWireRecord(record *HttpRecord) wireRecord {
 
 // fromWireRecord 将 Kafka 消息结构转换为访问记录
 func fromWireRecord(wire wireRecord) *HttpRecord {
-	if wire.Method == "" && wire.Path == "" && wire.TraceID == "" {
+	if wire.Method == "" && wire.Path == "" && wire.TraceParent == "" {
 		return nil
 	}
 	return &HttpRecord{
-		TraceID:               wire.TraceID,
+		TraceParent:           wire.TraceParent,
 		ServiceType:           wire.ServiceType,
 		ServiceVersion:        wire.ServiceVersion,
 		RequestAt:             time.UnixMilli(wire.RequestAt),

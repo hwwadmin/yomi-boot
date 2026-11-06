@@ -100,7 +100,7 @@ func authenticatedRequest(method, target, body string) *http.Request {
 	}
 	req := httptest.NewRequest(method, target, reader)
 	ctx := token.WithSession(req.Context(), &token.TokenSession{UserID: 7, ClientType: "admin"})
-	ctx = traceid.ContextWithSpanContext(ctx, traceid.SpanContext{TraceID: "trace-1"})
+	ctx = traceid.ContextWithTraceparent(ctx, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 	return req.WithContext(ctx)
 }
 
@@ -135,8 +135,8 @@ func TestMiddlewareCapturesFullRecord(t *testing.T) {
 	if record.ServiceType != "test-app" || record.ServiceVersion != "v1" {
 		t.Fatalf("服务信息不符: %+v", record)
 	}
-	if record.TraceID != "trace-1" {
-		t.Fatalf("链路 ID 不符: %q", record.TraceID)
+	if record.TraceParent != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" {
+		t.Fatalf("链路 ID 不符: %q", record.TraceParent)
 	}
 	if record.Method != http.MethodPost || record.Path != "/api/v1/login/42" || record.Route != "/api/v1/login/:id" {
 		t.Fatalf("请求行不符: %+v", record)

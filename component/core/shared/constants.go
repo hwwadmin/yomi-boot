@@ -13,22 +13,10 @@ const (
 	MaxPageSize = 100
 )
 
-// 链路追踪常量
+// 链路追踪常量。对外只有 W3C traceparent，日志字段与头使用同一个名字。
 const (
-	// TraceID 日志字段名（ELK / 规范 snake_case）
-	TraceID = "trace_id"
-	// SpanID 日志字段名：当前 span（与 trace_id 成对、语义独立）
-	SpanID = "span_id"
-	// ParentSpanID 日志字段名：父 span（可选）
-	ParentSpanID = "parent_span_id"
-	// TraceParentHeader W3C traceparent
-	TraceParentHeader = "traceparent"
-	// TraceIDHeader 跨服务透传主 Header
-	TraceIDHeader = "X-Trace-ID"
-	// RequestIDHeader 请求 ID Header
-	RequestIDHeader = "X-Request-ID"
-	// MissingTraceID 上下文中不存在链路 ID 时的占位值
-	MissingTraceID = "-1"
-	// MissingSpanID 上下文中不存在 span ID 时的占位值
-	MissingSpanID = "-1"
+	// Traceparent 是日志字段名，也是 HTTP 头名
+	Traceparent = "traceparent"
+	// Tracestate 是 W3C tracestate 头；只原样转发，不解析
+	Tracestate = "tracestate"
 )

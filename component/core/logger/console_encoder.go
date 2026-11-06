@@ -41,14 +41,14 @@ func fieldsOnlyJSONEncoderConfig(cfg zapcore.EncoderConfig) zapcore.EncoderConfi
 	return fieldCfg
 }
 
-// EncodeEntry 将日志条目编码为控制台格式的 buffer（含时间、级别、traceID、调用者）
+// EncodeEntry 将日志条目编码为控制台格式的 buffer（含时间、级别、traceparent、调用者）
 func (e *tracingConsoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
-	traceID, otherFields := splitMetaFields(fields)
+	traceparent, otherFields := splitMetaFields(fields)
 
 	line := consoleLinePool.Get()
 	appendBracketField(line, encodeTimeString(ent.Time))
 	appendBracketField(line, encodeLevelString(e.cfg, ent.Level))
-	appendBracketField(line, colorBrightGreen+traceID+colorReset)
+	appendBracketField(line, colorBrightGreen+traceparent+colorReset)
 	appendBracketField(line, encodeCallerString(ent.Caller))
 	line.AppendString(ent.Message)
 
@@ -295,27 +295,17 @@ func (e *tracingConsoleEncoder) OpenNamespace(key string) {
 	e.fieldEncoder.OpenNamespace(key)
 }
 
-// splitMetaFields 从字段列表中提取 traceID，其余字段作为业务字段返回
-// span_id / parent_span_id 视为系统元数据，不进入控制台 JSON 段（控制台仍以 trace 展示为主）
-func splitMetaFields(fields []zapcore.Field) (traceID string, rest []zapcore.Field) {
-	traceID = shared.MissingTraceID
+// splitMetaFields 取出 traceparent 供控制台展示，其余字段留给业务 JSON 段。没有链路时这一格为空。
+func splitMetaFields(fields []zapcore.Field) (traceparent string, rest []zapcore.Field) {
 	rest = make([]zapcore.Field, 0, len(fields))
-
 	for _, field := range fields {
-		switch field.Key {
-		case shared.TraceID:
-			if field.Type == zapcore.StringType && strings.TrimSpace(field.String) != "" {
-				traceID = field.String
+		if field.Key == shared.Traceparent {
+			if field.Type == zapcore.StringType {
+				traceparent = strings.TrimSpace(field.String)
 			}
-			continue
-		case shared.SpanID, shared.ParentSpanID:
 			continue
 		}
 		rest = append(rest, field)
 	}
-
-	if strings.TrimSpace(traceID) == "" {
-		traceID = shared.MissingTraceID
-	}
-	return traceID, rest
+	return traceparent, rest
 }

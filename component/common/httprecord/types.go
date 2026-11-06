@@ -13,7 +13,7 @@ import (
 type HttpRecord struct {
 	ServiceType    string        // ServiceType 是来源服务类型，如 admin-bff、user-service
 	ServiceVersion string        // ServiceVersion 是来源服务版本号，如 v1
-	TraceID        string        // TraceID 是请求链路追踪标识
+	TraceParent    string        // TraceParent 是本跳 W3C traceparent
 	RequestAt      time.Time     // RequestAt 是请求到达时间
 	Duration       time.Duration // Duration 是请求处理耗时
 

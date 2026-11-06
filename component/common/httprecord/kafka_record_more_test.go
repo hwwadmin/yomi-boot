@@ -94,12 +94,12 @@ func TestNewKafkaHttpRecordServicePanics(t *testing.T) {
 
 // TestKafkaHttpRecordServiceHandle 验证发布内容组装与异常容忍
 func TestKafkaHttpRecordServiceHandle(t *testing.T) {
-	t.Run("正常发布且 TraceID 作为消息键", func(t *testing.T) {
+	t.Run("正常发布且 TraceParent 作为消息键", func(t *testing.T) {
 		pub := &recordingKafkaPublisher{}
 		svc := NewKafkaHttpRecordService(pub, "http.record")
 
 		svc.Handle(context.Background(), &HttpRecord{
-			TraceID: "tr-1", Method: "GET", Path: "/ping", StatusCode: 200, RequestHeaders: map[string]string{"k": "v"},
+			TraceParent: "tr-1", Method: "GET", Path: "/ping", StatusCode: 200, RequestHeaders: map[string]string{"k": "v"},
 		})
 
 		reqs := pub.snapshot()
@@ -113,7 +113,7 @@ func TestKafkaHttpRecordServiceHandle(t *testing.T) {
 		if err := json.Unmarshal(reqs[0].Value, &wire); err != nil {
 			t.Fatalf("消息体应为合法 wire JSON: %v", err)
 		}
-		if wire.TraceID != "tr-1" || wire.Path != "/ping" || wire.StatusCode != 200 || wire.RequestHeaders["k"] != "v" {
+		if wire.TraceParent != "tr-1" || wire.Path != "/ping" || wire.StatusCode != 200 || wire.RequestHeaders["k"] != "v" {
 			t.Fatalf("wire 字段不符: %+v", wire)
 		}
 	})
@@ -130,7 +130,7 @@ func TestKafkaHttpRecordServiceHandle(t *testing.T) {
 	t.Run("发布失败仅告警", func(t *testing.T) {
 		pub := &recordingKafkaPublisher{err: context.Canceled}
 		svc := NewKafkaHttpRecordService(pub, "http.record")
-		svc.Handle(context.Background(), &HttpRecord{TraceID: "tr-2", Method: "GET", Path: "/x"})
+		svc.Handle(context.Background(), &HttpRecord{TraceParent: "tr-2", Method: "GET", Path: "/x"})
 		if got := len(pub.snapshot()); got != 1 {
 			t.Fatalf("失败也应尝试发布，实际 %d 次", got)
 		}
@@ -139,7 +139,7 @@ func TestKafkaHttpRecordServiceHandle(t *testing.T) {
 	t.Run("发布 panic 被捕获", func(t *testing.T) {
 		pub := &recordingKafkaPublisher{panicOn: true}
 		svc := NewKafkaHttpRecordService(pub, "http.record")
-		svc.Handle(context.Background(), &HttpRecord{TraceID: "tr-3", Method: "GET", Path: "/x"})
+		svc.Handle(context.Background(), &HttpRecord{TraceParent: "tr-3", Method: "GET", Path: "/x"})
 	})
 }
 
@@ -235,12 +235,12 @@ func TestKafkaRecordE2E(t *testing.T) {
 		})
 
 	svc.Handle(context.Background(), &HttpRecord{
-		TraceID: "e2e-1", Method: "POST", Path: "/api/x", StatusCode: 200, UserID: 3, ClientType: "app",
+		TraceParent: "e2e-1", Method: "POST", Path: "/api/x", StatusCode: 200, UserID: 3, ClientType: "app",
 	})
 
 	select {
 	case record := <-collected:
-		if record.TraceID != "e2e-1" || record.Path != "/api/x" || record.Method != "POST" {
+		if record.TraceParent != "e2e-1" || record.Path != "/api/x" || record.Method != "POST" {
 			t.Fatalf("消费记录不符: %+v", record)
 		}
 		if record.UserID != 3 || record.ClientType != "app" || record.StatusCode != 200 {
@@ -256,11 +256,11 @@ func TestKafkaRecordE2E(t *testing.T) {
 	if err := broker.Publish(ctx, "httprecord.e2e", kafkago.Message{Value: []byte("not-json")}); err != nil {
 		t.Fatalf("写入非法消息失败: %v", err)
 	}
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "e2e-2", Method: "GET", Path: "/api/y"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "e2e-2", Method: "GET", Path: "/api/y"})
 
 	select {
 	case record := <-collected:
-		if record.TraceID != "e2e-2" {
+		if record.TraceParent != "e2e-2" {
 			t.Fatalf("非法消息后应继续消费有效记录，实际 %+v", record)
 		}
 	case <-time.After(15 * time.Second):
@@ -322,7 +322,7 @@ func TestKafkaRecordHandleBudget(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	start := time.Now()
-	svc.Handle(ctx, &HttpRecord{TraceID: "budget", Method: "GET", Path: "/x"})
+	svc.Handle(ctx, &HttpRecord{TraceParent: "budget", Method: "GET", Path: "/x"})
 	elapsed := time.Since(start)
 
 	if elapsed < recordPublishBudget/2 {

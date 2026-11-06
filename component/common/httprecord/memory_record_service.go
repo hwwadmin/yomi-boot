@@ -53,7 +53,7 @@ func (s *MemoryHttpRecordService) Handle(ctx context.Context, record *HttpRecord
 	select {
 	case <-s.ctx.Done():
 		logger.Warn(ctx, "HTTP 访问记录内存队列已关闭，已丢弃",
-			"traceId", record.TraceID,
+			"traceparent", record.TraceParent,
 			"path", record.Path,
 			"method", record.Method,
 		)
@@ -65,7 +65,7 @@ func (s *MemoryHttpRecordService) Handle(ctx context.Context, record *HttpRecord
 	case s.queue <- record:
 	default:
 		logger.Warn(ctx, "HTTP 访问记录内存队列已满，已丢弃",
-			"traceId", record.TraceID,
+			"traceparent", record.TraceParent,
 			"path", record.Path,
 			"method", record.Method,
 			"queueCap", cap(s.queue),

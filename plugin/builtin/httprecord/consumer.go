@@ -51,7 +51,7 @@ func (p *HttpRecord) OnReady(context.Context) error {
 	if handler == nil {
 		return errors.New("http_record: 已启用消费但未注册 RecordHandler，请在 wire 中调用 httprecordplugin.From(slot).MustRegisterHandler")
 	}
-	handler = withTraceID(handler)
+	handler = withTraceparent(handler)
 
 	var err error
 	switch p.provider {
@@ -94,11 +94,11 @@ func (p *HttpRecord) registeredHandler() httprecord.RecordHandler {
 	return p.handler
 }
 
-// withTraceID 把记录中的 TraceID 注入消费上下文，便于业务日志串联链路
-func withTraceID(handler httprecord.RecordHandler) httprecord.RecordHandler {
+// withTraceparent 把记录中的 TraceParent 注入消费上下文，便于业务日志串联链路
+func withTraceparent(handler httprecord.RecordHandler) httprecord.RecordHandler {
 	return func(ctx context.Context, record *httprecord.HttpRecord) httprecord.RecordHandleResult {
-		if record != nil && record.TraceID != "" {
-			ctx = traceid.ContextWithTraceID(ctx, record.TraceID)
+		if record != nil && record.TraceParent != "" {
+			ctx = traceid.ContextWithTraceparent(ctx, record.TraceParent)
 		}
 		return handler(ctx, record)
 	}

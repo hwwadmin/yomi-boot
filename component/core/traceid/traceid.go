@@ -9,81 +9,141 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/core/shared"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
-// Middleware 返回请求链路追踪中间件。
-// 解析优先级：traceparent → X-Trace-ID → 本地生成。
-// 入口建立 root span_id（写入 ctx），响应 Header 复用该 span，与日志一致。
+const (
+	traceparentVersion = "00"
+	traceFlagsRecorded = "01"
+)
+
+// Middleware 为每个请求建立本跳 span，并把 traceparent 写进响应头。
+// 入站头合法时沿用追踪号和 flags，另建本跳 span；否则新开一条链路。
 func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		traceID, parentSpanID := "", ""
+		rawTP, rawTS := "", ""
 		if c.Request != nil {
-			if tid, ps := parseTraceparent(c.Request.Header.Get(shared.TraceParentHeader)); tid != "" {
-				traceID, parentSpanID = tid, ps
-			} else if id := strings.TrimSpace(c.Request.Header.Get(shared.TraceIDHeader)); id != "" {
-				traceID = id
-			}
+			rawTP = c.Request.Header.Get(shared.Traceparent)
+			rawTS = c.Request.Header.Get(shared.Tracestate)
 		}
-		if traceID == "" {
-			traceID = newTraceID()
+		sc := continueOrNew(rawTP, rawTS)
+		if c.Request != nil {
+			c.Request = c.Request.WithContext(ContextWithSpanContext(c.Request.Context(), sc))
 		}
-		sc := SpanContext{
-			TraceID:      traceID,
-			SpanID:       newSpanID(),
-			ParentSpanID: parentSpanID,
-		}
-		c.Request = c.Request.WithContext(ContextWithSpanContext(c.Request.Context(), sc))
-		writeTraceHeadersTo(c.Writer.Header(), sc.TraceID, sc.SpanID)
+		writeTraceparent(c.Writer.Header(), sc)
 		c.Next()
 	}
 }
 
-// writeTraceHeadersTo 向 Header 写入 traceparent / X-Trace-ID / X-Request-ID
-func writeTraceHeadersTo(h http.Header, traceID, spanID string) {
-	if h == nil || strings.TrimSpace(traceID) == "" {
+// continueOrNew 接受一条入站 traceparent，或新开一条根链路。
+func continueOrNew(rawTP, rawTS string) SpanContext {
+	parsed, ok := parseTraceparent(rawTP)
+	if !ok {
+		return newRootSpan()
+	}
+	sc := SpanContext{
+		TraceID:      parsed.traceID,
+		SpanID:       newSpanID(),
+		ParentSpanID: parsed.spanID,
+		Flags:        parsed.flags,
+	}
+	if ts := strings.TrimSpace(rawTS); ts != "" {
+		sc.Tracestate = ts
+	}
+	return sc
+}
+
+// newRootSpan 生成一条新的已采样链路。
+func newRootSpan() SpanContext {
+	return SpanContext{
+		TraceID: newTraceID(),
+		SpanID:  newSpanID(),
+		Flags:   traceFlagsRecorded,
+	}
+}
+
+// writeTraceparent 写入 traceparent；有 tracestate 时原样带上。
+func writeTraceparent(h http.Header, sc SpanContext) {
+	if h == nil {
 		return
 	}
-	h.Set(shared.TraceIDHeader, traceID)
-	h.Set(shared.RequestIDHeader, traceID)
-	if spanID == "" {
-		spanID = newSpanID()
+	tp := sc.Traceparent()
+	if tp == "" {
+		return
 	}
-	h.Set(shared.TraceParentHeader, formatTraceparent(traceID, spanID))
-}
-
-// formatTraceparent 生成 W3C traceparent：00-{trace}-{span}-01
-func formatTraceparent(traceID, spanID string) string {
-	return "00-" + normalizeTraceID(traceID) + "-" + normalizeSpanID(spanID) + "-01"
-}
-
-// normalizeTraceID 规范为 32 位小写 hex；非标准形态则用 SHA1-UUID 派生
-func normalizeTraceID(id string) string {
-	id = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(id)), "-", "")
-	if len(id) == 32 && isHex(id) {
-		return id
+	h.Set(shared.Traceparent, tp)
+	if ts := strings.TrimSpace(sc.Tracestate); ts != "" {
+		h.Set(shared.Tracestate, ts)
 	}
-	u := uuid.NewSHA1(uuid.NameSpaceOID, []byte(id))
-	return strings.ReplaceAll(u.String(), "-", "")
 }
 
-// normalizeSpanID 规范为 16 位小写 hex；非法则重新生成
-func normalizeSpanID(id string) string {
-	id = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(id)), "-", "")
-	if len(id) >= 16 && isHex(id[:16]) {
-		return id[:16]
+type parsedHeader struct {
+	traceID string
+	spanID  string
+	flags   string
+}
+
+// parseTraceparent 解析 W3C traceparent。只接受版本 00，且追踪号、span、flags 都合法。
+func parseTraceparent(raw string) (parsedHeader, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return parsedHeader{}, false
 	}
-	return newSpanID()
+	parts := strings.Split(raw, "-")
+	if len(parts) < 4 || parts[0] != traceparentVersion {
+		return parsedHeader{}, false
+	}
+	traceID := strings.ToLower(parts[1])
+	spanID := strings.ToLower(parts[2])
+	flags := strings.ToLower(parts[3])
+	if !validTraceID(traceID) || !validSpanID(spanID) || !validFlags(flags) {
+		return parsedHeader{}, false
+	}
+	return parsedHeader{traceID: traceID, spanID: spanID, flags: flags}, true
 }
 
-// newSpanID 生成 16 hex 的 span id
+func validTraceID(id string) bool {
+	return len(id) == 32 && isHex(id) && id != "00000000000000000000000000000000"
+}
+
+func validSpanID(id string) bool {
+	return len(id) == 16 && isHex(id) && id != "0000000000000000"
+}
+
+func validFlags(flags string) bool {
+	return len(flags) == 2 && isHex(flags)
+}
+
+func newTraceID() string {
+	var b [16]byte
+	return randomHex(b[:])
+}
+
 func newSpanID() string {
 	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	return randomHex(b[:])
 }
 
-// isHex 判断字符串是否全为十六进制字符
+func randomHex(b []byte) string {
+	for {
+		if _, err := rand.Read(b); err != nil {
+			return ""
+		}
+		id := hex.EncodeToString(b)
+		if !allZero(b) {
+			return id
+		}
+	}
+}
+
+func allZero(b []byte) bool {
+	for _, c := range b {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func isHex(s string) bool {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
@@ -91,5 +151,5 @@ func isHex(s string) bool {
 			return false
 		}
 	}
-	return true
+	return s != ""
 }

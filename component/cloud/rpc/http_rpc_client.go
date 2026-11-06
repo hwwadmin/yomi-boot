@@ -306,7 +306,7 @@ func (c *HttpRpcClient) doRequest(ctx context.Context, url string, payload []byt
 		return nil, &requestError{err: errors.Wrap(err, "创建请求失败")}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	traceid.SetTraceID(ctx, req)
+	traceid.SetTraceparent(ctx, req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

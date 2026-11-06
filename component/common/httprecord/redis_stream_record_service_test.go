@@ -26,9 +26,9 @@ func TestRedisStreamHttpRecordService_Handle(t *testing.T) {
 	const stream = "httprecord.test"
 	svc := NewRedisStreamHttpRecordService(components.Publisher, stream)
 	svc.Handle(context.Background(), &HttpRecord{
-		TraceID: "t-1",
-		Method:  "GET",
-		Path:    "/ping",
+		TraceParent: "t-1",
+		Method:      "GET",
+		Path:        "/ping",
 	})
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -53,7 +53,7 @@ func TestRedisStreamHttpRecordService_Handle(t *testing.T) {
 	if err := json.Unmarshal(payload, &wire); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if wire.TraceID != "t-1" || wire.Path != "/ping" {
+	if wire.TraceParent != "t-1" || wire.Path != "/ping" {
 		t.Fatalf("wire = %+v, want traceId=t-1 path=/ping", wire)
 	}
 }
@@ -81,7 +81,7 @@ func TestStartRedisStreamRecordConsumer(t *testing.T) {
 		Group:    "httprecord-test",
 		Consumer: "c1",
 	}, func(_ context.Context, record *HttpRecord) RecordHandleResult {
-		got <- record.TraceID
+		got <- record.TraceParent
 		return HandleOK()
 	})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestStartRedisStreamRecordConsumer(t *testing.T) {
 	}
 
 	svc := NewRedisStreamHttpRecordService(components.Publisher, stream)
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "consume-1", Method: "POST", Path: "/api"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "consume-1", Method: "POST", Path: "/api"})
 
 	select {
 	case traceID := <-got:
@@ -162,7 +162,7 @@ func TestRedisStreamRecordHandleBudget(t *testing.T) {
 	svc := NewRedisStreamHttpRecordService(blockingStreamPublisher{}, "s")
 
 	start := time.Now()
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "budget", Method: "GET", Path: "/x"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "budget", Method: "GET", Path: "/x"})
 	elapsed := time.Since(start)
 
 	if elapsed < recordPublishBudget/2 {

@@ -106,7 +106,7 @@ func invokeMemoryRecordHandler(
 			logger.Warn(ctx, "HTTP 访问记录内存消费 panic",
 				"panic", r,
 				"worker", workerIndex,
-				"traceId", record.TraceID,
+				"traceparent", record.TraceParent,
 				"path", record.Path,
 			)
 		}
@@ -116,7 +116,7 @@ func invokeMemoryRecordHandler(
 	if result.Status == RecordHandleRetry {
 		logger.Warn(ctx, "HTTP 访问记录内存消费返回 Retry，已丢弃",
 			"worker", workerIndex,
-			"traceId", record.TraceID,
+			"traceparent", record.TraceParent,
 			"path", record.Path,
 			"method", record.Method,
 		)

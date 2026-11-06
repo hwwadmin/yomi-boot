@@ -91,7 +91,7 @@ func TestReadRequestBodyForRecord_Guards(t *testing.T) {
 
 // TestWireRecordNilCases 验证 wire 转换的空值边界
 func TestWireRecordNilCases(t *testing.T) {
-	if wire := toWireRecord(nil); wire.TraceID != "" || wire.Path != "" || wire.Method != "" {
+	if wire := toWireRecord(nil); wire.TraceParent != "" || wire.Path != "" || wire.Method != "" {
 		t.Fatalf("nil 记录应转出零值 wire，实际 %+v", wire)
 	}
 	if got := fromWireRecord(wireRecord{}); got != nil {
@@ -114,7 +114,7 @@ func TestMemoryServiceBoundaries(t *testing.T) {
 		svc := NewMemoryHttpRecordService(4)
 		svc.Handle(context.Background(), nil)
 		svc.Close()
-		svc.Handle(context.Background(), &HttpRecord{TraceID: "closed"})
+		svc.Handle(context.Background(), &HttpRecord{TraceParent: "closed"})
 	})
 }
 
@@ -199,18 +199,18 @@ func TestStartRedisStreamRecordConsumerDropsInvalid(t *testing.T) {
 	if err := client.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: map[string]any{redisstream.PayloadField: "not-json"}}).Err(); err != nil {
 		t.Fatalf("写入非法消息失败: %v", err)
 	}
-	// 空对象 wire（Method/Path/TraceID 均空）应视为无效
+	// 空对象 wire（Method/Path/TraceParent 均空）应视为无效
 	if err := client.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: map[string]any{redisstream.PayloadField: "{}"}}).Err(); err != nil {
 		t.Fatalf("写入空 wire 消息失败: %v", err)
 	}
 
 	// 合法记录仍可正常消费
 	svc := NewRedisStreamHttpRecordService(components.Publisher, stream)
-	svc.Handle(ctx, &HttpRecord{TraceID: "valid-1", Method: "GET", Path: "/ok"})
+	svc.Handle(ctx, &HttpRecord{TraceParent: "valid-1", Method: "GET", Path: "/ok"})
 
 	select {
 	case record := <-collected:
-		if record.TraceID != "valid-1" {
+		if record.TraceParent != "valid-1" {
 			t.Fatalf("非法消息后应继续消费有效记录，实际 %+v", record)
 		}
 	case <-time.After(5 * time.Second):
@@ -231,7 +231,7 @@ func TestMemoryConsumerRetryResultLogged(t *testing.T) {
 	if err := StartMemoryRecordConsumer(context.Background(), svc, MemoryRecordConsumerConfig{Workers: 1}, retryMemoryHandler()); err != nil {
 		t.Fatalf("启动消费者失败: %v", err)
 	}
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "retry-1", Method: "GET", Path: "/retry"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "retry-1", Method: "GET", Path: "/retry"})
 	// Retry 分支只打日志并丢弃，无暴露行为可断言；等待确保消费循环执行完毕不 panic
 	time.Sleep(200 * time.Millisecond)
 }
@@ -249,11 +249,11 @@ func TestMemoryConsumerPanicRecovered(t *testing.T) {
 	if err := StartMemoryRecordConsumer(context.Background(), svc, MemoryRecordConsumerConfig{Workers: 1}, panicMemoryHandler()); err != nil {
 		t.Fatalf("启动消费者失败: %v", err)
 	}
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "panic-1", Method: "GET", Path: "/panic"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "panic-1", Method: "GET", Path: "/panic"})
 	time.Sleep(200 * time.Millisecond)
 
 	// panic 后消费循环仍应存活：后续消息仍会被处理（返回 Retry 也仅告警）
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "after-panic", Method: "GET", Path: "/after"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "after-panic", Method: "GET", Path: "/after"})
 	time.Sleep(200 * time.Millisecond)
 }
 
@@ -269,7 +269,7 @@ func TestRedisStreamServiceHandlePublishError(t *testing.T) {
 
 	svc := NewRedisStreamHttpRecordService(failingStreamPublisher{}, "httprecord.pub-err")
 	// 发布失败应仅告警
-	svc.Handle(context.Background(), &HttpRecord{TraceID: "err-1", Method: "GET", Path: "/x"})
+	svc.Handle(context.Background(), &HttpRecord{TraceParent: "err-1", Method: "GET", Path: "/x"})
 }
 
 // failingStreamPublisher 始终发布失败的 Redis Stream 发布器桩
