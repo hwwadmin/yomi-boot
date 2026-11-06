@@ -180,6 +180,59 @@ func TestFileSplit_ELKFieldsAndStaticFields(t *testing.T) {
 	assertFileNotContains(t, infoPath, "empty_skip")
 }
 
+// TestTraceparentField_ContextWinsOrCallerKept 验证没有链路时保留调用方的 traceparent，有链路时用上下文的那串
+func TestTraceparentField_ContextWinsOrCallerKept(t *testing.T) {
+	dir := t.TempDir()
+	closeFn, err := InitLogger("test-svc", "test", Config{
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
+	}, nil)
+	if err != nil {
+		t.Fatalf("InitLogger: %v", err)
+	}
+	defer func() { _ = closeFn() }()
+
+	callerTP := "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"
+	contextTP := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	Info(context.Background(), "from caller", traceid.Traceparent, callerTP)
+	ctx := traceid.ContextWithTraceparent(context.Background(), contextTP)
+	Info(ctx, "from context", traceid.Traceparent, callerTP)
+	Info(context.Background(), "blank skipped", traceid.Traceparent, "  ")
+	_ = Sync()
+
+	infoPath := filepath.Join(dir, "info", "info.log")
+	lines := readLines(t, infoPath)
+	if len(lines) < 3 {
+		t.Fatalf("日志行数 = %d，内容 %v", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], `"traceparent":"`+callerTP+`"`) || !strings.Contains(lines[0], "from caller") {
+		t.Fatalf("没有链路时应留下调用方的 traceparent: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], `"traceparent":"`+contextTP+`"`) || strings.Contains(lines[1], callerTP) {
+		t.Fatalf("有链路时应只用上下文的 traceparent: %s", lines[1])
+	}
+	if strings.Contains(lines[2], `"traceparent"`) {
+		t.Fatalf("空白 traceparent 不应写入: %s", lines[2])
+	}
+}
+
+// readLines 读出日志文件的非空行
+func readLines(t *testing.T, path string) []string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var lines []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
 // TestMiddleware_InboundOutboundPair 验证 access 中间件成对写入入站/出站日志
 func TestMiddleware_InboundOutboundPair(t *testing.T) {
 	gin.SetMode(gin.TestMode)

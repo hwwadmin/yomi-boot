@@ -11,6 +11,7 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/cloud/consul"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"github.com/dtm-labs/client/dtmcli"
 )
@@ -111,6 +112,52 @@ func TestNewSagaSetsTransRequestTimeout(t *testing.T) {
 	}
 	if saga.RequestTimeout != 7 {
 		t.Fatalf("RequestTimeout 期望 7，实际 %d", saga.RequestTimeout)
+	}
+}
+
+// TestNewSagaBranchHeadersCarryTracestate 验证分支头同时带上 traceparent 和 tracestate
+func TestNewSagaBranchHeadersCarryTracestate(t *testing.T) {
+	srv := newJSONGidServer(t, http.StatusOK, `{"gid":"g-1"}`)
+	defer srv.Close()
+
+	const tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	ctx := traceid.ContextWithSpanContext(context.Background(), traceid.SpanContext{
+		TraceID:    "4bf92f3577b34da6a3ce929d0e0e4736",
+		SpanID:     "00f067aa0ba902b7",
+		Flags:      "01",
+		Tracestate: "vendor=opaque",
+	})
+	saga, err := NewClient(nil, srv.URL).NewSaga(ctx)
+	if err != nil {
+		t.Fatalf("创建 Saga 失败: %v", err)
+	}
+	if got := saga.BranchHeaders[traceid.Traceparent]; got != tp {
+		t.Fatalf("traceparent = %q", got)
+	}
+	if got := saga.BranchHeaders[traceid.Tracestate]; got != "vendor=opaque" {
+		t.Fatalf("tracestate = %q", got)
+	}
+
+	onlyTP, err := NewClient(nil, srv.URL).NewSaga(traceid.ContextWithTraceparent(context.Background(), tp))
+	if err != nil {
+		t.Fatalf("只有 traceparent 时创建 Saga 失败: %v", err)
+	}
+	if got := onlyTP.BranchHeaders[traceid.Traceparent]; got != tp {
+		t.Fatalf("traceparent = %q", got)
+	}
+	if _, ok := onlyTP.BranchHeaders[traceid.Tracestate]; ok {
+		t.Fatal("没有 tracestate 时不应写这个头")
+	}
+
+	plain, err := NewClient(nil, srv.URL).NewSaga(context.Background())
+	if err != nil {
+		t.Fatalf("无链路创建 Saga 失败: %v", err)
+	}
+	if _, ok := plain.BranchHeaders[traceid.Traceparent]; ok {
+		t.Fatal("没有链路时不应写 traceparent")
+	}
+	if _, ok := plain.BranchHeaders[traceid.Tracestate]; ok {
+		t.Fatal("没有链路时不应写 tracestate")
 	}
 }
 

@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
@@ -53,14 +54,14 @@ func ErrorWithoutCtx(msg string, keysAndValues ...any) {
 // Access 写入 access 文件日志（不进入 info/error/debug 文件）
 func Access(ctx context.Context, msg string, keysAndValues ...any) {
 	keysAndValues = currentMasking().MaskKV(keysAndValues...)
-	fields := injectTraceFields(ctx, withoutMetaFields(kvToFields(keysAndValues...))...)
+	fields := withTraceparent(ctx, kvToFields(keysAndValues...))
 	accessLogger().Info(msg, fields...)
 }
 
-// write 写入指定级别日志。有链路时注入 traceparent，并按脱敏服务处理业务字段。
+// write 写入指定级别日志。上下文有链路时写入那条 traceparent；没有时保留调用方传入的非空 traceparent。
 func write(ctx context.Context, level zapcore.Level, msg string, keysAndValues ...any) {
 	keysAndValues = currentMasking().MaskKV(keysAndValues...)
-	fields := injectTraceFields(ctx, withoutMetaFields(kvToFields(keysAndValues...))...)
+	fields := withTraceparent(ctx, kvToFields(keysAndValues...))
 
 	switch level {
 	case zapcore.DebugLevel:
@@ -76,17 +77,18 @@ func write(ctx context.Context, level zapcore.Level, msg string, keysAndValues .
 	}
 }
 
-// injectTraceFields 有链路时注入 traceparent。没有链路时不写这个字段。
-func injectTraceFields(ctx context.Context, extra ...zap.Field) []zap.Field {
-	tp := traceid.FromContext(ctx)
-	if tp == "" {
-		return extra
+// withTraceparent 决定日志里的 traceparent。
+// 上下文里已有链路时，用那一串，并丢掉调用方同名字段，避免盖掉它。
+// 上下文里没有时，留下调用方传入的第一个非空字符串。
+func withTraceparent(ctx context.Context, fields []zap.Field) []zap.Field {
+	if tp := traceid.FromContext(ctx); tp != "" {
+		return append([]zap.Field{zap.String(traceid.Traceparent, tp)}, dropTraceparent(fields)...)
 	}
-	return append([]zap.Field{zap.String(traceid.Traceparent, tp)}, extra...)
+	return keepCallerTraceparent(fields)
 }
 
-// withoutMetaFields 丢掉调用方误传的 traceparent，避免盖掉系统写入的值。
-func withoutMetaFields(fields []zap.Field) []zap.Field {
+// dropTraceparent 去掉调用方传入的 traceparent。
+func dropTraceparent(fields []zap.Field) []zap.Field {
 	if len(fields) == 0 {
 		return nil
 	}
@@ -95,6 +97,27 @@ func withoutMetaFields(fields []zap.Field) []zap.Field {
 		if field.Key == traceid.Traceparent {
 			continue
 		}
+		filtered = append(filtered, field)
+	}
+	return filtered
+}
+
+// keepCallerTraceparent 在上下文没有链路时，保留第一个非空 traceparent 字符串。
+func keepCallerTraceparent(fields []zap.Field) []zap.Field {
+	if len(fields) == 0 {
+		return nil
+	}
+	filtered := make([]zap.Field, 0, len(fields))
+	kept := false
+	for _, field := range fields {
+		if field.Key != traceid.Traceparent {
+			filtered = append(filtered, field)
+			continue
+		}
+		if kept || field.Type != zapcore.StringType || strings.TrimSpace(field.String) == "" {
+			continue
+		}
+		kept = true
 		filtered = append(filtered, field)
 	}
 	return filtered

@@ -18,7 +18,8 @@ import (
 // maxErrorBodyRunes 是错误信息中保留的响应体最大字符数
 const maxErrorBodyRunes = 256
 
-// NewSaga 创建已注入 traceparent 的 DTM Saga 实例，控制面请求使用 Client 的超时
+// NewSaga 创建已注入 traceparent 的 DTM Saga 实例，控制面请求使用 Client 的超时。
+// 上下文里有 tracestate 时原样放进分支头。
 func (c *Client) NewSaga(ctx context.Context) (*dtmcli.Saga, error) {
 	if !c.Enabled() {
 		return nil, errors.Sentinel(ErrNotConfigured)
@@ -35,8 +36,12 @@ func (c *Client) NewSaga(ctx context.Context) (*dtmcli.Saga, error) {
 	}
 	saga.WithGlobalTransRequestTimeout(timeoutSeconds)
 	saga.BranchHeaders = map[string]string{}
-	if tp := traceid.FromContext(ctx); tp != "" {
+	sc := traceid.SpanFromContext(ctx)
+	if tp := sc.Traceparent(); tp != "" {
 		saga.BranchHeaders[traceid.Traceparent] = tp
+		if ts := strings.TrimSpace(sc.Tracestate); ts != "" {
+			saga.BranchHeaders[traceid.Tracestate] = ts
+		}
 	}
 	return saga, nil
 }
