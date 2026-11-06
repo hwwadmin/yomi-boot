@@ -41,35 +41,22 @@ func (f *FetchTimeout) Start(ctx context.Context, factory distlock.DistLockFacto
 	return nil
 }
 
-// doTask 检测并重置停留在 FETCHED 状态超时的事件为待处理状态
+// doTask 把停留在 FETCHED 状态已超时的事件改回待处理。单轮条数与抓取上限相同，改不完的留给下一轮。
 func (f *FetchTimeout) doTask(ctx context.Context) error {
 	timeoutBefore := time.Now().Add(-f.cfg.FetchTimeout)
-	rows, err := f.outboxRepo.FetchFetchedTimeout(ctx, f.cfg.ServiceName, timeoutBefore)
+	resetCount, err := f.outboxRepo.ResetFetchedTimeout(ctx, f.cfg.ServiceName, timeoutBefore, f.cfg.FetchSize)
 	if err != nil {
 		return err
 	}
-	if len(rows) == 0 {
+	if resetCount == 0 {
 		return nil
 	}
 
-	logger.Warn(ctx, "[消息队列事件]检测到 FETCHED 超时消息，准备重置为 PENDING",
-		"count", len(rows),
+	logger.Warn(ctx, "[消息队列事件]FETCHED 超时消息已重置为 PENDING",
+		"count", resetCount,
 		"serviceName", f.cfg.ServiceName,
 		"fetchTimeout", f.cfg.FetchTimeout.String(),
-		"sample", buildOutboxSample(rows),
 	)
-
-	ids := make([]int64, 0, len(rows))
-	for i := range rows {
-		ids = append(ids, rows[i].ID)
-	}
-	resetCount, err := f.outboxRepo.MarkPendingBatch(ctx, ids, timeoutBefore)
-	if err != nil {
-		return err
-	}
-
-	logger.Warn(ctx, "[消息队列事件]FETCHED 超时消息重置完成",
-		"count", resetCount, "serviceName", f.cfg.ServiceName)
 	return nil
 }
 

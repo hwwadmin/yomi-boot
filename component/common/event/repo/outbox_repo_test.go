@@ -194,17 +194,23 @@ func TestOutboxRepoMarkFetchedBatchOnlyPending(t *testing.T) {
 	}
 }
 
-// TestOutboxRepoMarkPendingBatchOnlyTimeoutFetched 验证只有超时 FETCHED 记录会被重置
-func TestOutboxRepoMarkPendingBatchOnlyTimeoutFetched(t *testing.T) {
+// TestOutboxRepoResetFetchedTimeout 验证超时回收在库内按条件更新，并且单轮不超过上限
+func TestOutboxRepoResetFetchedTimeout(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
 	defer cleanup()
 
-	oldTime := time.Now().Add(-10 * time.Minute)
-	freshTime := time.Now()
+	oldest := time.Now().Add(-30 * time.Minute)
+	older := time.Now().Add(-20 * time.Minute)
+	newer := time.Now().Add(-10 * time.Minute)
+	fresh := time.Now()
 	rows := []model.SysEventOutbox{
-		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldTime},
-		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &freshTime},
-		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusSentSuccess, FetchTime: &oldTime},
+		{ServiceName: "svc", EventID: "deleted", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldest},
+		{ServiceName: "svc", EventID: "older", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &older},
+		{ServiceName: "svc", EventID: "newer", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &newer},
+		{ServiceName: "svc", EventID: "fresh", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &fresh},
+		{ServiceName: "svc", EventID: "pending", Topic: "topic", Status: model.OutboxStatusPending, FetchTime: &older},
+		{ServiceName: "svc", EventID: "sent", Topic: "topic", Status: model.OutboxStatusSentSuccess, FetchTime: &older},
+		{ServiceName: "other", EventID: "other", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &older},
 	}
 	for i := range rows {
 		rows[i].ID = int64(i + 1)
@@ -212,28 +218,62 @@ func TestOutboxRepoMarkPendingBatchOnlyTimeoutFetched(t *testing.T) {
 	if err := gormDB.Create(&rows).Error; err != nil {
 		t.Fatalf("初始化发件箱数据失败: %v", err)
 	}
+	if err := gormDB.Delete(&model.SysEventOutbox{}, rows[0].ID).Error; err != nil {
+		t.Fatalf("软删除发件箱记录失败: %v", err)
+	}
 
 	r := repo.NewOutboxRepo(gormDB)
-	affected, err := r.MarkPendingBatch(context.Background(), []int64{1, 2, 3}, time.Now().Add(-5*time.Minute))
+	deadline := time.Now().Add(-5 * time.Minute)
+	affected, err := r.ResetFetchedTimeout(context.Background(), "svc", deadline, 1)
 	if err != nil {
-		t.Fatalf("重置 PENDING 失败: %v", err)
+		t.Fatalf("重置超时记录失败: %v", err)
 	}
 	if affected != 1 {
-		t.Fatalf("期望实际更新 1 条，实际 %d 条", affected)
+		t.Fatalf("上限 1 时期望更新 1 条，实际 %d 条", affected)
+	}
+	assertOutboxStatus(t, gormDB, "older", model.OutboxStatusPending, false)
+	assertOutboxStatus(t, gormDB, "newer", model.OutboxStatusFetched, true)
+	assertOutboxStatus(t, gormDB, "fresh", model.OutboxStatusFetched, true)
+	assertOutboxStatus(t, gormDB, "pending", model.OutboxStatusPending, true)
+	assertOutboxStatus(t, gormDB, "sent", model.OutboxStatusSentSuccess, true)
+	assertOutboxStatus(t, gormDB, "other", model.OutboxStatusFetched, true)
+
+	var deleted model.SysEventOutbox
+	if err := gormDB.Unscoped().First(&deleted, rows[0].ID).Error; err != nil {
+		t.Fatalf("查询软删除记录失败: %v", err)
+	}
+	if deleted.Status != model.OutboxStatusFetched || !deleted.DeleteTime.Valid {
+		t.Fatalf("软删除记录不应被重置: %+v", deleted)
 	}
 
-	var stored []model.SysEventOutbox
-	if err := gormDB.Order("id ASC").Find(&stored).Error; err != nil {
-		t.Fatalf("查询发件箱数据失败: %v", err)
+	affected, err = r.ResetFetchedTimeout(context.Background(), "svc", deadline, 10)
+	if err != nil {
+		t.Fatalf("第二轮重置失败: %v", err)
 	}
-	if stored[0].Status != model.OutboxStatusPending || stored[0].FetchTime != nil {
-		t.Fatalf("超时 FETCHED 记录应重置为 PENDING: %+v", stored[0])
+	if affected != 1 {
+		t.Fatalf("第二轮期望更新剩余 1 条，实际 %d 条", affected)
 	}
-	if stored[1].Status != model.OutboxStatusFetched || stored[1].FetchTime == nil {
-		t.Fatalf("未超时 FETCHED 记录不应被重置: %+v", stored[1])
+	assertOutboxStatus(t, gormDB, "newer", model.OutboxStatusPending, false)
+	assertOutboxStatus(t, gormDB, "fresh", model.OutboxStatusFetched, true)
+
+	if _, err := r.ResetFetchedTimeout(context.Background(), "svc", deadline, 0); err == nil {
+		t.Fatal("上限不大于 0 应返回错误")
 	}
-	if stored[2].Status != model.OutboxStatusSentSuccess {
-		t.Fatalf("SENT_SUCCESS 记录不应被重置: %+v", stored[2])
+	assertOutboxStatus(t, gormDB, "fresh", model.OutboxStatusFetched, true)
+}
+
+// assertOutboxStatus 按 eventId 校验状态，以及是否仍保留取走时间
+func assertOutboxStatus(t *testing.T, gormDB *gorm.DB, eventID string, status model.OutboxStatus, hasFetchTime bool) {
+	t.Helper()
+	var stored model.SysEventOutbox
+	if err := gormDB.Where("event_id = ?", eventID).First(&stored).Error; err != nil {
+		t.Fatalf("查询 %s 失败: %v", eventID, err)
+	}
+	if stored.Status != status {
+		t.Fatalf("%s 状态期望 %s，实际 %+v", eventID, status, stored)
+	}
+	if hasFetchTime != (stored.FetchTime != nil) {
+		t.Fatalf("%s 取走时间期望保留=%v，实际 %+v", eventID, hasFetchTime, stored)
 	}
 }
 
@@ -438,37 +478,6 @@ func TestOutboxRepoFetchPending(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].EventID != "event-3" {
 		t.Fatalf("限量 1 条期望只返回 event-3，实际 %v", outboxEventIDs(got))
-	}
-}
-
-// TestOutboxRepoFetchFetchedTimeout 验证只返回本服务停留在 FETCHED 且已超时的记录
-func TestOutboxRepoFetchFetchedTimeout(t *testing.T) {
-	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}))
-	defer cleanup()
-
-	oldTime := time.Now().Add(-10 * time.Minute)
-	freshTime := time.Now()
-	rows := []model.SysEventOutbox{
-		{ServiceName: "svc", EventID: "event-1", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldTime},
-		{ServiceName: "svc", EventID: "event-2", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &freshTime},
-		{ServiceName: "svc", EventID: "event-3", Topic: "topic", Status: model.OutboxStatusPending},
-		{ServiceName: "svc", EventID: "event-4", Topic: "topic", Status: model.OutboxStatusSentFail, FetchTime: &oldTime},
-		{ServiceName: "other", EventID: "event-5", Topic: "topic", Status: model.OutboxStatusFetched, FetchTime: &oldTime},
-	}
-	for i := range rows {
-		rows[i].ID = int64(i + 1)
-	}
-	if err := gormDB.Create(&rows).Error; err != nil {
-		t.Fatalf("初始化发件箱数据失败: %v", err)
-	}
-
-	r := repo.NewOutboxRepo(gormDB)
-	got, err := r.FetchFetchedTimeout(context.Background(), "svc", time.Now().Add(-5*time.Minute))
-	if err != nil {
-		t.Fatalf("查询 FETCHED 超时事件失败: %v", err)
-	}
-	if len(got) != 1 || got[0].EventID != "event-1" {
-		t.Fatalf("期望只返回 event-1，实际 %v", outboxEventIDs(got))
 	}
 }
 

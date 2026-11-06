@@ -10,6 +10,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/db/tx"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 
 	"gorm.io/gorm"
 )
@@ -34,6 +35,34 @@ WHERE o.service_name = ?
   )
 ORDER BY o.sent_time ASC
 LIMIT ?`
+
+// resetFetchedTimeoutMySQL 在库内把已超时的 FETCHED 改回 PENDING。按取走时间从早到晚，单轮不超过上限。
+const resetFetchedTimeoutMySQL = `
+UPDATE sys_event_outbox
+SET status = ?, fetch_time = NULL
+WHERE service_name = ?
+  AND status = ?
+  AND fetch_time < ?
+  AND delete_time IS NULL
+ORDER BY fetch_time ASC
+LIMIT ?`
+
+// resetFetchedTimeoutPostgres 与 MySQL 同一语义。PostgreSQL 没有 UPDATE ... LIMIT，上限放在子查询里，主键不回到程序。
+const resetFetchedTimeoutPostgres = `
+UPDATE sys_event_outbox
+SET status = ?, fetch_time = NULL
+WHERE id IN (
+    SELECT id FROM (
+        SELECT id
+        FROM sys_event_outbox
+        WHERE service_name = ?
+          AND status = ?
+          AND fetch_time < ?
+          AND delete_time IS NULL
+        ORDER BY fetch_time ASC
+        LIMIT ?
+    ) AS picked
+)`
 
 // OutboxRepo 发件箱仓储
 type OutboxRepo struct {
@@ -68,23 +97,45 @@ func (r *OutboxRepo) FetchPending(ctx context.Context, serviceName string, size 
 	return rows, nil
 }
 
-// FetchFetchedTimeout 获取停留在 FETCHED 状态超时的事件
-func (r *OutboxRepo) FetchFetchedTimeout(ctx context.Context, serviceName string, timeoutBefore time.Time) ([]model.SysEventOutbox, error) {
-	var rows []model.SysEventOutbox
-	err := tx.Exec(ctx, r.DB).
-		Model(&model.SysEventOutbox{}).
-		Where("service_name = ? AND status = ? AND fetch_time < ?",
-			serviceName, model.OutboxStatusFetched, timeoutBefore).
-		Find(&rows).Error
-	if err != nil {
-		return nil, errors.Wrap(err, "查询 FETCHED 超时发件箱事件失败")
+// ResetFetchedTimeout 在库内把本服务已超时的 FETCHED 记录改回 PENDING，返回实际更新行数。
+// 主键不读回程序。limit 是这一轮的上限，必须大于 0。按 fetch_time 从早到晚处理。
+func (r *OutboxRepo) ResetFetchedTimeout(ctx context.Context, serviceName string, timeoutBefore time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, errors.New("重置条数必须大于 0")
 	}
-	return rows, nil
+	statement, err := resetFetchedTimeoutSQL(r.DB.Dialector.Name())
+	if err != nil {
+		return 0, err
+	}
+	result := tx.Exec(ctx, r.DB).Exec(
+		statement,
+		model.OutboxStatusPending,
+		serviceName,
+		model.OutboxStatusFetched,
+		timeoutBefore,
+		limit,
+	)
+	if result.Error != nil {
+		return 0, errors.Wrap(result.Error, "重置 FETCHED 超时发件箱事件失败")
+	}
+	return result.RowsAffected, nil
+}
+
+// resetFetchedTimeoutSQL 按数据库方言返回超时回收语句。占位符顺序两边一致。
+func resetFetchedTimeoutSQL(dialector string) (string, error) {
+	switch enums.DbType(dialector) {
+	case enums.MySQL:
+		return resetFetchedTimeoutMySQL, nil
+	case enums.Postgres:
+		return resetFetchedTimeoutPostgres, nil
+	default:
+		return "", errors.Newf("不支持的数据库类型: %s", dialector)
+	}
 }
 
 // Update 全量更新发件箱记录
 //
-// 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/MarkPendingBatch/MarkSentSuccess/MarkSentFail。
+// 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/RestorePendingBatch/MarkSentSuccess/MarkSentFail。
 func (r *OutboxRepo) Update(ctx context.Context, row *model.SysEventOutbox) error {
 	if err := tx.Exec(ctx, r.DB).Save(row).Error; err != nil {
 		return errors.Wrap(err, "更新发件箱记录失败")
@@ -94,7 +145,7 @@ func (r *OutboxRepo) Update(ctx context.Context, row *model.SysEventOutbox) erro
 
 // UpdateBatch 批量全量更新发件箱记录（按固定分片提交，避免单条 SQL 过大）
 //
-// 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/MarkPendingBatch。
+// 全列 upsert 会覆盖并发状态；状态迁移请使用 MarkFetchedBatch/RestorePendingBatch。
 func (r *OutboxRepo) UpdateBatch(ctx context.Context, rows []model.SysEventOutbox) error {
 	if len(rows) == 0 {
 		return nil
@@ -135,25 +186,6 @@ func (r *OutboxRepo) MarkFetchedBatch(ctx context.Context, ids []int64, fetchTim
 		return nil, errors.Wrap(err, "查询已标记发件箱事件失败")
 	}
 	return fetchedIDs, nil
-}
-
-// MarkPendingBatch 仅将仍为 FETCHED 且已超时的记录批量恢复为 PENDING，返回实际更新行数
-func (r *OutboxRepo) MarkPendingBatch(ctx context.Context, ids []int64, fetchTimeBefore time.Time) (int64, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	result := tx.Exec(ctx, r.DB).
-		Model(&model.SysEventOutbox{}).
-		Where("id IN ? AND status = ? AND fetch_time < ?",
-			ids, model.OutboxStatusFetched, fetchTimeBefore).
-		Updates(map[string]any{
-			"status":     model.OutboxStatusPending,
-			"fetch_time": nil,
-		})
-	if result.Error != nil {
-		return 0, errors.Wrap(result.Error, "批量重置发件箱事件为待处理失败")
-	}
-	return result.RowsAffected, nil
 }
 
 // MarkSentSuccess 仅将仍为 FETCHED 的记录标记为发送成功，返回是否实际更新

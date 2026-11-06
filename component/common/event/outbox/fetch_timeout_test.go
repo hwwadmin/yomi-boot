@@ -36,7 +36,7 @@ func TestFetchTimeoutDoTask(t *testing.T) {
 		t.Fatalf("初始化发件箱数据失败: %v", err)
 	}
 
-	f := NewFetchTimeout(cfg.Runtime{ServiceName: "svc", FetchTimeout: 5 * time.Minute}, outboxRepo)
+	f := NewFetchTimeout(cfg.Runtime{ServiceName: "svc", FetchTimeout: 5 * time.Minute, FetchSize: 10}, outboxRepo)
 	if err := f.doTask(context.Background()); err != nil {
 		t.Fatalf("超时回收任务失败: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestFetchTimeoutDoTaskEmpty(t *testing.T) {
 	_, outboxRepo, _, cleanup := newOutboxTestDB(t)
 	defer cleanup()
 
-	f := NewFetchTimeout(cfg.Runtime{ServiceName: "svc", FetchTimeout: 5 * time.Minute}, outboxRepo)
+	f := NewFetchTimeout(cfg.Runtime{ServiceName: "svc", FetchTimeout: 5 * time.Minute, FetchSize: 10}, outboxRepo)
 	if err := f.doTask(context.Background()); err != nil {
 		t.Fatalf("无超时记录时不应报错: %v", err)
 	}
