@@ -11,6 +11,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// consoleLinePool 复用控制台每一行的缓冲。必须放在包级，不能在每条日志里新建。
+var consoleLinePool = buffer.NewPool()
+
 // tracingConsoleEncoder 带链路追踪 ID 的控制台日志编码器
 type tracingConsoleEncoder struct {
 	cfg          zapcore.EncoderConfig
@@ -42,7 +45,7 @@ func fieldsOnlyJSONEncoderConfig(cfg zapcore.EncoderConfig) zapcore.EncoderConfi
 func (e *tracingConsoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
 	traceID, otherFields := splitMetaFields(fields)
 
-	line := buffer.NewPool().Get()
+	line := consoleLinePool.Get()
 	appendBracketField(line, encodeTimeString(ent.Time))
 	appendBracketField(line, encodeLevelString(e.cfg, ent.Level))
 	appendBracketField(line, colorBrightGreen+traceID+colorReset)

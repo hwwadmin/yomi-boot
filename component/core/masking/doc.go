@@ -5,6 +5,7 @@
 //     规则为空即全链路透传。
 //   - 内置策略（phone/idcard/bankcard/email/name）与业务自定义策略共用同一注册表；
 //     自定义策略须在 boot.Run 之前调用 MustRegisterStrategy 完成注册。
+//     策略名在注册和查找时都规范成小写，配置里大小写不同指向同一策略。
 //   - 安全不变量：字段命中规则后绝不原文返回；策略形状不符时降级为 placeholder。
 //     看起来像 JSON 但解析失败时，整段换成 placeholder。query 标准解析失败时按 & 拆开，
 //     能识别的键照常脱敏，识别不了的片段换成 placeholder。

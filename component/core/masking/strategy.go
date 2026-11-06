@@ -27,9 +27,10 @@ var (
 
 // MustRegisterStrategy 注册自定义脱敏策略，须在 boot.Run 之前完成
 // （masking 插件在 Init 阶段构造服务并解析策略名）。
+// 名称会去掉首尾空白并规范成小写，和查找使用同一规则；大小写不同视为同一个名字。
 // 名称为空、fn 为 nil、名称为保留名或与已注册策略冲突时 panic。
 func MustRegisterStrategy(name string, fn Strategy) {
-	name = strings.TrimSpace(name)
+	name = normalizeStrategyName(name)
 	if name == "" {
 		panic(errors.New("masking: 策略名称不能为空"))
 	}
@@ -48,12 +49,18 @@ func MustRegisterStrategy(name string, fn Strategy) {
 	registry[name] = fn
 }
 
-// lookupStrategy 按名称查找已注册策略
+// lookupStrategy 按名称查找已注册策略。名称先规范成小写。
 func lookupStrategy(name string) (Strategy, bool) {
+	name = normalizeStrategyName(name)
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	fn, ok := registry[name]
 	return fn, ok
+}
+
+// normalizeStrategyName 去掉首尾空白并转成小写，注册和查找共用
+func normalizeStrategyName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }
 
 // RegisteredStrategies 返回全部已注册策略名（内置 + 业务自定义），升序

@@ -172,6 +172,28 @@ func TestCustomStrategy(t *testing.T) {
 	}
 }
 
+// TestStrategyNameNormalizedToLower 验证注册名和配置名都按小写对应到同一策略
+func TestStrategyNameNormalizedToLower(t *testing.T) {
+	MustRegisterStrategy("Test_Token_Mask", func(v string) (string, bool) {
+		if v == "" {
+			return "", false
+		}
+		return "masked", true
+	})
+	if !contains(RegisteredStrategies(), "test_token_mask") || contains(RegisteredStrategies(), "Test_Token_Mask") {
+		t.Fatalf("注册表应只保留小写名: %v", RegisteredStrategies())
+	}
+
+	for _, strategy := range []string{"Test_Token_Mask", "test_token_mask", "TEST_TOKEN_MASK"} {
+		svc := newTestService(t, Config{Rules: []RuleConfig{
+			{Keys: []string{"token"}, Strategy: strategy},
+		}})
+		if got := svc.Mask("token", "secret"); got != "masked" {
+			t.Fatalf("策略名 %s 应命中已注册策略，实际 %q", strategy, got)
+		}
+	}
+}
+
 // TestRegistryListing 验证注册表清单查询：内置与自定义的区分
 func TestRegistryListing(t *testing.T) {
 	for _, name := range []string{StrategyPhone, StrategyIDCard, StrategyBankCard, StrategyEmail, StrategyName} {
@@ -211,7 +233,11 @@ func TestMustRegisterStrategyPanics(t *testing.T) {
 	}{
 		{"空名称", func() { MustRegisterStrategy("", maskPhone) }},
 		{"nil 函数", func() { MustRegisterStrategy("test_nil", nil) }},
-		{"保留名 redact", func() { MustRegisterStrategy(StrategyRedact, maskPhone) }},
+		{"保留名 Redact", func() { MustRegisterStrategy("Redact", maskPhone) }},
+		{"大小写重复", func() {
+			MustRegisterStrategy("test_Case_Dup", maskEmail)
+			MustRegisterStrategy("test_case_dup", maskEmail)
+		}},
 		{"保留名 keep_edges", func() { MustRegisterStrategy(StrategyKeepEdges, maskPhone) }},
 		{"覆盖内置策略", func() { MustRegisterStrategy(StrategyPhone, maskPhone) }},
 		{"重复注册", func() {
