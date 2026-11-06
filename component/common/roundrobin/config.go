@@ -22,7 +22,8 @@ type Config struct {
 	MaxRunDuration time.Duration // MaxRunDuration 单次任务最长执行时间，0 表示不限制；同时作为执行锁 MaxHoldDuration
 }
 
-// Task 单次轮询任务
+// Task 单次轮询任务。
+// 返回的 error 只记日志，轮询继续，不进入 BackoffDuration。
 type Task func(ctx context.Context) error
 
 // Simple 创建带默认延迟与唤醒间隔的轮询配置；MaxRunDuration 默认为 0（不限制）

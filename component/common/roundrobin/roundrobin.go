@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"runtime/debug"
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
@@ -24,9 +25,6 @@ const (
 	execLockKeyPrefix      = "roundrobin:lock:"      // execLockKeyPrefix 是执行锁 Key 前缀
 )
 
-// testExecLockOpts 非空时覆盖 tick 的执行锁选项，仅供测试注入短 TTL / MaxHoldDuration
-var testExecLockOpts []distlock.LockOption
-
 // Start 校验参数后在后台 goroutine 按轮询策略执行任务；ctx 取消时退出。
 // 参数非法时返回错误且不启动调度。
 func Start(ctx context.Context, cfg Config, task Task, factory distlock.DistLockFactory) error {
@@ -38,7 +36,10 @@ func Start(ctx context.Context, cfg Config, task Task, factory distlock.DistLock
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error(ctx, fmt.Sprintf("RoundRobin[%s] runLoop panic.", cfg.Name), "panic", r)
+				logger.Error(ctx, fmt.Sprintf("RoundRobin[%s] runLoop panic.", cfg.Name),
+					"panic", r,
+					"stack", string(debug.Stack()),
+				)
 			}
 		}()
 		_ = runLoop(ctx, cfg, task, factory)
@@ -80,7 +81,7 @@ func runLoop(ctx context.Context, cfg Config, task Task, factory distlock.DistLo
 			return err
 		}
 
-		executed, err := tick(ctx, cfg, task, factory)
+		executed, err := tick(ctx, cfg, task, factory, nil)
 		if err != nil {
 			// 仅当调度 ctx 本身已结束时停机。tick/Unlock 冒泡的 DeadlineExceeded
 			//（如 Redis 解锁超时）不得当作永久退出，否则解析引擎会假死而 HTTP 仍存活。
@@ -127,8 +128,9 @@ func shouldStopOnTickError(ctx context.Context, err error) bool {
 	return err != nil && ctx.Err() != nil
 }
 
-// tick 执行一轮抢锁与任务调度；executed 表示是否成功持执行锁完成任务
-func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockFactory) (executed bool, err error) {
+// tick 执行一轮抢锁与任务调度；executed 表示是否成功持执行锁完成任务。
+// execLockOpts 为 nil 时使用默认执行锁（TTL、看门狗、Config.MaxRunDuration）；非 nil 时整组替换，仅测试用来缩短持锁时间。
+func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockFactory, execLockOpts []distlock.LockOption) (executed bool, err error) {
 	// 抢频率锁，控制轮询频率
 	freqLock := factory.GetLock(
 		frequencyLockKey(cfg.Name),
@@ -147,14 +149,14 @@ func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockF
 	}
 
 	// 抢执行锁，保证集群互斥
-	execOpts := []distlock.LockOption{
-		distlock.WithTTL(defaultExecLockTTL),
-		distlock.WithWatchdog(true),
-		// MaxRunDuration 只跟随 Config，显式覆盖工厂级 MaxHoldDuration 默认值；0 表示不限制
-		distlock.WithMaxHoldDuration(cfg.MaxRunDuration),
-	}
-	if testExecLockOpts != nil {
-		execOpts = testExecLockOpts
+	execOpts := execLockOpts
+	if execOpts == nil {
+		execOpts = []distlock.LockOption{
+			distlock.WithTTL(defaultExecLockTTL),
+			distlock.WithWatchdog(true),
+			// MaxRunDuration 只跟随 Config，显式覆盖工厂级 MaxHoldDuration 默认值；0 表示不限制
+			distlock.WithMaxHoldDuration(cfg.MaxRunDuration),
+		}
 	}
 	execLock := factory.GetLock(execLockKey(cfg.Name), execOpts...)
 	execHeld, err := execLock.TryLock(ctx)
@@ -199,7 +201,10 @@ func tick(ctx context.Context, cfg Config, task Task, factory distlock.DistLockF
 func runTaskSafely(ctx context.Context, name string, task Task) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Error(ctx, fmt.Sprintf("RoundRobin[%s] task panic.", name), "panic", r)
+			logger.Error(ctx, fmt.Sprintf("RoundRobin[%s] task panic.", name),
+				"panic", r,
+				"stack", string(debug.Stack()),
+			)
 		}
 	}()
 	if taskErr := task(ctx); taskErr != nil {

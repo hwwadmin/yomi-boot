@@ -206,7 +206,7 @@ func TestTick_unlockAfterPanic(t *testing.T) {
 
 	executed, err := tick(ctx, cfg, func(context.Context) error {
 		panic("task panic")
-	}, factory)
+	}, factory, nil)
 	if err != nil {
 		t.Fatalf("tick: %v", err)
 	}
@@ -255,14 +255,6 @@ func TestTick_cancelsTaskOnLockLost(t *testing.T) {
 		t.Fatalf("NewFactory: %v", err)
 	}
 
-	testExecLockOpts = []distlock.LockOption{
-		distlock.WithTTL(time.Second),
-		distlock.WithWatchdog(true),
-		distlock.WithWatchdogInterval(50 * time.Millisecond),
-		distlock.WithMaxHoldDuration(150 * time.Millisecond),
-	}
-	defer func() { testExecLockOpts = nil }()
-
 	cfg := Simple("test-tick-lock-lost", 50*time.Millisecond)
 	canceled := make(chan struct{})
 	executed, err := tick(context.Background(), cfg, func(ctx context.Context) error {
@@ -274,7 +266,12 @@ func TestTick_cancelsTaskOnLockLost(t *testing.T) {
 			t.Error("task ctx 未在锁丢失后 cancel")
 			return nil
 		}
-	}, factory)
+	}, factory, []distlock.LockOption{
+		distlock.WithTTL(time.Second),
+		distlock.WithWatchdog(true),
+		distlock.WithWatchdogInterval(50 * time.Millisecond),
+		distlock.WithMaxHoldDuration(150 * time.Millisecond),
+	})
 	if err != nil && !errors.Is(err, distlock.ErrLockLost) {
 		t.Fatalf("tick: %v", err)
 	}
@@ -311,7 +308,7 @@ func TestTick_maxRunDurationCancelsTask(t *testing.T) {
 			t.Error("task ctx 未在 MaxRunDuration 到期后 cancel")
 			return nil
 		}
-	}, factory)
+	}, factory, nil)
 	if err != nil {
 		t.Fatalf("tick: %v", err)
 	}
@@ -351,7 +348,7 @@ func TestTick_zeroMaxRunDurationOverridesFactoryDefault(t *testing.T) {
 		case <-time.After(300 * time.Millisecond):
 			return nil
 		}
-	}, factory)
+	}, factory, nil)
 	if err != nil {
 		t.Fatalf("tick: %v", err)
 	}
