@@ -20,6 +20,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
 	"github.com/hwwadmin/yomi-boot/component/core/masking"
 	"github.com/hwwadmin/yomi-boot/component/core/router"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 	"github.com/hwwadmin/yomi-boot/plugin"
 	httprecordplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/httprecord"
 )
@@ -49,7 +50,7 @@ func wire(slot *plugin.PluginSlot) []router.Registrar {
 			"method", record.Method,
 			"path", record.Path,
 			"statusCode", record.StatusCode,
-			"traceparent", record.TraceParent,
+			traceid.Traceparent, record.TraceParent,
 		)
 		return httprecord.HandleOK()
 	})

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -25,7 +25,7 @@ func TestEncodeEntry_ReusesLineBuffer(t *testing.T) {
 	secondTP := "00-cccccccccccccccccccccccccccccccc-dddddddddddddddd-01"
 	first, err := enc.EncodeEntry(zapcore.Entry{
 		Time: when, Level: zapcore.InfoLevel, Message: "first-line", Caller: caller,
-	}, []zapcore.Field{zap.String(shared.Traceparent, firstTP)})
+	}, []zapcore.Field{zap.String(traceid.Traceparent, firstTP)})
 	if err != nil {
 		t.Fatalf("encode first: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestEncodeEntry_ReusesLineBuffer(t *testing.T) {
 
 	second, err := enc.EncodeEntry(zapcore.Entry{
 		Time: when, Level: zapcore.InfoLevel, Message: "second-line", Caller: caller,
-	}, []zapcore.Field{zap.String(shared.Traceparent, secondTP)})
+	}, []zapcore.Field{zap.String(traceid.Traceparent, secondTP)})
 	if err != nil {
 		t.Fatalf("encode second: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 )
 
 // RedisStreamHttpRecordService 通过 Redis Stream 异步发布 HTTP 访问记录
@@ -53,7 +54,7 @@ func (s *RedisStreamHttpRecordService) Handle(ctx context.Context, record *HttpR
 		logger.Warn(ctx, "HTTP 访问记录 Redis Stream 发布失败",
 			"error", err,
 			"stream", s.stream,
-			"traceparent", wire.TraceParent,
+			traceid.Traceparent, wire.TraceParent,
 		)
 	}
 }

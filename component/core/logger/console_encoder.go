@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
@@ -299,7 +299,7 @@ func (e *tracingConsoleEncoder) OpenNamespace(key string) {
 func splitMetaFields(fields []zapcore.Field) (traceparent string, rest []zapcore.Field) {
 	rest = make([]zapcore.Field, 0, len(fields))
 	for _, field := range fields {
-		if field.Key == shared.Traceparent {
+		if field.Key == traceid.Traceparent {
 			if field.Type == zapcore.StringType {
 				traceparent = strings.TrimSpace(field.String)
 			}

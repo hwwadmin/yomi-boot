@@ -84,7 +84,7 @@ func TestAccessConfig_SampleRateOrDefault(t *testing.T) {
 func TestConfig_Normalize_ReservedFields(t *testing.T) {
 	cfg := Config{
 		Rotation: testRotation(),
-		Fields:   map[string]string{"traceparent": "x"},
+		Fields:   map[string]string{traceid.Traceparent: "x"},
 	}
 	if err := cfg.Normalize(); err == nil {
 		t.Fatal("expected reserved field error")

@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,8 +24,8 @@ func TestMiddleware_ContinuesTraceparent(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	req.Header.Set(shared.Traceparent, sampleTP)
-	req.Header.Set(shared.Tracestate, "vendor=opaque")
+	req.Header.Set(Traceparent, sampleTP)
+	req.Header.Set(Tracestate, "vendor=opaque")
 	req.Header.Set("X-Trace-ID", "order-42")
 	r.ServeHTTP(w, req)
 
@@ -44,10 +42,10 @@ func TestMiddleware_ContinuesTraceparent(t *testing.T) {
 		t.Fatalf("flags=%q tracestate=%q", got.Flags, got.Tracestate)
 	}
 	want := got.Traceparent()
-	if got := w.Header().Get(shared.Traceparent); got != want {
+	if got := w.Header().Get(Traceparent); got != want {
 		t.Fatalf("响应 traceparent=%q，期望 %q", got, want)
 	}
-	if got := w.Header().Get(shared.Tracestate); got != "vendor=opaque" {
+	if got := w.Header().Get(Tracestate); got != "vendor=opaque" {
 		t.Fatalf("响应 tracestate=%q", got)
 	}
 	if w.Header().Get("X-Trace-ID") != "" || w.Header().Get("X-Request-ID") != "" {
@@ -70,8 +68,8 @@ func TestMiddleware_InvalidTraceparentStartsNew(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	req.Header.Set(shared.Traceparent, "00-zzzz-00f067aa0ba902b7-01")
-	req.Header.Set(shared.Tracestate, "vendor=drop")
+	req.Header.Set(Traceparent, "00-zzzz-00f067aa0ba902b7-01")
+	req.Header.Set(Tracestate, "vendor=drop")
 	r.ServeHTTP(w, req)
 
 	if got == "" || !strings.HasPrefix(got, "00-") || !strings.HasSuffix(got, "-01") {
@@ -80,11 +78,11 @@ func TestMiddleware_InvalidTraceparentStartsNew(t *testing.T) {
 	if strings.Contains(got, "zzzz") {
 		t.Fatalf("非法头不应被沿用: %s", got)
 	}
-	if w.Header().Get(shared.Tracestate) != "" {
+	if w.Header().Get(Tracestate) != "" {
 		t.Fatal("非法 traceparent 时不应转发 tracestate")
 	}
-	if w.Header().Get(shared.Traceparent) != got {
-		t.Fatalf("响应头 %q 与上下文 %q 不一致", w.Header().Get(shared.Traceparent), got)
+	if w.Header().Get(Traceparent) != got {
+		t.Fatalf("响应头 %q 与上下文 %q 不一致", w.Header().Get(Traceparent), got)
 	}
 }
 
@@ -92,7 +90,7 @@ func TestSetTraceparent_ReusesContext(t *testing.T) {
 	ctx := ContextWithTraceparent(context.Background(), sampleTP)
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/api", nil)
 	SetTraceparent(ctx, req)
-	if got := req.Header.Get(shared.Traceparent); got != sampleTP {
+	if got := req.Header.Get(Traceparent); got != sampleTP {
 		t.Fatalf("traceparent=%q", got)
 	}
 	if req.Header.Get("X-Trace-ID") != "" || req.Header.Get("X-Request-ID") != "" {
@@ -109,10 +107,10 @@ func TestSetTraceparent_ForwardsTracestate(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
 	SetTraceparent(ctx, req)
-	if got := req.Header.Get(shared.Traceparent); got != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00" {
+	if got := req.Header.Get(Traceparent); got != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00" {
 		t.Fatalf("traceparent=%q", got)
 	}
-	if got := req.Header.Get(shared.Tracestate); got != "vendor=opaque" {
+	if got := req.Header.Get(Tracestate); got != "vendor=opaque" {
 		t.Fatalf("tracestate=%q", got)
 	}
 }

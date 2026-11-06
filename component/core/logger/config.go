@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 )
 
 // LogType 文件日志类型
@@ -17,7 +18,7 @@ const (
 // reservedFieldKeys 禁止出现在 log.fields 中的保留键
 var reservedFieldKeys = map[string]struct{}{
 	"time": {}, "level": {}, "log_type": {}, "service": {}, "env": {},
-	"message": {}, "msg": {}, "traceparent": {},
+	"message": {}, "msg": {}, traceid.Traceparent: {},
 	"caller": {}, "stack": {}, "name": {},
 }
 

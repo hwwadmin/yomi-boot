@@ -6,12 +6,15 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
-
 	"github.com/gin-gonic/gin"
 )
 
 const (
+	// Traceparent 是 W3C 头名，也是日志字段名
+	Traceparent = "traceparent"
+	// Tracestate 是 W3C tracestate 头；只原样转发，不解析
+	Tracestate = "tracestate"
+
 	traceparentVersion = "00"
 	traceFlagsRecorded = "01"
 )
@@ -22,8 +25,8 @@ func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rawTP, rawTS := "", ""
 		if c.Request != nil {
-			rawTP = c.Request.Header.Get(shared.Traceparent)
-			rawTS = c.Request.Header.Get(shared.Tracestate)
+			rawTP = c.Request.Header.Get(Traceparent)
+			rawTS = c.Request.Header.Get(Tracestate)
 		}
 		sc := continueOrNew(rawTP, rawTS)
 		if c.Request != nil {
@@ -70,9 +73,9 @@ func writeTraceparent(h http.Header, sc SpanContext) {
 	if tp == "" {
 		return
 	}
-	h.Set(shared.Traceparent, tp)
+	h.Set(Traceparent, tp)
 	if ts := strings.TrimSpace(sc.Tracestate); ts != "" {
-		h.Set(shared.Tracestate, ts)
+		h.Set(Tracestate, ts)
 	}
 }
 

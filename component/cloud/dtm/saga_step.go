@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"github.com/dtm-labs/client/dtmcli"
@@ -37,7 +36,7 @@ func (c *Client) NewSaga(ctx context.Context) (*dtmcli.Saga, error) {
 	saga.WithGlobalTransRequestTimeout(timeoutSeconds)
 	saga.BranchHeaders = map[string]string{}
 	if tp := traceid.FromContext(ctx); tp != "" {
-		saga.BranchHeaders[shared.Traceparent] = tp
+		saga.BranchHeaders[traceid.Traceparent] = tp
 	}
 	return saga, nil
 }

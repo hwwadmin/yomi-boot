@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hwwadmin/yomi-boot/component/core/shared"
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"go.uber.org/zap"
@@ -83,7 +82,7 @@ func injectTraceFields(ctx context.Context, extra ...zap.Field) []zap.Field {
 	if tp == "" {
 		return extra
 	}
-	return append([]zap.Field{zap.String(shared.Traceparent, tp)}, extra...)
+	return append([]zap.Field{zap.String(traceid.Traceparent, tp)}, extra...)
 }
 
 // withoutMetaFields 丢掉调用方误传的 traceparent，避免盖掉系统写入的值。
@@ -93,7 +92,7 @@ func withoutMetaFields(fields []zap.Field) []zap.Field {
 	}
 	filtered := make([]zap.Field, 0, len(fields))
 	for _, field := range fields {
-		if field.Key == shared.Traceparent {
+		if field.Key == traceid.Traceparent {
 			continue
 		}
 		filtered = append(filtered, field)
