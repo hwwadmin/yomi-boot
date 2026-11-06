@@ -37,11 +37,17 @@ type asyncSink struct {
 	name string    // name 是 stderr 告警中的 sink 标识
 	dst  io.Writer // dst 是真正落盘的底层 writer
 
-	queue    chan sinkTask // queue 是待落盘任务队列
-	dropped  atomic.Int64  // dropped 累计入队失败（队列满）条数
-	failed   atomic.Int64  // failed 累计底层写入失败条数
-	lastWarn atomic.Int64  // lastWarn 是上次 stderr 告警的 unix 纳秒，用于限频
-	running  atomic.Bool   // running 为 false 后不再入队，Write 直接同步写底层
+	queue   chan sinkTask // queue 是待落盘任务队列
+	dropped atomic.Int64  // dropped 累计尚未打出的入队失败（队列满）条数
+	failed  atomic.Int64  // failed 累计尚未打出的底层写入失败条数
+	running atomic.Bool   // running 为 false 后不再入队，Write 直接同步写底层
+
+	warnOut      io.Writer     // warnOut 是告警输出；nil 时用 stderr
+	warnInterval time.Duration // warnInterval 是两次告警的最小间隔；<=0 时用 dropWarnInterval
+	warnCh       chan struct{} // warnCh 容量 1，通知告警协程有新的丢弃或写失败
+	warnStop     chan struct{} // warnStop 在消费协程退出后关闭，告警协程打出剩余次数再退出
+	warnDone     chan struct{} // warnDone 在告警协程退出后关闭
+
 	stopOnce sync.Once
 	stop     chan struct{} // stop 关闭后消费协程排空队列退出
 	done     chan struct{} // done 在消费协程退出后关闭
@@ -53,14 +59,18 @@ func newAsyncSink(name string, dst io.Writer, queueSize int) *asyncSink {
 		queueSize = defaultAsyncQueueSize
 	}
 	s := &asyncSink{
-		name:  name,
-		dst:   dst,
-		queue: make(chan sinkTask, queueSize),
-		stop:  make(chan struct{}),
-		done:  make(chan struct{}),
+		name:     name,
+		dst:      dst,
+		queue:    make(chan sinkTask, queueSize),
+		warnCh:   make(chan struct{}, 1),
+		warnStop: make(chan struct{}),
+		warnDone: make(chan struct{}),
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
 	}
 	s.running.Store(true)
 	go s.consumeLoop()
+	go s.warnLoop()
 	return s
 }
 
@@ -78,6 +88,7 @@ func (s *asyncSink) Write(p []byte) (int, error) {
 	case s.queue <- sinkTask{data: cp}:
 	default:
 		s.dropped.Add(1)
+		s.signalWarn()
 	}
 	return len(p), nil
 }
@@ -104,12 +115,14 @@ func (s *asyncSink) Flush(timeout time.Duration) error {
 	}
 }
 
-// Stop 停止接受新日志并排空残余后退出消费协程；幂等
+// Stop 停止接受新日志，先等消费协程排空，再让告警协程打出剩余次数并退出；幂等
 func (s *asyncSink) Stop() {
 	s.stopOnce.Do(func() {
 		s.running.Store(false)
 		close(s.stop)
 		<-s.done
+		close(s.warnStop)
+		<-s.warnDone
 	})
 }
 
@@ -141,7 +154,6 @@ func (s *asyncSink) consume() (stopped bool) {
 			return true
 		case t := <-s.queue:
 			s.handle(t)
-			s.reportCounters()
 		}
 	}
 }
@@ -166,20 +178,80 @@ func (s *asyncSink) handle(t sinkTask) {
 	}
 	if _, err := s.dst.Write(t.data); err != nil {
 		s.failed.Add(1)
+		s.signalWarn()
 	}
 }
 
-// reportCounters 在有丢弃/写失败时向 stderr 限频告警
-func (s *asyncSink) reportCounters() {
+// signalWarn 通知告警协程。通道里已有信号时丢掉这次通知，次数留在计数器里。
+func (s *asyncSink) signalWarn() {
+	select {
+	case s.warnCh <- struct{}{}:
+	default:
+	}
+}
+
+// warnLoop 是该 sink 唯一写告警的协程。落盘协程卡住时，丢弃仍能从这里打出。
+func (s *asyncSink) warnLoop() {
+	defer close(s.warnDone)
+	var timer *time.Timer
+	var timerC <-chan time.Time
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+	for {
+		select {
+		case <-s.warnStop:
+			s.emitIfAny()
+			return
+		case <-s.warnCh:
+			if timerC != nil {
+				continue
+			}
+			if !s.emitIfAny() {
+				continue
+			}
+			timer, timerC = s.armWarnTimer(timer)
+		case <-timerC:
+			timerC = nil
+			if !s.emitIfAny() {
+				continue
+			}
+			timer, timerC = s.armWarnTimer(timer)
+		}
+	}
+}
+
+// armWarnTimer 开始一段静默时间。这段时间里的新次数只累加，到点再打一行。
+func (s *asyncSink) armWarnTimer(timer *time.Timer) (*time.Timer, <-chan time.Time) {
+	interval := s.warnInterval
+	if interval <= 0 {
+		interval = dropWarnInterval
+	}
+	if timer == nil {
+		timer = time.NewTimer(interval)
+		return timer, timer.C
+	}
+	timer.Reset(interval)
+	return timer, timer.C
+}
+
+// emitIfAny 在即将打出时才清零。打出失败则把次数加回去，等下一次信号再试。
+func (s *asyncSink) emitIfAny() bool {
 	dropped := s.dropped.Swap(0)
 	failed := s.failed.Swap(0)
 	if dropped == 0 && failed == 0 {
-		return
+		return false
 	}
-	now := time.Now().UnixNano()
-	last := s.lastWarn.Load()
-	if now-last < int64(dropWarnInterval) || !s.lastWarn.CompareAndSwap(last, now) {
-		return
+	out := s.warnOut
+	if out == nil {
+		out = os.Stderr
 	}
-	fmt.Fprintf(os.Stderr, "logger: sink[%s] 队列满丢弃 %d 条、写失败 %d 条\n", s.name, dropped, failed)
+	if _, err := fmt.Fprintf(out, "logger: sink[%s] 队列满丢弃 %d 条、写失败 %d 条\n", s.name, dropped, failed); err != nil {
+		s.dropped.Add(dropped)
+		s.failed.Add(failed)
+		return false
+	}
+	return true
 }

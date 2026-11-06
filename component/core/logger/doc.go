@@ -8,7 +8,8 @@
 //
 // 写入路径：异步开启时（log.async_enabled，默认 true），控制台与各文件为相互独立的
 // 异步 sink——单目标故障（stdout 管道积压、磁盘卡死）只丢弃自身日志并向 stderr 限频
-// 告警，绝不阻塞调用方。控制台输出可用 log.console_enabled 关闭（默认开启），
+// 告警，绝不阻塞调用方。告警由该 sink 自己的协程写出，落盘卡住时仍会打出；5 秒内的
+// 次数合并成一行，打出时才清零。控制台输出可用 log.console_enabled 关闭（默认开启），
 // 控制台等级跟随 log.level。logger.Flush 等待在途日志落盘；停机路径自动按
 // flush → 停 sink → 关文件收尾。async_enabled=false 时退化为同步直写。
 //

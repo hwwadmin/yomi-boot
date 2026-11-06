@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -99,6 +100,7 @@ func TestAsyncSink_FIFOOrderAndFlush(t *testing.T) {
 func TestAsyncSink_DropsWhenFull(t *testing.T) {
 	dst := newGateWriter()
 	s := newAsyncSink("test", dst, 1)
+	s.warnOut = io.Discard
 
 	// 占住消费协程：首条进入 dst.Write 并阻塞，此时队列为空
 	if _, err := s.Write([]byte("first")); err != nil {
@@ -116,9 +118,6 @@ func TestAsyncSink_DropsWhenFull(t *testing.T) {
 	if _, err := s.Write([]byte("B")); err != nil { // 队列满，丢弃
 		t.Fatalf("write B: %v", err)
 	}
-	if got := s.dropped.Load(); got != 1 {
-		t.Fatalf("期望丢弃 1 条，实际 %d", got)
-	}
 
 	close(dst.release)
 	if err := s.Flush(time.Second); err != nil {
@@ -128,6 +127,162 @@ func TestAsyncSink_DropsWhenFull(t *testing.T) {
 		t.Fatalf("期望落盘 firstA（B 被丢弃），实际 %q", got)
 	}
 	s.Stop()
+}
+
+// lockBuffer 供告警协程和测试同时读写
+type lockBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (w *lockBuffer) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
+}
+
+func (w *lockBuffer) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.String()
+}
+
+// errWriter 每次写入都失败
+type errWriter struct{}
+
+func (errWriter) Write(p []byte) (int, error) {
+	return 0, io.ErrShortWrite
+}
+
+// warnDropCounts 按打出顺序取出「队列满丢弃 N 条」里的 N
+func warnDropCounts(text string) []int {
+	const mark = "队列满丢弃 "
+	var counts []int
+	for _, line := range strings.Split(text, "\n") {
+		i := strings.Index(line, mark)
+		if i < 0 {
+			continue
+		}
+		n := 0
+		ok := false
+		for _, c := range line[i+len(mark):] {
+			if c < '0' || c > '9' {
+				break
+			}
+			n = n*10 + int(c-'0')
+			ok = true
+		}
+		if ok {
+			counts = append(counts, n)
+		}
+	}
+	return counts
+}
+
+func waitWarnDrops(t *testing.T, buf *lockBuffer, want []int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var got []int
+	for time.Now().Before(deadline) {
+		got = warnDropCounts(buf.String())
+		if len(got) >= len(want) {
+			match := true
+			for i := range want {
+				if got[i] != want[i] {
+					match = false
+					break
+				}
+			}
+			if match {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("告警丢弃次数 = %v，正文 %q，期望前缀 %v", got, buf.String(), want)
+}
+
+// TestAsyncSink_WarnsWhileWriteBlocked 验证落盘卡住时仍会告警，静默窗口内的次数合并到下一行
+func TestAsyncSink_WarnsWhileWriteBlocked(t *testing.T) {
+	dst := newGateWriter()
+	warns := &lockBuffer{}
+	s := newAsyncSink("test", dst, 1)
+	s.warnOut = warns
+	s.warnInterval = 300 * time.Millisecond
+	release := func() {
+		select {
+		case <-dst.release:
+		default:
+			close(dst.release)
+		}
+	}
+	t.Cleanup(func() {
+		release()
+		s.Stop()
+	})
+
+	if _, err := s.Write([]byte("first")); err != nil {
+		t.Fatalf("write first: %v", err)
+	}
+	select {
+	case <-dst.entered:
+	case <-time.After(time.Second):
+		t.Fatal("消费协程未进入写入点")
+	}
+	if _, err := s.Write([]byte("queued")); err != nil {
+		t.Fatalf("write queued: %v", err)
+	}
+	if _, err := s.Write([]byte("drop-1")); err != nil {
+		t.Fatalf("write drop-1: %v", err)
+	}
+	waitWarnDrops(t, warns, []int{1})
+
+	for _, line := range []string{"drop-2", "drop-3", "drop-4"} {
+		if _, err := s.Write([]byte(line)); err != nil {
+			t.Fatalf("write %s: %v", line, err)
+		}
+	}
+	time.Sleep(80 * time.Millisecond)
+	if got := warnDropCounts(warns.String()); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("静默窗口内不应打出第二行，实际 %v，正文 %q", got, warns.String())
+	}
+	waitWarnDrops(t, warns, []int{1, 3})
+	release()
+}
+
+// TestAsyncSink_WriteErrorWarns 验证底层写失败由告警协程打出
+func TestAsyncSink_WriteErrorWarns(t *testing.T) {
+	warns := &lockBuffer{}
+	s := newAsyncSink("test", errWriter{}, 4)
+	s.warnOut = warns
+	t.Cleanup(s.Stop)
+
+	if _, err := s.Write([]byte("x")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(warns.String(), "写失败 1 条") {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("应打出写失败 1 条，实际 %q", warns.String())
+}
+
+// TestAsyncSink_StopStopsWarnLoop 验证 Stop 把消费协程和告警协程都停掉
+func TestAsyncSink_StopStopsWarnLoop(t *testing.T) {
+	before := runtime.NumGoroutine()
+	s := newAsyncSink("test", &bytes.Buffer{}, 8)
+	s.Stop()
+
+	deadline := time.Now().Add(time.Second)
+	for runtime.NumGoroutine() != before {
+		if time.Now().After(deadline) {
+			t.Fatalf("Stop 后协程未回到启动前：之前 %d，现在 %d", before, runtime.NumGoroutine())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // TestAsyncSink_StopDrainsAndWriteFallback 验证 Stop 排空残余，停后写入走同步兜底
