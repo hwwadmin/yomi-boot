@@ -154,7 +154,8 @@ func execute[T any](
 	if nested && !txRunner.InTx(ctx) {
 		return zero, errors.Sentinel(ErrNotInTx)
 	}
-	if key.BizID == "" || key.BizSubID == "" || key.OperationType == "" {
+	// biz_id、biz_sub_id 先做格式校验，再拼 Redis 键。含冒号的两段会合成同一条缓存。
+	if key.OperationType == "" || !validBizPart(key.BizID) || !validBizPart(key.BizSubID) {
 		return zero, errors.Sentinel(ErrKeyInvalid)
 	}
 

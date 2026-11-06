@@ -2,20 +2,19 @@ package httprecord
 
 import (
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 )
 
-func TestConfigValidate_RejectsNegativeBodySize(t *testing.T) {
+func TestConfigValidate_RejectsNonPositiveBodySize(t *testing.T) {
 	t.Parallel()
-	neg := -1
-	cfg := Config{MaxRequestBodySize: &neg}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for negative max_request_body_size")
-	}
-	cfg = Config{MaxResponseBodySize: &neg}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for negative max_response_body_size")
+	for _, n := range []int{-1, 0} {
+		req := n
+		resp := n
+		if err := (Config{MaxRequestBodySize: &req}).Validate(); err == nil {
+			t.Fatalf("max_request_body_size=%d 应拒绝", n)
+		}
+		if err := (Config{MaxResponseBodySize: &resp}).Validate(); err == nil {
+			t.Fatalf("max_response_body_size=%d 应拒绝", n)
+		}
 	}
 }
 
@@ -32,11 +31,11 @@ func TestConfigBodySizeOrDefault(t *testing.T) {
 	zero := 0
 	cfg.MaxRequestBodySize = &zero
 	cfg.MaxResponseBodySize = &zero
-	if got := cfg.MaxRequestBodySizeOrDefault(); got != utf8util.Unlimited {
-		t.Fatalf("explicit 0 request size=%d want unlimited", got)
+	if got := cfg.MaxRequestBodySizeOrDefault(); got != defaultHTTPRecordMaxRequestBodySize {
+		t.Fatalf("explicit 0 request size=%d want default %d", got, defaultHTTPRecordMaxRequestBodySize)
 	}
-	if got := cfg.MaxResponseBodySizeOrDefault(); got != utf8util.Unlimited {
-		t.Fatalf("explicit 0 response size=%d want unlimited", got)
+	if got := cfg.MaxResponseBodySizeOrDefault(); got != defaultHTTPRecordMaxResponseBodySize {
+		t.Fatalf("explicit 0 response size=%d want default %d", got, defaultHTTPRecordMaxResponseBodySize)
 	}
 
 	limit := 1024

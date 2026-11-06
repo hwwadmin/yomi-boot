@@ -57,12 +57,17 @@ func (m *HttpRecordMiddleware) Handler() gin.HandlerFunc {
 
 		start := time.Now()
 		requestAt := start
-		blw := newBodyRecordWriter(c.Writer, m.cfg.MaxResponseBodySizeOrDefault())
-		c.Writer = blw
+		// 未记录响应体时不包装 Writer，避免每个请求都拷贝响应字节；状态码仍从原 Writer 读取
+		var blw *bodyRecordWriter
+		if m.cfg.RecordResponseBody {
+			blw = newBodyRecordWriter(c.Writer, m.cfg.MaxResponseBodySizeOrDefault())
+			c.Writer = blw
+		}
 
 		var requestBody string
 		var requestBodyTruncated bool
-		if m.cfg.RecordRequestBody {
+		// multipart、图片、二进制与访问日志一样不读正文，避免把上传内容读进记录；请求元数据仍采集
+		if m.cfg.RecordRequestBody && !omitBodyByContentType(c.GetHeader("Content-Type")) {
 			var err error
 			requestBody, requestBodyTruncated, err = readRequestBodyForRecord(c.Request, m.cfg.MaxRequestBodySizeOrDefault())
 			if err != nil {
@@ -123,6 +128,8 @@ func (m *HttpRecordMiddleware) buildRecord(
 	blw *bodyRecordWriter,
 ) *HttpRecord {
 	r := c.Request
+	skipResponseBody := blw == nil || blw.skipped || omitBodyByContentType(c.Writer.Header().Get("Content-Type"))
+	truncated := blw != nil && blw.truncated && !skipResponseBody
 	record := &HttpRecord{
 		ServiceType:           m.serviceType(),
 		ServiceVersion:        m.serviceVersion(),
@@ -137,7 +144,7 @@ func (m *HttpRecordMiddleware) buildRecord(
 		RequestBody:           requestBody,
 		RequestBodyTruncated:  requestBodyTruncated,
 		StatusCode:            c.Writer.Status(),
-		ResponseBodyTruncated: blw.truncated,
+		ResponseBodyTruncated: truncated,
 	}
 
 	if r.URL.RawQuery != "" {
@@ -151,8 +158,9 @@ func (m *HttpRecordMiddleware) buildRecord(
 		record.ClientType = session.ClientType
 	}
 
-	// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文
-	if m.cfg.RecordResponseBody && !blw.truncated {
+	// 截断残片不是合法 JSON，无法按字段脱敏；为避免敏感字段原文落盘，截断时不记正文。
+	// multipart、图片、二进制不记正文，与访问日志一致
+	if blw != nil && !blw.truncated && !skipResponseBody {
 		record.ResponseBody = m.mask.MaskJSON(blw.recordedBody())
 	}
 
@@ -175,6 +183,23 @@ func (m *HttpRecordMiddleware) serviceType() string {
 // serviceVersion 返回当前服务版本号
 func (m *HttpRecordMiddleware) serviceVersion() string {
 	return m.app.Version()
+}
+
+// omitBodyByContentType 判断该 Content-Type 是否不采集正文。
+// 范围与访问日志一致：multipart、图片，以及 octet-stream、pdf、zip、vnd 二进制。
+func omitBodyByContentType(contentType string) bool {
+	ct := strings.ToLower(contentType)
+	switch {
+	case strings.HasPrefix(ct, "multipart/"), strings.HasPrefix(ct, "image/"):
+		return true
+	case strings.Contains(ct, "octet-stream"),
+		strings.Contains(ct, "application/pdf"),
+		strings.Contains(ct, "application/zip"),
+		strings.Contains(ct, "application/vnd."):
+		return true
+	default:
+		return false
+	}
 }
 
 // normalizePath 规范化请求路径，便于与 skip_paths 配置比对
@@ -230,6 +255,7 @@ type bodyRecordWriter struct {
 	body      bytes.Buffer // body 是已采集的响应体内容
 	maxSize   int          // maxSize 是响应体记录最大采集字节数；<0 表示不截断
 	truncated bool         // truncated 表示响应体是否因超出限制被截断
+	skipped   bool         // skipped 表示按 Content-Type 跳过正文采集
 }
 
 // newBodyRecordWriter 创建带响应体采集能力的 ResponseWriter 包装器
@@ -252,9 +278,14 @@ func (w *bodyRecordWriter) WriteString(s string) (int, error) {
 	return w.ResponseWriter.WriteString(s)
 }
 
-// capture 按 maxSize 限制采集响应体片段；maxSize < 0 表示不截断
+// capture 按 maxSize 限制采集响应体片段；maxSize < 0 表示不截断。
+// multipart、图片、二进制不采集，客户端仍收到完整写出内容
 func (w *bodyRecordWriter) capture(b []byte) {
-	if w.truncated {
+	if w.skipped || w.truncated {
+		return
+	}
+	if omitBodyByContentType(w.Header().Get("Content-Type")) {
+		w.skipped = true
 		return
 	}
 	if w.maxSize < 0 {

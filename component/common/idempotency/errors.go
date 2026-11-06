@@ -6,7 +6,7 @@ package idempotency
 import "github.com/hwwadmin/yomi-boot/component/core/errors"
 
 var (
-	// ErrKeyInvalid 幂等键不合法
+	// ErrKeyInvalid 幂等键不合法：字段为空，或 biz_id / biz_sub_id 不是 1～100 位的字母、数字、下划线、连字符
 	ErrKeyInvalid = errors.NewNoStack("sysbiz: invalid key")
 	// ErrProcessing 同键请求仍在处理中
 	ErrProcessing = errors.NewNoStack("sysbiz: request processing")

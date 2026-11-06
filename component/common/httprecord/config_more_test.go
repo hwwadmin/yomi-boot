@@ -5,8 +5,6 @@ package httprecord
 
 import (
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 )
 
 func intPtr(v int) *int    { return &v }
@@ -71,13 +69,13 @@ func TestConsumerAndMemoryDefaults(t *testing.T) {
 	}
 }
 
-// TestResolveBodySizeLimit 验证体积上限解析：nil 默认、0 不截断、正值透传
+// TestResolveBodySizeLimit 验证体积上限解析：nil 与非正数用默认 1MB，正值透传
 func TestResolveBodySizeLimit(t *testing.T) {
-	if got := (Config{}).MaxRequestBodySizeOrDefault(); got != 4096 {
-		t.Fatalf("未配置请求体上限期望 4096，实际 %d", got)
+	if got := (Config{}).MaxRequestBodySizeOrDefault(); got != defaultHTTPRecordMaxRequestBodySize {
+		t.Fatalf("未配置请求体上限期望 %d，实际 %d", defaultHTTPRecordMaxRequestBodySize, got)
 	}
-	if got := (Config{MaxRequestBodySize: intPtr(0)}).MaxRequestBodySizeOrDefault(); got != utf8util.Unlimited {
-		t.Fatalf("显式 0 期望不截断，实际 %d", got)
+	if got := (Config{MaxRequestBodySize: intPtr(0)}).MaxRequestBodySizeOrDefault(); got != defaultHTTPRecordMaxRequestBodySize {
+		t.Fatalf("显式 0 应回落到默认上限，实际 %d", got)
 	}
 	if got := (Config{MaxResponseBodySize: intPtr(16)}).MaxResponseBodySizeOrDefault(); got != 16 {
 		t.Fatalf("显式 16 期望透传，实际 %d", got)
@@ -97,7 +95,9 @@ func TestConfigValidateBranches(t *testing.T) {
 	}{
 		{name: "skip_paths 含首尾空格", cfg: Config{SkipPaths: []string{" /a"}}},
 		{name: "请求体上限为负", cfg: Config{MaxRequestBodySize: intPtr(-1)}},
+		{name: "请求体上限为 0", cfg: Config{MaxRequestBodySize: intPtr(0)}},
 		{name: "响应体上限为负", cfg: Config{MaxResponseBodySize: intPtr(-1)}},
+		{name: "响应体上限为 0", cfg: Config{MaxResponseBodySize: intPtr(0)}},
 		{name: "provider 不支持", cfg: Config{Provider: "nsq"}},
 		{name: "memory 关闭消费", cfg: Config{Provider: ProviderMemory, Consumer: ConsumerConfig{Enabled: boolPtr(false)}}},
 		{name: "max_retry 为负", cfg: Config{Consumer: ConsumerConfig{MaxRetry: intPtr(-1)}}},

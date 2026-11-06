@@ -99,6 +99,35 @@ func TestBizID(t *testing.T) {
 	if first == second {
 		t.Fatal("幂等 ID 不应重复")
 	}
+	if !validBizPart(first) || !validBizPart(second) {
+		t.Fatalf("生成的幂等 ID 应符合业务键格式: %q %q", first, second)
+	}
+}
+
+// TestValidBizPart 验证 biz_id、biz_sub_id 只接受 1～100 位字母、数字、下划线、连字符
+func TestValidBizPart(t *testing.T) {
+	cases := []struct {
+		name string
+		part string
+		want bool
+	}{
+		{name: "空串", part: "", want: false},
+		{name: "字母数字连字符", part: "biz-k1", want: true},
+		{name: "下划线", part: "biz_sub", want: true},
+		{name: "冒号", part: "order:1", want: false},
+		{name: "空格", part: "order 1", want: false},
+		{name: "中文", part: "订单", want: false},
+		{name: "斜杠", part: "a/b", want: false},
+		{name: "满 100 位", part: strings.Repeat("a", 100), want: true},
+		{name: "超过 100 位", part: strings.Repeat("a", 101), want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validBizPart(tc.part); got != tc.want {
+				t.Fatalf("validBizPart(%q)=%v, want %v", tc.part, got, tc.want)
+			}
+		})
+	}
 }
 
 // TestMarshalAndUnmarshalResult 验证结果快照序列化的边界行为

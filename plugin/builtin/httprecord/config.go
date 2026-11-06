@@ -29,8 +29,8 @@ type BootConfig struct {
 	KafkaTopic          string             `mapstructure:"kafka_topic"`            // KafkaTopic 是 Kafka 发布/订阅主题
 	Stream              string             `mapstructure:"stream"`                 // Stream 是 Redis Stream 逻辑名（provider=redis_stream）
 	SkipPaths           []string           `mapstructure:"skip_paths"`             // SkipPaths 是不进行记录采集的接口路径列表
-	MaxRequestBodySize  *int               `mapstructure:"max_request_body_size"`  // MaxRequestBodySize 是请求体记录最大字节数；nil 默认 4096，0 表示不截断
-	MaxResponseBodySize *int               `mapstructure:"max_response_body_size"` // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 4096，0 表示不截断
+	MaxRequestBodySize  *int               `mapstructure:"max_request_body_size"`  // MaxRequestBodySize 是请求体记录最大字节数；nil 默认 1MB，必须为正数
+	MaxResponseBodySize *int               `mapstructure:"max_response_body_size"` // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 1MB，必须为正数
 	RecordRequestBody   bool               `mapstructure:"record_request_body"`    // RecordRequestBody 是否记录请求体
 	RecordResponseBody  bool               `mapstructure:"record_response_body"`   // RecordResponseBody 是否记录响应体
 	MaskSensitive       *bool              `mapstructure:"mask_sensitive"`         // MaskSensitive 记录内容是否经统一脱敏服务；nil 默认 true，规则见 masking 段

@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 )
 
 // HTTP 访问记录默认值
 const (
-	defaultHTTPRecordMaxRequestBodySize  = 4096
-	defaultHTTPRecordMaxResponseBodySize = 4096
+	// 与 httpguard 的默认请求体上限一致：未配置时也有绝对上限，不允许整包读入
+	defaultHTTPRecordMaxRequestBodySize  = 1 << 20
+	defaultHTTPRecordMaxResponseBodySize = 1 << 20
 	defaultHttpRecordKafkaTopic          = "yomi.http.record"
 	defaultHttpRecordStream              = "yomi.http.record"
 	defaultKafkaRecordMaxRetries         = 3
@@ -54,8 +54,8 @@ type Config struct {
 	KafkaTopic          string         // KafkaTopic 是 Kafka 发布/订阅主题
 	Stream              string         // Stream 是 Redis Stream 逻辑名（provider=redis_stream）
 	SkipPaths           []string       // SkipPaths 是不进行记录采集的接口路径列表
-	MaxRequestBodySize  *int           // MaxRequestBodySize 是请求体记录最大字节数；nil 默认 4096，0 表示不截断
-	MaxResponseBodySize *int           // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 4096，0 表示不截断
+	MaxRequestBodySize  *int           // MaxRequestBodySize 是请求体记录最大字节数；nil 默认 1MB，必须为正数
+	MaxResponseBodySize *int           // MaxResponseBodySize 是响应体记录最大字节数；nil 默认 1MB，必须为正数
 	RecordRequestBody   bool           // RecordRequestBody 是否记录请求体
 	RecordResponseBody  bool           // RecordResponseBody 是否记录响应体
 	MaskSensitive       bool           // MaskSensitive 是否用注入的脱敏服务处理记录内容；false 时不调用脱敏组件（组件内聚判定）
@@ -83,11 +83,11 @@ func (c Config) Validate() error {
 			return errors.New("skip_paths 不能含首尾空格")
 		}
 	}
-	if c.MaxRequestBodySize != nil && *c.MaxRequestBodySize < 0 {
-		return errors.New("max_request_body_size 不能小于 0")
+	if c.MaxRequestBodySize != nil && *c.MaxRequestBodySize <= 0 {
+		return errors.New("max_request_body_size 必须大于 0")
 	}
-	if c.MaxResponseBodySize != nil && *c.MaxResponseBodySize < 0 {
-		return errors.New("max_response_body_size 不能小于 0")
+	if c.MaxResponseBodySize != nil && *c.MaxResponseBodySize <= 0 {
+		return errors.New("max_response_body_size 必须大于 0")
 	}
 	switch c.ProviderOrDefault() {
 	case ProviderKafka, ProviderMemory, ProviderRedisStream:
@@ -141,23 +141,20 @@ func (c MemoryConfig) WorkersOrDefault() int {
 	return c.Workers
 }
 
-// MaxRequestBodySizeOrDefault 返回请求体记录最大字节数；未配置用默认值，显式 0 表示不截断
+// MaxRequestBodySizeOrDefault 返回请求体记录最大字节数；未配置或非正数时用默认 1MB
 func (c Config) MaxRequestBodySizeOrDefault() int {
 	return resolveBodySizeLimit(c.MaxRequestBodySize, defaultHTTPRecordMaxRequestBodySize)
 }
 
-// MaxResponseBodySizeOrDefault 返回响应体记录最大字节数；未配置用默认值，显式 0 表示不截断
+// MaxResponseBodySizeOrDefault 返回响应体记录最大字节数；未配置或非正数时用默认 1MB
 func (c Config) MaxResponseBodySizeOrDefault() int {
 	return resolveBodySizeLimit(c.MaxResponseBodySize, defaultHTTPRecordMaxResponseBodySize)
 }
 
-// resolveBodySizeLimit 将接入方配置解析为采集上限：nil 用默认值，0 为 utf8util.Unlimited
+// resolveBodySizeLimit 将接入方配置解析为采集上限：nil 或非正数用默认值，正数原样使用
 func resolveBodySizeLimit(configured *int, defaultSize int) int {
-	if configured == nil {
+	if configured == nil || *configured <= 0 {
 		return defaultSize
-	}
-	if *configured == 0 {
-		return utf8util.Unlimited
 	}
 	return *configured
 }

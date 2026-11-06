@@ -5,6 +5,7 @@ package httprecord
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -321,6 +322,102 @@ func TestMiddlewareRecordsBodyReadFailure(t *testing.T) {
 	records := waitForRecords(t, rec, 1)
 	if records[0].RequestBody != requestBodyReadFailed || records[0].RequestBodyTruncated {
 		t.Fatalf("请求体应记为 %q，实际 %q truncated=%v", requestBodyReadFailed, records[0].RequestBody, records[0].RequestBodyTruncated)
+	}
+}
+
+// TestMiddlewareOmitsBinaryBodies 验证 multipart、图片和二进制不读正文，请求元数据仍记录
+func TestMiddlewareOmitsBinaryBodies(t *testing.T) {
+	raw := "file-bytes-and-a-password"
+	cases := []struct {
+		name        string
+		contentType string
+	}{
+		{name: "multipart", contentType: "multipart/form-data; boundary=abc"},
+		{name: "image", contentType: "image/png"},
+		{name: "octet-stream", contentType: "application/octet-stream"},
+		{name: "pdf", contentType: "application/pdf"},
+		{name: "zip", contentType: "application/zip"},
+		{name: "vnd", contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recorderService{}
+			four := 4
+			cfg := Config{
+				MiddlewareEnabled:   true,
+				RecordRequestBody:   true,
+				RecordResponseBody:  true,
+				MaskSensitive:       true,
+				MaxResponseBodySize: &four,
+			}
+			engine := newTestEngine(t, cfg, rec, newTestMaskService(t))
+			engine.POST("/upload", func(c *gin.Context) {
+				got, err := io.ReadAll(c.Request.Body)
+				if err != nil {
+					t.Errorf("业务读取正文失败: %v", err)
+				}
+				if string(got) != raw {
+					t.Errorf("业务应读到原始正文 %q，实际 %q", raw, got)
+				}
+				c.Data(http.StatusCreated, "image/png", []byte("png-image-bytes"))
+			})
+
+			req := httptest.NewRequest(http.MethodPost, "/upload?q=1", strings.NewReader(raw))
+			req.Header.Set("Content-Type", tc.contentType)
+			w := httptest.NewRecorder()
+			engine.ServeHTTP(w, req)
+			if w.Code != http.StatusCreated || w.Body.String() != "png-image-bytes" {
+				t.Fatalf("客户端应收到完整响应，实际 %d %q", w.Code, w.Body.String())
+			}
+
+			record := waitForRecords(t, rec, 1)[0]
+			if record.Method != http.MethodPost || record.Path != "/upload" || record.StatusCode != http.StatusCreated {
+				t.Fatalf("请求元数据应保留: %+v", record)
+			}
+			if record.Query != "q=1" {
+				t.Fatalf("query 应保留: %q", record.Query)
+			}
+			if record.RequestBody != "" || record.RequestBodyTruncated {
+				t.Fatalf("请求正文应跳过: %q truncated=%v", record.RequestBody, record.RequestBodyTruncated)
+			}
+			if record.ResponseBody != "" || record.ResponseBodyTruncated {
+				t.Fatalf("响应正文应跳过且不算截断: %q truncated=%v", record.ResponseBody, record.ResponseBodyTruncated)
+			}
+		})
+	}
+}
+
+// TestMiddlewareSkipsResponseCaptureWhenDisabled 验证未记录响应体时不采集正文，状态码和请求体仍记录
+func TestMiddlewareSkipsResponseCaptureWhenDisabled(t *testing.T) {
+	rec := &recorderService{}
+	cfg := Config{
+		MiddlewareEnabled:  true,
+		RecordRequestBody:  true,
+		RecordResponseBody: false,
+		MaskSensitive:      true,
+	}
+	engine := newTestEngine(t, cfg, rec, newTestMaskService(t))
+	engine.POST("/meta", func(c *gin.Context) {
+		c.JSON(http.StatusCreated, gin.H{"code": "OK", "msg": "success", "password": "resp-secret"})
+	})
+
+	req := authenticatedRequest(http.MethodPost, "/meta", `{"password":"req-secret"}`)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), "resp-secret") {
+		t.Fatalf("客户端应收到完整响应，实际 %d %q", w.Code, w.Body.String())
+	}
+
+	record := waitForRecords(t, rec, 1)[0]
+	if record.StatusCode != http.StatusCreated || record.Path != "/meta" {
+		t.Fatalf("元数据应保留: %+v", record)
+	}
+	if !strings.Contains(record.RequestBody, `"password":"***"`) || strings.Contains(record.RequestBody, "req-secret") {
+		t.Fatalf("请求体应继续脱敏: %q", record.RequestBody)
+	}
+	if record.ResponseBody != "" || record.ResponseBodyTruncated || record.BizCode != "" {
+		t.Fatalf("未开启响应体记录时不应采集正文和业务码: %+v", record)
 	}
 }
 

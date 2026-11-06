@@ -244,13 +244,29 @@ func TestExecute_InvalidInput(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
 	ctx := context.Background()
-	fn := func(context.Context) (string, error) { return "", nil }
+	calls := 0
+	fn := func(context.Context) (string, error) {
+		calls++
+		return "", nil
+	}
 
 	if _, err := Execute[string](nil, nil, ctx, testKey("k5"), fn); !errors.Is(err, ErrGuardNotReady) {
 		t.Fatalf("事务运行器缺失应返回 ErrGuardNotReady, err=%v", err)
 	}
 	if _, err := Execute(env.guard, env.runner, ctx, Key{BizID: "only-biz"}, fn); !errors.Is(err, ErrKeyInvalid) {
 		t.Fatalf("幂等键不完整应返回 ErrKeyInvalid, err=%v", err)
+	}
+	// 冒号会把不同的 biz_id、biz_sub_id 拼成同一条 Redis 键，进缓存前直接拒绝
+	for _, key := range []Key{
+		{BizID: "order:1", BizSubID: "pay", OperationType: "TEST_OP"},
+		{BizID: "order", BizSubID: "1:pay", OperationType: "TEST_OP"},
+	} {
+		if _, err := Execute(env.guard, env.runner, ctx, key, fn); !errors.Is(err, ErrKeyInvalid) {
+			t.Fatalf("含冒号的业务键应返回 ErrKeyInvalid, key=%+v, err=%v", key, err)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("非法幂等键不应执行业务, calls=%d", calls)
 	}
 }
 
@@ -486,14 +502,19 @@ func newLockLostOnRecheck() *lockLostOnRecheck {
 }
 
 func (l *lockLostOnRecheck) Lock(context.Context) error { return nil }
+
 func (l *lockLostOnRecheck) TryLock(context.Context) (bool, error) {
 	return true, nil
 }
+
 func (l *lockLostOnRecheck) TryLockWithTimeout(context.Context, time.Duration) (bool, error) {
 	return true, nil
 }
+
 func (l *lockLostOnRecheck) Unlock(context.Context) error { return nil }
-func (l *lockLostOnRecheck) Key() string                  { return "test-lock-lost-on-recheck" }
+
+func (l *lockLostOnRecheck) Key() string { return "test-lock-lost-on-recheck" }
+
 func (l *lockLostOnRecheck) HeldContext() context.Context {
 	l.reads++
 	if l.reads >= 2 {
