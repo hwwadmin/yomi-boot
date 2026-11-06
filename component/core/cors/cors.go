@@ -24,7 +24,9 @@ func Middleware(cfg Config) gin.HandlerFunc {
 
 		origin := c.GetHeader("Origin")
 
-		// 携带凭证时不能使用 *，需回显具体 Origin
+		// 来源列表里要不要写 *，由业务库的配置决定，本包不替它拒绝。
+		// 浏览器不允许 Access-Control-Allow-Origin: * 和凭证同时出现，
+		// 所以配置为 * 且允许凭证时，回显请求里的 Origin。
 		if cfg.AllowCredentials && allowAllOrigins && origin != "" {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Vary", "Origin")

@@ -9,7 +9,7 @@ import (
 // Config 表示跨域资源共享运行时配置
 type Config struct {
 	MiddlewareEnabled *bool    // MiddlewareEnabled 控制 CORS 中间件是否执行；nil 视为启用；由 BootConfig.enabled 映射
-	AllowOrigins      []string // AllowOrigins 是允许的来源地址列表，* 表示允许所有来源
+	AllowOrigins      []string // AllowOrigins 是允许的来源地址列表，* 表示允许所有来源；是否使用 * 由业务库决定
 	AllowMethods      []string // AllowMethods 是允许的 HTTP 方法列表
 	AllowHeaders      []string // AllowHeaders 是允许的请求头列表
 	MaxAge            int      // MaxAge 是预检请求缓存秒数（Access-Control-Max-Age），0 表示默认 86400
