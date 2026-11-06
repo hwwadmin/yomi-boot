@@ -456,7 +456,10 @@ func (c *consumer) claimPending(ctx context.Context, handler Handler, processMu 
 		if err := c.processMessages(ctx, handler, messages, processMu); err != nil {
 			return
 		}
-		if next == "0-0" || len(messages) == 0 {
+		// 空列表只表示这一页没有认领到消息。Redis 7 扫满 COUNT*10 条尚未空闲的 PEL 时
+		// 会返回空列表和非 0-0 游标，必须沿游标继续，否则后面已经空闲的消息本轮会被漏掉。
+		// 游标为空或没有前进时停止，避免服务器反复给出同一位置时空转。
+		if next == "" || next == "0-0" || next == start {
 			return
 		}
 		start = next

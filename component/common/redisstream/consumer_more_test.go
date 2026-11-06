@@ -6,6 +6,7 @@ package redisstream
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -144,6 +145,131 @@ func newTestConsumer(t *testing.T) (*consumer, *redisv9.Client, *miniredis.Minir
 			deadStreamKey: "s_dead",
 		},
 	}, client, mr, func() { _ = client.Close() }
+}
+
+// autoClaimPage 是测试替身返回的一页 XAUTOCLAIM 结果
+type autoClaimPage struct {
+	messages []redisv9.XMessage
+	next     string
+}
+
+// scriptedAutoClaim 按预设页序返回 XAUTOCLAIM，不访问真实 Redis。
+// miniredis 在没认领到消息时直接给 0-0，盖不住 Redis 7 的空页加后续游标。
+type scriptedAutoClaim struct {
+	mu    sync.Mutex
+	pages []autoClaimPage
+	calls []string
+}
+
+func (s *scriptedAutoClaim) DialHook(next redisv9.DialHook) redisv9.DialHook { return next }
+
+func (s *scriptedAutoClaim) ProcessPipelineHook(next redisv9.ProcessPipelineHook) redisv9.ProcessPipelineHook {
+	return next
+}
+
+func (s *scriptedAutoClaim) ProcessHook(next redisv9.ProcessHook) redisv9.ProcessHook {
+	return func(ctx context.Context, cmd redisv9.Cmder) error {
+		if cmd.Name() != "xautoclaim" {
+			return next(ctx, cmd)
+		}
+		xcmd, ok := cmd.(*redisv9.XAutoClaimCmd)
+		if !ok {
+			return next(ctx, cmd)
+		}
+		start := ""
+		if args := cmd.Args(); len(args) >= 6 {
+			start, _ = args[5].(string)
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.calls = append(s.calls, start)
+		page := autoClaimPage{next: "0-0"}
+		if len(s.pages) > 0 {
+			page = s.pages[0]
+			s.pages = s.pages[1:]
+		}
+		xcmd.SetVal(page.messages, page.next)
+		return nil
+	}
+}
+
+func (s *scriptedAutoClaim) seenStarts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.calls))
+	copy(out, s.calls)
+	return out
+}
+
+// TestClaimPending_ContinuesAfterEmptyPage 验证空页仍沿非 0-0 游标继续认领
+func TestClaimPending_ContinuesAfterEmptyPage(t *testing.T) {
+	c, _, _, cleanup := newTestConsumer(t)
+	defer cleanup()
+
+	script := &scriptedAutoClaim{
+		pages: []autoClaimPage{
+			{next: "200-0"},
+			{
+				messages: []redisv9.XMessage{{
+					ID:     "200-1",
+					Values: map[string]any{PayloadField: "late"},
+				}},
+				next: "0-0",
+			},
+		},
+	}
+	c.client.AddHook(script)
+
+	var got []string
+	var mu sync.Mutex
+	c.claimPending(context.Background(), func(_ context.Context, entry Entry) HandleResult {
+		mu.Lock()
+		got = append(got, entry.ID)
+		mu.Unlock()
+		return HandleRetry
+	}, &sync.Mutex{})
+
+	if len(got) != 1 || got[0] != "200-1" {
+		t.Fatalf("应认领空页之后的消息，实际 %v", got)
+	}
+	starts := script.seenStarts()
+	if len(starts) != 2 || starts[0] != "0-0" || starts[1] != "200-0" {
+		t.Fatalf("应按游标继续，实际调用起点 %v", starts)
+	}
+}
+
+// TestClaimPending_StopsWhenCursorDoesNotAdvance 验证游标不前进时停止，避免空转
+func TestClaimPending_StopsWhenCursorDoesNotAdvance(t *testing.T) {
+	c, _, _, cleanup := newTestConsumer(t)
+	defer cleanup()
+
+	script := &scriptedAutoClaim{
+		pages: []autoClaimPage{
+			{next: "5-0"},
+			{next: "5-0"},
+			{
+				messages: []redisv9.XMessage{{
+					ID:     "9-0",
+					Values: map[string]any{PayloadField: "should-not-run"},
+				}},
+				next: "0-0",
+			},
+		},
+	}
+	c.client.AddHook(script)
+
+	called := false
+	c.claimPending(context.Background(), func(context.Context, Entry) HandleResult {
+		called = true
+		return HandleRetry
+	}, &sync.Mutex{})
+
+	if called {
+		t.Fatal("游标没有前进时不应继续认领后续页")
+	}
+	if starts := script.seenStarts(); len(starts) != 2 {
+		t.Fatalf("游标停滞应在第二次调用后停止，实际 %v", starts)
+	}
 }
 
 // TestFinalizeHandleResult 验证各 HandleResult 的收尾行为
