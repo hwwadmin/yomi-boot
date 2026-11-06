@@ -50,14 +50,25 @@ func Middleware(cfg Config) gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Methods", allowMethods)
 		c.Header("Access-Control-Allow-Headers", allowHeaders)
 
-		// 预检请求直接返回 204
-		if c.Request.Method == http.MethodOptions {
+		// 浏览器预检才直接 204，CORS 头已写在上面。其它 OPTIONS 交给后面的路由。
+		if isPreflight(c.Request) {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
 		c.Next()
 	}
+}
+
+// isPreflight 判断是不是 CORS 预检：OPTIONS，且同时带 Origin 和 Access-Control-Request-Method
+func isPreflight(r *http.Request) bool {
+	if r == nil || r.Method != http.MethodOptions {
+		return false
+	}
+	if strings.TrimSpace(r.Header.Get("Origin")) == "" {
+		return false
+	}
+	return strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")) != ""
 }
 
 // isOriginAllowed 检查请求来源是否在允许列表中
