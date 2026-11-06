@@ -94,12 +94,18 @@ func NewFileRotator(opts RotatorOptions) (*FileRotator, error) {
 	return r, nil
 }
 
-// Write 实现 io.Writer，必要时先滚动再写入
+// Write 实现 io.Writer，必要时先滚动再写入。
+// closed 才表示调用方已经关闭；file == nil 只表示当前没有句柄，下一笔会重新打开。
 func (r *FileRotator) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.closed || r.file == nil {
+	if r.closed {
 		return 0, errors.New("日志文件已关闭")
+	}
+	if r.file == nil {
+		if err := r.reopenActiveLocked(); err != nil {
+			return 0, err
+		}
 	}
 	if err := r.rotateIfNeededLocked(int64(len(p))); err != nil {
 		return 0, err
@@ -177,8 +183,10 @@ func (r *FileRotator) rotateIfNeededLocked(incoming int64) error {
 	return r.rotateLocked(today)
 }
 
-// rotateLocked 将活跃文件 rename 为历史名并创建新活跃文件（调用方须已持锁）
-func (r *FileRotator) rotateLocked(today string) error {
+// rotateLocked 将活跃文件 rename 为历史名并创建新活跃文件（调用方须已持锁）。
+// 改名或新建失败时，这一笔返回错误，并尽量重新打开活跃文件，避免后续写入永久失败。
+func (r *FileRotator) rotateLocked(today string) (err error) {
+	defer r.reopenAfterRotateFailure(&err)
 	if r.file != nil {
 		_ = r.file.Close()
 		r.file = nil
@@ -226,6 +234,34 @@ func (r *FileRotator) rotateLocked(today string) error {
 	}
 	r.file = f
 	r.size = 0
+	return nil
+}
+
+// reopenAfterRotateFailure 在滚动失败且句柄已丢掉时重新打开活跃文件。
+// 这一笔的错误仍然返回；下一笔 Write 可以继续滚动。
+func (r *FileRotator) reopenAfterRotateFailure(err *error) {
+	if err == nil || *err == nil || r.file != nil {
+		return
+	}
+	if reopenErr := r.reopenActiveLocked(); reopenErr != nil {
+		*err = errors.Join(*err, reopenErr)
+	}
+}
+
+// reopenActiveLocked 按追加方式打开活跃日志并刷新大小（调用方须已持锁）。
+// 不改日期和历史序号，避免失败的滚动把序号或日期清掉。
+func (r *FileRotator) reopenActiveLocked() error {
+	f, err := os.OpenFile(r.activePath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return errors.Wrap(err, "重新打开日志文件失败")
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return errors.Wrap(err, "读取日志文件信息失败")
+	}
+	r.file = f
+	r.size = info.Size()
 	return nil
 }
 

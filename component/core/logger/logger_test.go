@@ -592,6 +592,76 @@ func TestFileRotator_SizeRotate(t *testing.T) {
 	}
 }
 
+// TestFileRotator_RenameFailureKeepsWriting 验证改名失败只丢掉这一笔，下一笔仍能滚动。
+func TestFileRotator_RenameFailureKeepsWriting(t *testing.T) {
+	dir := t.TempDir()
+	rot, err := NewFileRotator(RotatorOptions{
+		RootDir:       dir,
+		LogType:       "info",
+		MaxSizeMB:     1,
+		RetentionDays: 3,
+		MaxBackups:    10,
+		MaxTotalMB:    100,
+		Compress:      false,
+		Timezone:      "Asia/Singapore",
+	})
+	if err != nil {
+		t.Fatalf("NewFileRotator: %v", err)
+	}
+	defer func() { _ = rot.Close() }()
+
+	rot.mu.Lock()
+	rot.maxSizeBytes = 64
+	rot.mu.Unlock()
+
+	payload := []byte(strings.Repeat("x", 40) + "\n")
+	if _, err := rot.Write(payload); err != nil {
+		t.Fatalf("write1: %v", err)
+	}
+
+	today := time.Now().In(rot.location).Format("20060102")
+	logDir := filepath.Join(dir, "info")
+	// 占住第一个历史名，让这次 rename 失败
+	if err := os.Mkdir(filepath.Join(logDir, today+"-0000001.log"), 0o755); err != nil {
+		t.Fatalf("mkdir conflict: %v", err)
+	}
+
+	if _, err := rot.Write(payload); err == nil || !strings.Contains(err.Error(), "滚动日志 rename 失败") {
+		t.Fatalf("want rename error, got %v", err)
+	}
+
+	recovered := []byte(strings.Repeat("y", 40) + "\n")
+	if _, err := rot.Write(recovered); err != nil {
+		t.Fatalf("write after rename failure: %v", err)
+	}
+	if err := rot.Sync(); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+
+	history := filepath.Join(logDir, today+"-0000002.log")
+	gotHistory, err := os.ReadFile(history)
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if string(gotHistory) != string(payload) {
+		t.Fatalf("history = %q, want first payload", gotHistory)
+	}
+	gotActive, err := os.ReadFile(filepath.Join(logDir, "info.log"))
+	if err != nil {
+		t.Fatalf("read active: %v", err)
+	}
+	if string(gotActive) != string(recovered) {
+		t.Fatalf("active = %q, want recovered payload", gotActive)
+	}
+
+	if err := rot.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if _, err := rot.Write(payload); err == nil || !strings.Contains(err.Error(), "日志文件已关闭") {
+		t.Fatalf("closed write = %v, want 日志文件已关闭", err)
+	}
+}
+
 // TestFileRotator_DefaultUsesProcessTimezone 验证未指定时区时跟随进程时区
 func TestFileRotator_DefaultUsesProcessTimezone(t *testing.T) {
 	original := time.Local
