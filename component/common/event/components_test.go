@@ -5,6 +5,7 @@ package event
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,25 @@ func TestNewComponentsValidation(t *testing.T) {
 	}
 	if _, err := NewComponents(buildDeps(func(d *Deps) { d.Redis = nil }), Config{InboxEnabled: true}); err == nil {
 		t.Fatal("消费侧启用但 Redis 服务缺失应返回错误")
+	}
+	if _, err := NewComponents(buildDeps(func(d *Deps) {
+		d.AppName = strings.Repeat("名", maxServiceNameLen+1)
+	}), Config{InboxEnabled: true}); err == nil {
+		t.Fatal("app.name 回退后的服务名超过 100 个字符应返回错误")
+	}
+	if _, err := NewComponents(buildDeps(func(d *Deps) {}), Config{
+		OutboxEnabled: true,
+		ServiceName:   strings.Repeat("a", maxServiceNameLen+1),
+	}); err == nil {
+		t.Fatal("配置的服务名超过 100 个字符应返回错误")
+	}
+	if _, err := NewComponents(buildDeps(func(d *Deps) {
+		d.AppName = strings.Repeat("名", maxServiceNameLen+1)
+	}), Config{
+		OutboxEnabled: true,
+		ServiceName:   strings.Repeat("a", maxServiceNameLen),
+	}); err != nil {
+		t.Fatalf("显式服务名在列宽内应忽略超长 app.name: %v", err)
 	}
 }
 

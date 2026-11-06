@@ -74,6 +74,9 @@ func NewComponents(deps Deps, eventCfg Config) (*Components, error) {
 	}
 
 	runtime := runtimeFrom(eventCfg, deps.AppName)
+	if err := validateServiceNameLen(runtime.ServiceName); err != nil {
+		return nil, errors.Wrap(err, "event")
+	}
 	c := &Components{
 		cfg:         runtime,
 		txExecutor:  deps.TxExecutor,

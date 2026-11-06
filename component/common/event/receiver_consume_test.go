@@ -5,6 +5,7 @@ package event
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
@@ -55,6 +56,14 @@ func TestReceiverWrapHandlerGuardBranches(t *testing.T) {
 		handler := receiver.WrapHandler(func(context.Context, Event) error { return nil })
 		if result := handler(ctx, yomikafka.Message{Value: []byte("not-json")}); result != yomikafka.AckDrop() {
 			t.Fatalf("非法消息应 AckDrop，实际 %+v", result)
+		}
+	})
+
+	t.Run("超长 eventId 抛弃", func(t *testing.T) {
+		handler := receiver.WrapHandler(func(context.Context, Event) error { return nil })
+		body := []byte(`{"eventId":"` + strings.Repeat("e", maxEventIDLen+1) + `","topic":"topic","payload":"p"}`)
+		if result := handler(ctx, yomikafka.Message{Value: body}); result != yomikafka.AckDrop() {
+			t.Fatalf("超长 eventId 应 AckDrop，实际 %+v", result)
 		}
 	})
 

@@ -1,6 +1,7 @@
 package event
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,33 @@ func TestConfigValidateFrequencyMinimum(t *testing.T) {
 				t.Fatalf("unexpected validation error: %v", err)
 			}
 		})
+	}
+}
+
+// TestConfigValidateServiceNameLength 校验服务名按字符计不超过 service_name 列宽
+func TestConfigValidateServiceNameLength(t *testing.T) {
+	exact := strings.Repeat("名", maxServiceNameLen)
+	over := strings.Repeat("名", maxServiceNameLen+1)
+
+	if err := (Config{OutboxEnabled: true, ServiceName: exact}).Validate(); err != nil {
+		t.Fatalf("100 个字符的服务名应通过: %v", err)
+	}
+	if err := (Config{OutboxEnabled: true, ServiceName: "  " + exact + "  "}).Validate(); err != nil {
+		t.Fatalf("去掉首尾空白后不超过列宽的服务名应通过: %v", err)
+	}
+	if err := (Config{OutboxEnabled: true, ServiceName: strings.Repeat(" ", maxServiceNameLen+1)}).Validate(); err != nil {
+		t.Fatalf("空白服务名会回退到默认名，不应报错: %v", err)
+	}
+	if err := (Config{ServiceName: over}).Validate(); err != nil {
+		t.Fatalf("未启用时不校验服务名长度: %v", err)
+	}
+
+	err := (Config{InboxEnabled: true, ServiceName: over}).Validate()
+	if err == nil {
+		t.Fatal("超过 100 个字符的服务名应返回错误")
+	}
+	if !strings.Contains(err.Error(), "service_name") || !strings.Contains(err.Error(), "100") {
+		t.Fatalf("错误信息应指出 service_name 和上限，实际 %v", err)
 	}
 }
 

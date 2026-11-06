@@ -5,6 +5,7 @@ package event
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
@@ -48,6 +49,19 @@ func TestPublisherPublish(t *testing.T) {
 	}
 	if err := p.Publish(ctx, Event{EventID: "event-2"}); !errors.Is(err, ErrEventInvalid) {
 		t.Fatalf("空 topic 应返回 ErrEventInvalid，实际 %v", err)
+	}
+	if err := p.Publish(ctx, Event{EventID: strings.Repeat("e", maxEventIDLen+1), Topic: "topic"}); !errors.Is(err, ErrEventInvalid) {
+		t.Fatalf("超长 eventId 应返回 ErrEventInvalid，实际 %v", err)
+	}
+	if err := p.Publish(ctx, Event{EventID: "event-len", Topic: strings.Repeat("t", maxTopicLen+1)}); !errors.Is(err, ErrEventInvalid) {
+		t.Fatalf("超长 topic 应返回 ErrEventInvalid，实际 %v", err)
+	}
+	if err := p.Publish(ctx, Event{
+		EventID: strings.Repeat("e", maxEventIDLen),
+		Topic:   strings.Repeat("t", maxTopicLen),
+		Payload: "payload-len",
+	}); err != nil {
+		t.Fatalf("列宽上限内的事件应能发布: %v", err)
 	}
 }
 

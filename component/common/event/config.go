@@ -6,6 +6,7 @@ package event
 import (
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/roundrobin"
@@ -28,13 +29,19 @@ const (
 	defaultEventCleanupFrequencyMS   = 3600000
 	defaultEventCleanupBatchSize     = 500
 	defaultEventCleanupMaxBatches    = 20
+
+	// 与 sys_event_inbox、sys_event_outbox 及两侧死信表的 varchar 列宽一致。
+	// MySQL utf8mb4 和 PostgreSQL 的 varchar(N) 都按字符计，这里用 rune 数。
+	maxServiceNameLen = 100
+	maxEventIDLen     = 100
+	maxTopicLen       = 200
 )
 
 // Config 表示消息队列事件配置
 type Config struct {
 	OutboxEnabled       bool   // OutboxEnabled 是否启用发布侧（写 Outbox + 发件箱后台投递）
 	InboxEnabled        bool   // InboxEnabled 是否启用消费侧（Receiver/Inbox）
-	ServiceName         string // ServiceName 是归属业务系统名称，未配置时使用 app.name
+	ServiceName         string // ServiceName 是归属业务系统名称，未配置时使用 app.name；按字符计不能超过 100
 	FetchFrequencyMS    int    // FetchFrequencyMS 是发件箱抓取频率（毫秒）
 	FetchSize           int    // FetchSize 是单次抓取待发件箱事件数量
 	SentThreadCount     int    // SentThreadCount 是发件箱 Kafka 发送工作池并发数
@@ -211,10 +218,26 @@ func validateCleanupConfig(
 	return nil
 }
 
+// columnTooLong 判断字符串是否超过表字段的字符上限。
+func columnTooLong(value string, maxLen int) bool {
+	return utf8.RuneCountInString(value) > maxLen
+}
+
+// validateServiceNameLen 拒绝写不进 service_name 的服务名。空串表示走默认名，这里放过。
+func validateServiceNameLen(name string) error {
+	if columnTooLong(name, maxServiceNameLen) {
+		return errors.Newf("service_name 长度不能超过 %d", maxServiceNameLen)
+	}
+	return nil
+}
+
 // Validate 校验消息队列事件配置（发布侧或消费侧启用时校验）
 func (c Config) Validate() error {
 	if !c.AnyEnabled() {
 		return nil
+	}
+	if err := validateServiceNameLen(strings.TrimSpace(c.ServiceName)); err != nil {
+		return err
 	}
 	minFrequencyMS := int(roundrobin.MinInterval / time.Millisecond)
 	if c.FetchFrequencyMS < 0 {

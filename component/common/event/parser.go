@@ -5,6 +5,7 @@ package event
 
 import (
 	"encoding/json"
+	"unicode/utf8"
 
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
 )
@@ -27,8 +28,18 @@ func ParseAndValidate(message []byte, requireEventID bool) (Event, bool) {
 		logger.ErrorWithoutCtx("[消息队列事件] topic 为空，已被抛弃", "message", string(message))
 		return Event{}, false
 	}
+	if columnTooLong(evt.Topic, maxTopicLen) {
+		logger.ErrorWithoutCtx("[消息队列事件] topic 超过列宽，已被抛弃",
+			"topicLen", utf8.RuneCountInString(evt.Topic), "max", maxTopicLen)
+		return Event{}, false
+	}
 	if requireEventID && evt.EventID == "" {
 		logger.ErrorWithoutCtx("[消息队列事件] eventId 为空，已被抛弃", "message", string(message))
+		return Event{}, false
+	}
+	if columnTooLong(evt.EventID, maxEventIDLen) {
+		logger.ErrorWithoutCtx("[消息队列事件] eventId 超过列宽，已被抛弃",
+			"eventIdLen", utf8.RuneCountInString(evt.EventID), "max", maxEventIDLen)
 		return Event{}, false
 	}
 	return evt, true
