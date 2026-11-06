@@ -148,6 +148,17 @@ func TestPresignArgs(t *testing.T) {
 	}
 }
 
+// TestIsHTTPEndpoint 验证只有明文 HTTP 才跳过正文哈希
+func TestIsHTTPEndpoint(t *testing.T) {
+	t.Parallel()
+	if !isHTTPEndpoint("http://127.0.0.1:9000") || !isHTTPEndpoint(" HTTP://rustfs:9000 ") {
+		t.Fatal("明文 HTTP 应判定为 true")
+	}
+	if isHTTPEndpoint("https://127.0.0.1:9000") || isHTTPEndpoint("") {
+		t.Fatal("HTTPS 和空端点不应跳过正文哈希")
+	}
+}
+
 // TestRustFSEndpoint 验证 RustFS 端点 scheme 归一化
 func TestRustFSEndpoint(t *testing.T) {
 	t.Parallel()

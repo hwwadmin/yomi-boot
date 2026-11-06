@@ -13,11 +13,13 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+	"github.com/aws/smithy-go/middleware"
 )
 
 var _ Storage = (*rustfsStorage)(nil)
@@ -30,6 +32,7 @@ type rustfsStorage struct {
 	presigner        *s3.PresignClient
 	publicBaseURL    string
 	maxPresignExpiry time.Duration
+	httpEndpoint     bool
 }
 
 // newRustFSStorage 根据配置创建 RustFS 存储实现
@@ -62,6 +65,7 @@ func newRustFSStorage(cfg Config) (Storage, error) {
 		presigner:        s3.NewPresignClient(client),
 		publicBaseURL:    strings.TrimSpace(cfg.PublicBaseURL),
 		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
+		httpEndpoint:     isHTTPEndpoint(endpoint),
 	}, nil
 }
 
@@ -75,6 +79,27 @@ func rustFSEndpoint(endpoint string, useSSL bool) string {
 		return "https://" + endpoint
 	}
 	return "http://" + endpoint
+}
+
+// payloadSignOptions 在 HTTP 端点上改为不计算正文哈希。
+// SDK 默认会先读完整文再回绕，不能回绕的流会失败，能回绕的会被读两遍。
+func (s *rustfsStorage) payloadSignOptions() []func(*s3.Options) {
+	if !s.httpEndpoint {
+		return nil
+	}
+	return []func(*s3.Options){withUnsignedPayload}
+}
+
+// isHTTPEndpoint 判断端点是否为未加密的 HTTP。空端点和 https 都返回 false。
+func isHTTPEndpoint(endpoint string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(endpoint)), "http://")
+}
+
+// withUnsignedPayload 让 PutObject 使用 UNSIGNED-PAYLOAD，正文只随请求发送一次。
+func withUnsignedPayload(o *s3.Options) {
+	o.APIOptions = append(o.APIOptions, func(stack *middleware.Stack) error {
+		return v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware(stack)
+	})
 }
 
 // PutObject 上传对象，成功返回可入库的逻辑 URI
@@ -101,7 +126,7 @@ func (s *rustfsStorage) PutObject(ctx context.Context, bucket, key string, body 
 		input.ContentLength = aws.Int64(size)
 	}
 
-	_, err = s.client.PutObject(ctx, input)
+	_, err = s.client.PutObject(ctx, input, s.payloadSignOptions()...)
 	if err != nil {
 		return "", errors.Wrap(err, "oss: RustFS 上传对象失败")
 	}

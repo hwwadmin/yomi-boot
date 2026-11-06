@@ -28,6 +28,7 @@ type s3Storage struct {
 	presigner        *s3.PresignClient
 	publicBaseURL    string
 	maxPresignExpiry time.Duration
+	httpEndpoint     bool
 }
 
 // newS3Storage 根据配置创建 AWS S3 存储实现
@@ -59,6 +60,7 @@ func newS3Storage(cfg Config) (Storage, error) {
 		presigner:        s3.NewPresignClient(client),
 		publicBaseURL:    strings.TrimSpace(cfg.PublicBaseURL),
 		maxPresignExpiry: cfg.maxPresignExpiryOrDefault(),
+		httpEndpoint:     isHTTPEndpoint(endpoint),
 	}, nil
 }
 
@@ -86,11 +88,19 @@ func (s *s3Storage) PutObject(ctx context.Context, bucket, key string, body io.R
 		input.ContentLength = aws.Int64(size)
 	}
 
-	_, err = s.client.PutObject(ctx, input)
+	_, err = s.client.PutObject(ctx, input, s.payloadSignOptions()...)
 	if err != nil {
 		return "", errors.Wrap(err, "oss: S3 上传对象失败")
 	}
 	return JoinURI(bucket, key)
+}
+
+// payloadSignOptions 在 HTTP 自定义端点上改为不计算正文哈希。官方 HTTPS 保持 SDK 默认。
+func (s *s3Storage) payloadSignOptions() []func(*s3.Options) {
+	if !s.httpEndpoint {
+		return nil
+	}
+	return []func(*s3.Options){withUnsignedPayload}
 }
 
 // GetObject 下载对象

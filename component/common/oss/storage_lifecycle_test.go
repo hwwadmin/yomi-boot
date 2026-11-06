@@ -11,6 +11,38 @@ import (
 	"time"
 )
 
+// readerOnly 去掉底层的 Seek，用来模拟只能往前读的流。
+type readerOnly struct{ io.Reader }
+
+// countReadSeeker 统计正文被读取的字节数，同时允许回绕。
+type countReadSeeker struct {
+	data  []byte
+	pos   int
+	bytes int
+}
+
+func (c *countReadSeeker) Read(p []byte) (int, error) {
+	if c.pos >= len(c.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, c.data[c.pos:])
+	c.pos += n
+	c.bytes += n
+	return n, nil
+}
+
+func (c *countReadSeeker) Seek(off int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		c.pos = int(off)
+	case io.SeekCurrent:
+		c.pos += int(off)
+	case io.SeekEnd:
+		c.pos = len(c.data) + int(off)
+	}
+	return int64(c.pos), nil
+}
+
 // 各后端预签名 URL 的签名参数名
 const (
 	awsPresignMarker    = "X-Amz-Signature"
@@ -41,6 +73,31 @@ func runStorageLifecycle(t *testing.T, store Storage, missingBaseStore Storage, 
 	}
 	if _, err := store.PutObject(ctx, bucket, key, nil, 1); err == nil {
 		t.Fatal("nil body 应返回错误")
+	}
+
+	// 不能回绕的流也应能上传并读回
+	const streamedKey, streamed = "streamed.txt", "streamed-body"
+	streamURI, err := store.PutObject(ctx, bucket, streamedKey, readerOnly{strings.NewReader(streamed)}, int64(len(streamed)))
+	if err != nil {
+		t.Fatalf("上传不能回绕的正文失败: %v", err)
+	}
+	if streamURI != bucket+"/"+streamedKey {
+		t.Fatalf("不能回绕的上传应返回逻辑 URI，实际 %q", streamURI)
+	}
+	streamRC, _, err := store.GetObject(ctx, streamURI)
+	if err != nil {
+		t.Fatalf("下载不能回绕的对象失败: %v", err)
+	}
+	streamGot, err := io.ReadAll(streamRC)
+	_ = streamRC.Close()
+	if err != nil {
+		t.Fatalf("读取不能回绕的对象失败: %v", err)
+	}
+	if string(streamGot) != streamed {
+		t.Fatalf("不能回绕的对象内容期望 %q，实际 %q", streamed, streamGot)
+	}
+	if err := store.DeleteObject(ctx, streamURI); err != nil {
+		t.Fatalf("删除不能回绕的对象失败: %v", err)
 	}
 
 	// 下载往返与元数据映射
@@ -148,6 +205,31 @@ func runStorageErrorInjection(t *testing.T, store Storage, fake *fakeS3) {
 	}
 	if err := store.DeleteObject(ctx, "bucket/err-key"); err == nil {
 		t.Fatal("服务端故障时删除应返回错误")
+	}
+}
+
+// TestHTTPPutObjectReadsBodyOnce 验证 HTTP 上传不会把正文读两遍。
+func TestHTTPPutObjectReadsBodyOnce(t *testing.T) {
+	payload := []byte("abcdefghijklmnopqrstuvwxyz")
+	cases := []struct {
+		name  string
+		store func(t *testing.T, endpoint string) Storage
+	}{
+		{name: "rustfs", store: newTestRustFSStorage},
+		{name: "s3", store: newTestS3Storage},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, endpoint := newFakeS3(t)
+			body := &countReadSeeker{data: payload}
+			_, err := tc.store(t, endpoint).PutObject(context.Background(), "bucket", "once.txt", body, int64(len(payload)))
+			if err != nil {
+				t.Fatalf("上传失败: %v", err)
+			}
+			if body.bytes != len(payload) {
+				t.Fatalf("正文应只读一遍，期望 %d 字节，实际 %d", len(payload), body.bytes)
+			}
+		})
 	}
 }
 
