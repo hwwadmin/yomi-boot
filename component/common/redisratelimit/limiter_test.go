@@ -40,7 +40,7 @@ func testRule(policy string) Rule {
 // TestNewNoop 验证 Noop 限流器恒放行
 func TestNewNoop(t *testing.T) {
 	lim := NewNoop()
-	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", Rule{Limit: 1, Window: time.Minute}); err != nil {
+	if err := lim.Allow(context.Background(), "login:ip:1_2_3_4", Rule{Limit: 1, Window: time.Minute}); err != nil {
 		t.Fatalf("Noop 应恒成功: %v", err)
 	}
 }
@@ -69,7 +69,7 @@ func TestNew_DefaultConfig(t *testing.T) {
 func TestAllow_RateLimited(t *testing.T) {
 	stub := &stubRedis{allowed: false}
 	lim := New(stub, testCfg())
-	err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule(""))
+	err := lim.Allow(context.Background(), "login:ip:1_2_3_4", testRule(""))
 	if !booterrors.Is(err, ErrRateLimited) {
 		t.Fatalf("期望 ErrRateLimited，实际 %v", err)
 	}
@@ -79,7 +79,7 @@ func TestAllow_RateLimited(t *testing.T) {
 func TestAllow_FailOpen(t *testing.T) {
 	stub := &stubRedis{err: errors.New("redis down")}
 	lim := New(stub, testCfg())
-	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailOpen)); err != nil {
+	if err := lim.Allow(context.Background(), "login:ip:1_2_3_4", testRule(RedisErrorPolicyFailOpen)); err != nil {
 		t.Fatalf("fail_open 应放行: %v", err)
 	}
 }
@@ -88,7 +88,7 @@ func TestAllow_FailOpen(t *testing.T) {
 func TestAllow_FailClosed(t *testing.T) {
 	stub := &stubRedis{err: errors.New("redis down")}
 	lim := New(stub, testCfg())
-	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailClosed)); err == nil {
+	if err := lim.Allow(context.Background(), "login:ip:1_2_3_4", testRule(RedisErrorPolicyFailClosed)); err == nil {
 		t.Fatal("fail_closed 应返回错误")
 	}
 }
@@ -97,7 +97,7 @@ func TestAllow_FailClosed(t *testing.T) {
 func TestAllow_DefaultPolicyFailClosed(t *testing.T) {
 	stub := &stubRedis{err: errors.New("redis down")}
 	lim := New(stub, testCfg())
-	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule("  ")); err == nil {
+	if err := lim.Allow(context.Background(), "login:ip:1_2_3_4", testRule("  ")); err == nil {
 		t.Fatal("空白策略应按 fail_closed 返回错误")
 	}
 }
@@ -106,7 +106,7 @@ func TestAllow_DefaultPolicyFailClosed(t *testing.T) {
 func TestAllow_InvalidPolicy(t *testing.T) {
 	stub := &stubRedis{allowed: true}
 	lim := New(stub, testCfg())
-	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule("failopen")); err == nil {
+	if err := lim.Allow(context.Background(), "login:ip:1_2_3_4", testRule("failopen")); err == nil {
 		t.Fatal("非法故障策略应失败")
 	}
 	if stub.calls.Load() != 0 {
@@ -121,6 +121,9 @@ func TestAllow_InvalidKey(t *testing.T) {
 	if err := lim.Allow(context.Background(), "Login:IP", testRule(RedisErrorPolicyFailOpen)); err == nil {
 		t.Fatal("大写 key 应失败")
 	}
+	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailOpen)); err == nil {
+		t.Fatal("带点的 key 应失败")
+	}
 	if stub.calls.Load() != 0 {
 		t.Fatal("非法 key 不应调用 Redis")
 	}
@@ -132,7 +135,7 @@ func TestAllow_CanceledCtx(t *testing.T) {
 	lim := New(stub, testCfg())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := lim.Allow(ctx, "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailOpen))
+	err := lim.Allow(ctx, "login:ip:1_2_3_4", testRule(RedisErrorPolicyFailOpen))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("已取消应返回 context.Canceled，实际 %v", err)
 	}
@@ -148,7 +151,7 @@ func TestAllow_DeadlineExceeded(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 	time.Sleep(time.Millisecond)
-	err := lim.Allow(ctx, "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailOpen))
+	err := lim.Allow(ctx, "login:ip:1_2_3_4", testRule(RedisErrorPolicyFailOpen))
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("截止时间已到应返回 context.DeadlineExceeded，实际 %v", err)
 	}
@@ -175,7 +178,7 @@ func TestAllow_CanceledDuringCall(t *testing.T) {
 	defer cancel()
 	stub := &cancelOnCall{cancel: cancel}
 	lim := New(stub, testCfg())
-	err := lim.Allow(ctx, "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailOpen))
+	err := lim.Allow(ctx, "login:ip:1_2_3_4", testRule(RedisErrorPolicyFailOpen))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("调用过程中取消应返回 context.Canceled，实际 %v", err)
 	}
@@ -188,7 +191,7 @@ func TestAllow_CanceledDuringCall(t *testing.T) {
 func TestAllow_CommandTimeoutStillFailOpen(t *testing.T) {
 	stub := &stubRedis{err: context.DeadlineExceeded}
 	lim := New(stub, testCfg())
-	if err := lim.Allow(context.Background(), "login:ip:1.2.3.4", testRule(RedisErrorPolicyFailOpen)); err != nil {
+	if err := lim.Allow(context.Background(), "login:ip:1_2_3_4", testRule(RedisErrorPolicyFailOpen)); err != nil {
 		t.Fatalf("调用方 ctx 仍有效时，Redis 超时应按 fail_open 放行: %v", err)
 	}
 }
@@ -202,7 +205,7 @@ func TestAllowN_AboveMax(t *testing.T) {
 		Window:           time.Minute,
 		RedisErrorPolicy: RedisErrorPolicyFailOpen,
 	}
-	err := lim.AllowN(context.Background(), "login:ip:1.2.3.4", yomiredis.MaxRateLimitN+1, rule)
+	err := lim.AllowN(context.Background(), "login:ip:1_2_3_4", yomiredis.MaxRateLimitN+1, rule)
 	if err == nil {
 		t.Fatal("n 超过单次上限应返回错误")
 	}
@@ -223,7 +226,7 @@ func TestAllow_Integration(t *testing.T) {
 	lim := New(helper, testCfg())
 	ctx := context.Background()
 	rule := Rule{Limit: 2, Window: time.Minute}
-	key := "login:ip:203.0.113.1"
+	key := "login:ip:203_0_113_1"
 
 	if err := lim.Allow(ctx, key, rule); err != nil {
 		t.Fatalf("第 1 次应成功: %v", err)

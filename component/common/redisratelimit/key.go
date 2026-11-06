@@ -38,10 +38,10 @@ func validateLogicalKey(key string) error {
 		if unicode.IsUpper(r) {
 			return errors.New("redisratelimit: key 必须小写")
 		}
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ':' || r == '_' || r == '.' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ':' || r == '_' {
 			continue
 		}
-		return errors.New("redisratelimit: key 仅允许小写字母、数字、冒号、下划线和点")
+		return errors.New("redisratelimit: key 仅允许小写字母、数字、冒号和下划线")
 	}
 	return nil
 }
