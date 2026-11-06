@@ -231,7 +231,7 @@ func TestMustRegisterStrategyPanics(t *testing.T) {
 	}
 }
 
-// TestMaskJSON 验证 JSON 递归脱敏、大数精度与解析失败透传
+// TestMaskJSON 验证 JSON 递归脱敏、大数精度，以及解析失败不回原文
 func TestMaskJSON(t *testing.T) {
 	svc := newTestService(t, Config{Rules: []RuleConfig{
 		{Keys: []string{"password", "token"}, Strategy: StrategyRedact},
@@ -252,8 +252,14 @@ func TestMaskJSON(t *testing.T) {
 	if got := svc.MaskJSON("not a json"); got != "not a json" {
 		t.Fatalf("非 JSON 应原样返回: %q", got)
 	}
-	if got := svc.MaskJSON(`{"broken":`); got != `{"broken":` {
-		t.Fatalf("解析失败应原样返回: %q", got)
+	if got := svc.MaskJSON(`{"broken":`); got != DefaultPlaceholder || strings.Contains(got, "broken") {
+		t.Fatalf("解析失败应换成 placeholder: %q", got)
+	}
+	if got := svc.MaskJSON(`{"password":"secret",}`); got != DefaultPlaceholder || strings.Contains(got, "secret") {
+		t.Fatalf("残缺 JSON 不应留下密码: %q", got)
+	}
+	if got := svc.MaskJSON(`{"name":"u"}{"password":"secret"}`); got != DefaultPlaceholder || strings.Contains(got, "secret") {
+		t.Fatalf("第二段 JSON 应整段换成 placeholder: %q", got)
 	}
 	if got := svc.MaskJSON("   "); got != "   " {
 		t.Fatalf("空串应原样返回: %q", got)
@@ -279,8 +285,19 @@ func TestMaskQueryAndHeaderMap(t *testing.T) {
 	if strings.Contains(decoded, "secret") || !strings.Contains(decoded, "phone=138****5678") {
 		t.Fatalf("敏感参数未按策略脱敏: %s", decoded)
 	}
-	if got := svc.MaskQuery("%zz=broken"); got != "%zz=broken" {
-		t.Fatalf("解析失败应原样返回: %q", got)
+	if got := svc.MaskQuery("%zz=broken"); got != DefaultPlaceholder || strings.Contains(got, "broken") {
+		t.Fatalf("非法转义应换成 placeholder: %q", got)
+	}
+	got = svc.MaskQuery("access_token=secret&q=1&x=%zz")
+	decoded, err = url.QueryUnescape(got)
+	if err != nil {
+		t.Fatalf("解码失败: %v", err)
+	}
+	if strings.Contains(decoded, "secret") || !strings.Contains(decoded, "access_token=***") || !strings.Contains(got, DefaultPlaceholder) {
+		t.Fatalf("能识别的键应脱敏，坏片段应换成 placeholder: %s", decoded)
+	}
+	if got := svc.MaskQuery("q=1;access_token=secret"); got != DefaultPlaceholder || strings.Contains(got, "secret") {
+		t.Fatalf("分号片段不应留下令牌: %q", got)
 	}
 
 	headers := svc.MaskHeaderMap(map[string]string{"authorization": "Bearer x", "content-type": "application/json"})

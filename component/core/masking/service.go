@@ -100,7 +100,8 @@ func (s *Service) MaskMap(m map[string]any) map[string]any {
 	return s.maskAny(m).(map[string]any)
 }
 
-// MaskJSON 对 JSON 字符串按字段名递归脱敏；非 JSON 或解析失败时原样返回。
+// MaskJSON 对 JSON 字符串按字段名递归脱敏。
+// 不像 JSON 的文本原样返回。看起来像 JSON 但解析失败，或后面还有第二段 JSON 时，整段换成 placeholder。
 // UseNumber 避免大整数（如雪花 ID）经 float64 往返时精度丢失。
 func (s *Service) MaskJSON(raw string) string {
 	if !s.Active() {
@@ -113,24 +114,25 @@ func (s *Service) MaskJSON(raw string) string {
 	decoder := json.NewDecoder(strings.NewReader(trimmed))
 	decoder.UseNumber()
 	var payload any
-	if err := decoder.Decode(&payload); err != nil {
-		return raw
+	if err := decoder.Decode(&payload); err != nil || decoder.More() {
+		return s.placeholder
 	}
 	data, err := json.Marshal(s.maskAny(payload))
 	if err != nil {
-		return raw
+		return s.placeholder
 	}
 	return string(data)
 }
 
-// MaskQuery 对 query string 中的敏感参数按策略脱敏；解析失败时原样返回
+// MaskQuery 对 query string 中的敏感参数按策略脱敏。
+// 标准解析失败时按 & 拆开：能识别的键照常脱敏，识别不了的片段换成 placeholder。
 func (s *Service) MaskQuery(raw string) string {
 	if !s.Active() || raw == "" {
 		return raw
 	}
 	values, err := url.ParseQuery(raw)
 	if err != nil {
-		return raw
+		return s.maskQueryLoose(raw)
 	}
 	for key, items := range values {
 		if !s.ShouldMask(key) {
@@ -143,6 +145,46 @@ func (s *Service) MaskQuery(raw string) string {
 		values[key] = masked
 	}
 	return values.Encode()
+}
+
+// maskQueryLoose 在标准解析失败时逐段处理，避免把未解析的原文送进日志
+func (s *Service) maskQueryLoose(raw string) string {
+	parts := strings.Split(raw, "&")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		out = append(out, s.maskQueryPart(part))
+	}
+	return strings.Join(out, "&")
+}
+
+// maskQueryPart 处理单个 & 片段。分号、空键或非法转义都换成 placeholder。
+func (s *Service) maskQueryPart(part string) string {
+	if strings.Contains(part, ";") {
+		return s.placeholder
+	}
+	keyRaw, valRaw, hasVal := strings.Cut(part, "=")
+	key, err := url.QueryUnescape(keyRaw)
+	if err != nil || strings.TrimSpace(key) == "" {
+		return s.placeholder
+	}
+	val := ""
+	if hasVal {
+		val, err = url.QueryUnescape(valRaw)
+		if err != nil {
+			return s.placeholder
+		}
+	}
+	if s.ShouldMask(key) {
+		val = s.Mask(key, val)
+	}
+	escapedKey := url.QueryEscape(key)
+	if !hasVal {
+		return escapedKey
+	}
+	return escapedKey + "=" + url.QueryEscape(val)
 }
 
 // MaskHeaderMap 对 header map 按键名脱敏（key 建议已小写）；返回新 map
