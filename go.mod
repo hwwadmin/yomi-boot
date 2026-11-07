@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/consul/api v1.34.3
 	github.com/jackc/pgx/v5 v5.6.0
+	github.com/moby/moby/api v1.54.1 // 仅 dtmtest 测试封装使用，生产代码禁止 import
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/spf13/viper v1.20.1
@@ -33,7 +34,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/testcontainers/testcontainers-go v0.42.0 // 仅 dbtest、kafkatest、consultest 测试封装使用，生产代码禁止 import
+	github.com/testcontainers/testcontainers-go v0.42.0 // 仅 dbtest、kafkatest、consultest、dtmtest 测试封装使用，生产代码禁止 import
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.42.0 // 仅 dbtest 测试封装使用，生产代码禁止 import
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
 	golang.org/x/crypto v0.57.0
@@ -41,7 +42,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/testcontainers/testcontainers-go/modules/redis v0.42.0 // 仅 redistest 测试封装使用，生产代码禁止 import
+require github.com/testcontainers/testcontainers-go/modules/redis v0.42.0 // 仅 redistest、dtmtest 测试封装使用，生产代码禁止 import
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -124,7 +125,6 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
-	github.com/moby/moby/api v1.54.1 // indirect
 	github.com/moby/moby/client v0.4.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
