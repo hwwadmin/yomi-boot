@@ -6,41 +6,41 @@
 
 一条需求从提出到代码落地的完整路径：
 
-| ① prd_spec | → | ② create_spec | → | ③ 审阅修订 | → | ④ audit_spec | → | ⑤ 审核闭合 | → | ⑥ do_spec |
+| ① prd-spec | → | ② create-spec | → | ③ 审阅修订 | → | ④ audit-spec | → | ⑤ 审核闭合 | → | ⑥ do-spec |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 充分讨论后 AI 生成 PRD | | AI 生成方案 | | 人工指引 | | AI 生成审核 | | 人工+AI 修订 | | AI 落地代码 |
 
-核心原则：**审核不通过，不写一行代码**。主闭环在 `do_spec` 结束；其后可用可选指令做代码巡检。
+核心原则：**审核不通过，不写一行代码**。主闭环在 `do-spec` 结束；其后可用可选技能做代码巡检。
 
-`_prompts` 分两层：**指令**（`commands/`，IDE 入口）→ **Skill**（`skills/`，执行型工作流）；执行时 AI 按指令直接加载对应 Skill，不设 Agent / 规则 / 索引中间层。
+技能在 `.cursor/skills/{技能名}/SKILL.md`。每个技能一个目录，入口约定和执行步骤都在 `SKILL.md` 里。对话中点名技能名即可。不设 commands、Agent、规则或索引中间层。
 
 ---
 
 ## 提示词工程如何使用
 
-业务工程直接把本仓 `_prompts/` **整体拷入工程根目录**即可，无外部查找：`_prompts/skills/` 相对工程根；PRD、spec、tasks 等产物（`_doc/`、`_feat-doc/`、`_task-doc/`、`_ipc-doc/`）同样落在工程根。
+业务工程把本仓 `.cursor/skills/` 拷到目标工程的 `.cursor/skills/`。PRD、spec、tasks 等产物（`_doc/`、`_feat-doc/`、`_task-doc/`、`_ipc-doc/`）落在工程根。
 
 ---
 
-## 指令速查
+## 技能速查
 
-| 指令 | 必选 | 作用 | 产物 |
+| 技能 | 必选 | 作用 | 产物 |
 |------|------|------|------|
-| `prd_spec` | 主路径 | 根据当前会话生成产品业务需求文档 | `_doc/{YYYYMMDD}_{需求名称}-prd.md` |
-| `create_spec` | 主路径 | 生成技术方案 | `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md` |
-| `audit_spec` | 主路径 | 审核技术方案 | `_feat-doc/{YYYYMMDD}_{需求名称}/audit.md` |
-| `do_spec` | 主路径 | 落地代码 | `_task-doc/{需求名称}/tasks.md` + 代码变更 |
-| `check_code` | **可选** | 代码质量巡检 | `_ipc-doc/{YYYYMMDD}_{需求名称}-ipc.md` |
-| `deep_think` | **可选** | 对当前问题做第一性原理 + 对抗性审查 | 对话结论（不落盘） |
+| `prd-spec` | 主路径 | 根据当前会话生成产品业务需求文档 | `_doc/{YYYYMMDD}_{需求名称}-prd.md` |
+| `create-spec` | 主路径 | 生成技术方案 | `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md` |
+| `audit-spec` | 主路径 | 审核技术方案 | `_feat-doc/{YYYYMMDD}_{需求名称}/audit.md` |
+| `do-spec` | 主路径 | 落地代码 | `_task-doc/{需求名称}/tasks.md` + 代码变更 |
+| `check-code` | **可选** | 代码质量巡检 | `_ipc-doc/{YYYYMMDD}_{模块名}-ipc.md` |
+| `deep-think` | **可选** | 对当前问题做第一性原理 + 对抗性审查 | 对话结论（不落盘） |
 
 ---
 
-## 第一步：prd_spec — 生成产品需求文档（PRD）
+## 第一步：prd-spec — 生成产品需求文档（PRD）
 
 需求讨论充分后，在对话中输入：
 
 ```
-prd_spec
+prd-spec
 ```
 
 AI 基于当前会话中已确认的需求、决策与补充说明生成产品业务需求文档。产物保存到：
@@ -53,16 +53,16 @@ PRD 从产品与业务视角描述需求背景、目标用户、业务目标、�
 
 ---
 
-## 第二步：create_spec — 生成开发方案
+## 第二步：create-spec — 生成开发方案
 
 在对话中输入：
 
 ```
-create_spec：{功能名称}
+create-spec：{功能名称}
 需求来源：_doc/{文档名}.md
 ```
 
-AI 按 `create_spec` Skill 生成技术方案到：
+AI 按 `create-spec` Skill 生成技术方案到：
 
 > `_feat-doc/{YYYYMMDD}_{需求名称}/spec.md`
 
@@ -78,7 +78,7 @@ AI 生成的 spec 是初稿，你需要审阅并指引修订：
 - 技术方案与架构有偏差的地方直接指出
 - 业务规则理解有误的地方直接纠正
 
-示例指令：
+例如：
 
 > 「将用户名格式确认为：小写字母、数字、下划线，回写到 spec」
 >
@@ -86,15 +86,15 @@ AI 生成的 spec 是初稿，你需要审阅并指引修订：
 
 ---
 
-## 第四步：audit_spec — 生成审核文档
+## 第四步：audit-spec — 生成审核文档
 
 在对话中输入：
 
 ```
-audit_spec _feat-doc/{YYYYMMDD}_{需求名称}/spec.md
+audit-spec _feat-doc/{YYYYMMDD}_{需求名称}/spec.md
 ```
 
-AI 按 `audit_spec` Skill 审核，生成同目录下的 `audit.md`。
+AI 按 `audit-spec` Skill 审核，生成同目录下的 `audit.md`。
 
 问题分三级：
 
@@ -108,7 +108,7 @@ AI 按 `audit_spec` Skill 审核，生成同目录下的 `audit.md`。
 
 ## 第五步：审核闭合 — 修订至通过
 
-根据 `audit.md` 中的发现，逐一指引 AI 回写 spec，再次运行 `audit_spec` 复审。
+根据 `audit.md` 中的发现，逐一指引 AI 回写 spec，再次运行 `audit-spec` 复审。
 
 **闭合标准**（必须全部满足）：
 
@@ -117,12 +117,12 @@ AI 按 `audit_spec` Skill 审核，生成同目录下的 `audit.md`。
 
 ---
 
-## 第六步：do_spec — 落地代码
+## 第六步：do-spec — 落地代码
 
 审核通过后，在对话中输入：
 
 ```
-do_spec _feat-doc/{YYYYMMDD}_{需求名称}/spec.md
+do-spec _feat-doc/{YYYYMMDD}_{需求名称}/spec.md
 ```
 
 AI 将：
@@ -132,20 +132,20 @@ AI 将：
 
 ---
 
-## 附：可选指令
+## 附：可选技能
 
-以下指令**不纳入主闭环门禁**，彼此互不前置，也不由 `do_spec` 自动触发。
+以下技能**不纳入主闭环门禁**，彼此互不前置，也不由 `do-spec` 自动触发。
 
-### check_code — 代码质量巡检
+### check-code — 代码质量巡检
 
 代码落地后，在对话中输入：
 
 ```
-check_code
+check-code
 ```
 
 或指定范围：
 
 ```
-check_code：{模块名或文件路径}
+check-code：{模块名或文件路径}
 ```
