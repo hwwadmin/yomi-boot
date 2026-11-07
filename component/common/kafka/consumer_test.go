@@ -185,6 +185,56 @@ func TestBuildReaderConfigMinMaxBytes(t *testing.T) {
 	})
 }
 
+// TestBuildReaderConfigStartOffset 验证普通数字偏移返回错误，最早和最新可以显式指定
+func TestBuildReaderConfigStartOffset(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := consumerRuntime{minBytes: 1, maxBytes: 10e6, startOffset: kafkago.LastOffset}
+	baseCfg := ConsumerConfig{Topics: []string{"orders"}, GroupID: "order-group"}
+
+	t.Run("plain offset returns error", func(t *testing.T) {
+		t.Parallel()
+		cfg := baseCfg
+		cfg.StartOffset = 1
+		if _, err := buildReaderConfig(runtimeCfg, cfg); err == nil {
+			t.Fatal("StartOffset=1 应返回错误，避免 kafka-go panic")
+		}
+	})
+
+	t.Run("zero uses manager offset", func(t *testing.T) {
+		t.Parallel()
+		readerCfg, err := buildReaderConfig(runtimeCfg, baseCfg)
+		if err != nil {
+			t.Fatalf("未设置 StartOffset 应通过: %v", err)
+		}
+		if readerCfg.StartOffset != kafkago.LastOffset {
+			t.Fatalf("StartOffset = %d, want %d", readerCfg.StartOffset, kafkago.LastOffset)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		offset int64
+	}{
+		{name: "explicit earliest", offset: kafkago.FirstOffset},
+		{name: "explicit latest", offset: kafkago.LastOffset},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := baseCfg
+			cfg.StartOffset = tc.offset
+			readerCfg, err := buildReaderConfig(runtimeCfg, cfg)
+			if err != nil {
+				t.Fatalf("StartOffset=%d 应通过: %v", tc.offset, err)
+			}
+			if readerCfg.StartOffset != tc.offset {
+				t.Fatalf("StartOffset = %d, want %d", readerCfg.StartOffset, tc.offset)
+			}
+		})
+	}
+}
+
 // scriptedReader 按预设结果提交偏移量，并记录提交发生的时刻
 type scriptedReader struct {
 	commitErr error

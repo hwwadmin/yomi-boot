@@ -27,7 +27,7 @@ type ConsumerConfig struct {
 	MinBytes          int           // MinBytes 是单次拉取最小字节数，0 表示使用默认值
 	MaxBytes          int           // MaxBytes 是单次拉取最大字节数，0 表示使用默认值
 	MaxWait           time.Duration // MaxWait 是拉取等待时长，0 表示使用默认值
-	StartOffset       int64         // StartOffset 是起始偏移量，默认 kafka.FirstOffset
+	StartOffset       int64         // StartOffset 是消费组尚无提交位点时的起始位置。0 沿用管理器；仅支持最早（kafka.FirstOffset，-2）或最新（kafka.LastOffset，-1）
 	MaxHandlerRetries *int          // MaxHandlerRetries 是 handler 返回 Retry 时的最大重试次数；nil 默认 -1（无限），0 不重试，N>0 最多重试 N 次
 }
 

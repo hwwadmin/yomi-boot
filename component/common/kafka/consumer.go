@@ -549,6 +549,13 @@ func validateConsumerConfig(cfg ConsumerConfig) error {
 	if _, err := effectiveMaxHandlerRetries(cfg); err != nil {
 		return err
 	}
+	// kafka-go 消费组只接受最早/最新。其他数字会在 NewReader 里 panic，须在校验层拦截
+	if cfg.StartOffset != 0 &&
+		cfg.StartOffset != kafkago.FirstOffset &&
+		cfg.StartOffset != kafkago.LastOffset {
+		return errors.Newf("kafka 消费起始偏移仅支持 0、最早(%d) 或最新(%d)",
+			kafkago.FirstOffset, kafkago.LastOffset)
+	}
 	return nil
 }
 
