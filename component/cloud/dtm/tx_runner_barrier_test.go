@@ -1,7 +1,7 @@
 // TxRunner Barrier 链路的单元测试：解析 Barrier → Barrier 事务执行 → 幂等/空补偿语义
 //
 // 覆盖 dtmcli BranchBarrier.Call 的真实行为（insert-ignore 幂等），
-// 依赖 dbtest 进程内真 MySQL 与 sys_barrier 表的唯一索引。
+// 依赖 dbtest 拉起的 MySQL 8.4 与 sys_barrier 表的唯一索引。
 
 package dtm
 
@@ -64,7 +64,7 @@ func mustBarrierCtx(t *testing.T, gid, branchID, op string) context.Context {
 	return ctx
 }
 
-// newBarrierTestRunner 启动内存 MySQL 并创建绑定 sys_barrier 表的 TxRunner
+// newBarrierTestRunner 启动临时 MySQL 并创建绑定 sys_barrier 表的 TxRunner
 func newBarrierTestRunner(t *testing.T) (*testing.T, *TxRunner, *gorm.DB, func()) {
 	t.Helper()
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(dtmTestModel{}, dtmTestBarrier{}))

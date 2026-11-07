@@ -1,4 +1,4 @@
-// Processing 超时清理器的单元测试：内存 MySQL（权威 DDL）+ 内存 Redis
+// Processing 超时清理器的单元测试：临时 MySQL（权威 DDL）+ 内存 Redis
 //
 // @author zwei
 package idempotency
@@ -25,7 +25,7 @@ type cleanerEnv struct {
 	cleanup func()
 }
 
-// newCleanerEnv 组装内存 MySQL（权威 sys_biz DDL）与内存 Redis 分布式锁工厂
+// newCleanerEnv 组装临时 MySQL（权威 sys_biz DDL）与内存 Redis 分布式锁工厂
 func newCleanerEnv(t *testing.T) *cleanerEnv {
 	t.Helper()
 

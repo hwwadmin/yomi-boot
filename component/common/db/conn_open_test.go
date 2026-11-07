@@ -19,14 +19,15 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// mockMySQLConfig 构造指向内存 mock MySQL 的数据源配置
+// mockMySQLConfig 构造指向 Testcontainers MySQL 的数据源配置
 func mockMySQLConfig(port int, dbName string, mutate func(*Config)) Config {
 	zero := 0
 	cfg := Config{
 		Type:                   enums.MySQL,
-		Host:                   "127.0.0.1",
+		Host:                   dbtest.Host,
 		Port:                   port,
-		User:                   "root",
+		User:                   dbtest.User,
+		Password:               dbtest.Password,
 		Database:               dbName,
 		MaxOpenConns:           5,
 		MaxIdleConns:           3,

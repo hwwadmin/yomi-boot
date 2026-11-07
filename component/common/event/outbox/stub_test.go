@@ -21,7 +21,7 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// newOutboxTestDB 启动内存 MySQL 并建发件箱相关表，返回 gorm 客户端与两个仓储
+// newOutboxTestDB 启动临时 MySQL 并建发件箱相关表，返回 gorm 客户端与两个仓储
 func newOutboxTestDB(t *testing.T) (*gorm.DB, *repo.OutboxRepo, *repo.OutboxDlqRepo, func()) {
 	t.Helper()
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(model.SysEventOutbox{}, model.SysEventOutboxDlq{}))

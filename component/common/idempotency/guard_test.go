@@ -1,4 +1,4 @@
-// 业务幂等守卫 Execute / ExecuteInTx 编排的集成测试：内存 MySQL 灌入权威 sys_biz DDL + 内存 Redis
+// 业务幂等守卫 Execute / ExecuteInTx 编排的集成测试：临时 MySQL 灌入权威 sys_biz DDL + 内存 Redis
 //
 // @author zwei
 
@@ -23,7 +23,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// testEnv 是守卫测试的完整依赖：内存 MySQL（权威 DDL）+ 内存 Redis
+// testEnv 是守卫测试的完整依赖：临时 MySQL（权威 DDL）+ 内存 Redis
 type testEnv struct {
 	db      *gorm.DB
 	guard   *Guard
