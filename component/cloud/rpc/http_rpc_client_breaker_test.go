@@ -127,6 +127,51 @@ func TestInvoke_AttemptTimeoutNoRetryInHalfOpen(t *testing.T) {
 	}
 }
 
+// TestInvoke_TimeoutCountsAsSlow 验证超过慢调用线的单次超时计入慢调用率
+func TestInvoke_TimeoutCountsAsSlow(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		time.Sleep(80 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"OK"}`))
+	}))
+	defer server.Close()
+
+	client := newTestRPCClient(server.URL,
+		WithBreaker(BreakerOptions{
+			WindowSize: 4, MinRequests: 4, FailureRate: 1, SlowRate: 0.5,
+			SlowThreshold: 30 * time.Millisecond, OpenDuration: time.Minute,
+		}),
+	)
+	var env testEnvelope
+	if err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x", RespBody: &env, Timeout: 500 * time.Millisecond, MaxAttempts: 1,
+	}); err != nil {
+		t.Fatalf("慢成功应返回 nil，实际 %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		err := client.Invoke(context.Background(), InvokeRequest{
+			Endpoint: "/x", RespBody: &env, Timeout: 40 * time.Millisecond, MaxAttempts: 1,
+		})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("第 %d 次超时：期望 DeadlineExceeded，实际 %v", i+1, err)
+		}
+	}
+	if state, _ := breakerSnapshot(client); state != breakerOpen {
+		t.Fatalf("超时计入慢调用后应打开熔断，state=%d", state)
+	}
+	before := hits.Load()
+	if err := client.Invoke(context.Background(), InvokeRequest{
+		Endpoint: "/x", RespBody: &env, Timeout: 500 * time.Millisecond, MaxAttempts: 1,
+	}); !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
+	}
+	if hits.Load() != before {
+		t.Fatalf("熔断打开后不应再请求下游，hits=%d", hits.Load())
+	}
+}
+
 // TestInvoke_CanceledContextIsNeutral 验证首个尝试前取消不清零熔断窗口
 func TestInvoke_CanceledContextIsNeutral(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

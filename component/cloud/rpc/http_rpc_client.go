@@ -400,7 +400,7 @@ func (c *HttpRpcClient) classify(err error, elapsed time.Duration) attemptResult
 	if errors.As(err, &protocolErr) {
 		return attemptResult{failure: true, slow: slow, counted: true}
 	}
-	return attemptResult{failure: true, counted: true}
+	return attemptResult{failure: true, slow: slow, counted: true}
 }
 
 // isLocalError 判断是否为本地请求构建错误
