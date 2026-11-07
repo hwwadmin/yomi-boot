@@ -51,7 +51,7 @@ func TestNewHttpRpcClient_WithTransport(t *testing.T) {
 	if client.httpClient.Transport != transport {
 		t.Fatalf("应使用注入的 transport，实际 %T", client.httpClient.Transport)
 	}
-	if err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, nil); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if reads.Load() == 0 {
@@ -76,7 +76,7 @@ func TestInvoke_DefaultDoesNotFollowRedirect(t *testing.T) {
 
 	client := newTestRPCClient(server.URL)
 	var env testEnvelope
-	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+	err := invokeTest(client, context.Background(), "/x", nil, &env)
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusFound {
 		t.Fatalf("期望 302 HTTPStatusError，实际 %v", err)
@@ -105,7 +105,7 @@ func TestInvoke_WithCheckRedirectFollows(t *testing.T) {
 		return nil
 	}))
 	var env testEnvelope
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env); err != nil {
 		t.Fatalf("允许跟随重定向后应成功: %v", err)
 	}
 	if redirected.Load() != 1 {

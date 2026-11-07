@@ -68,7 +68,7 @@ func TestInvoke_VoidDrainsBody(t *testing.T) {
 		return "http://example.test/x", nil
 	})
 
-	if err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, nil); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if bytesRead.Load() != int64(len(body)) || reads.Load() == 0 {
@@ -88,7 +88,7 @@ func TestInvoke_VoidNon200DrainsBody(t *testing.T) {
 		return "http://example.test/x", nil
 	})
 
-	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", nil, nil)
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusInternalServerError {
 		t.Fatalf("期望 HTTP 500，实际 %v", err)
@@ -111,7 +111,7 @@ func TestInvoke_BodyReadWhenNeeded(t *testing.T) {
 	})
 
 	var env testEnvelope
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if reads.Load() == 0 || bytesRead.Load() == 0 {
@@ -131,7 +131,6 @@ func TestInvoke_RequestMaxResponseBytesOverride(t *testing.T) {
 	if err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:         "/x",
 		RespBody:         &env,
-		BizHook:          checkTestEnvelope,
 		MaxResponseBytes: 1024,
 	}); err != nil {
 		t.Fatalf("请求级上限应覆盖客户端默认值: %v", err)
@@ -140,7 +139,6 @@ func TestInvoke_RequestMaxResponseBytesOverride(t *testing.T) {
 	err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:         "/x",
 		RespBody:         &env,
-		BizHook:          checkTestEnvelope,
 		MaxResponseBytes: 4,
 	})
 	var protocolErr *ProtocolError

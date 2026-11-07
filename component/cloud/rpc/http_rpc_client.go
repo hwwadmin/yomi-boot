@@ -58,15 +58,12 @@ func NewHttpRpcClient(resolver EndpointResolver, serviceName string, opts ...Cli
 }
 
 // Invoke 实现 RpcService.Invoke
-// 传输成功指 HTTP 200 且响应反序列化成功；业务成功由 req.BizHook 判定
+// 传输成功指 HTTP 200 且响应反序列化成功；业务成败由调用方看 RespBody
 // 每次尝试使用 req.Timeout；普通调用按 MaxAttempts 重试；半开探测只尝试一次
 // 整个 Invoke 的总时长由调用方 ctx 控制，req.Timeout 不是总预算
 func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 	if c == nil || c.httpClient == nil {
 		return errors.New("HttpRpcClient 未初始化")
-	}
-	if req.BizHook == nil {
-		return errors.New("rpc: BizHook 不能为空；纯传输请使用 rpc.NoopBizHook")
 	}
 	ctx = appctx.OrBackground(ctx)
 	callerCtx := ctx
@@ -244,17 +241,6 @@ func (c *HttpRpcClient) Invoke(ctx context.Context, req InvokeRequest) error {
 				reason = "slow"
 			}
 			c.logBreakerOpen(ctx, req.Endpoint, attempt, reason, nil)
-		}
-		ok, hookErr := req.BizHook(callerCtx, BizHookContext{
-			Endpoint: req.Endpoint,
-			ReqBody:  req.ReqBody,
-			RespBody: req.RespBody,
-		})
-		if hookErr != nil {
-			return hookErr
-		}
-		if !ok {
-			return errors.Sentinel(ErrBizRejected)
 		}
 		if attempt > 1 {
 			c.logRetryRecovered(ctx, req.Endpoint, attempt)

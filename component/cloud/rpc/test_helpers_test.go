@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
-
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // testServiceSeq 为每个测试客户端生成唯一服务名，便于日志区分不同测试的 client
@@ -18,12 +16,11 @@ func newTestServiceName() string {
 }
 
 // invokeTest 用默认超时构造 InvokeRequest 调用客户端
-func invokeTest(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any, hook BizHookFunc) error {
+func invokeTest(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any) error {
 	return c.Invoke(ctx, InvokeRequest{
 		Endpoint: endpoint,
 		ReqBody:  reqBody,
 		RespBody: respBody,
-		BizHook:  hook,
 	})
 }
 
@@ -36,12 +33,11 @@ func (f resolverFunc) ResolveHTTPBase(ctx context.Context, serviceName, pathSuff
 }
 
 // invokeTestWith 指定最大尝试次数调用客户端
-func invokeTestWith(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any, hook BizHookFunc, attempts int) error {
+func invokeTestWith(c *HttpRpcClient, ctx context.Context, endpoint string, reqBody, respBody any, attempts int) error {
 	return c.Invoke(ctx, InvokeRequest{
 		Endpoint:    endpoint,
 		ReqBody:     reqBody,
 		RespBody:    respBody,
-		BizHook:     hook,
 		MaxAttempts: attempts,
 	})
 }
@@ -51,21 +47,6 @@ type testEnvelope struct {
 	Code string          `json:"code"`
 	Msg  string          `json:"msg"`
 	Data json.RawMessage `json:"data"`
-}
-
-// checkTestEnvelope 测试用业务判定 hook
-func checkTestEnvelope(_ context.Context, call BizHookContext) (bool, error) {
-	env, ok := call.RespBody.(*testEnvelope)
-	if !ok {
-		return false, errors.New("bad envelope type")
-	}
-	if env.Code == "" {
-		return false, errors.Sentinel(ErrDownstream)
-	}
-	if env.Code != "OK" {
-		return false, errors.NewBiz(env.Code, env.Msg)
-	}
-	return true, nil
 }
 
 // breakerSnapshot 读取熔断器状态与窗口长度

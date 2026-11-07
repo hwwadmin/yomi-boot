@@ -21,8 +21,6 @@ var (
 	ErrDiscovery = errors.NewNoStack("DISCOVERY_ERROR")
 	// ErrRequest 本地请求构建异常
 	ErrRequest = errors.NewNoStack("REQUEST_ERROR")
-	// ErrBizRejected 业务 hook 判定失败且未返回具体错误
-	ErrBizRejected = errors.NewNoStack("BIZ_REJECTED")
 )
 
 // circuitOpenError 熔断打开；Error 为 CIRCUIT_OPEN，Unwrap 到 ErrDownstream 以支持 errors.Is

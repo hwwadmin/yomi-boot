@@ -38,7 +38,6 @@ func TestInvoke_RetriesThenSucceeds(t *testing.T) {
 	err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		MaxAttempts: 3,
 	})
 	if err != nil {
@@ -64,7 +63,6 @@ func TestInvoke_AttemptTimeoutRetriesUntilAttemptsExhausted(t *testing.T) {
 	err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		Timeout:     20 * time.Millisecond,
 		MaxAttempts: 3,
 	})
@@ -94,7 +92,6 @@ func TestInvoke_AttemptTimeoutRetriesThenSucceeds(t *testing.T) {
 	err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		Timeout:     20 * time.Millisecond,
 		MaxAttempts: 3,
 	})
@@ -123,7 +120,6 @@ func TestInvoke_CallerDeadlineStopsAttemptRetry(t *testing.T) {
 	err := client.Invoke(ctx, InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		Timeout:     50 * time.Millisecond,
 		MaxAttempts: 3,
 	})
@@ -135,8 +131,8 @@ func TestInvoke_CallerDeadlineStopsAttemptRetry(t *testing.T) {
 	}
 }
 
-// TestInvoke_BizErrorNotRetried 验证业务错误不重试
-func TestInvoke_BizErrorNotRetried(t *testing.T) {
+// TestInvoke_BusinessBodyDoesNotRetry 验证 HTTP 200 的业务失败体不触发传输重试
+func TestInvoke_BusinessBodyDoesNotRetry(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
@@ -147,16 +143,14 @@ func TestInvoke_BizErrorNotRetried(t *testing.T) {
 
 	client := newTestRPCClient(server.URL, WithBackoff(time.Millisecond, time.Millisecond))
 	var env testEnvelope
-	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
-	if err == nil {
-		t.Fatal("期望业务错误")
+	if err := invokeTest(client, context.Background(), "/x", nil, &env); err != nil {
+		t.Fatalf("HTTP 200 应视为传输成功，实际 %v", err)
 	}
-	var biz *errors.BizError
-	if !errors.As(err, &biz) || biz.Code != "INVALID_INPUT" {
-		t.Fatalf("期望 INVALID_INPUT，实际 %v", err)
+	if env.Code != "INVALID_INPUT" {
+		t.Fatalf("响应应已反序列化，code=%q", env.Code)
 	}
 	if hits.Load() != 1 {
-		t.Fatalf("业务错误不应重试，hits=%d", hits.Load())
+		t.Fatalf("传输成功不应重试，hits=%d", hits.Load())
 	}
 }
 
@@ -176,7 +170,7 @@ func TestInvoke_500CountsAsFailureButNotRetried(t *testing.T) {
 		}),
 	)
 	var env testEnvelope
-	err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+	err := invokeTest(client, context.Background(), "/x", nil, &env)
 	var statusErr *HTTPStatusError
 	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusInternalServerError {
 		t.Fatalf("期望 HTTP 500，实际 %v", err)
@@ -187,7 +181,7 @@ func TestInvoke_500CountsAsFailureButNotRetried(t *testing.T) {
 	if state, _ := breakerSnapshot(client); state != breakerOpen {
 		t.Fatalf("500 应计失败并打开熔断，state=%d", state)
 	}
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); !errors.Is(err, ErrCircuitOpen) {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env); !errors.Is(err, ErrCircuitOpen) {
 		t.Fatalf("期望 ErrCircuitOpen，实际 %v", err)
 	}
 }
@@ -209,7 +203,7 @@ func TestInvoke_4xxDoesNotTripBreaker(t *testing.T) {
 	)
 	var env testEnvelope
 	for i := 0; i < 2; i++ {
-		err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope)
+		err := invokeTest(client, context.Background(), "/x", nil, &env)
 		var statusErr *HTTPStatusError
 		if !errors.As(err, &statusErr) || statusErr.Code != http.StatusBadRequest {
 			t.Fatalf("第 %d 次期望 HTTP 400，实际 %v", i+1, err)
@@ -234,7 +228,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		return "", errors.New("consul down")
 	})
 
-	err := invokeTestWith(client, context.Background(), "/x", nil, nil, NoopBizHook, 1)
+	err := invokeTestWith(client, context.Background(), "/x", nil, nil, 1)
 	var discoveryErr *discoveryError
 	if !errors.As(err, &discoveryErr) {
 		t.Fatalf("期望 discoveryError，实际 %v", err)
@@ -243,7 +237,7 @@ func TestInvoke_DiscoveryErrorNotCountedAsBreaker(t *testing.T) {
 		t.Fatalf("发现失败不应打开下游熔断，state=%d", state)
 	}
 
-	_ = invokeTestWith(client, context.Background(), "/x", nil, nil, NoopBizHook, 1)
+	_ = invokeTestWith(client, context.Background(), "/x", nil, nil, 1)
 	if calls.Load() != 2 {
 		t.Fatalf("发现失败不应打开熔断，calls=%d", calls.Load())
 	}
@@ -263,7 +257,7 @@ func TestInvoke_LocalRequestErrorNotRetried(t *testing.T) {
 		return "10.0.0.1:8080/x", nil
 	})
 
-	err := invokeTest(client, context.Background(), "/x", nil, nil, NoopBizHook)
+	err := invokeTest(client, context.Background(), "/x", nil, nil)
 	var localErr *requestError
 	if !errors.As(err, &localErr) {
 		t.Fatalf("期望 requestError，实际 %v", err)
@@ -292,7 +286,6 @@ func TestInvoke_RequestMaxAttemptsOverride(t *testing.T) {
 	err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		MaxAttempts: 1,
 	})
 	if err == nil {
@@ -323,7 +316,6 @@ func TestInvoke_RetryAfterHonored(t *testing.T) {
 	err := client.Invoke(context.Background(), InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		MaxAttempts: 2,
 		Timeout:     5 * time.Second,
 	})
@@ -355,7 +347,6 @@ func TestInvoke_RetryAfterExceedsBudget(t *testing.T) {
 	err := client.Invoke(ctx, InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		MaxAttempts: 3,
 		Timeout:     3 * time.Second,
 	})
@@ -386,7 +377,6 @@ func TestInvoke_DiscoveryBudgetExhaustedPreservesError(t *testing.T) {
 	err := client.Invoke(ctx, InvokeRequest{
 		Endpoint:    "/x",
 		RespBody:    &env,
-		BizHook:     checkTestEnvelope,
 		MaxAttempts: 3,
 		Timeout:     3 * time.Second,
 	})

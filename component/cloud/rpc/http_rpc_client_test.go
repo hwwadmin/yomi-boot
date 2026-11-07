@@ -28,7 +28,7 @@ func TestInvoke_PreservesInt64Precision(t *testing.T) {
 
 	client := newTestRPCClient(server.URL)
 	var env testEnvelope
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 
@@ -53,7 +53,7 @@ func TestInvoke_PreservesInt64InPageResponse(t *testing.T) {
 
 	client := newTestRPCClient(server.URL)
 	var env testEnvelope
-	if err := invokeTest(client, context.Background(), "/x", nil, &env, checkTestEnvelope); err != nil {
+	if err := invokeTest(client, context.Background(), "/x", nil, &env); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 
