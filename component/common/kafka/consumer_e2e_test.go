@@ -1,4 +1,4 @@
-// Package kafka_test 的消费者管理器端到端测试（基于 kfake 内存集群）
+// Package kafka_test 的消费者管理器端到端测试（基于 Testcontainers 拉起的 Kafka 容器）
 //
 // @author zwei
 package kafka_test

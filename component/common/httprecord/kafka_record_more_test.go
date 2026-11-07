@@ -219,7 +219,7 @@ func (m *stubConsumerManager) StopAll() error { return nil }
 // Close 空实现
 func (m *stubConsumerManager) Close() error { return nil }
 
-// TestKafkaRecordE2E 基于 kfake 内存集群验证发布→消费→解析全链路
+// TestKafkaRecordE2E 基于 Testcontainers 拉起的 Kafka 容器验证发布→消费→解析全链路
 func TestKafkaRecordE2E(t *testing.T) {
 	broker := kafkatest.NewMockBroker(t, kafkatest.SeedTopics(1, "httprecord.e2e"))
 	manager := kafkatest.NewConsumerManager(t, broker)

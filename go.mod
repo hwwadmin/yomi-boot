@@ -14,7 +14,6 @@ require (
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/spf13/viper v1.20.1
-	github.com/twmb/franz-go/pkg/kfake v0.0.0-20260624160703-2af41df56f3c // 仅 kafkatest 测试封装使用，生产代码禁止 import franz-go
 	go.uber.org/zap v1.28.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0
@@ -34,7 +33,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/testcontainers/testcontainers-go v0.42.0 // 仅 dbtest 测试封装使用，生产代码禁止 import
+	github.com/testcontainers/testcontainers-go v0.42.0 // 仅 dbtest、kafkatest 测试封装使用，生产代码禁止 import
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.42.0 // 仅 dbtest 测试封装使用，生产代码禁止 import
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
 	golang.org/x/crypto v0.57.0
@@ -157,8 +156,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/twmb/franz-go v1.21.1 // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect

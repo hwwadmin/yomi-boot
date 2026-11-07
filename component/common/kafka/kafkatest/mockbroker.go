@@ -2,6 +2,7 @@ package kafkatest
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,10 +14,12 @@ import (
 
 const defaultPartitions = 1
 
-// MockBroker 表示可在测试中使用的内存 Kafka broker（底层为 kfake，对外仍通过 kafka-go 客户端访问）。
+// MockBroker 表示可在测试中使用的 Kafka broker。
+// 同一测试进程共用一个 apache/kafka 容器，每个用例创建自己的主题，结束时删除主题和消费组。
 type MockBroker struct {
-	cluster *kfakeCluster
-	t       testing.TB
+	server *brokerServer
+	topics []string
+	once   sync.Once
 }
 
 // Option 配置 MockBroker 启动参数。
@@ -34,7 +37,7 @@ type seedTopic struct {
 	topics     []string
 }
 
-// NumBrokers 指定 broker 节点数量，默认 1。
+// NumBrokers 指定 broker 节点数量，默认 1。当前只支持单节点，大于 1 时 NewMockBroker 会失败。
 func NumBrokers(n int) Option {
 	return func(o *mockBrokerOptions) {
 		if n > 0 {
@@ -59,7 +62,7 @@ func SeedTopics(partitions int, topics ...string) Option {
 	}
 }
 
-// NewMockBroker 启动内存 broker，测试结束时自动关闭。
+// NewMockBroker 连接进程内共用的 Kafka 容器，并预创建主题。测试结束时删除这些主题，不停止容器。
 func NewMockBroker(t testing.TB, opts ...Option) *MockBroker {
 	t.Helper()
 
@@ -67,40 +70,73 @@ func NewMockBroker(t testing.TB, opts ...Option) *MockBroker {
 	for _, opt := range opts {
 		opt(&options)
 	}
-
-	clusterOpts := buildKfakeOpts(options)
-	cluster := newKfakeCluster(t, clusterOpts)
-
-	return &MockBroker{
-		cluster: cluster,
-		t:       t,
+	if options.numBrokers != 1 {
+		t.Fatalf("kafkatest: 仅支持单节点 broker，NumBrokers(%d)", options.numBrokers)
 	}
+
+	topics, configs := topicConfigs(options)
+	broker := &MockBroker{
+		server: ensureServer(t),
+		topics: topics,
+	}
+	t.Cleanup(func() { broker.release(t) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), adminTimeout)
+	defer cancel()
+	if err := broker.server.createTopics(ctx, configs); err != nil {
+		t.Fatalf("kafkatest: 创建 topic 失败: %v", err)
+	}
+	return broker
 }
 
-// buildKfakeOpts 将 MockBroker 配置转换为 kfake 集群选项
-func buildKfakeOpts(options mockBrokerOptions) []kfakeOpt {
-	clusterOpts := make([]kfakeOpt, 0, 1+len(options.seedTopics))
-	clusterOpts = append(clusterOpts, kfakeOptNumBrokers(options.numBrokers))
+// topicConfigs 把 SeedTopics 展开成创建请求，同名主题只保留第一次出现的分区数。
+func topicConfigs(options mockBrokerOptions) ([]string, []kafkago.TopicConfig) {
+	seen := make(map[string]struct{}, len(options.seedTopics))
+	topics := make([]string, 0, len(options.seedTopics))
+	configs := make([]kafkago.TopicConfig, 0, len(options.seedTopics))
 	for _, seed := range options.seedTopics {
-		clusterOpts = append(clusterOpts, kfakeOptSeedTopics(int32(seed.partitions), seed.topics...))
+		for _, name := range seed.topics {
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			topics = append(topics, name)
+			configs = append(configs, kafkago.TopicConfig{
+				Topic:             name,
+				NumPartitions:     seed.partitions,
+				ReplicationFactor: 1,
+			})
+		}
 	}
-	return clusterOpts
+	return topics, configs
 }
 
-// Close 关闭 broker 并释放资源。
+// Close 删除本次用例创建的主题和消费组，不停止共用容器。
 func (b *MockBroker) Close() {
-	if b == nil || b.cluster == nil {
+	if b == nil {
 		return
 	}
-	b.cluster.close()
+	b.release(nil)
+}
+
+// release 只执行一次，t.Cleanup 与 Close 同时调用也安全。
+func (b *MockBroker) release(t testing.TB) {
+	b.once.Do(func() {
+		if b.server == nil {
+			return
+		}
+		if err := b.server.release(b.topics); err != nil && t != nil {
+			t.Errorf("kafkatest: 清理 topic 失败: %v", err)
+		}
+	})
 }
 
 // Brokers 返回 broker 地址列表。
 func (b *MockBroker) Brokers() []string {
-	if b == nil || b.cluster == nil {
+	if b == nil || b.server == nil {
 		return nil
 	}
-	return b.cluster.addrs()
+	return []string{b.server.addr}
 }
 
 // Addr 返回首个 broker 地址。
@@ -114,7 +150,7 @@ func (b *MockBroker) Addr() string {
 
 // Publish 向指定主题分区 0 写入消息（通过 kafka-go Conn）。
 func (b *MockBroker) Publish(ctx context.Context, topic string, msgs ...kafkago.Message) error {
-	if b == nil || b.cluster == nil {
+	if b == nil || b.server == nil {
 		return errors.New("MockBroker 未初始化")
 	}
 	if topic == "" {
