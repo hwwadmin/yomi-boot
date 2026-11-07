@@ -33,7 +33,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/testcontainers/testcontainers-go v0.42.0 // 仅 dbtest、kafkatest 测试封装使用，生产代码禁止 import
+	github.com/testcontainers/testcontainers-go v0.42.0 // 仅 dbtest、kafkatest、consultest 测试封装使用，生产代码禁止 import
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.42.0 // 仅 dbtest 测试封装使用，生产代码禁止 import
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
 	golang.org/x/crypto v0.57.0
