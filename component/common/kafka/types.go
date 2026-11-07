@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -41,36 +42,45 @@ type Message struct {
 	Headers   []Header  // Headers 是消息头
 }
 
-// ConsumeStatus 表示消息处理结果
-type ConsumeStatus int
+// ConsumeResult 是消费处理的三态结果。
+// 成功和丢弃提交偏移量，重试不提交。零值是重试，handler 漏返回时不会误提交。
+type ConsumeResult int
 
-// 消息处理结果状态码
+// 消费处理结果
 const (
-	ConsumeStatusOK    ConsumeStatus = iota // 处理成功
-	ConsumeStatusRetry                      // 可重试失败，不提交偏移量
-	ConsumeStatusDrop                       // 不可恢复，提交偏移量后继续
+	ConsumeRetry ConsumeResult = iota // 可重试失败，不提交偏移量
+	ConsumeOK                         // 处理成功，提交偏移量
+	ConsumeDrop                       // 不可恢复，提交偏移量后跳过
 )
 
-// ConsumeResult 表示消费处理结果，由 handler 显式决定是否提交偏移量
-type ConsumeResult struct {
-	Status ConsumeStatus // Status 是处理结果
-	Ack    bool          // Ack 为 true 时提交当前消息偏移量
+// String 返回结果名称，未知值带上原始数字
+func (r ConsumeResult) String() string {
+	switch r {
+	case ConsumeOK:
+		return "ok"
+	case ConsumeRetry:
+		return "retry"
+	case ConsumeDrop:
+		return "drop"
+	default:
+		return fmt.Sprintf("unknown(%d)", int(r))
+	}
 }
 
 // AckOK 返回处理成功并提交偏移量的结果
 func AckOK() ConsumeResult {
-	return ConsumeResult{Status: ConsumeStatusOK, Ack: true}
+	return ConsumeOK
 }
 
 // Retry 返回可重试失败且不提交偏移量的结果
 func Retry() ConsumeResult {
-	return ConsumeResult{Status: ConsumeStatusRetry, Ack: false}
+	return ConsumeRetry
 }
 
 // AckDrop 返回不可恢复处理且提交偏移量跳过的结果
 func AckDrop() ConsumeResult {
-	return ConsumeResult{Status: ConsumeStatusDrop, Ack: true}
+	return ConsumeDrop
 }
 
-// ConsumeHandler 消费处理函数，通过 ConsumeResult 返回处理结果与 ack 决策
+// ConsumeHandler 消费处理函数，通过 ConsumeResult 返回处理结果
 type ConsumeHandler func(ctx context.Context, msg Message) ConsumeResult

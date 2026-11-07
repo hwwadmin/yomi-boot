@@ -38,98 +38,22 @@ func TestInvokeConsumeHandler(t *testing.T) {
 	})
 }
 
-// TestNormalizeConsumeResult 验证消费结果规范化逻辑，包括合法组合与非法组合的纠偏处理
-func TestNormalizeConsumeResult(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	tests := []struct {
-		name  string
-		input ConsumeResult
-		want  ConsumeResult
-	}{
-		{
-			name:  "ok with ack",
-			input: AckOK(),
-			want:  AckOK(),
-		},
-		{
-			name:  "retry without ack",
-			input: Retry(),
-			want:  Retry(),
-		},
-		{
-			name:  "drop with ack",
-			input: AckDrop(),
-			want:  AckDrop(),
-		},
-		{
-			name: "retry with ack coerced",
-			input: ConsumeResult{
-				Status: ConsumeStatusRetry,
-				Ack:    true,
-			},
-			want: Retry(),
-		},
-		{
-			name: "ok without ack coerced",
-			input: ConsumeResult{
-				Status: ConsumeStatusOK,
-				Ack:    false,
-			},
-			want: Retry(),
-		},
-		{
-			name: "drop without ack coerced",
-			input: ConsumeResult{
-				Status: ConsumeStatusDrop,
-				Ack:    false,
-			},
-			want: Retry(),
-		},
-		{
-			name: "unknown status with ack",
-			input: ConsumeResult{
-				Status: ConsumeStatus(99),
-				Ack:    true,
-			},
-			want: AckOK(),
-		},
-		{
-			name: "unknown status without ack",
-			input: ConsumeResult{
-				Status: ConsumeStatus(99),
-				Ack:    false,
-			},
-			want: Retry(),
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := normalizeConsumeResult(ctx, tt.input)
-			if got != tt.want {
-				t.Fatalf("got %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestConsumeResultHelpers 验证 AckOK、Retry、AckDrop 辅助函数返回正确的状态与 Ack 组合
+// TestConsumeResultHelpers 验证三态辅助函数与零值
 func TestConsumeResultHelpers(t *testing.T) {
 	t.Parallel()
 
-	if got := AckOK(); got.Status != ConsumeStatusOK || !got.Ack {
-		t.Fatalf("AckOK() = %+v", got)
+	if got := AckOK(); got != ConsumeOK {
+		t.Fatalf("AckOK() = %s", got)
 	}
-	if got := Retry(); got.Status != ConsumeStatusRetry || got.Ack {
-		t.Fatalf("Retry() = %+v", got)
+	if got := Retry(); got != ConsumeRetry {
+		t.Fatalf("Retry() = %s", got)
 	}
-	if got := AckDrop(); got.Status != ConsumeStatusDrop || !got.Ack {
-		t.Fatalf("AckDrop() = %+v", got)
+	if got := AckDrop(); got != ConsumeDrop {
+		t.Fatalf("AckDrop() = %s", got)
+	}
+	var zero ConsumeResult
+	if zero != ConsumeRetry {
+		t.Fatalf("零值 = %s，期望 retry", zero)
 	}
 }
 
@@ -318,6 +242,23 @@ func TestDropLogFollowsCommit(t *testing.T) {
 		}
 		if got, want := joinOrder(order), "commit,drop-exceeded"; got != want {
 			t.Fatalf("顺序 = %s，期望 %s", got, want)
+		}
+	})
+
+	t.Run("unknown result does not commit", func(t *testing.T) {
+		committed := false
+		reader := &scriptedReader{onCommit: func() { committed = true }}
+		c := &consumer{reader: reader, maxHandlerRetries: -1}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := c.processMessageWithRetry(ctx, func(context.Context, Message) ConsumeResult {
+			return ConsumeResult(99)
+		}, msg, kafkaMsg)
+		if err == nil {
+			t.Fatal("未知结果应按重试等待，上下文取消后返回错误")
+		}
+		if committed {
+			t.Fatal("未知结果不应提交偏移量")
 		}
 	})
 

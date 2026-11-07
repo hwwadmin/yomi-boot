@@ -215,12 +215,12 @@ func TestReceiverMovesToInboxDlqAfterRetryExhausted(t *testing.T) {
 	ctx := context.Background()
 
 	for attempt := 1; attempt <= 2; attempt++ {
-		if result := handler(ctx, msg); result.Ack {
-			t.Fatalf("第 %d 次失败不应 ack", attempt)
+		if result := handler(ctx, msg); result != yomikafka.Retry() {
+			t.Fatalf("第 %d 次失败应重试，实际 %s", attempt, result)
 		}
 	}
-	if result := handler(ctx, msg); !result.Ack {
-		t.Fatal("达到最大重试次数后应 ack 并转入死信")
+	if result := handler(ctx, msg); result != yomikafka.AckOK() {
+		t.Fatalf("达到最大重试次数后应提交并转入死信，实际 %s", result)
 	}
 
 	var dlqRows []model.SysEventInboxDlq
@@ -294,14 +294,14 @@ func TestReceiverRetryCountSharedAcrossReceivers(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if result := newReceiver().WrapHandler(fail)(ctx, msg); result.Ack {
-		t.Fatal("第一个接收器的首次失败不应 ack")
+	if result := newReceiver().WrapHandler(fail)(ctx, msg); result != yomikafka.Retry() {
+		t.Fatalf("第一个接收器的首次失败应重试，实际 %s", result)
 	}
-	if result := newReceiver().WrapHandler(fail)(ctx, msg); result.Ack {
-		t.Fatal("第二个接收器接手前不应 ack")
+	if result := newReceiver().WrapHandler(fail)(ctx, msg); result != yomikafka.Retry() {
+		t.Fatalf("第二个接收器接手前应重试，实际 %s", result)
 	}
-	if result := newReceiver().WrapHandler(fail)(ctx, msg); !result.Ack {
-		t.Fatal("跨接收器累加到上限后应 ack 并转入死信")
+	if result := newReceiver().WrapHandler(fail)(ctx, msg); result != yomikafka.AckOK() {
+		t.Fatalf("跨接收器累加到上限后应提交并转入死信，实际 %s", result)
 	}
 
 	var count int64
@@ -351,8 +351,8 @@ func TestReceiverRetryCountRedisFailureStaysRetry(t *testing.T) {
 		Offset:    8,
 		Value:     []byte(`{"eventId":"event-redis-down","topic":"topic","payload":"payload-1"}`),
 	}
-	if result := handler(context.Background(), msg); result.Ack {
-		t.Fatal("Redis 计数失败时不应 ack")
+	if result := handler(context.Background(), msg); result != yomikafka.Retry() {
+		t.Fatalf("Redis 计数失败时应重试，实际 %s", result)
 	}
 
 	var count int64
@@ -404,8 +404,8 @@ func TestCanceledFailureDoesNotConsumeRetryBudget(t *testing.T) {
 		Value:     []byte(`{"eventId":"event-cancel","topic":"topic","payload":"payload-1"}`),
 	}
 	ctx := context.Background()
-	if result := handler(ctx, msg); result.Ack {
-		t.Fatal("上下文取消不应 ack")
+	if result := handler(ctx, msg); result != yomikafka.Retry() {
+		t.Fatalf("上下文取消应重试，实际 %s", result)
 	}
 	exists, err := client.Exists(ctx, "event:receiver:retry:svc:topic:0:9").Result()
 	if err != nil {
@@ -416,10 +416,10 @@ func TestCanceledFailureDoesNotConsumeRetryBudget(t *testing.T) {
 	}
 
 	canceled = false
-	if result := handler(ctx, msg); result.Ack {
-		t.Fatal("取消之后的首次业务失败不应 ack")
+	if result := handler(ctx, msg); result != yomikafka.Retry() {
+		t.Fatalf("取消之后的首次业务失败应重试，实际 %s", result)
 	}
-	if result := handler(ctx, msg); !result.Ack {
-		t.Fatal("第二次业务失败应达到上限并 ack")
+	if result := handler(ctx, msg); result != yomikafka.AckOK() {
+		t.Fatalf("第二次业务失败应达到上限并提交，实际 %s", result)
 	}
 }

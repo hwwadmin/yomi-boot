@@ -60,7 +60,7 @@ type consumerManager struct {
 
 // ConsumerService 表示 Kafka 消费者管理能力接口
 type ConsumerService interface {
-	// Start 启动消费者，handler 通过 ConsumeResult 显式返回处理结果与 ack 决策
+	// Start 启动消费者，handler 通过 ConsumeResult 返回处理结果
 	Start(parentCtx context.Context, id string, cfg ConsumerConfig, handler ConsumeHandler) error
 	// Stop 停止并移除指定消费者
 	Stop(id string) error
@@ -127,7 +127,7 @@ func newConsumerRuntime(cfg ConsumerManagerConfig, conn connection) consumerRunt
 	}
 }
 
-// Start 启动消费者，handler 通过 ConsumeResult 显式返回处理结果与 ack 决策
+// Start 启动消费者，handler 通过 ConsumeResult 返回处理结果
 func (m *consumerManager) Start(
 	parentCtx context.Context,
 	id string,
@@ -261,7 +261,7 @@ func newConsumer(runtimeCfg consumerRuntime, cfg ConsumerConfig) (*consumer, err
 	}, nil
 }
 
-// run 阻塞消费消息，Ack 为 false 时在同一条消息上退避重试，Ack 为 true 时提交偏移量
+// run 阻塞消费消息。重试时在同一条消息上退避，成功或丢弃时提交偏移量
 func (c *consumer) run(ctx context.Context, handler ConsumeHandler) error {
 	if handler == nil {
 		return errors.New("消费处理函数不能为空")
@@ -280,7 +280,7 @@ func (c *consumer) run(ctx context.Context, handler ConsumeHandler) error {
 	}
 }
 
-// processMessageWithRetry 处理单条消息，Ack 为 false 时在同一条消息上退避重试
+// processMessageWithRetry 处理单条消息。重试时在同一条消息上退避，成功或丢弃时提交偏移量
 func (c *consumer) processMessageWithRetry(
 	ctx context.Context,
 	handler ConsumeHandler,
@@ -290,13 +290,17 @@ func (c *consumer) processMessageWithRetry(
 	retries := 0
 	delay := jitterDelay(consumerRetryInitialDelay)
 	for {
-		result := normalizeConsumeResult(ctx, invokeConsumeHandler(ctx, handler, msg))
-		if result.Ack {
+		result := invokeConsumeHandler(ctx, handler, msg)
+		if result != ConsumeOK && result != ConsumeRetry && result != ConsumeDrop {
+			logger.Warn(ctx, "Kafka 消费结果未知，已按可重试处理", "status", result.String())
+			result = ConsumeRetry
+		}
+		if result == ConsumeOK || result == ConsumeDrop {
 			if err := c.commitMessageWithRetry(ctx, kafkaMsg); err != nil {
 				logConsumeCommitFailed(ctx, msg, err)
 				return err
 			}
-			if result.Status == ConsumeStatusDrop {
+			if result == ConsumeDrop {
 				logConsumeDrop(ctx, msg, result)
 			}
 			return nil
@@ -348,45 +352,6 @@ func invokeConsumeHandler(ctx context.Context, handler ConsumeHandler, msg Messa
 		}
 	}()
 	return handler(ctx, msg)
-}
-
-// normalizeConsumeResult 校验并规范化 handler 返回结果，非法组合按保守策略处理
-func normalizeConsumeResult(ctx context.Context, result ConsumeResult) ConsumeResult {
-	switch result.Status {
-	case ConsumeStatusRetry:
-		if result.Ack {
-			logger.Warn(ctx,
-				"Kafka 消费结果非法：ConsumeStatusRetry 不应与 Ack=true 组合，已按不提交处理",
-				"status", result.Status,
-			)
-			result.Ack = false
-		}
-	case ConsumeStatusOK, ConsumeStatusDrop:
-		if !result.Ack {
-			logger.Warn(ctx,
-				"Kafka 消费结果非法：成功或丢弃状态不应与 Ack=false 组合，已按可重试处理",
-				"status", result.Status,
-			)
-			result.Status = ConsumeStatusRetry
-			result.Ack = false
-		}
-	default:
-		if result.Ack {
-			logger.Warn(ctx,
-				"Kafka 消费结果包含未知状态，已按成功提交处理",
-				"status", result.Status,
-			)
-			result.Status = ConsumeStatusOK
-		} else {
-			logger.Warn(ctx,
-				"Kafka 消费结果包含未知状态，已按可重试处理",
-				"status", result.Status,
-			)
-			result.Status = ConsumeStatusRetry
-			result.Ack = false
-		}
-	}
-	return result
 }
 
 // fetchMessageWithRetry 拉取消息，瞬时故障时按指数退避重试直至成功或上下文结束
@@ -475,7 +440,7 @@ func jitterDelay(delay time.Duration) time.Duration {
 func logConsumeRetry(ctx context.Context, msg Message, result ConsumeResult) {
 	logger.Warn(ctx,
 		"Kafka 消费处理需重试，偏移量未提交",
-		"status", result.Status,
+		"status", result.String(),
 		"topic", msg.Topic,
 		"partition", msg.Partition,
 		"offset", msg.Offset,
@@ -487,7 +452,7 @@ func logConsumeDrop(ctx context.Context, msg Message, result ConsumeResult) {
 	notifyConsumeLog("drop")
 	logger.Warn(ctx,
 		"Kafka 消息已丢弃，偏移量已提交",
-		"status", result.Status,
+		"status", result.String(),
 		"topic", msg.Topic,
 		"partition", msg.Partition,
 		"offset", msg.Offset,
