@@ -579,6 +579,11 @@ func TestRedisHelper_FixedScriptsUseEvalSha(t *testing.T) {
 	helper := NewRedisHelper(client)
 	ctx := context.Background()
 
+	// 脚本缓存是进程级的，前面的用例可能已经加载过同一段 Lua。
+	if err := client.ScriptFlush(ctx).Err(); err != nil {
+		t.Fatalf("清空脚本缓存失败: %v", err)
+	}
+
 	if err := helper.OpsHash4Set(ctx, "yomi:test:sha:hash", map[string]any{"f": "v"}, time.Minute); err != nil {
 		t.Fatalf("第一次 Hash 写入失败: %v", err)
 	}

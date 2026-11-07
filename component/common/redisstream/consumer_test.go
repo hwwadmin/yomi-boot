@@ -12,7 +12,6 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 
-	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
@@ -553,9 +552,8 @@ func TestConsumer_RunPanicExitsWithoutDeadlock(t *testing.T) {
 
 func TestConsumer_ClaimPending(t *testing.T) {
 	t.Parallel()
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	ctx := context.Background()
 	stream := "claim-demo"
@@ -579,7 +577,8 @@ func TestConsumer_ClaimPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XReadGroup: %v", err)
 	}
-	mr.FastForward(2 * time.Second)
+	// XAUTOCLAIM 的 idle 按墙钟计算，ClaimMinIdleMS 为 1，稍等即可认领
+	time.Sleep(20 * time.Millisecond)
 
 	zero := int64(0)
 	cfg := Config{

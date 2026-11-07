@@ -12,10 +12,10 @@ import (
 
 // TestMustNewClient_MiniRedis 验证合法配置创建可用客户端
 func TestMustNewClient_MiniRedis(t *testing.T) {
-	addr, cleanup := redistest.NewServer(t)
+	addr, db, cleanup := redistest.NewServer(t)
 	defer cleanup()
 
-	client := MustNewClient(context.Background(), Config{Addr: addr})
+	client := MustNewClient(context.Background(), Config{Addr: addr, DB: db})
 	if client == nil {
 		t.Fatal("MustNewClient 应返回可用客户端")
 	}

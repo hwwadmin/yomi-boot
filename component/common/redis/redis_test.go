@@ -6,14 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 )
 
 // TestNewClient_AppliesCommandTimeout 验证指令超时同时落到客户端读写超时与 context 超时开关
 func TestNewClient_AppliesCommandTimeout(t *testing.T) {
-	mr := miniredis.RunT(t)
+	addr, db, cleanup := redistest.NewServer(t)
+	defer cleanup()
 
-	client, err := NewClient(context.Background(), Config{Addr: mr.Addr(), CommandTimeoutMs: 1500})
+	client, err := NewClient(context.Background(), Config{Addr: addr, DB: db, CommandTimeoutMs: 1500})
 	if err != nil {
 		t.Fatalf("NewClient 失败: %v", err)
 	}
@@ -38,17 +39,21 @@ func TestNewClient_AppliesCommandTimeout(t *testing.T) {
 
 // TestNewClient_TrimsAddr 验证地址两端空白不影响连接
 func TestNewClient_TrimsAddr(t *testing.T) {
-	mr := miniredis.RunT(t)
+	addr, db, cleanup := redistest.NewServer(t)
+	defer cleanup()
 
-	client, err := NewClient(context.Background(), Config{Addr: " " + mr.Addr() + " ", CommandTimeoutMs: 1500})
+	client, err := NewClient(context.Background(), Config{Addr: " " + addr + " ", DB: db, CommandTimeoutMs: 1500})
 	if err != nil {
 		t.Fatalf("两端有空白的地址应能连上: %v", err)
 	}
 	defer func() {
 		_ = client.Close()
 	}()
-	if client.Options().Addr != mr.Addr() {
-		t.Fatalf("Addr=%q want %q", client.Options().Addr, mr.Addr())
+	if client.Options().Addr != addr {
+		t.Fatalf("Addr=%q want %q", client.Options().Addr, addr)
+	}
+	if client.Options().DB != db {
+		t.Fatalf("DB=%d want %d", client.Options().DB, db)
 	}
 }
 

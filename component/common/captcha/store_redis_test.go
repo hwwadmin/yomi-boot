@@ -11,25 +11,24 @@ import (
 	"time"
 
 	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
-	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
-// newTestRedisStore 创建基于 miniredis 的 Store
-func newTestRedisStore(t *testing.T, prefix string) (Store, *miniredis.Miniredis) {
+// newTestRedisStore 创建基于临时 Redis 的 Store
+func newTestRedisStore(t *testing.T, prefix string) (Store, *redisv9.Client) {
 	t.Helper()
 
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
+	client, cleanup := redistest.NewClient(t)
+	t.Cleanup(cleanup)
 
 	store, err := NewRedisStore(yomiredis.NewRedisHelper(client), RedisStoreConfig{KeyPrefix: prefix})
 	if err != nil {
 		t.Fatalf("NewRedisStore: %v", err)
 	}
-	return store, mr
+	return store, client
 }
 
 // TestRedisStoreContract 验证 Redis Store 满足公共契约
@@ -42,23 +41,24 @@ func TestRedisStoreContract(t *testing.T) {
 
 // TestRedisStoreTTL 验证 Redis 键按 TTL 过期
 func TestRedisStoreTTL(t *testing.T) {
-	store, mr := newTestRedisStore(t, "yomi:test:captcha")
+	store, _ := newTestRedisStore(t, "yomi:test:captcha")
 	ctx := context.Background()
+	const ttl = 400 * time.Millisecond
 
 	digestA := testDigest("a")
-	if err := store.Save(ctx, "beforeexpiry", digestA, time.Minute); err != nil {
+	if err := store.Save(ctx, "beforeexpiry", digestA, ttl); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	mr.FastForward(59 * time.Second)
+	time.Sleep(ttl / 2)
 	answer, found, err := store.Consume(ctx, "beforeexpiry")
 	if err != nil || !found || answer != digestA {
 		t.Fatalf("未到期 Consume = (%q, %v, %v), 期望命中", answer, found, err)
 	}
 
-	if err := store.Save(ctx, "afterexpiry", testDigest("b"), time.Minute); err != nil {
+	if err := store.Save(ctx, "afterexpiry", testDigest("b"), ttl); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	mr.FastForward(61 * time.Second)
+	time.Sleep(ttl + 150*time.Millisecond)
 	if _, found, err := store.Consume(ctx, "afterexpiry"); err != nil || found {
 		t.Fatalf("到期 Consume = (_, %v, %v), 期望未找到", found, err)
 	}
@@ -66,9 +66,8 @@ func TestRedisStoreTTL(t *testing.T) {
 
 // TestNewRedisStoreConfig 验证前缀配置与默认值
 func TestNewRedisStoreConfig(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
+	client, cleanup := redistest.NewClient(t)
+	t.Cleanup(cleanup)
 	helper := yomiredis.NewRedisHelper(client)
 
 	for _, prefix := range []string{"", "yomi:test", "a_b:c1", strings.Repeat("a", maxKeyPrefixLen)} {
@@ -96,22 +95,25 @@ func TestNewRedisStoreConfig(t *testing.T) {
 	if err := store.Save(context.Background(), "id1", testDigest("answer-1"), time.Minute); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if !mr.Exists(defaultKeyPrefix + ":id1") {
-		t.Fatalf("默认前缀键不存在，现有键: %v", mr.Keys())
+	key := defaultKeyPrefix + ":id1"
+	n, err := client.Exists(context.Background(), key).Result()
+	if err != nil || n != 1 {
+		keys, _ := client.Keys(context.Background(), "*").Result()
+		t.Fatalf("默认前缀键不存在，现有键: %v，查询错误: %v", keys, err)
 	}
 }
 
 // TestRedisStoreNeverStoresPlaintext 验证经 Service 写入 Redis 的只有答案摘要
 func TestRedisStoreNeverStoresPlaintext(t *testing.T) {
 	const id = "fixedid1234567890ab"
-	store, mr := newTestRedisStore(t, "yomi:test:captcha")
+	store, client := newTestRedisStore(t, "yomi:test:captcha")
 	svc := &service{driver: fixedDriver{id: id, answer: "9876"}, store: store, ttl: time.Minute}
 
 	if _, err := svc.Generate(context.Background()); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 
-	raw, err := mr.Get("yomi:test:captcha:" + id)
+	raw, err := client.Get(context.Background(), "yomi:test:captcha:"+id).Result()
 	if err != nil {
 		t.Fatalf("读取 Redis 值: %v", err)
 	}
@@ -125,9 +127,8 @@ func TestRedisStoreNeverStoresPlaintext(t *testing.T) {
 
 // TestRedisStorePrefixIsolation 验证不同前缀互不可见
 func TestRedisStorePrefixIsolation(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
+	client, cleanup := redistest.NewClient(t)
+	t.Cleanup(cleanup)
 	helper := yomiredis.NewRedisHelper(client)
 
 	storeA, err := NewRedisStore(helper, RedisStoreConfig{KeyPrefix: "yomi:test:a"})
@@ -154,9 +155,8 @@ func TestRedisStorePrefixIsolation(t *testing.T) {
 
 // TestRedisStoreRejectsDelimitedID 验证 id 中的冒号不能把两个前缀拼成同一个键
 func TestRedisStoreRejectsDelimitedID(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
+	client, cleanup := redistest.NewClient(t)
+	t.Cleanup(cleanup)
 	helper := yomiredis.NewRedisHelper(client)
 
 	storeA, err := NewRedisStore(helper, RedisStoreConfig{KeyPrefix: "yomi:captcha"})
@@ -180,7 +180,11 @@ func TestRedisStoreRejectsDelimitedID(t *testing.T) {
 	if err != nil || found || got != "" {
 		t.Fatalf("更长前缀不应读到被拒绝的写入: (%q, %v, %v)", got, found, err)
 	}
-	if keys := mr.Keys(); len(keys) != 0 {
+	keys, err := client.Keys(ctx, "*").Result()
+	if err != nil {
+		t.Fatalf("列举 Redis 键失败: %v", err)
+	}
+	if len(keys) != 0 {
 		t.Fatalf("非法 id 不应留下 Redis 键: %v", keys)
 	}
 }

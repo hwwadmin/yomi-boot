@@ -62,7 +62,7 @@ func newDeadDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// newTestLockFactory 启动内存 Redis 并构建分布式锁工厂
+// newTestLockFactory 启动临时 Redis 并构建分布式锁工厂
 func newTestLockFactory(t *testing.T) distlock.DistLockFactory {
 	t.Helper()
 	client, cleanup := redistest.NewClient(t)
@@ -74,7 +74,7 @@ func newTestLockFactory(t *testing.T) distlock.DistLockFactory {
 	return factory
 }
 
-// newTestRedisService 启动内存 Redis 并返回常用读写服务
+// newTestRedisService 启动临时 Redis 并返回常用读写服务
 func newTestRedisService(t *testing.T) yomiredis.RedisService {
 	t.Helper()
 	client, cleanup := redistest.NewClient(t)

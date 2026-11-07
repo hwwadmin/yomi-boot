@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
 
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
@@ -129,17 +128,22 @@ func TestRun_execLockHeldByOther(t *testing.T) {
 
 // TestRun_tickErrorBacksOffUntilCtxDone 验证 tick 持续失败时按退避重试直至 ctx 结束
 func TestRun_tickErrorBacksOffUntilCtxDone(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	// 连一个无人监听的地址，让每次 tick 的 TryLock 都失败并进入指数退避。
+	// 不能关掉共享的测试容器。
+	client := redisv9.NewClient(&redisv9.Options{
+		Addr:                  "127.0.0.1:1",
+		MaxRetries:            -1,
+		DialTimeout:           200 * time.Millisecond,
+		ReadTimeout:           200 * time.Millisecond,
+		WriteTimeout:          200 * time.Millisecond,
+		ContextTimeoutEnabled: true,
+	})
 	defer func() { _ = client.Close() }()
 
 	factory, err := distlock.NewFactory(client)
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-
-	// 先关闭 Redis：每次 tick 的 TryLock 都失败，进入指数退避
-	mr.Close()
 
 	var runs atomic.Int32
 	ctx, cancel := context.WithTimeout(context.Background(), 1300*time.Millisecond)
@@ -157,27 +161,10 @@ func TestRun_tickErrorBacksOffUntilCtxDone(t *testing.T) {
 	}
 }
 
-// fastForwardTicker 持续推进 miniredis 的 TTL 时钟。
-// miniredis 不做实时过期，roundrobin 的频率锁依赖 TTL 自然过期让出窗口，
-// 多轮轮询的测试须由本协程模拟时间流逝。
-func fastForwardTicker(ctx context.Context, mr *miniredis.Miniredis, step time.Duration) {
-	ticker := time.NewTicker(step / 2)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			mr.FastForward(step)
-		}
-	}
-}
-
 // TestRun_taskErrorContinues 验证任务返回错误不影响后续轮询
 func TestRun_taskErrorContinues(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	factory, err := distlock.NewFactory(client)
 	if err != nil {
@@ -187,7 +174,6 @@ func TestRun_taskErrorContinues(t *testing.T) {
 	var runs atomic.Int32
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	go fastForwardTicker(ctx, mr, 200*time.Millisecond)
 
 	err = Run(ctx, Simple("test-task-error", 50*time.Millisecond), func(context.Context) error {
 		runs.Add(1)
@@ -201,11 +187,10 @@ func TestRun_taskErrorContinues(t *testing.T) {
 	}
 }
 
-// TestRun_successContinuesWithFastForward 验证任务成功后轮询按频率持续执行
-func TestRun_successContinuesWithFastForward(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+// TestRun_successContinues 验证任务成功后轮询按频率持续执行
+func TestRun_successContinues(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	factory, err := distlock.NewFactory(client)
 	if err != nil {
@@ -215,7 +200,6 @@ func TestRun_successContinuesWithFastForward(t *testing.T) {
 	var runs atomic.Int32
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	go fastForwardTicker(ctx, mr, 200*time.Millisecond)
 
 	err = Run(ctx, Simple("test-success-loop", 50*time.Millisecond), func(context.Context) error {
 		runs.Add(1)

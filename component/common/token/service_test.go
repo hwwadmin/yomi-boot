@@ -20,7 +20,7 @@ import (
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
-// newTestRedisStore 创建基于 miniredis 的 RedisStore 与底层客户端
+// newTestRedisStore 创建基于临时 Redis 的 RedisStore 与底层客户端
 func newTestRedisStore(t *testing.T) (*RedisStore, *redisv9.Client, func()) {
 	t.Helper()
 
@@ -28,7 +28,7 @@ func newTestRedisStore(t *testing.T) (*RedisStore, *redisv9.Client, func()) {
 	return NewRedisStore(yomiredis.NewRedisHelper(client)), client, cleanup
 }
 
-// newTestService 创建带内存 Redis 的令牌服务，allowMultiLogin 控制是否允许多端并发登录
+// newTestService 创建带临时 Redis 的令牌服务，allowMultiLogin 控制是否允许多端并发登录
 func newTestService(t *testing.T, allowMultiLogin bool) (*Service, func()) {
 	t.Helper()
 

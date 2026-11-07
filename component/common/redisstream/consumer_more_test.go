@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 
 	redisv9 "github.com/redis/go-redis/v9"
 )
@@ -130,11 +130,23 @@ func streamLen(t *testing.T, client *redisv9.Client, key string) int64 {
 	return n
 }
 
-// newTestConsumer 构建指向内存 Redis 的 consumer 实例
-func newTestConsumer(t *testing.T) (*consumer, *redisv9.Client, *miniredis.Miniredis, func()) {
+// unreachableRedis 返回连向无人监听端口的客户端，用来制造可重试的网络错误。
+// 关闭共享容器或关闭客户端都会影响其他用例，或被当成不可恢复错误。
+func unreachableRedis() *redisv9.Client {
+	return redisv9.NewClient(&redisv9.Options{
+		Addr:                  "127.0.0.1:1",
+		MaxRetries:            -1,
+		DialTimeout:           50 * time.Millisecond,
+		ReadTimeout:           50 * time.Millisecond,
+		WriteTimeout:          50 * time.Millisecond,
+		ContextTimeoutEnabled: true,
+	})
+}
+
+// newTestConsumer 构建指向临时 Redis 的 consumer 实例
+func newTestConsumer(t *testing.T) (*consumer, *redisv9.Client, func()) {
 	t.Helper()
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	client, cleanup := redistest.NewClient(t)
 	return &consumer{
 		client: client,
 		cfg: resolvedGroupConfig{
@@ -144,7 +156,7 @@ func newTestConsumer(t *testing.T) (*consumer, *redisv9.Client, *miniredis.Minir
 			consumer:      "c1",
 			deadStreamKey: "s_dead",
 		},
-	}, client, mr, func() { _ = client.Close() }
+	}, client, cleanup
 }
 
 // autoClaimPage 是测试替身返回的一页 XAUTOCLAIM 结果
@@ -154,7 +166,7 @@ type autoClaimPage struct {
 }
 
 // scriptedAutoClaim 按预设页序返回 XAUTOCLAIM，不访问真实 Redis。
-// miniredis 在没认领到消息时直接给 0-0，盖不住 Redis 7 的空页加后续游标。
+// 用手写页序覆盖空页加后续游标，不依赖服务器对 XAUTOCLAIM 的具体返回。
 type scriptedAutoClaim struct {
 	mu    sync.Mutex
 	pages []autoClaimPage
@@ -203,7 +215,7 @@ func (s *scriptedAutoClaim) seenStarts() []string {
 
 // TestClaimPending_ContinuesAfterEmptyPage 验证空页仍沿非 0-0 游标继续认领
 func TestClaimPending_ContinuesAfterEmptyPage(t *testing.T) {
-	c, _, _, cleanup := newTestConsumer(t)
+	c, _, cleanup := newTestConsumer(t)
 	defer cleanup()
 
 	script := &scriptedAutoClaim{
@@ -240,7 +252,7 @@ func TestClaimPending_ContinuesAfterEmptyPage(t *testing.T) {
 
 // TestClaimPending_StopsWhenCursorDoesNotAdvance 验证游标不前进时停止，避免空转
 func TestClaimPending_StopsWhenCursorDoesNotAdvance(t *testing.T) {
-	c, _, _, cleanup := newTestConsumer(t)
+	c, _, cleanup := newTestConsumer(t)
 	defer cleanup()
 
 	script := &scriptedAutoClaim{
@@ -274,7 +286,7 @@ func TestClaimPending_StopsWhenCursorDoesNotAdvance(t *testing.T) {
 
 // TestFinalizeHandleResult 验证各 HandleResult 的收尾行为
 func TestFinalizeHandleResult(t *testing.T) {
-	c, client, mr, cleanup := newTestConsumer(t)
+	c, client, cleanup := newTestConsumer(t)
 	defer cleanup()
 	ctx := context.Background()
 	entry := Entry{Stream: "s", ID: "1-1", Values: map[string]string{PayloadField: "v"}}
@@ -304,7 +316,7 @@ func TestFinalizeHandleResult(t *testing.T) {
 	}
 
 	// 服务不可用时 HandleDead 写入失败：保留 PEL 且不报错
-	mr.Close()
+	_ = client.Close()
 	shouldAck, err = c.finalizeHandleResult(ctx, entry, HandleDead)
 	if err != nil || shouldAck {
 		t.Fatalf("死信写入失败应保留 PEL: %v %v", shouldAck, err)
@@ -313,7 +325,7 @@ func TestFinalizeHandleResult(t *testing.T) {
 
 // TestAckWithRetry_Branches 验证 XACK 的不可恢复、取消与重试耗尽分支
 func TestAckWithRetry_Branches(t *testing.T) {
-	c, _, mr, cleanup := newTestConsumer(t)
+	c, _, cleanup := newTestConsumer(t)
 	defer cleanup()
 	ctx := context.Background()
 
@@ -329,8 +341,9 @@ func TestAckWithRetry_Branches(t *testing.T) {
 		t.Fatalf("已取消上下文应返回 Canceled，实际 %v", err)
 	}
 
-	// 服务不可用时重试耗尽后放弃（瞬时错误重试 ackRetryMaxAttempts 次）
-	mr.Close()
+	// 连不上 Redis 时重试耗尽后放弃。关掉客户端会被当成不可恢复错误，不会退避。
+	c.client = unreachableRedis()
+	defer func() { _ = c.client.Close() }()
 	start := time.Now()
 	if err := c.ackWithRetry(ctx, "1-1"); err != nil {
 		t.Fatalf("重试耗尽应返回 nil: %v", err)
@@ -342,9 +355,8 @@ func TestAckWithRetry_Branches(t *testing.T) {
 
 // TestPublisherAsyncMethodsSyncFallback 验证同步发布器的 Async 方法退化为同步发送
 func TestPublisherAsyncMethodsSyncFallback(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	pub := NewPublisher(client, RuntimeConfig{})
 	ctx := context.Background()
@@ -382,9 +394,8 @@ func TestPublisherAsyncMethodsSyncFallback(t *testing.T) {
 
 // TestPublisherInputGuards 验证发布入参校验
 func TestPublisherInputGuards(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	pub := NewPublisher(client, RuntimeConfig{})
 	ctx := context.Background()
@@ -417,9 +428,8 @@ func TestPublisherInputGuards(t *testing.T) {
 
 // TestAsyncPublisherDelegationAndGuards 验证异步发布器的委派、守卫与无工作池降级
 func TestAsyncPublisherDelegationAndGuards(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	syncPub := NewPublisher(client, RuntimeConfig{})
 	// 无工作池：sendTimeout<=0 取默认值，Async 方法直接同步发送
@@ -470,9 +480,8 @@ func TestAsyncPublisherDelegationAndGuards(t *testing.T) {
 
 // TestMustNewComponents 验证 Fail Fast 构造的成功与失败路径
 func TestMustNewComponents(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	components := MustNewComponents(Config{PublishWorker: PublishWorkerConfig{WorkNum: 1, Size: 8}}, client)
 	if components == nil || components.Publisher == nil || components.Consumer == nil {
@@ -556,9 +565,8 @@ func (h *xaddDeadlineHook) ProcessHook(next redisv9.ProcessHook) redisv9.Process
 
 // TestNewComponentsUsesConfiguredSendTimeout 验证装配把 send_timeout_seconds 用到异步 XADD
 func TestNewComponentsUsesConfiguredSendTimeout(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	hook := &xaddDeadlineHook{seen: make(chan struct{})}
 	client.AddHook(hook)

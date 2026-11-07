@@ -10,7 +10,6 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
-	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
@@ -43,12 +42,10 @@ func (h *countEvalHook) ProcessPipelineHook(next redisv9.ProcessPipelineHook) re
 }
 
 // TestWatchdog_KeepsLockBeyondTTL 验证看门狗续期使锁在 TTL 外仍被持有。
-// miniredis 不按墙钟过期，只在 FastForward 时减少 TTL；PEXPIRE 会把剩余时间拨回整段 TTL。
-// 每次确认出现一次新的续期后再推进不到一个 TTL，累计推进超过 TTL。不续期时 Key 会被删掉。
+// 每次确认出现一次新的续期后再等待不到一个 TTL，累计等待超过 TTL。不续期时 Key 会被删掉。
 func TestWatchdog_KeepsLockBeyondTTL(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	var extends atomic.Int32
 	client.AddHook(&countEvalHook{n: &extends})
@@ -85,17 +82,17 @@ func TestWatchdog_KeepsLockBeyondTTL(t *testing.T) {
 	}
 
 	step := ttl / 3
-	var forwarded time.Duration
-	for forwarded < 2*ttl {
+	var waited time.Duration
+	for waited < 2*ttl {
 		seen := extends.Load()
 		waitExtend(seen)
-		mr.FastForward(step)
-		forwarded += step
+		time.Sleep(step)
+		waited += step
 
 		ok, tryErr := waiter.TryLock(ctx)
 		if tryErr != nil || ok {
-			t.Fatalf("累计推进 %s 后看门狗仍应持有锁，实际 ok=%v err=%v extends=%d",
-				forwarded, ok, tryErr, extends.Load())
+			t.Fatalf("累计等待 %s 后看门狗仍应持有锁，实际 ok=%v err=%v extends=%d",
+				waited, ok, tryErr, extends.Load())
 		}
 	}
 	if extends.Load() < 2 {
@@ -105,9 +102,8 @@ func TestWatchdog_KeepsLockBeyondTTL(t *testing.T) {
 
 // TestWatchdog_DisabledLockExpires 验证未启用看门狗时锁会过期
 func TestWatchdog_DisabledLockExpires(t *testing.T) {
-	mr := miniredis.RunT(t)
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	defer func() { _ = client.Close() }()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 
 	factory, err := NewFactory(client)
 	if err != nil {
@@ -124,7 +120,7 @@ func TestWatchdog_DisabledLockExpires(t *testing.T) {
 		t.Fatalf("Lock 失败: %v", err)
 	}
 
-	mr.FastForward(2 * ttl)
+	time.Sleep(2 * ttl)
 
 	ok, err := waiter.TryLock(ctx)
 	if err != nil || !ok {

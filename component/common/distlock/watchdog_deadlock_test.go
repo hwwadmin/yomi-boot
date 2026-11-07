@@ -8,7 +8,6 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 
-	"github.com/alicebob/miniredis/v2"
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
@@ -45,11 +44,9 @@ func (h *delayHook) ProcessPipelineHook(next redisv9.ProcessPipelineHook) redisv
 // Unlock 持有 l.mu 后 <-watchdogDone，看门狗又阻塞在 l.mu.Lock() 上
 // 互相等待 → 死锁。修复前此测试会超时失败。
 func TestWatchdog_UnlockDoesNotDeadlockWithMarkLost(t *testing.T) {
-	mr := miniredis.RunT(t)
-
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 	client.AddHook(&delayHook{delay: 30 * time.Millisecond})
-	defer func() { _ = client.Close() }()
 
 	factory, err := NewFactory(client)
 	if err != nil {
@@ -95,11 +92,9 @@ func TestWatchdog_UnlockDoesNotDeadlockWithMarkLost(t *testing.T) {
 // TestWatchdog_UnlockDuringExtendInFlight 通过高频 Lock/Unlock 循环
 // 在看门狗 ExtendContext 进行中调用 Unlock，验证无死锁。
 func TestWatchdog_UnlockDuringExtendInFlight(t *testing.T) {
-	mr := miniredis.RunT(t)
-
-	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
 	client.AddHook(&delayHook{delay: 10 * time.Millisecond})
-	defer func() { _ = client.Close() }()
 
 	factory, err := NewFactory(client)
 	if err != nil {

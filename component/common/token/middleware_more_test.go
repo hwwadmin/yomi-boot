@@ -1,4 +1,4 @@
-// 令牌鉴权中间件的端到端补充测试：真实令牌服务 + 内存 Redis
+// 令牌鉴权中间件的端到端补充测试：真实令牌服务 + 临时 Redis
 //
 // @author zwei
 package token_test
@@ -18,7 +18,7 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/core/response"
 )
 
-// newE2ETokenService 构建基于内存 Redis 的真实令牌服务（多端登录模式，无需分布式锁）
+// newE2ETokenService 构建基于临时 Redis 的真实令牌服务（多端登录模式，无需分布式锁）
 func newE2ETokenService(t *testing.T) token.TokenService {
 	t.Helper()
 
