@@ -248,6 +248,30 @@ func TestClonePublishRequest(t *testing.T) {
 	}
 }
 
+// TestCloneBytesKeepsNilAndEmpty 验证 nil 与空切片在拷贝后仍然可区分
+func TestCloneBytesKeepsNilAndEmpty(t *testing.T) {
+	if cloneBytes(nil) != nil {
+		t.Fatal("nil 应保持 nil")
+	}
+	cloned := cloneBytes([]byte{})
+	if cloned == nil || len(cloned) != 0 {
+		t.Fatalf("空切片应保持为空切片，实际 %#v", cloned)
+	}
+
+	req := clonePublishRequest(PublishRequest{
+		Topic:   "topic",
+		Key:     []byte{},
+		Value:   []byte("v"),
+		Headers: []Header{{Key: "h", Value: []byte{}}},
+	})
+	if req.Key == nil || len(req.Key) != 0 {
+		t.Fatalf("空 key 应保持为空切片，实际 %#v", req.Key)
+	}
+	if req.Headers[0].Value == nil || len(req.Headers[0].Value) != 0 {
+		t.Fatalf("空消息头应保持为空切片，实际 %#v", req.Headers[0].Value)
+	}
+}
+
 // TestAsyncPublisher_SyncMethodsDelegate 验证同步方法直接委托底层生产者
 func TestAsyncPublisher_SyncMethodsDelegate(t *testing.T) {
 	rec := &recordingPublisher{}

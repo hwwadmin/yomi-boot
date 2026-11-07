@@ -69,9 +69,10 @@ func NewPublisher(ctx context.Context, cfg PublisherConfig) (PublisherService, e
 		"batch_timeout_seconds", effectiveBatchTimeoutSeconds(cfg.BatchTimeoutSeconds),
 		"publish_worker_num", publishWorkerCfg.WorkNum,
 		"publish_worker_size", publishWorkerCfg.Size,
+		"publish_send_timeout_seconds", int(cfg.PublishWorker.SendTimeout()/time.Second),
 	)
 
-	return newAsyncPublisher(syncer, publishWorker, cfg.Connection.DialTimeout()), nil
+	return newAsyncPublisher(syncer, publishWorker, cfg.PublishWorker.SendTimeout()), nil
 }
 
 // syncPublisher 封装 Kafka 同步生产者

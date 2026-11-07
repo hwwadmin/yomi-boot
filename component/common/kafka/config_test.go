@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"testing"
+	"time"
 
 	kafkago "github.com/segmentio/kafka-go"
 )
@@ -121,6 +122,19 @@ func TestPublisherConfigValidate(t *testing.T) {
 	invalidWorker.PublishWorker.WorkNum = -1
 	if err := invalidWorker.Validate(); err == nil {
 		t.Fatal("publish_worker.work_num=-1 应校验失败")
+	}
+}
+
+// TestPublishWorkerSendTimeout 验证异步写出超时的默认值、显式值与负数校验
+func TestPublishWorkerSendTimeout(t *testing.T) {
+	if got := (PublishWorkerConfig{}).SendTimeout(); got != defaultPublishSendTimeout {
+		t.Fatalf("未配置发送超时 = %v, want %v", got, defaultPublishSendTimeout)
+	}
+	if got := (PublishWorkerConfig{SendTimeoutSeconds: 8}).SendTimeout(); got != 8*time.Second {
+		t.Fatalf("显式发送超时 = %v, want 8s", got)
+	}
+	if err := (PublishWorkerConfig{SendTimeoutSeconds: -1}).Validate(); err == nil {
+		t.Fatal("send_timeout_seconds 为负应返回错误")
 	}
 }
 

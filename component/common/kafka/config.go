@@ -7,11 +7,14 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
+const defaultPublishSendTimeout = 10 * time.Second // defaultPublishSendTimeout 是未配置时单次异步写出的超时
+
 // PublishWorkerConfig 表示 Kafka 异步发布专用工作池配置
 type PublishWorkerConfig struct {
 	WorkNum              int // WorkNum 是并发 worker 数，0 表示使用默认值
 	Size                 int // Size 是任务队列容量，0 表示使用默认值
 	SubmitTimeoutSeconds int // SubmitTimeoutSeconds 是入队等待超时秒数。队列满时最多等待该时长，超时后本次发布失败，0 表示使用 worker 默认值
+	SendTimeoutSeconds   int // SendTimeoutSeconds 是入队之后单次写出的超时秒数，0 表示 10 秒
 }
 
 // ConnectionConfig 表示 Kafka 连接与安全配置
@@ -111,7 +114,18 @@ func (c PublishWorkerConfig) Validate() error {
 	if c.SubmitTimeoutSeconds < 0 {
 		return errors.New("publish_worker.submit_timeout_seconds 不能小于 0")
 	}
+	if c.SendTimeoutSeconds < 0 {
+		return errors.New("publish_worker.send_timeout_seconds 不能小于 0")
+	}
 	return nil
+}
+
+// SendTimeout 返回入队之后单次写出的超时；0 使用 10 秒
+func (c PublishWorkerConfig) SendTimeout() time.Duration {
+	if c.SendTimeoutSeconds <= 0 {
+		return defaultPublishSendTimeout
+	}
+	return time.Duration(c.SendTimeoutSeconds) * time.Second
 }
 
 // Validate 校验 Kafka 消费者管理器配置

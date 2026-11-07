@@ -135,9 +135,9 @@ func clonePublishRequest(req PublishRequest) PublishRequest {
 	return cloned
 }
 
-// cloneBytes 拷贝字节切片
+// cloneBytes 拷贝字节切片。nil 保持 nil；空切片保持为空切片，避免把空 key 收成 nil 后改走轮询分区
 func cloneBytes(value []byte) []byte {
-	if len(value) == 0 {
+	if value == nil {
 		return nil
 	}
 	out := make([]byte, len(value))

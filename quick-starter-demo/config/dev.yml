@@ -157,6 +157,7 @@ kafka:
     work_num: 4
     size: 256
     submit_timeout_seconds: 3
+    send_timeout_seconds: 10
   # 消费者
   min_bytes: 1
   max_bytes: 10485760
