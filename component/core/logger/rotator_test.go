@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 )
@@ -109,21 +108,17 @@ func TestFileRotator_CompressHistoryOnSizeRotate(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// compressHistoryFile 成功后会删除原文件；但它在读句柄 defer 关闭之前执行
-	// os.Remove，Windows 共享模式下删除必然失败（错误被 `_ =` 静默吞掉），POSIX 下正常。
-	// 因此原文件删除断言仅在非 Windows 平台开启。
-	if runtime.GOOS != "windows" {
-		for {
-			if _, statErr := os.Stat(historyPath); os.IsNotExist(statErr) {
-				break
-			} else if statErr != nil {
-				t.Fatalf("stat 历史文件: %v", statErr)
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("压缩完成后原历史文件未被删除: %s", historyPath)
-			}
-			time.Sleep(5 * time.Millisecond)
+	// compressHistoryFile 成功后会在读句柄关闭之后删除原文件（defer 内先 Close 再 Remove）
+	for {
+		if _, statErr := os.Stat(historyPath); os.IsNotExist(statErr) {
+			break
+		} else if statErr != nil {
+			t.Fatalf("stat 历史文件: %v", statErr)
 		}
+		if time.Now().After(deadline) {
+			t.Fatalf("压缩完成后原历史文件未被删除: %s", historyPath)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

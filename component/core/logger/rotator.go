@@ -400,7 +400,15 @@ func compressHistoryFile(path string) {
 	if err != nil {
 		return
 	}
-	defer func() { _ = in.Close() }()
+	// 原文件删除必须在读句柄关闭之后：Windows 共享模式不含 FILE_SHARE_DELETE，
+	// 句柄未关时 os.Remove 必败；删除失败保持静默，残留 .log 仍被 cleanup 的清理口径覆盖
+	removeSource := false
+	defer func() {
+		_ = in.Close()
+		if removeSource {
+			_ = os.Remove(path)
+		}
+	}()
 
 	outPath := path + ".gz"
 	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -415,5 +423,5 @@ func compressHistoryFile(path string) {
 		_ = os.Remove(outPath)
 		return
 	}
-	_ = os.Remove(path)
+	removeSource = true
 }
