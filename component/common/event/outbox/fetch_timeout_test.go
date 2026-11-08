@@ -11,6 +11,7 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
 )
 
 // ptrTime 返回时间指针，便于构造测试数据
@@ -107,5 +108,13 @@ func TestBuildOutboxSample(t *testing.T) {
 	}
 	if got := buildOutboxSample(many); strings.Count(got, "eventId=") != fetchTimeoutLogSampleSize {
 		t.Fatalf("采样条数应不超过 %d，实际 %q", fetchTimeoutLogSampleSize, got)
+	}
+}
+
+// TestFetchTimeoutRejectsNonPositiveLimit 验证非正抓取上限时回收任务失败
+func TestFetchTimeoutRejectsNonPositiveLimit(t *testing.T) {
+	task := NewFetchTimeout(cfg.Runtime{}, &repo.OutboxRepo{})
+	if err := task.doTask(context.Background()); err == nil {
+		t.Fatal("非正抓取上限应失败")
 	}
 }

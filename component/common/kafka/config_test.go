@@ -1,10 +1,9 @@
 package kafka
 
 import (
+	kafkago "github.com/segmentio/kafka-go"
 	"testing"
 	"time"
-
-	kafkago "github.com/segmentio/kafka-go"
 )
 
 // TestConnectionConfigValidate 验证连接配置的 broker、超时与安全字段校验

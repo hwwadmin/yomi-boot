@@ -2,21 +2,19 @@ package handler_test
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
+	"github.com/gin-gonic/gin"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"github.com/hwwadmin/yomi-boot/component/core/handler"
 	"github.com/hwwadmin/yomi-boot/component/core/logger"
 	"github.com/hwwadmin/yomi-boot/component/core/masking"
 	"github.com/hwwadmin/yomi-boot/component/core/response"
 	sharederr "github.com/hwwadmin/yomi-boot/component/core/shared/error"
-
-	"github.com/gin-gonic/gin"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestLogRequestError_MasksQueryLikeAccess(t *testing.T) {

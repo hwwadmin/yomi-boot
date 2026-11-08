@@ -5,8 +5,10 @@ package logger
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,7 +23,23 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+type logArray struct{}
+
+func (logArray) MarshalLogArray(enc zapcore.ArrayEncoder) error {
+	enc.AppendString("a")
+	return nil
+}
+
+type logObject struct{}
+
+func (logObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("k", "v")
+	return nil
+}
 
 // testRotation 返回测试用滚动配置
 func testRotation() RotationConfig {
@@ -792,5 +810,129 @@ func assertJSONField(t *testing.T, path, key, want string) {
 	got, _ := m[key].(string)
 	if got != want {
 		t.Fatalf("%s field %s=%q want %q full=%v", path, key, got, want, m)
+	}
+}
+
+func TestLoggerAPIAndEncoderEdges(t *testing.T) {
+	prev := defaultHub.Load()
+	t.Cleanup(func() { defaultHub.Store(prev) })
+	defaultHub.Store(nil)
+
+	Debug(context.Background(), "debug")
+	DebugWithoutCtx("debug")
+	InfoWithoutCtx("info", 7, "n")
+	WarnWithoutCtx("warn", "only-key")
+	ErrorWithoutCtx("error")
+	Access(context.Background(), "access")
+	write(context.Background(), zapcore.DPanicLevel, "unexpected")
+	if dropTraceparent(nil) != nil || keepCallerTraceparent(nil) != nil || kvToFields() != nil {
+		t.Fatal("空字段应返回 nil")
+	}
+	if accessLogger() == nil || infoLogger() == nil || errorLogger() == nil || debugLogger() == nil || fallbackLogger() == nil {
+		t.Fatal("未初始化时应回退到开发日志")
+	}
+	if Flush(0) != nil || Sync() != nil {
+		t.Fatal("未初始化时刷新应为空操作")
+	}
+	_ = CurrentAccessConfig()
+	if MaskQuery("a=1") != "a=1" {
+		t.Fatal("未初始化时查询串应原样返回")
+	}
+
+	oldOut, oldErr := gin.DefaultWriter, gin.DefaultErrorWriter
+	t.Cleanup(func() {
+		gin.DefaultWriter = oldOut
+		gin.DefaultErrorWriter = oldErr
+	})
+	SetupGin()
+	if _, err := gin.DefaultWriter.Write([]byte(" \n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gin.DefaultWriter.Write([]byte("gin debug")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gin.DefaultErrorWriter.Write([]byte("gin warn")); err != nil {
+		t.Fatal(err)
+	}
+
+	enc := newTracingConsoleEncoder(zap.NewDevelopmentEncoderConfig()).(*tracingConsoleEncoder)
+	enc.AddArray("arr", logArray{})
+	enc.AddObject("obj", logObject{})
+	enc.AddBinary("bin", []byte{1})
+	enc.AddByteString("bs", []byte("b"))
+	enc.AddBool("ok", true)
+	enc.AddComplex128("c128", 1+2i)
+	enc.AddComplex64("c64", 1+2i)
+	enc.AddDuration("d", time.Second)
+	enc.AddFloat64("f64", 1.5)
+	enc.AddFloat32("f32", 1.5)
+	enc.AddInt("i", 1)
+	enc.AddInt64("i64", 1)
+	enc.AddInt32("i32", 1)
+	enc.AddInt16("i16", 1)
+	enc.AddInt8("i8", 1)
+	enc.AddString("s", "v")
+	enc.AddTime("t", time.Unix(0, 0))
+	enc.AddUint("u", 1)
+	enc.AddUint64("u64", 1)
+	enc.AddUint32("u32", 1)
+	enc.AddUint16("u16", 1)
+	enc.AddUint8("u8", 1)
+	enc.AddUintptr("p", 1)
+	if err := enc.AddReflected("r", map[string]string{"a": "b"}); err != nil {
+		t.Fatal(err)
+	}
+	enc.OpenNamespace("ns")
+	cloned := enc.Clone()
+	buf, err := cloned.EncodeEntry(zapcore.Entry{Message: "m", Time: time.Now()}, []zapcore.Field{zap.String("k", "v")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.Free()
+
+	arr := &stringArrayEncoder{}
+	arr.AppendBool(true)
+	arr.AppendByteString([]byte("x"))
+	arr.AppendComplex128(0)
+	arr.AppendComplex64(0)
+	arr.AppendFloat64(0)
+	arr.AppendFloat32(0)
+	arr.AppendInt(0)
+	arr.AppendInt64(0)
+	arr.AppendInt32(0)
+	arr.AppendInt16(0)
+	arr.AppendInt8(0)
+	arr.AppendString("s")
+	arr.AppendUint(0)
+	arr.AppendUint64(0)
+	arr.AppendUint32(0)
+	arr.AppendUint16(0)
+	arr.AppendUint8(0)
+	arr.AppendUintptr(0)
+	if arr.String() == "" {
+		t.Fatal("字符串编码器应保留追加的文本")
+	}
+
+	colorTimeEncoder(time.Now(), &stringArrayEncoder{})
+	colorCallerEncoder(zapcore.EntryCaller{}, &stringArrayEncoder{})
+	colorNameEncoder("", &stringArrayEncoder{})
+	colorNameEncoder("logger", &stringArrayEncoder{})
+	for _, level := range []string{"debug", "info", "warn", "warning", "error", "nope"} {
+		_ = parseLevel(level, zapcore.InfoLevel)
+	}
+	if ignoreSyncError(nil) != nil {
+		t.Fatal("nil 同步错误应忽略")
+	}
+	if ignoreSyncError(&os.PathError{Op: "sync", Path: "stdout", Err: errors.New("bad")}) != nil {
+		t.Fatal("stdout 同步错误应忽略")
+	}
+	if ignoreSyncError(errors.New("disk")) == nil {
+		t.Fatal("普通同步错误应保留")
+	}
+	if _, err := (&colorConsoleWriter{w: failWriter{}}).Write([]byte("x")); err == nil {
+		t.Fatal("控制台写入失败应返回错误")
+	}
+	if _, err := (&colorConsoleWriter{w: &bytes.Buffer{}}).Write([]byte("x")); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -1,10 +1,9 @@
 package repo
 
 import (
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 	"strings"
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 )
 
 // TestResetFetchedTimeoutSQL 验证两种数据库的超时回收语句都在库内限制条数

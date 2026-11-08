@@ -1,9 +1,8 @@
 package httprecord
 
 import (
-	"testing"
-
 	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
+	"testing"
 )
 
 // TestMapRecordHandlerResultToKafka 验证 RecordHandleResult 到 Kafka ConsumeResult 的映射

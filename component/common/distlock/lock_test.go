@@ -2,13 +2,12 @@ package distlock
 
 import (
 	"context"
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // newTestLock 创建测试用 Lock 实例，返回锁及 Redis 资源清理函数

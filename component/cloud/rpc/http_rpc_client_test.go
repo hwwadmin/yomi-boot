@@ -1,8 +1,10 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -100,5 +102,53 @@ func TestNewHttpRpcClient_Validation(t *testing.T) {
 	}), "svc")
 	if client == nil {
 		t.Fatal("合法参数应返回 client")
+	}
+}
+
+func TestLogHelpersAndNormalize(t *testing.T) {
+	client := &HttpRpcClient{serviceName: "demo"}
+	ctx := context.Background()
+	client.logRequest(ctx, "/ping", nil)
+	client.logRequest(ctx, "/ping", bytes.Repeat([]byte("a"), defaultMaxLogBodyBytes+8))
+	client.logResponse(ctx, "/ping", 1, 0, []byte("ok"))
+	client.logResponse(ctx, "/ping", 2, http.StatusOK, []byte("ok"))
+	statusErr := &HTTPStatusError{Code: http.StatusServiceUnavailable, Detail: "down", RetryAfter: time.Second}
+	client.logRetry(ctx, "/ping", 1, 3, time.Millisecond, statusErr)
+	client.logBudgetExhausted(ctx, "/ping", 3, 3, time.Millisecond, context.DeadlineExceeded)
+	client.logBreakerOpen(ctx, "/ping", 1, "open", statusErr)
+	client.logBreakerReject(ctx, "/ping", 1)
+	client.logBreakerProbe(ctx, "/ping", 1)
+	client.logRetryRecovered(ctx, "/ping", 2)
+
+	if statusCodeOf(errors.New("x")) != 0 || statusCodeOf(statusErr) != http.StatusServiceUnavailable {
+		t.Fatal("statusCodeOf 结果不正确")
+	}
+	if truncateLogBody(nil) != "" {
+		t.Fatal("空日志体应为空字符串")
+	}
+	for _, err := range []error{
+		nil,
+		context.Canceled,
+		context.DeadlineExceeded,
+		statusErr,
+		&ProtocolError{Reason: "bad"},
+		&discoveryError{err: errors.New("d")},
+		&retryableError{err: errors.New("t")},
+		errors.New("other"),
+	} {
+		_ = reasonOf(err)
+	}
+
+	normalized := normalizeHTTPClientOptions(httpClientOptions{MaxBackoff: time.Millisecond})
+	if normalized.BaseBackoff <= 0 || normalized.MaxBackoff < normalized.BaseBackoff || normalized.Transport == nil || normalized.CheckRedirect == nil {
+		t.Fatalf("客户端参数未归一化: %+v", normalized)
+	}
+	breaker := normalizeBreakerOptions(BreakerOptions{MinRequests: 20, WindowSize: 2, FailureRate: 2, SlowRate: -1})
+	if breaker.WindowSize < breaker.MinRequests || breaker.FailureRate <= 0 || breaker.FailureRate > 1 || breaker.SlowRate <= 0 || breaker.OpenDuration <= 0 {
+		t.Fatalf("熔断参数未归一化: %+v", breaker)
+	}
+	applied := applyHTTPClientOptions([]ClientOption{nil, WithLogBodies(true)})
+	if !applied.LogBodies {
+		t.Fatal("WithLogBodies 应打开请求体日志")
 	}
 }

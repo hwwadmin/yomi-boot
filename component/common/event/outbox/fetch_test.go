@@ -13,6 +13,33 @@ import (
 	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
 )
 
+// TestFetcherFetchSize 验证抓取量不超过发送队列可用容量
+func TestFetcherFetchSize(t *testing.T) {
+	cases := []struct {
+		name       string
+		configured int
+		queue      int
+		pending    int
+		want       int
+	}{
+		{name: "configured smaller", configured: 50, queue: 256, pending: 0, want: 50},
+		{name: "capacity smaller", configured: 5000, queue: 256, pending: 0, want: 256},
+		{name: "available smaller", configured: 5000, queue: 256, pending: 200, want: 56},
+		{name: "queue full", configured: 5000, queue: 256, pending: 256, want: 0},
+		{name: "zero configured", configured: 0, queue: 256, pending: 0, want: 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Processor{queueSize: tc.queue, worker: &stubWorker{pending: tc.pending}}
+			f := &Fetcher{cfg: cfg.Runtime{FetchSize: tc.configured}, processor: p}
+			if got := f.fetchSize(); got != tc.want {
+				t.Fatalf("fetchSize 期望 %d，实际 %d", tc.want, got)
+			}
+		})
+	}
+}
+
 // TestFetcherDoTask 验证抓取 PENDING 事件、标记 FETCHED 并提交发送
 func TestFetcherDoTask(t *testing.T) {
 	pub := &stubPublisher{}

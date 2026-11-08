@@ -5,6 +5,7 @@ package event
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -323,10 +324,69 @@ func TestRetentionCleanerCleanError(t *testing.T) {
 
 // TestStartCleanupTask_RejectsBlankName 验证空任务名不会启动清理轮询
 func TestStartCleanupTask_RejectsBlankName(t *testing.T) {
-	err := startCleanupTask(context.Background(), nopLockFactory{}, "", cfg.CleanupRuntime{
+	err := startCleanupTask(context.Background(), stubDistLockFactory{}, "", cfg.CleanupRuntime{
 		Frequency: time.Second,
 	}, func(context.Context) error { return nil })
 	if err == nil {
 		t.Fatal("空任务名应启动失败")
+	}
+}
+
+func TestRetentionGuardsAndCleanErrors(t *testing.T) {
+	ctx := context.Background()
+	factory := stubDistLockFactory{}
+	if err := NewRetentionCleaner(cfg.Runtime{
+		OutboxCleanup: cfg.CleanupRuntime{Enabled: true},
+	}, nil, nil).Start(ctx, factory); err == nil {
+		t.Fatal("缺少发件箱仓储应失败")
+	}
+	if err := NewRetentionCleaner(cfg.Runtime{
+		InboxCleanup: cfg.CleanupRuntime{Enabled: true},
+	}, nil, nil).Start(ctx, factory); err == nil {
+		t.Fatal("缺少收件箱仓储应失败")
+	}
+	if err := NewRetentionCleaner(cfg.Runtime{}, nil, nil).Start(ctx, factory); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewRetentionCleaner(cfg.Runtime{
+		OutboxCleanup: cfg.CleanupRuntime{Enabled: true},
+	}, &repo.OutboxRepo{}, nil).Start(ctx, factory); err == nil {
+		t.Fatal("非法清理运行时配置应失败")
+	}
+	if err := NewRetentionCleaner(cfg.Runtime{
+		InboxCleanup: cfg.CleanupRuntime{Enabled: true},
+	}, nil, &repo.InboxRepo{}).Start(ctx, factory); err == nil {
+		t.Fatal("非法收件箱清理配置应失败")
+	}
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	validCleanup := cfg.CleanupRuntime{
+		Enabled:    true,
+		Retention:  24 * time.Hour,
+		Frequency:  time.Second,
+		BatchSize:  10,
+		MaxBatches: 1,
+	}
+	if err := NewRetentionCleaner(cfg.Runtime{
+		OutboxCleanup: validCleanup,
+		InboxCleanup:  validCleanup,
+	}, &repo.OutboxRepo{}, &repo.InboxRepo{}).Start(canceled, factory); err != nil {
+		t.Fatal(err)
+	}
+
+	cleaner := &RetentionCleaner{}
+	cleanup := cfg.CleanupRuntime{Retention: time.Hour, BatchSize: 10, MaxBatches: 2}
+	if err := cleaner.clean(ctx, "outbox", cleanup,
+		func(context.Context, time.Time, int) ([]int64, error) { return nil, nil },
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleaner.clean(ctx, "outbox", cleanup,
+		func(context.Context, time.Time, int) ([]int64, error) { return []int64{1}, nil },
+		func(context.Context, []int64) error { return errors.New("delete") },
+	); err == nil {
+		t.Fatal("删除失败应返回错误")
 	}
 }

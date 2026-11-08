@@ -3,15 +3,14 @@ package dtmtest_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/dtm-labs/client/dtmcli"
+	"github.com/hwwadmin/yomi-boot/component/cloud/dtm/dtmtest"
 	"net"
 	"net/http"
 	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/dtm-labs/client/dtmcli"
-	"github.com/hwwadmin/yomi-boot/component/cloud/dtm/dtmtest"
 )
 
 // TestSagaSubmitSucceeds 验证真实 DTM 能生成 gid、调用分支并完成 Saga。

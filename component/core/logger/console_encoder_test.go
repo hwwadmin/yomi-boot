@@ -1,14 +1,12 @@
 package logger
 
 import (
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/hwwadmin/yomi-boot/component/core/traceid"
-
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 func TestEncodeEntry_ReusesLineBuffer(t *testing.T) {

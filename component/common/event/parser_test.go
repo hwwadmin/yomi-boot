@@ -52,3 +52,15 @@ func TestParseAndValidate(t *testing.T) {
 		}
 	})
 }
+
+func TestParseAndValidate_InvalidMessages(t *testing.T) {
+	if _, ok := ParseAndValidate(nil, true); ok {
+		t.Fatal("空消息应丢弃")
+	}
+	if _, ok := ParseAndValidate([]byte("{"), true); ok {
+		t.Fatal("非法 JSON 应丢弃")
+	}
+	if _, ok := ParseAndValidate([]byte(`{"eventId":"e1"}`), true); ok {
+		t.Fatal("空 topic 应丢弃")
+	}
+}

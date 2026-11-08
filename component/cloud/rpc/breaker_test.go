@@ -1,10 +1,10 @@
 package rpc
 
 import (
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"net/http"
 	"testing"
 	"time"
-
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // testBreakerConfig 返回测试用熔断参数
@@ -374,5 +374,35 @@ func TestCircuitBreaker_RecordOutcome(t *testing.T) {
 	}
 	if got := failBreaker.recordOutcome(failTicket, attemptResult{counted: true}); got != breakerRecordOpenedByFailure {
 		t.Fatalf("成功样本补足窗口后应由失败率打开，实际 %d", got)
+	}
+}
+
+func TestBreakerNilAndPlainHTTPError(t *testing.T) {
+	var breaker *circuitBreaker
+	if _, err := breaker.allow(); err != nil {
+		t.Fatal(err)
+	}
+	if breaker.recordOutcome(breakerTicket{}, attemptResult{}) != breakerRecordClosed {
+		t.Fatal("nil 熔断器记录应视为关闭")
+	}
+	breaker.onNeutral(breakerTicket{})
+	if breaker.slowThreshold() != defaultBreakerSlowThreshold {
+		t.Fatal("nil 熔断器应使用默认慢调用阈值")
+	}
+	if rate(nil, func(attemptResult) bool { return true }) != 0 {
+		t.Fatal("空窗口比率应为 0")
+	}
+
+	plain := &HTTPStatusError{Code: http.StatusBadRequest, Detail: "bad"}
+	if plain.Error() == "" {
+		t.Fatal("没有 Retry-After 的状态错误应仍有描述")
+	}
+	if got := normalizeHTTPClientOptions(httpClientOptions{BaseBackoff: time.Second, MaxBackoff: 0}); got.MaxBackoff <= 0 {
+		t.Fatalf("MaxBackoff = %v", got.MaxBackoff)
+	}
+
+	live := newCircuitBreaker(BreakerOptions{WindowSize: 2, MinRequests: 2})
+	if live.recordOutcome(breakerTicket{probe: true, seq: 99}, attemptResult{}) != breakerRecordClosed {
+		t.Fatal("过期探测票据不应打开熔断")
 	}
 }

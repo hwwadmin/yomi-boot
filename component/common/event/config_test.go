@@ -1,11 +1,10 @@
 package event
 
 import (
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 )
 
 // TestConfigConsumerDefaults 校验消费重试与收件箱死信重投的默认值
@@ -192,5 +191,55 @@ func TestValidateCleanupConfig(t *testing.T) {
 				t.Fatalf("%s 应返回错误", tc.name)
 			}
 		})
+	}
+}
+
+func intPtr(v int) *int { return &v }
+
+func TestConfigExplicitValuesAndRejects(t *testing.T) {
+	if (Config{}).ServiceNameOrDefault("  ") != defaultEventServiceName {
+		t.Fatal("空服务名应回落到默认值")
+	}
+	retry := 3
+	inboxRetry := 4
+	explicit := Config{
+		FetchFrequencyMS:  1500,
+		FetchSize:         10,
+		SentThreadCount:   2,
+		OutboxDlqSize:     8,
+		OutboxDlqMaxRetry: &retry,
+		InboxDlqMaxRetry:  &inboxRetry,
+		InboxDlqSize:      9,
+		OutboxEnabled:     true,
+	}
+	if explicit.FetchFrequencyOrDefault() != 1500*time.Millisecond ||
+		explicit.FetchSizeOrDefault() != 10 ||
+		explicit.SentThreadCountOrDefault() != 2 ||
+		explicit.OutboxDlqSizeOrDefault() != 8 ||
+		explicit.OutboxDlqMaxRetryOrDefault() != 3 ||
+		explicit.InboxDlqMaxRetryOrDefault() != 4 ||
+		explicit.InboxDlqSizeOrDefault() != 9 {
+		t.Fatalf("显式配置未生效: %+v", explicit)
+	}
+
+	rejects := []Config{
+		{OutboxEnabled: true, FetchFrequencyMS: -1},
+		{OutboxEnabled: true, FetchSize: -1},
+		{OutboxEnabled: true, SentThreadCount: -1},
+		{OutboxEnabled: true, OutboxDlqFrequencyMS: -1},
+		{OutboxEnabled: true, OutboxDlqSize: -1},
+		{OutboxEnabled: true, OutboxDlqMaxRetry: &retry, FetchFrequencyMS: 0},
+		{OutboxEnabled: true, FetchTimeoutMinutes: -1},
+		{OutboxEnabled: true, InboxDlqFrequencyMS: -1},
+		{OutboxEnabled: true, InboxDlqSize: -1},
+		{OutboxEnabled: true, OutboxRetentionDays: -1},
+		{OutboxEnabled: true, InboxRetentionDays: -1},
+		{OutboxEnabled: true, InboxDlqFrequencyMS: 1},
+	}
+	rejects[5].OutboxDlqMaxRetry = intPtr(-1)
+	for i, cfg := range rejects {
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("第 %d 组非法配置应失败: %+v", i, cfg)
+		}
 	}
 }

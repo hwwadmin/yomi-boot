@@ -2,14 +2,12 @@ package repo
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
-
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+	"testing"
+	"time"
 )
 
 func deadDB(t *testing.T) *gorm.DB {
@@ -35,7 +33,7 @@ type namedDialector struct {
 
 func (d namedDialector) Name() string { return d.name }
 
-func TestRepo_QueryErrors(t *testing.T) {
+func TestRepo_DeadConnectionErrors(t *testing.T) {
 	ctx := context.Background()
 	db := deadDB(t)
 	now := time.Now()

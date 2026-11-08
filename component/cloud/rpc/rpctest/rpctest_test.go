@@ -2,9 +2,8 @@ package rpctest
 
 import (
 	"context"
-	"testing"
-
 	"github.com/hwwadmin/yomi-boot/component/cloud/rpc"
+	"testing"
 )
 
 // TestTestRpcService_Invoke 验证测试桩透传参数与零值可用

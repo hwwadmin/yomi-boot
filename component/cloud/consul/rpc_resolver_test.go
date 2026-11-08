@@ -2,12 +2,11 @@ package consul
 
 import (
 	"context"
+	"github.com/hwwadmin/yomi-boot/component/cloud/rpc"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/cloud/rpc"
 )
 
 // 编译期验证 RPC 端点解析接口实现

@@ -489,3 +489,17 @@ func TestReceiver_RetryCounterAndDlqID(t *testing.T) {
 		t.Fatal("ID 生成失败应返回错误")
 	}
 }
+
+func TestReceiver_GuardBranches(t *testing.T) {
+	receiver := &Receiver{}
+	receiver.resetInboxRetry(context.Background(), yomikafka.Message{})
+	if _, err := redisInteger(7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := redisInteger("bad"); err == nil {
+		t.Fatal("非数值的重试计数应失败")
+	}
+	if err := receiver.moveToInboxDlq(context.Background(), Event{}, errors.New("x"), 1); err == nil {
+		t.Fatal("缺少死信仓储应失败")
+	}
+}

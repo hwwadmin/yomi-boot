@@ -3,11 +3,10 @@ package kafka
 import (
 	"context"
 	"errors"
+	"github.com/hwwadmin/yomi-boot/component/common/worker"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/hwwadmin/yomi-boot/component/common/worker"
 )
 
 // submitTimeoutWorker 模拟工作池队列持续满员：入队等待直到超时

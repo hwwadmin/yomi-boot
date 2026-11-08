@@ -3,12 +3,12 @@ package rsapss
 import (
 	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
 	stdrsa "crypto/rsa"
 	"crypto/sha256"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"math/big"
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestSignVerify 验证签名验签、标准库兼容性及篡改检测
@@ -49,5 +49,21 @@ func TestSign_RejectsIncompleteKey(t *testing.T) {
 	}
 	if _, err := Sign(priv, []byte("m")); err == nil {
 		t.Fatal("缺少素数的私钥签名应失败")
+	}
+}
+
+func TestPSSRejectsNilAndBadSignature(t *testing.T) {
+	if _, err := Sign(nil, []byte("m")); err == nil {
+		t.Fatal("nil 私钥应拒绝")
+	}
+	if err := Verify(nil, []byte("m"), nil); err == nil {
+		t.Fatal("nil 公钥应拒绝")
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Verify(&key.PublicKey, []byte("m"), []byte("bad")); err == nil {
+		t.Fatal("损坏的签名应失败")
 	}
 }

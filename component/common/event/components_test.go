@@ -11,10 +11,15 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/db/dbtest"
 	"github.com/hwwadmin/yomi-boot/component/common/distlock"
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/outbox"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
+	yomikafka "github.com/hwwadmin/yomi-boot/component/common/kafka"
 	yomiredis "github.com/hwwadmin/yomi-boot/component/common/redis"
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/common/snowflake/snowflaketest"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 
 	"gorm.io/driver/mysql"
@@ -333,5 +338,82 @@ func modelSysEventTables() []schema.Tabler {
 		model.SysEventOutboxDlq{},
 		model.SysEventInbox{},
 		model.SysEventInboxDlq{},
+	}
+}
+
+type edgePublisher struct{}
+
+func (edgePublisher) Publish(context.Context, yomikafka.PublishRequest) error { return nil }
+func (edgePublisher) PublishBatch(context.Context, []yomikafka.PublishRequest) error {
+	return nil
+}
+func (edgePublisher) PublishJSON(context.Context, string, string, any) error {
+	return errors.New("publish")
+}
+func (edgePublisher) PublishAsync(context.Context, yomikafka.PublishRequest) error { return nil }
+func (edgePublisher) PublishBatchAsync(context.Context, []yomikafka.PublishRequest) error {
+	return nil
+}
+func (edgePublisher) PublishJSONAsync(context.Context, string, string, any) error { return nil }
+func (edgePublisher) Close() error                                                { return nil }
+
+func TestComponents_StartGuards(t *testing.T) {
+	skipped := &Components{lockFactory: stubDistLockFactory{}, cfg: cfg.Runtime{InboxEnabled: true}}
+	if err := skipped.Start(nil); err == nil {
+		t.Fatal("缺少收件箱死信处理器应失败")
+	}
+
+	outboxComp := &Components{lockFactory: stubDistLockFactory{}, cfg: cfg.Runtime{OutboxEnabled: true}}
+	if err := outboxComp.Start(context.Background()); err == nil {
+		t.Fatal("缺少发件箱依赖应失败")
+	}
+	preset := &Components{
+		lockFactory: stubDistLockFactory{},
+		processor:   &outbox.Processor{},
+		cfg:         cfg.Runtime{OutboxEnabled: true, FetchFrequency: time.Millisecond},
+	}
+	if err := preset.Start(context.Background()); err == nil {
+		t.Fatal("过短的抓取频率应拒绝启动")
+	}
+	replay := &Components{
+		lockFactory: stubDistLockFactory{},
+		cfg:         cfg.Runtime{InboxEnabled: true},
+		inboxDlqHandler: &InboxDlqHandler{
+			dlqRepo:        &repo.InboxDlqRepo{},
+			inboxRepo:      &repo.InboxRepo{},
+			kafkaPublisher: edgePublisher{},
+			cfg:            cfg.Runtime{InboxDlqFrequency: time.Millisecond},
+		},
+	}
+	if err := replay.Start(nil); err == nil {
+		t.Fatal("过短的收件箱死信频率应拒绝启动")
+	}
+}
+
+func TestComponents_StartPartialFailures(t *testing.T) {
+	ctx := context.Background()
+	comp := &Components{
+		cfg: cfg.Runtime{
+			ServiceName:    "svc",
+			OutboxEnabled:  true,
+			FetchFrequency: time.Second,
+		},
+		lockFactory: stubDistLockFactory{},
+		processor:   &outbox.Processor{},
+		dlqHandler:  outbox.NewDlqHandler(cfg.Runtime{ServiceName: "svc"}, nil, nil, nil, nil, nil),
+	}
+	if err := comp.Start(ctx); err == nil {
+		t.Fatal("死信轮询频率非法时应启动失败")
+	}
+
+	retain := &Components{
+		lockFactory: stubDistLockFactory{},
+		retentionCleaner: NewRetentionCleaner(cfg.Runtime{
+			ServiceName:   "svc",
+			OutboxCleanup: cfg.CleanupRuntime{Enabled: true},
+		}, nil, nil),
+	}
+	if err := retain.Start(ctx); err == nil {
+		t.Fatal("清理仓储缺失时应启动失败")
 	}
 }

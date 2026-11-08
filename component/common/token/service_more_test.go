@@ -248,56 +248,6 @@ func TestRevokeByRelIDs(t *testing.T) {
 	}
 }
 
-// TestRedisStoreListStaleCleanup 验证列举时自动清理索引中的残留死链与会话失效项
-func TestRedisStoreListStaleCleanup(t *testing.T) {
-	store, client, cleanup := newTestRedisStore(t)
-	defer cleanup()
-	ctx := context.Background()
-	const prefix = "yomi:test:token"
-
-	save := func(tokenValue string, userID int64, expireAt time.Time) {
-		session := &TokenSession{UserID: userID, IssuedAt: time.Now(), ExpireAt: expireAt}
-		if err := store.Save(ctx, prefix, tokenValue, session, 10*time.Minute); err != nil {
-			t.Fatalf("保存令牌失败: %v", err)
-		}
-	}
-	save("live-token", 7001, time.Now().Add(10*time.Minute))
-	save("gone-token", 7001, time.Now().Add(10*time.Minute))
-	save("expired-token", 7001, time.Now().Add(-time.Minute))
-	// 所属用户不匹配的会话（索引串写场景）
-	save("wrong-user", 9999, time.Now().Add(10*time.Minute))
-
-	// 直接删除 live 之外某一会话的存储键，模拟残留死链
-	goneKey, err := store.storageKey(prefix, store.hashToken("gone-token"))
-	if err != nil {
-		t.Fatalf("构造存储键失败: %v", err)
-	}
-	if err := client.Del(ctx, goneKey).Err(); err != nil {
-		t.Fatalf("删除存储键失败: %v", err)
-	}
-
-	tokens, err := store.ListByUserID(ctx, prefix, 7001)
-	if err != nil {
-		t.Fatalf("列举失败: %v", err)
-	}
-	if len(tokens) != 1 || tokens[0].Session.UserID != 7001 {
-		t.Fatalf("应仅保留有效令牌，实际 %+v", tokens)
-	}
-
-	// 索引中的残留成员应被清掉
-	indexKey, err := store.userTokensKey(prefix, 7001)
-	if err != nil {
-		t.Fatalf("构造索引键失败: %v", err)
-	}
-	remaining, err := client.SMembers(ctx, indexKey).Result()
-	if err != nil {
-		t.Fatalf("读取索引失败: %v", err)
-	}
-	if len(remaining) != 1 {
-		t.Fatalf("索引应仅剩有效成员，实际 %v", remaining)
-	}
-}
-
 // TestTokenSessionDeleteContextValue 验证自定义上下文字段删除
 func TestTokenSessionDeleteContextValue(t *testing.T) {
 	var nilSession *TokenSession

@@ -1,9 +1,8 @@
 package captcha
 
 import (
-	"testing"
-
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"testing"
 )
 
 func TestNewDriver_UnknownDriver(t *testing.T) {

@@ -1,14 +1,12 @@
 package token_test
 
 import (
+	"github.com/gin-gonic/gin"
+	"github.com/hwwadmin/yomi-boot/component/common/token"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/common/token"
-	"github.com/hwwadmin/yomi-boot/component/core/response"
-
-	"github.com/gin-gonic/gin"
 )
 
 // TestMiddleware_DisabledPassesThrough 验证中间件关闭时直接放行

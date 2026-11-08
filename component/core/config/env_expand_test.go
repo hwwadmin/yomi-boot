@@ -1,11 +1,10 @@
 package config_test
 
 import (
+	"github.com/hwwadmin/yomi-boot/component/core/config"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/core/config"
 )
 
 func TestExpandEnvDefaults_RejectsNewline(t *testing.T) {

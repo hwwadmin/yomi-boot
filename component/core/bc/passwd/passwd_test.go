@@ -1,10 +1,9 @@
 package passwd
 
 import (
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"strings"
 	"testing"
-
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestHashAndVerify 验证密码哈希与校验及错误密码返回 ErrMismatch
@@ -81,6 +80,12 @@ func TestCostAndNeedsRehash(t *testing.T) {
 		t.Fatal("非法目标成本应失败")
 	}
 	if _, err := NeedsRehash("not a bcrypt hash", 10); err == nil {
+		t.Fatal("非法哈希应失败")
+	}
+}
+
+func TestVerifyRejectsMalformedHash(t *testing.T) {
+	if err := Verify("not-a-bcrypt-hash", "secret"); err == nil {
 		t.Fatal("非法哈希应失败")
 	}
 }

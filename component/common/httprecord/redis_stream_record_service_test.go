@@ -3,11 +3,10 @@ package httprecord
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/common/redisstream"
+	"testing"
+	"time"
 )
 
 // TestRedisStreamHttpRecordService_Handle 验证异步写入 Redis Stream

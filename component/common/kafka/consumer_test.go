@@ -3,11 +3,10 @@ package kafka
 import (
 	"context"
 	"errors"
+	kafkago "github.com/segmentio/kafka-go"
 	"strings"
 	"testing"
 	"time"
-
-	kafkago "github.com/segmentio/kafka-go"
 )
 
 // TestInvokeConsumeHandler 验证 handler panic 被捕获并按 Retry 处理

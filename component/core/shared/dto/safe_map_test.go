@@ -72,3 +72,45 @@ func TestSafeMap_ConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestSafeMap_DeleteReplaceAndNil(t *testing.T) {
+	var empty *SafeMap
+	empty.Set("a", 1)
+	empty.Delete("a")
+	empty.Replace(map[string]any{"a": 1})
+	if _, ok := empty.Get("a"); ok || empty.Snapshot() != nil {
+		t.Fatal("nil SafeMap 应保持为空")
+	}
+	if err := empty.UnmarshalJSON([]byte(`{"a":1}`)); err != nil {
+		t.Fatalf("nil Unmarshal: %v", err)
+	}
+	if raw, err := json.Marshal(empty); err != nil || string(raw) != "null" {
+		t.Fatalf("nil marshal = %s err=%v", raw, err)
+	}
+
+	m := &SafeMap{}
+	m.Set("", 1)
+	m.Delete("")
+	if _, ok := m.Get(""); ok {
+		t.Fatal("空 key 不应写入")
+	}
+	m.Delete("missing")
+	m.Set("a", 1)
+	m.Set("b", 2)
+	m.Delete("a")
+	if _, ok := m.Get("a"); ok {
+		t.Fatal("已删除的 key 仍存在")
+	}
+	m.Delete("b")
+	if m.Snapshot() != nil {
+		t.Fatal("删空后应释放映射")
+	}
+	m.Replace(nil)
+	m.Replace(map[string]any{"c": "d"})
+	if got, ok := m.Get("c"); !ok || got != "d" {
+		t.Fatalf("replace = %v ok=%v", got, ok)
+	}
+	if err := m.UnmarshalJSON([]byte(`{`)); err == nil {
+		t.Fatal("非法 JSON 应失败")
+	}
+}

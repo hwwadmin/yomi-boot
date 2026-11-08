@@ -3,13 +3,6 @@ package boot
 import (
 	"context"
 	"fmt"
-	"net"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
-	"testing"
-
 	"github.com/hwwadmin/yomi-boot/boot/lifecycle"
 	"github.com/hwwadmin/yomi-boot/boot/server"
 	"github.com/hwwadmin/yomi-boot/component/core/config"
@@ -20,6 +13,12 @@ import (
 	eventplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/event"
 	routerplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/router"
 	snowflakeplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/snowflake"
+	"net"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
 )
 
 // TestMustInitPluginSlot 验证最小配置下默认插件链可初始化、可查找并可关闭

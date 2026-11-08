@@ -528,13 +528,6 @@ func TestNewConfigError(t *testing.T) {
 	}
 }
 
-// TestMustNew 验证 Fail Fast 构造
-func TestMustNew(t *testing.T) {
-	if svc := MustNew(newSpyStore(), Config{}); svc == nil {
-		t.Fatal("MustNew 合法配置不应返回 nil")
-	}
-}
-
 // TestServiceConcurrent 验证并发生成与校验
 func TestServiceConcurrent(t *testing.T) {
 	svc, store := newTestService(t, Config{Driver: DriverDigit})

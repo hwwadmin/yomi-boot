@@ -1,9 +1,8 @@
 package response
 
 import (
-	"testing"
-
 	"github.com/gin-gonic/gin"
+	"testing"
 )
 
 // TestMustRegister_RejectDuplicateAndUnregistered 验证未注册时 Enc 应 panic

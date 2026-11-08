@@ -2,13 +2,11 @@ package distlock
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
-
 	redisv9 "github.com/redis/go-redis/v9"
+	"testing"
+	"time"
 )
 
 // delayHook 对 Extend 相关命令注入延迟，放大看门狗续期窗口，

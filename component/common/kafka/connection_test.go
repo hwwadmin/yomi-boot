@@ -2,10 +2,9 @@ package kafka
 
 import (
 	"context"
+	kafkago "github.com/segmentio/kafka-go"
 	"testing"
 	"time"
-
-	kafkago "github.com/segmentio/kafka-go"
 )
 
 func TestConnection_RejectsBadDialerAndUnreachableBroker(t *testing.T) {
