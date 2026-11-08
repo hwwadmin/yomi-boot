@@ -179,3 +179,22 @@ func TestRequiredAcksFromConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestConfig_RejectsNegativeLimits(t *testing.T) {
+	conn := ConnectionConfig{Brokers: []string{"127.0.0.1:1"}, DialTimeoutSeconds: 1}
+	if err := (PublisherConfig{Connection: conn, BatchTimeoutSeconds: -1}).Validate(); err == nil {
+		t.Fatal("负的批量超时应失败")
+	}
+	if err := (PublishWorkerConfig{Size: -1}).Validate(); err == nil {
+		t.Fatal("负的队列容量应失败")
+	}
+	if err := (PublishWorkerConfig{SubmitTimeoutSeconds: -1}).Validate(); err == nil {
+		t.Fatal("负的入队超时应失败")
+	}
+	if err := (ConsumerManagerConfig{Connection: conn, MaxBytes: -1}).Validate(); err == nil {
+		t.Fatal("负的 max_bytes 应失败")
+	}
+	if err := (ConsumerManagerConfig{Connection: conn, MaxWaitSeconds: -1}).Validate(); err == nil {
+		t.Fatal("负的 max_wait 应失败")
+	}
+}

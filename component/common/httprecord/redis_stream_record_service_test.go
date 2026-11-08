@@ -172,3 +172,38 @@ func TestRedisStreamRecordHandleBudget(t *testing.T) {
 		t.Fatalf("投递阻塞超出预算: %v", elapsed)
 	}
 }
+
+func TestMapRecordHandlerResultToRedisStream_UnknownStatus(t *testing.T) {
+	unknown := RecordHandleResult{Status: RecordHandleStatus(99)}
+	if got := mapRecordHandlerResultToRedisStream(unknown); got != redisstream.HandleDead {
+		t.Fatalf("未知状态应记 Redis Stream 死信: %v", got)
+	}
+}
+
+func TestStartRedisStreamRecordConsumer_RejectsBadArgs(t *testing.T) {
+	handler := func(context.Context, *HttpRecord) RecordHandleResult { return HandleOK() }
+	consumer := nopRedisConsumer{}
+	valid := RedisStreamRecordConsumerConfig{Stream: "s", Group: "g", Consumer: "c"}
+
+	if err := StartRedisStreamRecordConsumer(context.Background(), consumer, "id", valid, nil); err == nil {
+		t.Fatal("空 handler 应失败")
+	}
+	if err := StartRedisStreamRecordConsumer(context.Background(), consumer, "id", RedisStreamRecordConsumerConfig{Group: "g", Consumer: "c"}, handler); err == nil {
+		t.Fatal("空 stream 应失败")
+	}
+	if err := StartRedisStreamRecordConsumer(context.Background(), consumer, "id", RedisStreamRecordConsumerConfig{Stream: "s", Consumer: "c"}, handler); err == nil {
+		t.Fatal("空消费组应失败")
+	}
+	if err := StartRedisStreamRecordConsumer(context.Background(), consumer, "id", RedisStreamRecordConsumerConfig{Stream: "s", Group: "g"}, handler); err == nil {
+		t.Fatal("空消费者名应失败")
+	}
+}
+
+type nopRedisConsumer struct{}
+
+func (nopRedisConsumer) Start(context.Context, string, redisstream.GroupConfig, redisstream.Handler) error {
+	return nil
+}
+func (nopRedisConsumer) Stop(string) error { return nil }
+func (nopRedisConsumer) StopAll() error    { return nil }
+func (nopRedisConsumer) Close() error      { return nil }

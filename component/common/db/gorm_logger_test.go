@@ -93,3 +93,10 @@ func TestGormLog_TraceLogsSlowSQL(t *testing.T) {
 		t.Fatal("慢 SQL 应读取 SQL 并输出日志")
 	}
 }
+
+func TestGormLogTrace_SilentAndInfo(t *testing.T) {
+	fc := func() (string, int64) { return "select 1", 1 }
+	(&gormLog{level: gormlogger.Silent}).Trace(context.Background(), time.Now(), fc, nil)
+
+	(&gormLog{level: gormlogger.Info, slowThreshold: time.Hour}).Trace(context.Background(), time.Now(), fc, nil)
+}

@@ -118,3 +118,19 @@ func TestInvalidKey(t *testing.T) {
 		t.Fatal("非法 key 应失败")
 	}
 }
+
+// oversizedBlock 的块长超出 PKCS7 上限，用来走到填充失败分支。
+type oversizedBlock struct{}
+
+func (oversizedBlock) BlockSize() int          { return 256 }
+func (oversizedBlock) Encrypt(dst, src []byte) {}
+func (oversizedBlock) Decrypt(dst, src []byte) {}
+
+func TestSeal_RejectsOversizedBlock(t *testing.T) {
+	if _, err := (&CBC{block: oversizedBlock{}}).Seal([]byte("a")); err == nil {
+		t.Fatal("CBC 块长非法时应填充失败")
+	}
+	if _, err := (&ECB{block: oversizedBlock{}}).Seal([]byte("a")); err == nil {
+		t.Fatal("ECB 块长非法时应填充失败")
+	}
+}

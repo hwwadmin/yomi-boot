@@ -92,3 +92,56 @@ func TestStartMemoryRecordConsumer_DuplicateStart(t *testing.T) {
 		t.Fatal("second StartMemoryRecordConsumer() error = nil, want already started")
 	}
 }
+
+func TestStartMemoryRecordConsumer_RejectsBadArgs(t *testing.T) {
+	svc := NewMemoryHttpRecordService(1)
+	t.Cleanup(svc.Close)
+	handler := func(context.Context, *HttpRecord) RecordHandleResult { return HandleOK() }
+
+	if err := StartMemoryRecordConsumer(context.Background(), svc, MemoryRecordConsumerConfig{Workers: 1}, nil); err == nil {
+		t.Fatal("空 handler 应失败")
+	}
+	if err := StartMemoryRecordConsumer(context.Background(), svc, MemoryRecordConsumerConfig{}, handler); err == nil {
+		t.Fatal("协程数小于等于 0 应失败")
+	}
+	if err := StartMemoryRecordConsumer(nil, svc, MemoryRecordConsumerConfig{Workers: 1}, handler); err != nil {
+		t.Fatalf("空父上下文应归一化为 Background: %v", err)
+	}
+}
+
+func TestMemoryWorker_CanceledCtxAndNilRecord(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc := NewMemoryHttpRecordService(1)
+	t.Cleanup(svc.Close)
+	if err := StartMemoryRecordConsumer(parent, svc, MemoryRecordConsumerConfig{Workers: 1}, func(context.Context, *HttpRecord) RecordHandleResult {
+		t.Fatal("已取消的上下文不应消费记录")
+		return HandleOK()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	live := NewMemoryHttpRecordService(1)
+	t.Cleanup(live.Close)
+	live.queue <- nil
+	if err := StartMemoryRecordConsumer(context.Background(), live, MemoryRecordConsumerConfig{Workers: 1}, func(context.Context, *HttpRecord) RecordHandleResult {
+		t.Fatal("空记录应跳过")
+		return HandleOK()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Millisecond)
+}
+
+func TestMemoryHandle_RecoversClosedQueue(t *testing.T) {
+	svc := NewMemoryHttpRecordService(1)
+	t.Cleanup(svc.Close)
+	close(svc.queue)
+	svc.Handle(context.Background(), &HttpRecord{Method: "GET", Path: "/closed"})
+}
+
+func TestMemoryClose_NilReceiver(t *testing.T) {
+	var svc *MemoryHttpRecordService
+	svc.Close()
+}

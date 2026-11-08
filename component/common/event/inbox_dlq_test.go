@@ -252,3 +252,30 @@ func TestInboxDlqHandlerStartValidation(t *testing.T) {
 		}
 	})
 }
+
+// TestInboxDlqHandler_DeadRepoErrors 验证启动失败、查询失败以及重投前后的仓储错误
+func TestInboxDlqHandler_DeadRepoErrors(t *testing.T) {
+	db := newDeadDB(t)
+	dlqRepo := repo.NewInboxDlqRepo(db)
+	inboxRepo := repo.NewInboxRepo(db)
+	ctx := context.Background()
+
+	handler := NewInboxDlqHandler(cfg.Runtime{
+		ServiceName:       "svc",
+		InboxDlqFrequency: time.Millisecond,
+		InboxDlqSize:      1,
+	}, dlqRepo, inboxRepo, &stubPublisher{})
+	if err := handler.Start(ctx, &stubDistLockFactory{}); err == nil {
+		t.Fatal("轮询频率过低应启动失败")
+	}
+	if err := handler.processDlq(ctx); err == nil {
+		t.Fatal("查询收件箱死信失败应返回错误")
+	}
+	handler.processOne(ctx, &model.SysEventInboxDlq{ServiceName: "svc", EventID: "event-1", Topic: "topic"})
+
+	failHandler := NewInboxDlqHandler(cfg.Runtime{ServiceName: "svc", InboxDlqFrequency: time.Second}, dlqRepo, inboxRepo, &stubPublisher{err: errTestPublish})
+	failHandler.processOne(ctx, &model.SysEventInboxDlq{Topic: "topic"})
+
+	okHandler := NewInboxDlqHandler(cfg.Runtime{ServiceName: "svc"}, dlqRepo, inboxRepo, &stubPublisher{})
+	okHandler.processOne(ctx, &model.SysEventInboxDlq{EventID: "event-2", Topic: "topic"})
+}

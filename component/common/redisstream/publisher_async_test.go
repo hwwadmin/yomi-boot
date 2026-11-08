@@ -207,3 +207,12 @@ func TestAddJSONAsync_EnqueueAndCloseDrains(t *testing.T) {
 		t.Fatalf("sync add calls after drain = %d, want 1", recorder.addCalls)
 	}
 }
+
+func TestAsyncPublisher_CloseWithoutSyncAndEmptyClone(t *testing.T) {
+	if err := (&asyncPublisher{}).Close(); err != nil {
+		t.Fatal(err)
+	}
+	if cloneStringMap(nil) != nil {
+		t.Fatal("空 map 应返回 nil")
+	}
+}

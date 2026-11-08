@@ -202,3 +202,32 @@ func TestRetentionGuardsAndCleanErrors(t *testing.T) {
 		t.Fatal("删除失败应返回错误")
 	}
 }
+
+// TestComponents_StartPartialFailures 验证后台任务中途失败时取消并返回错误
+func TestComponents_StartPartialFailures(t *testing.T) {
+	ctx := context.Background()
+	comp := &Components{
+		cfg: cfg.Runtime{
+			ServiceName:    "svc",
+			OutboxEnabled:  true,
+			FetchFrequency: time.Second,
+		},
+		lockFactory: nopLockFactory{},
+		processor:   &outbox.Processor{},
+		dlqHandler:  outbox.NewDlqHandler(cfg.Runtime{ServiceName: "svc"}, nil, nil, nil, nil, nil),
+	}
+	if err := comp.Start(ctx); err == nil {
+		t.Fatal("死信轮询频率非法时应启动失败")
+	}
+
+	retain := &Components{
+		lockFactory: nopLockFactory{},
+		retentionCleaner: NewRetentionCleaner(cfg.Runtime{
+			ServiceName:   "svc",
+			OutboxCleanup: cfg.CleanupRuntime{Enabled: true},
+		}, nil, nil),
+	}
+	if err := retain.Start(ctx); err == nil {
+		t.Fatal("清理仓储缺失时应启动失败")
+	}
+}

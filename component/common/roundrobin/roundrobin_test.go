@@ -405,4 +405,40 @@ func TestBackoffDuration(t *testing.T) {
 	if BackoffDuration(20) != maxBackoff {
 		t.Fatalf("backoff cap: %s", BackoffDuration(20))
 	}
+	if BackoffDuration(0) != time.Second || BackoffDuration(-3) != time.Second {
+		t.Fatalf("非正次数应回退 1s: %s %s", BackoffDuration(0), BackoffDuration(-3))
+	}
+}
+
+// idleFactory 只用于校验通过后、抢锁之前就返回的路径
+type idleFactory struct{}
+
+func (idleFactory) GetLock(string, ...distlock.LockOption) distlock.Lock { return nil }
+
+func TestRun_invalidArgs(t *testing.T) {
+	if err := Run(context.Background(), Config{}, nil, nil); err == nil {
+		t.Fatal("非法参数应返回错误")
+	}
+}
+
+func TestRun_stopsImmediatelyWhenCtxDone(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := Run(ctx, Simple("already-done", 50*time.Millisecond), func(context.Context) error {
+		return nil
+	}, idleFactory{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("已取消的上下文应结束轮询: %v", err)
+	}
+}
+
+func TestDurationHelpers_edges(t *testing.T) {
+	cfg := Config{Frequency: time.Second, RandomDelayMin: 2 * time.Second, RandomDelayMax: time.Second}
+	if got := jitterDuration(cfg); got != cfg.Frequency+cfg.RandomDelayMin {
+		t.Fatalf("high<=low 时应返回下界，实际 %s", got)
+	}
+	if err := sleep(context.Background(), 0); err != nil {
+		t.Fatalf("非正休眠应立即返回: %v", err)
+	}
+	stopTimer(nil)
 }

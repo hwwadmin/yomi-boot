@@ -122,6 +122,63 @@ func TestNormalizeFailureKeepsCauseOutOfWireCode(t *testing.T) {
 	})
 }
 
+func TestWriteBusinessError_NilBizAndFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	if !response.Registered() {
+		response.MustRegister(response.DefaultEncoder{})
+	}
+
+	t.Run("nil request error", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		handler.LogRequestError(c, nil)
+	})
+
+	t.Run("nil err", func(t *testing.T) {
+		rec, log := captureFailure(t, func(c *gin.Context) {
+			handler.WriteBusinessError(c, nil)
+		})
+		if !strings.Contains(rec, `"code":"INTERNAL_ERROR"`) {
+			t.Fatalf("空错误应落成 INTERNAL_ERROR: %s", rec)
+		}
+		if !strings.Contains(log, "INTERNAL_ERROR") {
+			t.Fatalf("日志应记录 INTERNAL_ERROR: %s", log)
+		}
+	})
+
+	t.Run("nil err with fallback", func(t *testing.T) {
+		rec, _ := captureFailure(t, func(c *gin.Context) {
+			handler.WriteBusinessErrorWithFallback(c, nil, sharederr.ErrRequestTimeout)
+		})
+		if !strings.Contains(rec, `"code":"REQUEST_TIMEOUT"`) {
+			t.Fatalf("空错误应改用 fallback: %s", rec)
+		}
+	})
+
+	t.Run("biz", func(t *testing.T) {
+		rec, log := captureFailure(t, func(c *gin.Context) {
+			handler.WriteBusinessError(c, errors.NewBiz("BIZ_CODE", "业务失败"))
+		})
+		if !strings.Contains(rec, "BIZ_CODE") || !strings.Contains(rec, "业务失败") {
+			t.Fatalf("业务错误应原样输出: %s", rec)
+		}
+		if !strings.Contains(log, "BIZ_CODE") || !strings.Contains(log, "业务失败") {
+			t.Fatalf("日志应带上业务码和消息: %s", log)
+		}
+	})
+
+	t.Run("fallback wraps unknown", func(t *testing.T) {
+		rec, log := captureFailure(t, func(c *gin.Context) {
+			handler.WriteBusinessErrorWithFallback(c, errors.New("db down"), sharederr.ErrInternal)
+		})
+		if !strings.Contains(rec, `"code":"INTERNAL_ERROR"`) {
+			t.Fatalf("未知错误应改用 fallback: %s", rec)
+		}
+		if !strings.Contains(log, "db down") {
+			t.Fatalf("日志应保留原始原因: %s", log)
+		}
+	})
+}
+
 func captureFailure(t *testing.T, write func(c *gin.Context)) (body, log string) {
 	t.Helper()
 	dir := t.TempDir()

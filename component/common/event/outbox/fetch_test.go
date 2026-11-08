@@ -10,6 +10,7 @@ import (
 
 	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
+	"github.com/hwwadmin/yomi-boot/component/common/event/repo"
 )
 
 // TestFetcherDoTask 验证抓取 PENDING 事件、标记 FETCHED 并提交发送
@@ -111,5 +112,17 @@ func TestFetcherStartRejectsNilFactory(t *testing.T) {
 	f := NewFetcher(cfg.Runtime{ServiceName: "svc", FetchFrequency: 50 * time.Millisecond}, p.outboxRepo, p)
 	if err := f.Start(context.Background(), nil); err == nil {
 		t.Fatal("nil 分布式锁工厂应返回错误")
+	}
+}
+
+// TestFetcher_DoTaskQueryError 验证待发件箱查询失败时原样返回
+func TestFetcher_DoTaskQueryError(t *testing.T) {
+	f := &Fetcher{
+		cfg:        cfg.Runtime{ServiceName: "svc", FetchSize: 1},
+		processor:  &Processor{queueSize: 8, worker: &stubWorker{}},
+		outboxRepo: repo.NewOutboxRepo(newDeadDB(t)),
+	}
+	if err := f.doTask(context.Background()); err == nil {
+		t.Fatal("查询待发件箱失败应返回错误")
 	}
 }

@@ -4,6 +4,7 @@
 package outbox
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -79,5 +80,13 @@ func TestJitterDelay(t *testing.T) {
 		if got < lower || got > upper {
 			t.Fatalf("抖动时长 %s 超出 [%s, %s]", got, lower, upper)
 		}
+	}
+}
+
+// TestJitterDelay_OverflowReturnsBase 验证时长乘法溢出时退回原值
+func TestJitterDelay_OverflowReturnsBase(t *testing.T) {
+	delay := time.Duration(math.MaxInt64 / 2)
+	if got := jitterDelay(delay); got != delay {
+		t.Fatalf("溢出时应返回原时长，实际 %d", got)
 	}
 }

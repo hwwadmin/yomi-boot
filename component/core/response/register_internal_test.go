@@ -33,6 +33,18 @@ func TestMustRegister_DuplicatePanics(t *testing.T) {
 	MustRegister(nopEncoder{})
 }
 
+func TestMustRegister_NilPanics(t *testing.T) {
+	resetRegisterForTest()
+	t.Cleanup(resetRegisterForTest)
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("nil Encoder 应 panic")
+		}
+	}()
+	MustRegister(nil)
+}
+
 func TestMustReady_UnregisteredPanics(t *testing.T) {
 	resetRegisterForTest()
 	t.Cleanup(resetRegisterForTest)

@@ -20,7 +20,8 @@ import (
 
 // stubWorker 仅实现容量查询所需方法的工作池桩
 type stubWorker struct {
-	pending int
+	pending   int
+	submitErr error
 }
 
 // Start 空实现
@@ -32,8 +33,8 @@ func (s *stubWorker) Submit(worker.WorkerHandler) error { return nil }
 // SubmitContext 空实现
 func (s *stubWorker) SubmitContext(context.Context, worker.WorkerHandler) error { return nil }
 
-// TrySubmit 空实现
-func (s *stubWorker) TrySubmit(worker.WorkerHandler) error { return nil }
+// TrySubmit 返回预设错误，默认成功
+func (s *stubWorker) TrySubmit(worker.WorkerHandler) error { return s.submitErr }
 
 // Pending 返回预设的待处理任务数
 func (s *stubWorker) Pending() int { return s.pending }
@@ -438,5 +439,30 @@ func TestShouldRestorePending(t *testing.T) {
 	}
 	if shouldRestorePending(errors.New("boom")) {
 		t.Fatal("普通错误不应判定为可恢复")
+	}
+}
+
+// TestProcessor_SubmitAndPushFailures 验证不可恢复的提交错误、恢复失败和推送后写库失败
+func TestProcessor_SubmitAndPushFailures(t *testing.T) {
+	ctx := context.Background()
+	row := model.SysEventOutbox{ID: 1, EventID: "event-1", Topic: "topic"}
+	dead := repo.NewOutboxRepo(newDeadDB(t))
+
+	(&Processor{worker: &stubWorker{submitErr: errors.New("boom")}}).OfferBatch(ctx, []model.SysEventOutbox{row})
+
+	(&Processor{
+		worker:     &stubWorker{submitErr: errors.New("worker.queue_full")},
+		outboxRepo: dead,
+	}).OfferBatch(ctx, []model.SysEventOutbox{row})
+
+	pub := &stubPublisher{err: errors.New("down")}
+	p := &Processor{
+		kafkaPublisher: pub,
+		txExecutor:     passthroughExecutor{},
+		outboxRepo:     dead,
+		dlq:            NewDlqHandler(cfg.Runtime{ServiceName: "svc"}, dead, repo.NewOutboxDlqRepo(newDeadDB(t)), pub, passthroughExecutor{}, nil),
+	}
+	if err := p.push(ctx, row); err == nil {
+		t.Fatal("推送失败且状态回写失败时应返回错误")
 	}
 }

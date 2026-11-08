@@ -52,6 +52,7 @@ func TestConfigValidate(t *testing.T) {
 	}{
 		{name: "scan_interval 为负", cfg: Config{ScanIntervalMinutes: -1}},
 		{name: "stale_timeout 为负", cfg: Config{StaleTimeoutMinutes: -1}},
+		{name: "stale_timeout 小于 5", cfg: Config{StaleTimeoutMinutes: 4}},
 		{name: "batch_size 为负", cfg: Config{BatchSize: -1}},
 	}
 	for _, tc := range cases {

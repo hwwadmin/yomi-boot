@@ -518,3 +518,74 @@ func TestSessionContextOps(t *testing.T) {
 		t.Fatalf("UserID 为 0 应返回 ErrTokenInvalid, err=%v", err)
 	}
 }
+
+func TestService_LoadErrorBadSnapshotAndTieSort(t *testing.T) {
+	issued := time.Now()
+	store := &scriptStore{
+		loadErr: errors.New("redis down"),
+		list: []*UserTokenSession{
+			{TokenHash: "b", Session: &TokenSession{UserID: 7, IssuedAt: issued}},
+			{TokenHash: "a", Session: &TokenSession{UserID: 7, IssuedAt: issued}},
+		},
+	}
+	svc := NewService(NewUUIDGenerator(), store, Config{
+		TokenTTLMinutes: 30,
+		AllowMultiLogin: true,
+		StorePrefix:     "pfx",
+	}, nil)
+
+	if _, err := svc.Validate(context.Background(), "tok"); err == nil {
+		t.Fatal("存储失败时应返回错误")
+	}
+
+	store.loadErr = nil
+	store.session = &TokenSession{UserID: 0, IssuedAt: issued}
+	if _, err := svc.Validate(context.Background(), "tok"); err == nil {
+		t.Fatal("非法会话快照应视为令牌无效")
+	}
+
+	store.listErr = errors.New("index down")
+	if _, err := svc.ListByUserID(context.Background(), 7); err == nil {
+		t.Fatal("索引失败时应返回错误")
+	}
+
+	store.listErr = nil
+	listed, err := svc.ListByUserID(context.Background(), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].TokenHash != "a" || listed[1].TokenHash != "b" {
+		t.Fatalf("相同签发时间应按哈希排序: %+v", listed)
+	}
+}
+
+type scriptStore struct {
+	loadErr error
+	session *TokenSession
+	listErr error
+	list    []*UserTokenSession
+}
+
+func (s *scriptStore) Save(context.Context, string, string, *TokenSession, time.Duration) error {
+	return nil
+}
+func (s *scriptStore) ReplaceUserSession(context.Context, string, string, *TokenSession, time.Duration) error {
+	return nil
+}
+func (s *scriptStore) Load(context.Context, string, string) (*TokenSession, error) {
+	if s.loadErr != nil {
+		return nil, s.loadErr
+	}
+	return s.session, nil
+}
+func (s *scriptStore) ListByUserID(context.Context, string, int64) ([]*UserTokenSession, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return s.list, nil
+}
+func (s *scriptStore) Delete(context.Context, string, string) error { return nil }
+func (s *scriptStore) DeleteByTokenHash(context.Context, string, string) error {
+	return nil
+}
+func (s *scriptStore) DeleteByUserID(context.Context, string, int64) error { return nil }

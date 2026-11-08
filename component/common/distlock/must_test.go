@@ -1,6 +1,10 @@
 package distlock
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+)
 
 func TestMustNewFactory_NilClientPanics(t *testing.T) {
 	defer func() {
@@ -9,4 +13,14 @@ func TestMustNewFactory_NilClientPanics(t *testing.T) {
 		}
 	}()
 	MustNewFactory(nil)
+}
+
+func TestMustNewFactory_Success(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	factory := MustNewFactory(client)
+	if factory == nil || factory.GetLock("k") == nil {
+		t.Fatal("合法客户端应返回工厂")
+	}
 }

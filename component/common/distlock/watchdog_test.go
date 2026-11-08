@@ -481,3 +481,39 @@ func TestApplyLockOptions_WatchdogIntervalCapped(t *testing.T) {
 		t.Fatalf("WatchdogInterval = %v, want %v", got.WatchdogInterval, want)
 	}
 }
+
+func TestWatchdogHelpers_Edges(t *testing.T) {
+	if got := (&redsyncLock{}).watchdogInterval(); got != time.Second {
+		t.Fatalf("零 TTL 续期间隔 = %s，期望 1s", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	lock := &redsyncLock{heldCtx: ctx, heldCancel: cancel}
+	lock.mu.Lock()
+	lock.stopWatchdogLocked()
+	lock.mu.Unlock()
+	if lock.heldCancel != nil || lock.heldCtx != nil {
+		t.Fatal("未启动看门狗时停止应清掉 HeldContext")
+	}
+
+	lock.lost = true
+	lock.mu.Lock()
+	lock.markLostLocked()
+	lock.mu.Unlock()
+
+	if lock.shouldStopWatchdogTick() != true {
+		t.Fatal("未持锁时看门狗应停止")
+	}
+	if ok, err := lock.extendHeldMutex(context.Background()); ok || !errors.Is(err, ErrLockNotHeld) {
+		t.Fatalf("未持锁续期 = %v %v", ok, err)
+	}
+	if !lock.isLost() {
+		t.Fatal("已标记丢失")
+	}
+
+	extendCtx, extendCancel := extendContext(50 * time.Millisecond)
+	extendCancel()
+	if deadline, ok := extendCtx.Deadline(); !ok || time.Until(deadline) > 50*time.Millisecond {
+		t.Fatal("极短 TTL 的续期超时应被压到 TTL/2")
+	}
+}

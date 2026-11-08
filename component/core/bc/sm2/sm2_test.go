@@ -5,7 +5,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"testing"
+
+	"github.com/emmansun/gmsm/smx509"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
@@ -158,5 +162,60 @@ func TestPEMRoundTrip(t *testing.T) {
 	}
 	if _, err := ParsePrivateKeyPEM([]byte("not a pem")); err == nil {
 		t.Fatal("非法 PEM 应失败")
+	}
+}
+
+func TestEncrypt_RejectsEmptyPlain(t *testing.T) {
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Encrypt(&priv.PublicKey, nil); err == nil {
+		t.Fatal("空明文应失败")
+	}
+}
+
+func TestSign_RejectsInvalidScalar(t *testing.T) {
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv.D = nil
+	if _, err := Sign(priv, []byte("m")); err == nil {
+		t.Fatal("标量为空的私钥应失败")
+	}
+}
+
+func TestParsePrivateKeyPEM_RejectsNonSM2SEC1(t *testing.T) {
+	ec, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalECPrivateKey(ec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+	if _, err := ParsePrivateKeyPEM(pemBytes); err == nil {
+		t.Fatal("P-256 SEC1 私钥不应被当成 SM2")
+	}
+}
+
+func TestParsePrivateKeyPEM_SEC1RoundTrip(t *testing.T) {
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := smx509.MarshalSM2PrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+	parsed, err := ParsePrivateKeyPEM(pemBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.D.Cmp(priv.D) != 0 {
+		t.Fatal("SEC1 私钥解析结果不一致")
 	}
 }

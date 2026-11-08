@@ -610,3 +610,123 @@ func TestConfigValidatePrefixWarningBranch(t *testing.T) {
 		t.Fatalf("无冒号前缀不应报错: %v", err)
 	}
 }
+
+func TestNewConsumerManager_NilClientPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("nil client 应 panic")
+		}
+	}()
+	NewConsumerManager(nil, RuntimeConfig{})
+}
+
+func TestConsumerManager_RejectsBadStartAndClosed(t *testing.T) {
+	client := redisv9.NewClient(&redisv9.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() { _ = client.Close() })
+
+	m := NewConsumerManager(client, RuntimeConfig{})
+	if m.stopTimeout != time.Duration(defaultStopTimeoutMS)*time.Millisecond {
+		t.Fatalf("stopTimeout=%s", m.stopTimeout)
+	}
+	handler := func(context.Context, Entry) HandleResult { return HandleAck }
+	ctx := context.Background()
+	if err := m.Start(ctx, "id", GroupConfig{Stream: "s", Group: "g", Consumer: "c"}, nil); err == nil {
+		t.Fatal("空 handler 应失败")
+	}
+	if err := m.Start(ctx, " ", GroupConfig{Stream: "s", Group: "g", Consumer: "c"}, handler); err == nil {
+		t.Fatal("空消费者标识应失败")
+	}
+	if err := m.Start(ctx, "id", GroupConfig{Group: "g", Consumer: "c"}, handler); err == nil {
+		t.Fatal("空 stream 应失败")
+	}
+	if err := m.Start(ctx, "id", GroupConfig{Stream: "s", Consumer: "c"}, handler); err == nil {
+		t.Fatal("空 group 应失败")
+	}
+	if err := m.Start(ctx, "id", GroupConfig{Stream: "s", Group: "g"}, handler); err == nil {
+		t.Fatal("空 consumer 应失败")
+	}
+	if err := m.Stop("missing"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start(ctx, "id", GroupConfig{Stream: "s", Group: "g", Consumer: "c"}, handler); err == nil {
+		t.Fatal("关闭后不应再启动")
+	}
+
+	entry := &consumerEntry{done: make(chan struct{})}
+	m.entries["gone"] = entry
+	m.finish("gone", entry)
+	if _, ok := m.entries["gone"]; ok {
+		t.Fatal("退出后应清理登记")
+	}
+}
+
+func TestConsumerManager_RejectsDuplicateID(t *testing.T) {
+	client := redisv9.NewClient(&redisv9.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() { _ = client.Close() })
+	m := NewConsumerManager(client, RuntimeConfig{StopTimeout: time.Second})
+	m.entries["id"] = &consumerEntry{done: make(chan struct{})}
+	err := m.Start(context.Background(), "id", GroupConfig{Stream: "s", Group: "g", Consumer: "c"}, func(context.Context, Entry) HandleResult {
+		return HandleAck
+	})
+	if err == nil {
+		t.Fatal("重复消费者标识应失败")
+	}
+}
+
+func TestClaimLoop_RecoversPanicAndStops(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &consumer{cfg: resolvedGroupConfig{claimInterval: time.Hour, logicalStream: "s", group: "g"}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.claimLoop(ctx, func(context.Context, Entry) HandleResult { return HandleAck }, &sync.Mutex{})
+	}()
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("claimLoop 未在取消后退出")
+	}
+}
+
+func TestRun_StopsWhenReadRetryContextEnds(t *testing.T) {
+	client := redisv9.NewClient(&redisv9.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() { _ = client.Close() })
+	c := &consumer{
+		client: client,
+		cfg: resolvedGroupConfig{
+			streamKey:     "s",
+			group:         "g",
+			consumer:      "c",
+			count:         1,
+			block:         time.Second,
+			claimInterval: time.Hour,
+			claimMinIdle:  time.Second,
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := c.run(ctx, func(context.Context, Entry) HandleResult { return HandleAck }); err == nil {
+		t.Fatal("读失败退避期间上下文结束应返回错误")
+	}
+}
+
+func TestMoveToDead_FailsWhenRedisDown(t *testing.T) {
+	client := redisv9.NewClient(&redisv9.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() { _ = client.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	c := &consumer{
+		client:  client,
+		runtime: RuntimeConfig{DefaultMaxLen: 10},
+		cfg:     resolvedGroupConfig{deadStreamKey: "s_dead", logicalStream: "s"},
+	}
+	if err := c.moveToDead(ctx, Entry{ID: "1-0", Stream: "s", Values: map[string]string{"k": "v"}}); err == nil {
+		t.Fatal("连不上 Redis 时写死信应失败")
+	}
+}

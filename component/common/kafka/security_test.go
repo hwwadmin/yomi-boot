@@ -220,3 +220,28 @@ func TestBuildDialer(t *testing.T) {
 		t.Fatalf("明文拨号器不应带安全配置: %+v", dialer)
 	}
 }
+
+func TestBuildSecurity_SASLSSLRejectsBadCAAndMechanism(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.pem")
+	if _, err := buildSecuritySettings(ConnectionConfig{
+		SecurityProtocol: "SASL_SSL",
+		SASLMechanism:    "PLAIN",
+		Username:         "u",
+		Password:         "p",
+		TLSCAFile:        missing,
+	}); err == nil {
+		t.Fatal("缺失 CA 的 SASL_SSL 应失败")
+	}
+	if _, err := buildSecuritySettings(ConnectionConfig{
+		SecurityProtocol: "SASL_SSL",
+		SASLMechanism:    "GSSAPI",
+		Username:         "u",
+		Password:         "p",
+		TLSSkipVerify:    true,
+	}); err == nil {
+		t.Fatal("不支持的 SASL 机制应失败")
+	}
+	if _, err := buildDialer(ConnectionConfig{SecurityProtocol: "NOPE"}); err == nil {
+		t.Fatal("不支持的安全协议应无法构建拨号器")
+	}
+}

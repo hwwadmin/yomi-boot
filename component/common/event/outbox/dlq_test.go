@@ -395,3 +395,25 @@ func TestDlqHandlerStartRejectsNilFactory(t *testing.T) {
 		t.Fatal("nil 分布式锁工厂应返回错误")
 	}
 }
+
+// TestDlqHandler_DeadRepoErrors 验证死信查询、孤立记录清理和重试计数回写失败
+func TestDlqHandler_DeadRepoErrors(t *testing.T) {
+	ctx := context.Background()
+	dead := newDeadDB(t)
+	outboxRepo := repo.NewOutboxRepo(dead)
+	dlqRepo := repo.NewOutboxDlqRepo(dead)
+	handler := NewDlqHandler(
+		cfg.Runtime{ServiceName: "svc", OutboxDlqMaxRetry: 3, OutboxDlqSize: 1},
+		outboxRepo, dlqRepo, &stubPublisher{err: errors.New("down")}, passthroughExecutor{}, nil,
+	)
+	if err := handler.processDlq(ctx); err == nil {
+		t.Fatal("查询死信失败应返回错误")
+	}
+	handler.processOne(ctx, model.SysEventOutboxDlq{ID: 1}, model.SysEventOutbox{})
+	handler.processOne(ctx, model.SysEventOutboxDlq{ID: 1}, model.SysEventOutbox{
+		ID: 2, Status: model.OutboxStatusSentSuccess, EventID: "event-1", Topic: "topic",
+	})
+	handler.processOne(ctx, model.SysEventOutboxDlq{ID: 1}, model.SysEventOutbox{
+		ID: 2, Status: model.OutboxStatusFetched, EventID: "event-1", Topic: "topic",
+	})
+}

@@ -6,6 +6,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -133,4 +134,47 @@ type idleTestModel struct {
 // TableName 返回最小空闲保活单测表名
 func (idleTestModel) TableName() string {
 	return "idle_test_model"
+}
+
+func TestIdleHelpers_Edges(t *testing.T) {
+	if err := warmIdle(context.Background(), nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := sql.Open("mysql", "u:p@tcp(127.0.0.1:1)/db?timeout=50ms")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := warmIdle(ctx, sqlDB, 1); err == nil {
+		t.Fatal("已取消的上下文预热应失败")
+	}
+	if err := ensureMinIdle(context.Background(), sqlDB, 0, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	keeper := startIdleKeeper(sqlDB, 1, 1, 0)
+	if keeper == nil || keeper.interval != 30*time.Second {
+		t.Fatalf("非正巡检间隔应回退 30s: %+v", keeper)
+	}
+	keeper.Stop()
+
+	panicKeeper := &idleKeeper{
+		db:       nil,
+		minIdle:  1,
+		maxIdle:  1,
+		interval: time.Millisecond,
+		done:     make(chan struct{}),
+	}
+	loopCtx, stopLoop := context.WithCancel(context.Background())
+	go panicKeeper.loop(loopCtx)
+	time.Sleep(30 * time.Millisecond)
+	stopLoop()
+	select {
+	case <-panicKeeper.done:
+	case <-time.After(time.Second):
+		t.Fatal("保活协程 panic 后应退出")
+	}
 }

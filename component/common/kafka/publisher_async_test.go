@@ -354,3 +354,12 @@ func TestAsyncPublisher_EnqueueOrSyncNilWorker(t *testing.T) {
 		t.Fatalf("应委托同步生产者，实际调用 %d 次", rec.publishCalls)
 	}
 }
+
+func TestAsyncPublisher_RejectsEmptyTopicAndClosesWithoutSync(t *testing.T) {
+	if err := (&asyncPublisher{}).PublishAsync(context.Background(), PublishRequest{}); err == nil {
+		t.Fatal("空主题应失败")
+	}
+	if err := (&asyncPublisher{}).Close(); err != nil {
+		t.Fatal(err)
+	}
+}

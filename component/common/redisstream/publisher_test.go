@@ -7,8 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
 func TestPublisher_AddBytesAndJSON(t *testing.T) {
@@ -68,5 +71,25 @@ func TestPublisher_RejectsEmpty(t *testing.T) {
 	}
 	if _, err := pub.AddBytes(context.Background(), "", []byte("x")); err == nil {
 		t.Fatal("expected error for empty stream")
+	}
+}
+
+func TestNewPublisher_NilClientPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("nil client 应 panic")
+		}
+	}()
+	NewPublisher(nil, RuntimeConfig{})
+}
+
+func TestPublisher_AddFailsWhenRedisDown(t *testing.T) {
+	client := redisv9.NewClient(&redisv9.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() { _ = client.Close() })
+	p := NewPublisher(client, RuntimeConfig{DefaultMaxLen: 10})
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if _, err := p.Add(ctx, "s", map[string]string{"k": "v"}); err == nil {
+		t.Fatal("连不上 Redis 时发布应失败")
 	}
 }

@@ -1,7 +1,10 @@
 package rsa
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	stdrsa "crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -116,5 +119,67 @@ func TestParseEncryptedPrivateKeyRequiresEncrypted(t *testing.T) {
 	}
 	if _, err := ParseEncryptedPrivateKeyPEM(pemBytes, nil); err == nil {
 		t.Fatal("空密码应失败")
+	}
+}
+
+func TestParsePrivateKeyPEM_PKCS1AndGarbage(t *testing.T) {
+	priv, err := GenerateKey(2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der := x509.MarshalPKCS1PrivateKey(priv)
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
+	parsed, err := ParsePrivateKeyPEM(pemBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.N.Cmp(priv.N) != 0 {
+		t.Fatal("PKCS#1 私钥解析结果不匹配")
+	}
+	garbage := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte{0x30, 0x00}})
+	if _, err := ParsePrivateKeyPEM(garbage); err == nil {
+		t.Fatal("损坏的 PKCS#8 应失败")
+	}
+}
+
+func TestParseEncryptedPrivateKeyPEM_RejectsPlainAndGarbage(t *testing.T) {
+	if _, err := ParseEncryptedPrivateKeyPEM([]byte("not-pem"), []byte("pw")); err == nil {
+		t.Fatal("无法解码的 PEM 应失败")
+	}
+	plain := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: []byte{1}})
+	if _, err := ParseEncryptedPrivateKeyPEM(plain, []byte("pw")); err == nil {
+		t.Fatal("没有 DEK-Info 的 RSA 私钥应失败")
+	}
+}
+
+func TestParsePublicKeyFromCertificatePEM_RejectsEC(t *testing.T) {
+	ec, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &ec.PublicKey, ec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	if _, err := ParsePublicKeyFromCertificatePEM(pemBytes); err == nil {
+		t.Fatal("EC 证书公钥应失败")
+	}
+	if _, err := ParsePublicKeyFromCertificatePEM([]byte("not a cert")); err == nil {
+		t.Fatal("无效证书 PEM 应失败")
+	}
+}
+
+func TestMarshalRejectsIncompleteKey(t *testing.T) {
+	if _, err := MarshalPrivateKeyPEM(&stdrsa.PrivateKey{}); err == nil {
+		t.Fatal("不完整私钥不应编码")
+	}
+	if _, err := MarshalPublicKeyPEM(&stdrsa.PublicKey{}); err == nil {
+		t.Fatal("不完整公钥不应编码")
 	}
 }

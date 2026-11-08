@@ -336,3 +336,30 @@ func TestDropLogFollowsCommit(t *testing.T) {
 func joinOrder(order []string) string {
 	return strings.Join(order, ",")
 }
+
+func TestConsumerHelpers_Edges(t *testing.T) {
+	if ConsumeOK.String() != "ok" {
+		t.Fatalf("成功结果名称 = %s", ConsumeOK.String())
+	}
+	if got := nextRetryDelay(consumerRetryMaxDelay); got <= 0 {
+		t.Fatalf("退避应仍为正数: %s", got)
+	}
+	if firstPositive(0, -1) != 0 {
+		t.Fatal("没有正数时应返回 0")
+	}
+	if firstDuration(0, -time.Second) != 0 {
+		t.Fatal("没有正时长时应返回 0")
+	}
+	c := &consumer{closed: true}
+	if err := c.close(); err != nil {
+		t.Fatal(err)
+	}
+	prev := consumeLogObserver
+	t.Cleanup(func() { consumeLogObserver = prev })
+	var seen string
+	consumeLogObserver = func(kind string) { seen = kind }
+	notifyConsumeLog("drop")
+	if seen != "drop" {
+		t.Fatalf("观察者收到 %q", seen)
+	}
+}

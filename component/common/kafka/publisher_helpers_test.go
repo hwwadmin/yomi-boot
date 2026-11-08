@@ -4,6 +4,8 @@
 package kafka
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -217,5 +219,69 @@ func TestBuildWriterUsesHashBalancer(t *testing.T) {
 	t.Cleanup(func() { _ = writer.Close() })
 	if _, ok := writer.Balancer.(*kafkago.Hash); !ok {
 		t.Fatalf("Balancer = %T，期望 *kafka.Hash", writer.Balancer)
+	}
+}
+
+func TestSyncPublisher_EmptyBatchAndBadJSON(t *testing.T) {
+	p := &syncPublisher{}
+	if err := p.PublishBatch(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.PublishJSON(context.Background(), "t", "k", make(chan int)); err == nil {
+		t.Fatal("不可序列化的消息应失败")
+	}
+}
+
+func TestBuildWriter_SecurityEdges(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.pem")
+	if _, err := buildWriter(PublisherConfig{Connection: ConnectionConfig{
+		SecurityProtocol: "SSL",
+		TLSCAFile:        missing,
+	}}, []string{"127.0.0.1:1"}); err == nil {
+		t.Fatal("缺失 CA 时不应创建生产者")
+	}
+	writer, err := buildWriter(PublisherConfig{Connection: ConnectionConfig{
+		SecurityProtocol: "SASL_PLAINTEXT",
+		SASLMechanism:    "PLAIN",
+		Username:         "u",
+		Password:         "p",
+	}}, []string{"127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+	if writer.Transport == nil {
+		t.Fatal("SASL 生产者应挂载传输层")
+	}
+}
+
+func TestNewClients_RejectUnreachableAndBadTLS(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cfg := ConnectionConfig{Brokers: []string{"127.0.0.1:1"}, DialTimeoutSeconds: 1}
+	if _, err := NewPublisher(ctx, PublisherConfig{Connection: cfg}); err == nil {
+		t.Fatal("连不上 broker 时不应创建生产者")
+	}
+	if _, err := NewAdmin(ctx, cfg); err == nil {
+		t.Fatal("连不上 broker 时不应创建管理端")
+	}
+	if _, err := NewConsumerManager(ctx, ConsumerManagerConfig{Connection: cfg}); err == nil {
+		t.Fatal("连不上 broker 时不应创建消费者管理器")
+	}
+
+	badTLS := ConnectionConfig{
+		Brokers:            []string{"127.0.0.1:1"},
+		DialTimeoutSeconds: 1,
+		SecurityProtocol:   "SSL",
+		TLSCAFile:          filepath.Join(t.TempDir(), "missing.pem"),
+	}
+	if _, err := NewPublisher(context.Background(), PublisherConfig{Connection: badTLS}); err == nil {
+		t.Fatal("缺失 CA 时不应创建生产者")
+	}
+	if _, err := NewAdmin(context.Background(), badTLS); err == nil {
+		t.Fatal("缺失 CA 时不应创建管理端")
+	}
+	if _, err := NewConsumerManager(context.Background(), ConsumerManagerConfig{Connection: badTLS}); err == nil {
+		t.Fatal("缺失 CA 时不应创建消费者管理器")
 	}
 }

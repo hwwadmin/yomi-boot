@@ -438,3 +438,11 @@ func TestLogger_ConsoleLevelFollowsLevel(t *testing.T) {
 		t.Fatalf("Warn 应上控制台: %q", console)
 	}
 }
+
+func TestAsyncSink_FlushAfterStop(t *testing.T) {
+	sink := newAsyncSink("edge", io.Discard, 1)
+	sink.Stop()
+	if err := sink.Flush(time.Second); err != nil {
+		t.Fatalf("停止后 Flush 应直接返回: %v", err)
+	}
+}

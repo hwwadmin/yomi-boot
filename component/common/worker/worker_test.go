@@ -5,6 +5,7 @@ package worker
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -551,4 +552,173 @@ func TestNewWorkerUsesChannelBackend(t *testing.T) {
 	if _, ok := pool.(*channelWorker); !ok {
 		t.Fatalf("expected channel worker, got %T", pool)
 	}
+}
+
+func TestAntsTrySubmit_RunsWhenCapacityFree(t *testing.T) {
+	pool, err := NewAntsWorker(WorkConfig{Name: "ants-try", WorkNum: 2, Size: 2}, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+	pool.Start()
+
+	if err := pool.TrySubmit(func(context.Context) error { return nil }); err != nil {
+		t.Fatalf("有空闲 worker 时 TrySubmit 应成功: %v", err)
+	}
+}
+
+func TestAntsSubmit_CallerCancelAndStopAndTimeout(t *testing.T) {
+	hold := make(chan struct{})
+	cfg := WorkConfig{Name: "ants-block", WorkNum: 1, Size: 8, SubmitTimeout: 40 * time.Millisecond}
+	pool, err := NewAntsWorker(cfg, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		close(hold)
+		_ = pool.Close()
+	})
+	pool.Start()
+
+	started := make(chan struct{})
+	if err := pool.Submit(func(context.Context) error {
+		close(started)
+		<-hold
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	if err := pool.Submit(func(context.Context) error { return nil }); err == nil || !strings.Contains(err.Error(), "submit_timeout") {
+		t.Fatalf("工作池占满时应入队超时: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- pool.SubmitContext(ctx, func(context.Context) error { return nil })
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	if err := <-errCh; err == nil {
+		t.Fatal("调用方取消后阻塞提交应返回错误")
+	}
+}
+
+func TestAntsSubmit_StopsWhenWorkerClosed(t *testing.T) {
+	hold := make(chan struct{})
+	parent, stopParent := context.WithCancel(context.Background())
+	cfg := WorkConfig{Name: "ants-stop", WorkNum: 1, Size: 8, SubmitTimeout: time.Second}
+	raw, err := newAntsWorker(cfg, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		close(hold)
+		stopParent()
+		_ = raw.Close()
+	})
+	raw.Start()
+
+	started := make(chan struct{})
+	if err := raw.Submit(func(context.Context) error {
+		close(started)
+		<-hold
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- raw.Submit(func(context.Context) error { return nil })
+	}()
+	time.Sleep(20 * time.Millisecond)
+	stopParent()
+	if err := <-errCh; err == nil || !strings.Contains(err.Error(), "stopped") {
+		t.Fatalf("工作池停止后阻塞提交应失败: %v", err)
+	}
+}
+
+func TestChannelSubmit_CallerCancelWhileQueued(t *testing.T) {
+	hold := make(chan struct{})
+	cfg := WorkConfig{Name: "ch-cancel", WorkNum: 1, Size: 1, SubmitTimeout: time.Second}
+	pool, err := NewWorker(cfg, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		close(hold)
+		_ = pool.Close()
+	})
+	pool.Start()
+
+	started := make(chan struct{})
+	if err := pool.Submit(func(context.Context) error {
+		close(started)
+		<-hold
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := pool.Submit(func(context.Context) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- pool.SubmitContext(ctx, func(context.Context) error { return nil })
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	if err := <-errCh; err == nil {
+		t.Fatal("队列已满时取消调用方上下文应返回错误")
+	}
+}
+
+func TestShutdown_AlreadyClosed(t *testing.T) {
+	antsW, err := newAntsWorker(WorkConfig{Name: "ants-closed", WorkNum: 1, Size: 1}, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		antsW.cancel()
+		if antsW.pool != nil {
+			antsW.pool.Release()
+		}
+	})
+	antsW.status = antsStatusClosed
+	antsW.shutdown()
+
+	channelW, err := newChannelWorker(WorkConfig{Name: "ch-closed", WorkNum: 1, Size: 1}, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(channelW.cancel)
+	channelW.status = channelStatusClosed
+	channelW.shutdown()
+}
+
+func TestWatchParentCtx_RecoversPanic(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	antsW := &antsWorker{
+		cfg:       WorkConfig{Name: "ants-watch"},
+		parentCtx: parent,
+		cancel:    func() {},
+	}
+	antsW.watchParentCtx()
+
+	channelW := &channelWorker{
+		cfg:       WorkConfig{Name: "ch-watch"},
+		parentCtx: parent,
+		cancel:    func() {},
+		jobs:      make(chan WorkerHandler),
+	}
+	channelW.watchParentCtx()
 }

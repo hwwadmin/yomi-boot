@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -307,3 +308,32 @@ func (failingStreamPublisher) AddJSONAsync(context.Context, string, any) error {
 
 // Close 空实现
 func (failingStreamPublisher) Close() error { return nil }
+
+func TestRecordBodyHelpers_Edges(t *testing.T) {
+	if got := normalizePath("."); got != "/" {
+		t.Fatalf("normalizePath(.) = %q", got)
+	}
+	if got := normalizePath("/"); got != "/" {
+		t.Fatalf("normalizePath(/) = %q", got)
+	}
+
+	empty := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	if body, truncated, err := readRequestBodyForRecord(empty, 0); err != nil || body != "" || truncated {
+		t.Fatalf("maxSize=0 应跳过读取: %q %v %v", body, truncated, err)
+	}
+	empty = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	if body, truncated, err := readRequestBodyForRecord(empty, 8); err != nil || body != "" || truncated {
+		t.Fatalf("空正文应返回空: %q %v %v", body, truncated, err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	w := &bodyRecordWriter{ResponseWriter: c.Writer, maxSize: 1}
+	w.capture([]byte("a"))
+	w.capture([]byte("b"))
+	if !w.truncated || w.body.Len() != 1 {
+		t.Fatalf("写满后应截断: truncated=%v len=%d", w.truncated, w.body.Len())
+	}
+	w.capture([]byte("c"))
+}

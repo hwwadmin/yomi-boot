@@ -39,6 +39,27 @@ func TestDefaultEncoder_SuccessAndFailure(t *testing.T) {
 	}
 }
 
+func TestDefaultEncoder_ParseRejects(t *testing.T) {
+	var enc DefaultEncoder
+	if _, ok := enc.Parse([]byte("{")); ok {
+		t.Fatal("非法 JSON 应无法识别")
+	}
+	if _, ok := enc.Parse([]byte(`{"timestamp":1}`)); ok {
+		t.Fatal("空 code 与 msg 应无法识别")
+	}
+}
+
+func TestWireFromErr_NilAndBiz(t *testing.T) {
+	code, msg := wireFromErr(nil)
+	if code != "INTERNAL_ERROR" || msg != "INTERNAL_ERROR" {
+		t.Fatalf("nil error: %s %s", code, msg)
+	}
+	code, msg = wireFromErr(errors.NewBiz("BIZ_CODE", "业务失败"))
+	if code != "BIZ_CODE" || msg != "业务失败" {
+		t.Fatalf("biz error: %s %s", code, msg)
+	}
+}
+
 // TestDefaultEncoder_PageUnderData 验证分页载荷整体落在 data 下，顶层不出现 total
 func TestDefaultEncoder_PageUnderData(t *testing.T) {
 	gin.SetMode(gin.TestMode)

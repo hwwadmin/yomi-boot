@@ -29,3 +29,10 @@ func TestMapRecordHandlerResultToKafka(t *testing.T) {
 		})
 	}
 }
+
+func TestMapRecordHandlerResultToKafka_UnknownStatus(t *testing.T) {
+	unknown := RecordHandleResult{Status: RecordHandleStatus(99)}
+	if got := mapRecordHandlerResultToKafka(unknown); got != yomikafka.AckDrop() {
+		t.Fatalf("未知状态应丢弃 Kafka 消息: %v", got)
+	}
+}

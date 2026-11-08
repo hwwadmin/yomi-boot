@@ -497,6 +497,67 @@ func TestJobNameRegistry(t *testing.T) {
 	releaseJobName(name)
 }
 
+// TestMustStart_success 校验合法参数时 MustStart 正常返回，cancel 后 done 关闭
+func TestMustStart_success(t *testing.T) {
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+	factory, err := distlock.NewFactory(client)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := MustStart(ctx, Job{Name: "test-must-ok", Spec: "0 0 3 * * *"}, func(context.Context) error {
+		return nil
+	}, factory)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("MustStart 成功后 cancel 应关闭 done")
+	}
+}
+
+// cronStubFactory 返回预设锁，用于覆盖 fire 的基础设施错误分支
+type cronStubFactory struct {
+	lock distlock.Lock
+}
+
+func (f cronStubFactory) GetLock(string, ...distlock.LockOption) distlock.Lock {
+	return f.lock
+}
+
+// cronErrLock 的 TryLock 固定返回基础设施错误
+type cronErrLock struct{}
+
+func (cronErrLock) Lock(context.Context) error { return nil }
+
+func (cronErrLock) TryLock(context.Context) (bool, error) {
+	return false, errors.New("trylock down")
+}
+
+func (cronErrLock) TryLockWithTimeout(context.Context, time.Duration) (bool, error) {
+	return false, nil
+}
+
+func (cronErrLock) Unlock(context.Context) error { return nil }
+
+func (cronErrLock) HeldContext() context.Context { return nil }
+
+func (cronErrLock) Key() string { return "cron-err" }
+
+// TestFire_tryLockError 校验 TryLock 基础设施错误时跳过 Handler
+func TestFire_tryLockError(t *testing.T) {
+	var runs atomic.Int32
+	fire(context.Background(), Job{Name: "test-trylock-err"}, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	}, cronStubFactory{lock: cronErrLock{}})
+	if runs.Load() != 0 {
+		t.Fatal("TryLock 失败时不应执行 Handler")
+	}
+}
+
 // TestSkipWarnThrottle 校验抢锁失败 Warn 的节流
 func TestSkipWarnThrottle(t *testing.T) {
 	name := "test-skip-warn"

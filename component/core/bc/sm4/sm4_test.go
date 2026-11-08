@@ -116,3 +116,25 @@ func TestGCMRoundTrip(t *testing.T) {
 		t.Fatal("非法密钥长度应失败")
 	}
 }
+
+type oversizedBlock struct{}
+
+func (oversizedBlock) BlockSize() int          { return 256 }
+func (oversizedBlock) Encrypt(dst, src []byte) {}
+func (oversizedBlock) Decrypt(dst, src []byte) {}
+
+func TestSealAndOpen_RejectBadBlocks(t *testing.T) {
+	if _, err := (&CBC{block: oversizedBlock{}}).Seal([]byte("a")); err == nil {
+		t.Fatal("CBC 块长非法时应填充失败")
+	}
+	if _, err := (&ECB{block: oversizedBlock{}}).Seal([]byte("a")); err == nil {
+		t.Fatal("ECB 块长非法时应填充失败")
+	}
+	ecb, err := NewECB(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ecb.Open([]byte{1, 2, 3}); !errors.Is(err, ErrOpen) {
+		t.Fatalf("长度不是块整数倍时应失败: %v", err)
+	}
+}

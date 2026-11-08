@@ -3,6 +3,7 @@ package pprof
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -76,6 +77,36 @@ func TestMustStart_InvalidConfigPanics(t *testing.T) {
 		}
 	}()
 	MustStart(Config{})
+}
+
+func TestStart_ListenFailsWhenAddrInUse(t *testing.T) {
+	t.Parallel()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("预占端口失败: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	if _, err := Start(Config{Addr: ln.Addr().String()}); err == nil {
+		t.Fatal("端口已被占用时启动应失败")
+	}
+}
+
+func TestServer_ServeLogsUnexpectedClose(t *testing.T) {
+	t.Parallel()
+
+	srv := MustStart(Config{Addr: "127.0.0.1:0"})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = srv.Stop(ctx)
+	})
+
+	if err := srv.listener.Close(); err != nil {
+		t.Fatalf("关闭监听失败: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
 }
 
 func TestServer_NilAddrAndStop(t *testing.T) {

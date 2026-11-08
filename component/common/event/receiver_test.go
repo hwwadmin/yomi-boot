@@ -5,6 +5,7 @@ package event
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -421,5 +422,70 @@ func TestCanceledFailureDoesNotConsumeRetryBudget(t *testing.T) {
 	}
 	if result := handler(ctx, msg); result != yomikafka.AckOK() {
 		t.Fatalf("第二次业务失败应达到上限并提交，实际 %s", result)
+	}
+}
+
+// scriptRedis 只预设脚本求值与删除结果的 Redis 桩
+type scriptRedis struct {
+	result  any
+	evalErr error
+	delErr  error
+}
+
+func (scriptRedis) OpsStr4Set(context.Context, string, string, time.Duration) error { return nil }
+func (scriptRedis) OpsStr4SetNoTTL(context.Context, string, string) error           { return nil }
+func (scriptRedis) OpsStr4SetJSON(context.Context, string, any, time.Duration) error {
+	return nil
+}
+func (scriptRedis) OpsStr4SetJSONNoTTL(context.Context, string, any) error { return nil }
+func (scriptRedis) OpsStr4Get(context.Context, string) (string, bool, error) {
+	return "", false, nil
+}
+func (scriptRedis) OpsStr4GetJSON(context.Context, string, any) (bool, error) { return false, nil }
+func (scriptRedis) OpsHash4Set(context.Context, string, map[string]any, time.Duration) error {
+	return nil
+}
+func (scriptRedis) OpsHash4Get(context.Context, string, string) (string, bool, error) {
+	return "", false, nil
+}
+func (scriptRedis) OpsHash4GetAll(context.Context, string) (map[string]string, bool, error) {
+	return nil, false, nil
+}
+func (s scriptRedis) OpsKey4Delete(context.Context, ...string) error { return s.delErr }
+func (scriptRedis) OpsKey4Exists(context.Context, string) (bool, error) {
+	return false, nil
+}
+func (scriptRedis) OpsKey4Expire(context.Context, string, time.Duration) (bool, error) {
+	return false, nil
+}
+func (scriptRedis) OpsSet4Add(context.Context, string, ...string) error    { return nil }
+func (scriptRedis) OpsSet4Remove(context.Context, string, ...string) error { return nil }
+func (s scriptRedis) OpsScript4Eval(context.Context, string, []string, ...any) (any, error) {
+	return s.result, s.evalErr
+}
+func (scriptRedis) OpsRateLimit4Allow(context.Context, string, int64, int64, time.Duration) (bool, error) {
+	return false, nil
+}
+func (scriptRedis) OpsSet4Members(context.Context, string) ([]string, error) { return nil, nil }
+
+type failIDGen struct{}
+
+func (failIDGen) NextID() (int64, error) { return 0, errors.New("id") }
+
+// TestReceiver_RetryCounterAndDlqID 验证计数类型异常、删除失败和 ID 生成失败
+func TestReceiver_RetryCounterAndDlqID(t *testing.T) {
+	receiver := &Receiver{
+		cfg:          cfg.Runtime{ServiceName: "svc"},
+		redis:        scriptRedis{result: "nope", delErr: errors.New("del")},
+		inboxDlqRepo: &repo.InboxDlqRepo{},
+		idGen:        failIDGen{},
+	}
+	msg := yomikafka.Message{Topic: "topic", Partition: 1, Offset: 2}
+	if _, err := receiver.incrementInboxRetry(context.Background(), msg); err == nil {
+		t.Fatal("异常计数类型应返回错误")
+	}
+	receiver.resetInboxRetry(context.Background(), msg)
+	if err := receiver.moveToInboxDlq(context.Background(), Event{EventID: "event-1"}, errors.New("boom"), 2); err == nil {
+		t.Fatal("ID 生成失败应返回错误")
 	}
 }

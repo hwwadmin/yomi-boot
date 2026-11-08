@@ -646,3 +646,62 @@ func TestEqualDigest(t *testing.T) {
 		t.Fatal("长度不同的摘要不应判等")
 	}
 }
+
+func TestGenerate_ContextCanceledDuringRender(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	svc := &service{
+		driver: cancelDriver{cancel: cancel},
+		store:  newSpyStore(),
+		ttl:    time.Minute,
+	}
+	if _, err := svc.Generate(ctx); err == nil {
+		t.Fatal("渲染期间上下文取消应返回错误")
+	}
+}
+
+func TestGenerate_EmptyImage(t *testing.T) {
+	svc := &service{
+		driver: scriptDriver{id: "abc", answer: "ok", item: b64Item{}},
+		store:  newSpyStore(),
+		ttl:    time.Minute,
+	}
+	_, err := svc.Generate(context.Background())
+	if err == nil {
+		t.Fatal("空图片应返回生成失败")
+	}
+	if !errors.Is(err, ErrGenerateFailed) {
+		t.Fatalf("空图片错误 = %v", err)
+	}
+}
+
+type cancelDriver struct {
+	cancel context.CancelFunc
+}
+
+func (d cancelDriver) GenerateIdQuestionAnswer() (string, string, string) {
+	d.cancel()
+	return "abc", "q", "ok"
+}
+
+func (d cancelDriver) DrawCaptcha(string) (base64Captcha.Item, error) {
+	return b64Item{s: "img"}, nil
+}
+
+type scriptDriver struct {
+	id, answer string
+	item       base64Captcha.Item
+}
+
+func (d scriptDriver) GenerateIdQuestionAnswer() (string, string, string) {
+	return d.id, "q", d.answer
+}
+
+func (d scriptDriver) DrawCaptcha(string) (base64Captcha.Item, error) {
+	return d.item, nil
+}
+
+type b64Item struct{ s string }
+
+func (b b64Item) WriteTo(io.Writer) (int64, error) { return 0, nil }
+
+func (b b64Item) EncodeB64string() string { return b.s }

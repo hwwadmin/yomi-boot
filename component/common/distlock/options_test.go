@@ -146,3 +146,17 @@ func TestWaitRetry(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeWatchdogInterval_Edges(t *testing.T) {
+	zero := LockOptions{}
+	normalizeWatchdogInterval(&zero)
+	if zero.WatchdogInterval != time.Millisecond {
+		t.Fatalf("TTL 为 0 时应落到 1ms，实际 %s", zero.WatchdogInterval)
+	}
+
+	short := LockOptions{TTL: time.Millisecond, WatchdogInterval: time.Second}
+	normalizeWatchdogInterval(&short)
+	if short.WatchdogInterval != time.Millisecond/3 {
+		t.Fatalf("间隔不小于 TTL 时应压到 TTL/3，实际 %s", short.WatchdogInterval)
+	}
+}

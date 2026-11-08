@@ -96,3 +96,21 @@ func TestConn_NilSafe(t *testing.T) {
 		t.Fatalf("nil Conn 关闭应返回 nil: %v", err)
 	}
 }
+
+func TestOpen_NilCtxRejectsInvalidConfig(t *testing.T) {
+	if _, err := Open(nil, Config{}); err == nil {
+		t.Fatal("空配置应失败")
+	}
+}
+
+func TestBuildDSN_UnsupportedType(t *testing.T) {
+	if _, err := buildDSN(Config{Type: enums.DbType("oracle")}); err == nil {
+		t.Fatal("不支持的数据库类型应失败")
+	}
+}
+
+func TestConnClose_NilGorm(t *testing.T) {
+	if err := (&Conn{}).Close(); err != nil {
+		t.Fatal(err)
+	}
+}

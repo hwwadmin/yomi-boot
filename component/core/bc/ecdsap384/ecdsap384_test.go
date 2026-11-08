@@ -142,3 +142,13 @@ func TestPEMRoundTrip(t *testing.T) {
 		t.Fatal("SEC1 私钥解析结果不一致")
 	}
 }
+
+func TestSign_RejectsOffCurvePoint(t *testing.T) {
+	key := &ecdsa.PrivateKey{
+		PublicKey: ecdsa.PublicKey{Curve: elliptic.P384(), X: big.NewInt(1), Y: big.NewInt(2)},
+		D:         big.NewInt(1),
+	}
+	if _, err := Sign(key, []byte("m")); err == nil {
+		t.Fatal("不在曲线上的私钥应失败")
+	}
+}

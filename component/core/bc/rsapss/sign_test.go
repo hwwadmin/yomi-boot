@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	stdrsa "crypto/rsa"
 	"crypto/sha256"
+	"math/big"
 	"testing"
 
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
@@ -38,5 +39,15 @@ func TestSignVerify(t *testing.T) {
 	}
 	if _, err := Sign(nil, msg); err == nil {
 		t.Fatal("nil 私钥应失败")
+	}
+}
+
+func TestSign_RejectsIncompleteKey(t *testing.T) {
+	priv := &stdrsa.PrivateKey{
+		PublicKey: stdrsa.PublicKey{N: new(big.Int).Lsh(big.NewInt(1), 2048), E: 65537},
+		D:         big.NewInt(1),
+	}
+	if _, err := Sign(priv, []byte("m")); err == nil {
+		t.Fatal("缺少素数的私钥签名应失败")
 	}
 }

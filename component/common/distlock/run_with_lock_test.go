@@ -2,6 +2,7 @@ package distlock
 
 import (
 	"context"
+	stderrors "errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -128,3 +129,28 @@ func TestRunWithLock_StolenLockReportsLockLost(t *testing.T) {
 	}
 	_ = client.Del(ctx, lock.Key()).Err()
 }
+
+func TestRunWithLock_NilAndLockErrorAndLost(t *testing.T) {
+	if err := RunWithLock(context.Background(), nil, func(context.Context) error { return nil }); err == nil {
+		t.Fatal("nil lock 应失败")
+	}
+	if err := RunWithLock(context.Background(), &stubHeldLock{}, nil); err == nil {
+		t.Fatal("nil fn 应失败")
+	}
+	if err := RunWithLock(context.Background(), &errLock{}, func(context.Context) error { return nil }); err == nil {
+		t.Fatal("加锁失败应返回错误")
+	}
+
+	held, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := RunWithLock(context.Background(), &stubHeldLock{held: held}, func(context.Context) error {
+		return stderrors.New("biz")
+	})
+	if err == nil || !errors.Is(err, ErrLockLost) {
+		t.Fatalf("业务失败且锁已丢失时应合并 ErrLockLost: %v", err)
+	}
+}
+
+type errLock struct{ stubHeldLock }
+
+func (errLock) Lock(context.Context) error { return stderrors.New("lock down") }

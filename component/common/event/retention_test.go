@@ -320,3 +320,13 @@ func TestRetentionCleanerCleanError(t *testing.T) {
 		t.Fatal("数据库不可用时清理应返回错误")
 	}
 }
+
+// TestStartCleanupTask_RejectsBlankName 验证空任务名不会启动清理轮询
+func TestStartCleanupTask_RejectsBlankName(t *testing.T) {
+	err := startCleanupTask(context.Background(), nopLockFactory{}, "", cfg.CleanupRuntime{
+		Frequency: time.Second,
+	}, func(context.Context) error { return nil })
+	if err == nil {
+		t.Fatal("空任务名应启动失败")
+	}
+}

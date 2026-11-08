@@ -188,3 +188,9 @@ func TestRedisStoreRejectsDelimitedID(t *testing.T) {
 		t.Fatalf("非法 id 不应留下 Redis 键: %v", keys)
 	}
 }
+
+func TestValidateKeyPrefix_Empty(t *testing.T) {
+	if err := validateKeyPrefix(""); err == nil {
+		t.Fatal("空前缀应失败")
+	}
+}
