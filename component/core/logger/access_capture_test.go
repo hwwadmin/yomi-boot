@@ -3,8 +3,10 @@ package logger
 import (
 	"bytes"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,6 +32,83 @@ func TestCaptureRequestBody_EmptyAndImage(t *testing.T) {
 	if got.OmittedReason != omitImageContent {
 		t.Fatalf("图片正文应省略: %+v", got)
 	}
+}
+
+// buildMultipartBody 构造含文件分片与普通文本字段的 multipart/form-data 请求体
+func buildMultipartBody(t *testing.T) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("file", "a.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("png-bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("note", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &buf, mw.FormDataContentType()
+}
+
+// TestCaptureRequestBody_MultipartOmitted 验证 multipart/form-data 正文按 file_upload 省略
+func TestCaptureRequestBody_MultipartOmitted(t *testing.T) {
+	buf, contentType := buildMultipartBody(t)
+	req := httptest.NewRequest(http.MethodPost, "/upload", buf)
+	req.Header.Set("Content-Type", contentType)
+	got := captureRequestBody(req, AccessConfig{RecordBody: true, MaxBodyBytes: 64}, nil)
+	if got.OmittedReason != omitFileUpload {
+		t.Fatalf("multipart 正文应按 file_upload 省略: %+v", got)
+	}
+	if got.Value != "" {
+		t.Fatalf("multipart 正文不应记录: %+v", got)
+	}
+	if got.ContentType != contentType {
+		t.Fatalf("应保留 Content-Type: %+v", got)
+	}
+	if got.Bytes <= 0 {
+		t.Fatalf("应保留原始字节数: %+v", got)
+	}
+}
+
+// TestAccessMiddleware_MultipartBodyOmitted 端到端验证中间件对 multipart 请求
+// 只落 file_upload 省略原因，不落正文；且正文未被消费，handler 仍能正常解析表单
+func TestAccessMiddleware_MultipartBodyOmitted(t *testing.T) {
+	dir := t.TempDir()
+	closeFn, err := InitLogger("test-svc", "test", Config{
+		Dir:      dir,
+		Level:    "info",
+		Rotation: testRotation(),
+	}, nil)
+	if err != nil {
+		t.Fatalf("InitLogger: %v", err)
+	}
+	defer func() { _ = closeFn() }()
+
+	buf, contentType := buildMultipartBody(t)
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(Middleware(AccessConfig{RecordBody: true, MaxBodyBytes: 1024}))
+	router.POST("/upload", func(c *gin.Context) {
+		if note := c.Request.FormValue("note"); note != "hello" {
+			t.Errorf("普通字段应可正常解析: %q", note)
+		}
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/upload", buf)
+	req.Header.Set("Content-Type", contentType)
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	_ = Sync()
+	accessPath := filepath.Join(dir, "access", "access.log")
+	assertFileContains(t, accessPath, `"body_omitted_reason":"file_upload"`)
+	assertFileNotContains(t, accessPath, "png-bytes")
+	assertFileNotContains(t, accessPath, "hello")
 }
 
 func TestAccessBodyWriter_SecondWriteTruncates(t *testing.T) {

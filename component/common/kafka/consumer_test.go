@@ -235,6 +235,55 @@ func TestBuildReaderConfigStartOffset(t *testing.T) {
 	}
 }
 
+// TestNewConsumerRuntimeStartOffset 验证管理器 start_offset 配置到 kafka-go 起始偏移量的映射
+func TestNewConsumerRuntimeStartOffset(t *testing.T) {
+	t.Parallel()
+
+	conn := connection{
+		brokers: []string{"127.0.0.1:9092"},
+		dialer:  &kafkago.Dialer{Timeout: time.Second},
+	}
+
+	for _, tc := range []struct {
+		name        string
+		startOffset string
+		want        int64
+	}{
+		{name: "latest maps to LastOffset", startOffset: "latest", want: kafkago.LastOffset},
+		{name: "latest with spaces maps to LastOffset", startOffset: " latest ", want: kafkago.LastOffset},
+		{name: "earliest maps to FirstOffset", startOffset: "earliest", want: kafkago.FirstOffset},
+		{name: "empty maps to FirstOffset", startOffset: "", want: kafkago.FirstOffset},
+		{name: "unknown value falls back to FirstOffset", startOffset: "middle", want: kafkago.FirstOffset},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := ConsumerManagerConfig{
+				MinBytes:       1,
+				MaxBytes:       10e6,
+				MaxWaitSeconds: 1,
+				StartOffset:    tc.startOffset,
+			}
+			runtimeCfg := newConsumerRuntime(cfg, conn)
+			if runtimeCfg.startOffset != tc.want {
+				t.Fatalf("startOffset = %d, want %d", runtimeCfg.startOffset, tc.want)
+			}
+			if len(runtimeCfg.brokers) != 1 || runtimeCfg.brokers[0] != "127.0.0.1:9092" {
+				t.Fatalf("brokers = %v, want [127.0.0.1:9092]", runtimeCfg.brokers)
+			}
+			if runtimeCfg.minBytes != 1 || runtimeCfg.maxBytes != 10e6 {
+				t.Fatalf("min/max bytes = %d/%d, want 1/10000000", runtimeCfg.minBytes, runtimeCfg.maxBytes)
+			}
+			if runtimeCfg.maxWait != time.Second {
+				t.Fatalf("maxWait = %v, want 1s", runtimeCfg.maxWait)
+			}
+			if runtimeCfg.dialer == nil {
+				t.Fatal("dialer 应原样透传")
+			}
+		})
+	}
+}
+
 // scriptedReader 按预设结果提交偏移量，并记录提交发生的时刻
 type scriptedReader struct {
 	commitErr error

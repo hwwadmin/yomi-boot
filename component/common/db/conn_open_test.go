@@ -41,6 +41,29 @@ func mockMySQLConfig(port int, dbName string, mutate func(*Config)) Config {
 	return cfg
 }
 
+// mockPostgresConfig 构造指向 Testcontainers Postgres 的数据源配置
+func mockPostgresConfig(port int, dbName string, mutate func(*Config)) Config {
+	zero := 0
+	cfg := Config{
+		Type:                   enums.Postgres,
+		Host:                   dbtest.Host,
+		Port:                   port,
+		User:                   dbtest.PostgresUser,
+		Password:               dbtest.PostgresPassword,
+		Database:               dbName,
+		Params:                 "sslmode=disable",
+		MaxOpenConns:           5,
+		MaxIdleConns:           3,
+		ConnMaxLifetimeMinutes: 30,
+		ConnMaxIdleTimeMinutes: 30,
+		SlowThresholdMs:        &zero,
+	}
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	return cfg
+}
+
 // TestOpen_MySQLMock 验证真实建连、读写与关闭契约
 func TestOpen_MySQLMock(t *testing.T) {
 	port, dbName, shutdown := dbtest.StartInfo(t, dbtest.WithTables(idleTestModel{}))
@@ -77,6 +100,38 @@ func TestOpen_MySQLMock(t *testing.T) {
 	}
 	if err := conn.Close(); err != nil {
 		t.Fatalf("重复关闭应幂等: %v", err)
+	}
+}
+
+// TestOpen_PostgresMock 验证 Postgres 方言的真实建连、连通性与关闭契约
+func TestOpen_PostgresMock(t *testing.T) {
+	port, dbName, shutdown := dbtest.PostgresStartInfo(t)
+	defer shutdown()
+
+	conn, err := Open(context.Background(), mockPostgresConfig(port, dbName, nil))
+	if err != nil {
+		t.Fatalf("打开数据源失败: %v", err)
+	}
+	if conn.GORM() == nil {
+		t.Fatal("打开后 GORM 句柄不应为 nil")
+	}
+	if got := conn.Type(); got != enums.Postgres {
+		t.Fatalf("Type 期望 postgres，实际 %s", got)
+	}
+
+	var one int
+	if err := conn.GORM().Raw("SELECT 1").Scan(&one).Error; err != nil {
+		t.Fatalf("SELECT 1 失败: %v", err)
+	}
+	if one != 1 {
+		t.Fatalf("SELECT 1 结果不符: %d", one)
+	}
+
+	if err := conn.Close(); err != nil {
+		t.Fatalf("关闭数据源失败: %v", err)
+	}
+	if conn.GORM() != nil {
+		t.Fatal("关闭后 GORM 句柄应返回 nil")
 	}
 }
 

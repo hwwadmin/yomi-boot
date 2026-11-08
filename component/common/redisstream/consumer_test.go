@@ -6,6 +6,7 @@ package redisstream
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -619,5 +620,109 @@ func TestConsumer_ClaimPending(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timeout waiting for claim")
+	}
+}
+
+// TestConsumer_ClaimLoopTickerReclaimsPending 验证 claimLoop ticker 周期触发的 PEL 回收。
+// 消息在 Start 前已被 old-worker 投递且未 ACK：启动首轮 claimOnce（仅执行一次）完成首次投递，
+// handler 返回 Retry 留在 PEL；读循环只读新消息碰不到它，因此二次投递只能来自 ticker 触发的 claimOnce。
+func TestConsumer_ClaimLoopTickerReclaimsPending(t *testing.T) {
+	t.Parallel()
+	client, cleanup := redistest.NewClient(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	stream := "reclaim-tick"
+	group := "g-reclaim-tick"
+	if err := client.XGroupCreateMkStream(ctx, stream, group, "0").Err(); err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	id, err := client.XAdd(ctx, &redisv9.XAddArgs{
+		Stream: stream,
+		Values: map[string]any{PayloadField: "x"},
+	}).Result()
+	if err != nil {
+		t.Fatalf("XAdd: %v", err)
+	}
+	_, err = client.XReadGroup(ctx, &redisv9.XReadGroupArgs{
+		Group:    group,
+		Consumer: "old-worker",
+		Streams:  []string{stream, ">"},
+		Count:    1,
+	}).Result()
+	if err != nil {
+		t.Fatalf("XReadGroup: %v", err)
+	}
+	// XAUTOCLAIM 的 idle 按墙钟计算，稍等使消息空闲时长超过 ClaimMinIdle
+	time.Sleep(100 * time.Millisecond)
+
+	zero := int64(0)
+	cfg := Config{
+		DefaultMaxLen:   &zero,
+		BlockMS:         100,
+		Count:           10,
+		ClaimMinIdleMS:  30,
+		ClaimIntervalMS: 100,
+	}
+	components, err := NewComponents(cfg, client)
+	if err != nil {
+		t.Fatalf("NewComponents: %v", err)
+	}
+	defer func() { _ = components.Close() }()
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	deliveries := make(map[string]int)
+	reclaimed := make(chan string, 1)
+	err = components.Consumer.Start(runCtx, "claimer-tick", GroupConfig{
+		Stream:   stream,
+		Group:    group,
+		Consumer: "w1",
+		Start:    "0",
+	}, func(_ context.Context, entry Entry) HandleResult {
+		mu.Lock()
+		deliveries[entry.ID]++
+		n := deliveries[entry.ID]
+		mu.Unlock()
+		if n == 1 {
+			// 首次投递不确认，留在 PEL 等待下一轮 ticker 回收
+			return HandleRetry
+		}
+		select {
+		case reclaimed <- entry.ID:
+		default:
+		}
+		return HandleAck
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	select {
+	case got := <-reclaimed:
+		if got != id {
+			t.Fatalf("claimed id=%s want %s", got, id)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for ticker reclaim")
+	}
+
+	// 二次投递并 ACK 后 PEL 应清空
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := client.XPending(ctx, stream, group).Result()
+		if err == nil && pending.Count == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			count := int64(-1)
+			if err == nil {
+				count = pending.Count
+			}
+			t.Fatalf("pending not cleared after ticker reclaim, err=%v count=%d", err, count)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

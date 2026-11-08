@@ -11,7 +11,55 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/panjf2000/ants/v2"
 )
+
+// TestAntsAbandonBlockedSubmit_ResultReady 验证放弃阻塞提交瞬间入队恰好完成的竞态收尾：
+// result 中已有真实提交结果时必须回读（含过载判定），而不是当作已丢弃返回放弃原因。
+//
+// 走完整 submit 路径无法确定性触达结果就绪分支：外层 select 只有在 ctx.Done/stop/timer
+// 先于 result 就绪时才会进入 abandonBlockedSubmit（result 先就绪会被外层 result 分支
+// 直接吃掉），而内层 pool.Submit 的结果要落进外层唤醒到 abandon 内层 select 之间
+// 纳秒级的窗口只能靠概率竞争，小次数有界循环几乎必然全部落在 default 分支
+// （default 分支已由 testAntsSubmitTimeoutNoGhostTask、testCloseWhileSubmitBlocked 覆盖）。
+// 因此按"让 select 两个分支同时就绪"的思路，用预填充的 result channel 直接驱动该方法：
+// select 存在就绪 case 时 default 永不选中，结果分支被确定性命中，断言逐例精确。
+func TestAntsAbandonBlockedSubmit_ResultReady(t *testing.T) {
+	w := &antsWorker{cfg: WorkConfig{Name: "ants-abandon"}}
+	var dropped atomic.Bool
+
+	// 入队已完成且成功：应回读真实结果 nil，而不是放弃原因
+	result := make(chan error, 1)
+	result <- nil
+	if err := w.abandonBlockedSubmit(result, &dropped, errors.New("abandoned")); err != nil {
+		t.Fatalf("入队已完成且成功时应回读 nil 结果: %v", err)
+	}
+	if dropped.Load() {
+		t.Fatal("回读真实结果时不应标记 dropped")
+	}
+
+	// 入队已完成但提交失败：应原样回读真实错误
+	result = make(chan error, 1)
+	realErr := errors.New("enqueue failed")
+	result <- realErr
+	if err := w.abandonBlockedSubmit(result, &dropped, nil); !errors.Is(err, realErr) {
+		t.Fatalf("应回读真实提交错误: %v", err)
+	}
+	if dropped.Load() {
+		t.Fatal("回读真实错误时不应标记 dropped")
+	}
+
+	// 入队已完成且过载：应判定为 queue_full 而不是放弃原因
+	result = make(chan error, 1)
+	result <- ants.ErrPoolOverload
+	if err := w.abandonBlockedSubmit(result, &dropped, errors.New("abandoned")); err == nil || err.Error() != "worker.ants-abandon.queue_full" {
+		t.Fatalf("入队已完成且过载时应判定为 queue_full: %v", err)
+	}
+	if dropped.Load() {
+		t.Fatal("过载判定分支不应标记 dropped")
+	}
+}
 
 // TestWorkerContract 测试工作池接口契约，覆盖 channel 和 ants 两种后端
 func TestWorkerContract(t *testing.T) {

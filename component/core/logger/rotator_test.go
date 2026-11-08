@@ -1,9 +1,14 @@
 package logger
 
 import (
+	"compress/gzip"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 )
 
 func TestFileRotator_ClosedFileWriteAndSync(t *testing.T) {
@@ -55,6 +60,85 @@ func TestFileRotator_ReopenFailsWhenDirRemoved(t *testing.T) {
 	if _, err := rot.Write([]byte("x")); err == nil {
 		t.Fatal("目录被删后重新打开应失败")
 	}
+}
+
+// TestFileRotator_CompressHistoryOnSizeRotate 验证按大小滚动产生历史文件时，
+// compress=true 会启动异步 goroutine 把历史 .log 压成 .log.gz（成功后删除原文件，POSIX 下断言）
+func TestFileRotator_CompressHistoryOnSizeRotate(t *testing.T) {
+	dir := t.TempDir()
+	rot, err := NewFileRotator(RotatorOptions{
+		RootDir:       dir,
+		LogType:       "info",
+		MaxSizeMB:     1,
+		RetentionDays: 1,
+		MaxBackups:    3,
+		MaxTotalMB:    8,
+		Compress:      true,
+	})
+	if err != nil {
+		t.Fatalf("NewFileRotator: %v", err)
+	}
+	t.Cleanup(func() { _ = rot.Close() })
+
+	if _, err := rot.Write([]byte("rotate me")); err != nil {
+		t.Fatalf("写入: %v", err)
+	}
+	// MaxSizeMB 最小 1MB，与现有用例一致直接把 size 顶到上限，让下一笔写入触发按大小滚动
+	rot.mu.Lock()
+	historyPath := filepath.Join(rot.dir, fmt.Sprintf("%s-%07d.log", rot.curDate, rot.nextSeq))
+	rot.size = rot.maxSizeBytes
+	rot.mu.Unlock()
+	if _, err := rot.Write([]byte("trigger")); err != nil {
+		t.Fatalf("触发滚动: %v", err)
+	}
+
+	// 压缩在异步 goroutine 里执行：用 deadline 轮询等 .log.gz 产物出现且内容完整可解
+	// （gzip 流能完整解出原文 ⟺ goroutine 已跑完 copy+close），不靠裸 sleep 定成败
+	deadline := time.Now().Add(2 * time.Second)
+	var readErr error
+	for {
+		content, gzErr := readGzipFile(historyPath + ".gz")
+		if gzErr == nil && string(content) == "rotate me" {
+			readErr = nil
+			break
+		}
+		readErr = gzErr
+		if time.Now().After(deadline) {
+			t.Fatalf("压缩 goroutine 未完成: %v", readErr)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// compressHistoryFile 成功后会删除原文件；但它在读句柄 defer 关闭之前执行
+	// os.Remove，Windows 共享模式下删除必然失败（错误被 `_ =` 静默吞掉），POSIX 下正常。
+	// 因此原文件删除断言仅在非 Windows 平台开启。
+	if runtime.GOOS != "windows" {
+		for {
+			if _, statErr := os.Stat(historyPath); os.IsNotExist(statErr) {
+				break
+			} else if statErr != nil {
+				t.Fatalf("stat 历史文件: %v", statErr)
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("压缩完成后原历史文件未被删除: %s", historyPath)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+}
+
+// readGzipFile 读取并解压 gzip 文件；文件不存在或流不完整时返回错误
+func readGzipFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(zr)
 }
 
 func TestFileRotator_ValidationReopenAndCleanup(t *testing.T) {

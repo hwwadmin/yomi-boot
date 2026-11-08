@@ -286,6 +286,70 @@ func TestNewAndStartFailureClosesComponents(t *testing.T) {
 	}
 }
 
+// TestNewAndStartSuccessRunsOutboxPipeline 验证创建并启动成功时返回运行中的组件：
+// 发布一条事件后，后台抓取-发送流水线应把它推送到 Kafka 并回写发送成功
+func TestNewAndStartSuccessRunsOutboxPipeline(t *testing.T) {
+	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(modelSysEventTables()...))
+	defer cleanup()
+
+	pub := &stubPublisher{}
+	c, err := NewAndStart(
+		Deps{
+			DB:              gormDB,
+			TxExecutor:      passthroughExecutor{},
+			KafkaPublisher:  pub,
+			DistLockFactory: newTestLockFactory(t),
+			IDGenerator:     snowflaketest.NewTestGenerator(),
+			DbType:          enums.MySQL,
+			AppName:         "app",
+		},
+		Config{
+			OutboxEnabled:    true,
+			FetchFrequencyMS: 50,
+		},
+	)
+	if err != nil {
+		t.Fatalf("创建并启动事件组件失败: %v", err)
+	}
+	if c == nil {
+		t.Fatal("启动成功应返回组件实例")
+	}
+	if !c.started {
+		t.Fatal("启动成功后组件应处于已启动状态")
+	}
+	if c.Publisher == nil {
+		t.Fatal("发布侧启用时 Publisher 应装配完成")
+	}
+
+	// 后台流水线把事件投递到 Kafka 桩并回写 SENT_SUCCESS，作为"确实在运行"的可观察效果
+	ctx := context.Background()
+	if err := c.Publisher.Publish(ctx, Event{EventID: "evt-start-ok", Topic: "topic", Payload: "payload"}); err != nil {
+		t.Fatalf("发布事件失败: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var stored model.SysEventOutbox
+		if err := gormDB.First(&stored, "event_id = ?", "evt-start-ok").Error; err != nil {
+			t.Fatalf("查询发件箱失败: %v", err)
+		}
+		if stored.Status == model.OutboxStatusSentSuccess {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("后台流水线未投递事件，status=%s", stored.Status)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if pub.calls == 0 {
+		t.Fatal("Kafka 发布者应收到推送调用")
+	}
+
+	if err := c.Close(); err != nil {
+		t.Fatalf("关闭事件组件失败: %v", err)
+	}
+}
+
 // TestComponentsStartAndClose 验证后台任务可正常启动并关闭
 func TestComponentsStartAndClose(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t, dbtest.WithTables(modelSysEventTables()...))
