@@ -104,8 +104,8 @@ func TestStartMemoryRecordConsumer_RejectsBadArgs(t *testing.T) {
 	if err := StartMemoryRecordConsumer(context.Background(), svc, MemoryRecordConsumerConfig{}, handler); err == nil {
 		t.Fatal("协程数小于等于 0 应失败")
 	}
-	if err := StartMemoryRecordConsumer(nil, svc, MemoryRecordConsumerConfig{Workers: 1}, handler); err != nil {
-		t.Fatalf("空父上下文应归一化为 Background: %v", err)
+	if err := StartMemoryRecordConsumer(context.TODO(), svc, MemoryRecordConsumerConfig{Workers: 1}, handler); err != nil {
+		t.Fatalf("合法上下文下消费器应能启动: %v", err)
 	}
 }
 

@@ -2,10 +2,11 @@ package consultest_test
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/cloud/consul/consultest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/cloud/consul/consultest"
 )
 
 // TestRegisterResolveDeregister 验证无健康检查的实例可被发现，注销后发现失败。

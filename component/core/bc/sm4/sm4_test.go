@@ -3,8 +3,9 @@ package sm4
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 var testKey = []byte("0123456789abcdef")

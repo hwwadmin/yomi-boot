@@ -4,16 +4,16 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
-	stdrsa "crypto/rsa"
 	"crypto/sha256"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"math/big"
 	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestSignVerify 验证签名验签、标准库兼容性及篡改检测
 func TestSignVerify(t *testing.T) {
-	priv, err := stdrsa.GenerateKey(rand.Reader, 2048)
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestSignVerify(t *testing.T) {
 	}
 
 	sum := sha256.Sum256(msg)
-	if err := stdrsa.VerifyPKCS1v15(pub, crypto.SHA256, sum[:], sig); err != nil {
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, sum[:], sig); err != nil {
 		t.Fatalf("签名与标准库不兼容: %v", err)
 	}
 	if err := Verify(pub, []byte("other"), sig); !errors.Is(err, ErrVerify) {
@@ -41,8 +41,8 @@ func TestSignVerify(t *testing.T) {
 }
 
 func TestSign_RejectsIncompleteKey(t *testing.T) {
-	priv := &stdrsa.PrivateKey{
-		PublicKey: stdrsa.PublicKey{N: new(big.Int).Lsh(big.NewInt(1), 2048), E: 65537},
+	priv := &rsa.PrivateKey{
+		PublicKey: rsa.PublicKey{N: new(big.Int).Lsh(big.NewInt(1), 2048), E: 65537},
 		D:         big.NewInt(1),
 	}
 	if _, err := Sign(priv, []byte("m")); err == nil {

@@ -1,9 +1,10 @@
 package oss
 
 import (
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestConfigValidate 验证 Config 构造时 provider 与必填项校验

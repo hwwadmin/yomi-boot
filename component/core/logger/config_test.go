@@ -88,7 +88,9 @@ func TestLoggerConfigMustInitAndAsyncEdges(t *testing.T) {
 		return 1, nil
 	}), 0)
 	fast := newAsyncSink("fast", &bytes.Buffer{}, 1)
-	slow.Write([]byte("x"))
+	if _, err := slow.Write([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(20 * time.Millisecond)
 	flushErr := (&logHub{sinks: []*asyncSink{slow, fast}}).Flush(time.Nanosecond)
 	close(block)

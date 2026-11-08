@@ -1,11 +1,12 @@
 package httprecord
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 	"net/http/httptest"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/gin-gonic/gin"
+	"github.com/hwwadmin/yomi-boot/component/core/utils/utf8util"
 )
 
 func newTestBodyWriter(maxSize int) *bodyRecordWriter {

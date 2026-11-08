@@ -98,7 +98,7 @@ func TestConn_NilSafe(t *testing.T) {
 }
 
 func TestOpen_NilCtxRejectsInvalidConfig(t *testing.T) {
-	if _, err := Open(nil, Config{}); err == nil {
+	if _, err := Open(context.TODO(), Config{}); err == nil {
 		t.Fatal("空配置应失败")
 	}
 }

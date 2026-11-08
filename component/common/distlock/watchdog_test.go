@@ -2,13 +2,14 @@ package distlock
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	redisv9 "github.com/redis/go-redis/v9"
 	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
 // countEvalHook 统计成功的 EVAL / EVALSHA，用来确认看门狗确实发出了续期。

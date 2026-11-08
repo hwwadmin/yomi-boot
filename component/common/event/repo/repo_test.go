@@ -2,12 +2,13 @@ package repo
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/hwwadmin/yomi-boot/component/common/event/model"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
-	"testing"
-	"time"
 )
 
 func deadDB(t *testing.T) *gorm.DB {

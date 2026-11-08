@@ -1,14 +1,15 @@
 package handler_test
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/hwwadmin/yomi-boot/component/core/handler"
-	"github.com/hwwadmin/yomi-boot/component/core/response"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/hwwadmin/yomi-boot/component/core/handler"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
 )
 
 func TestRecovery_PanicUsesFailureEnvelope(t *testing.T) {

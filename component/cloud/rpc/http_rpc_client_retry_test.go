@@ -2,12 +2,13 @@ package rpc
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // newTestRPCClient 构造带测试服务发现的 HTTP RPC 客户端

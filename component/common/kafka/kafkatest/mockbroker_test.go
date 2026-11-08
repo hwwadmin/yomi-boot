@@ -2,12 +2,13 @@ package kafkatest
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/common/kafka"
-	kafkago "github.com/segmentio/kafka-go"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/common/kafka"
+	kafkago "github.com/segmentio/kafka-go"
 )
 
 // TestMockBroker_PublishAndConsume 验证通过 mock broker 发布消息后消费者可正常拉取并提交偏移量

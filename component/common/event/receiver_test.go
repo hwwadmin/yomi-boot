@@ -445,9 +445,11 @@ func (scriptRedis) OpsStr4GetJSON(context.Context, string, any) (bool, error) { 
 func (scriptRedis) OpsHash4Set(context.Context, string, map[string]any, time.Duration) error {
 	return nil
 }
+
 func (scriptRedis) OpsHash4Get(context.Context, string, string) (string, bool, error) {
 	return "", false, nil
 }
+
 func (scriptRedis) OpsHash4GetAll(context.Context, string) (map[string]string, bool, error) {
 	return nil, false, nil
 }
@@ -455,6 +457,7 @@ func (s scriptRedis) OpsKey4Delete(context.Context, ...string) error { return s.
 func (scriptRedis) OpsKey4Exists(context.Context, string) (bool, error) {
 	return false, nil
 }
+
 func (scriptRedis) OpsKey4Expire(context.Context, string, time.Duration) (bool, error) {
 	return false, nil
 }
@@ -463,6 +466,7 @@ func (scriptRedis) OpsSet4Remove(context.Context, string, ...string) error { ret
 func (s scriptRedis) OpsScript4Eval(context.Context, string, []string, ...any) (any, error) {
 	return s.result, s.evalErr
 }
+
 func (scriptRedis) OpsRateLimit4Allow(context.Context, string, int64, int64, time.Duration) (bool, error) {
 	return false, nil
 }

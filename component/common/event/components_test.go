@@ -347,6 +347,7 @@ func (edgePublisher) Publish(context.Context, yomikafka.PublishRequest) error { 
 func (edgePublisher) PublishBatch(context.Context, []yomikafka.PublishRequest) error {
 	return nil
 }
+
 func (edgePublisher) PublishJSON(context.Context, string, string, any) error {
 	return errors.New("publish")
 }
@@ -359,7 +360,7 @@ func (edgePublisher) Close() error                                              
 
 func TestComponents_StartGuards(t *testing.T) {
 	skipped := &Components{lockFactory: stubDistLockFactory{}, cfg: cfg.Runtime{InboxEnabled: true}}
-	if err := skipped.Start(nil); err == nil {
+	if err := skipped.Start(context.TODO()); err == nil {
 		t.Fatal("缺少收件箱死信处理器应失败")
 	}
 
@@ -385,7 +386,7 @@ func TestComponents_StartGuards(t *testing.T) {
 			cfg:            cfg.Runtime{InboxDlqFrequency: time.Millisecond},
 		},
 	}
-	if err := replay.Start(nil); err == nil {
+	if err := replay.Start(context.TODO()); err == nil {
 		t.Fatal("过短的收件箱死信频率应拒绝启动")
 	}
 }

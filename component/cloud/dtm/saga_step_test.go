@@ -3,15 +3,16 @@ package dtm
 import (
 	"context"
 	"encoding/json"
-	"github.com/dtm-labs/client/dtmcli"
-	"github.com/hwwadmin/yomi-boot/component/cloud/consul"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dtm-labs/client/dtmcli"
+	"github.com/hwwadmin/yomi-boot/component/cloud/consul"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	"github.com/hwwadmin/yomi-boot/component/core/traceid"
 )
 
 // newFakeConsulAgent 返回伪装 Consul Agent 健康查询的 httptest 服务，固定返回 entriesJSON

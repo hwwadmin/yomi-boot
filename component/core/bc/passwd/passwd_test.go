@@ -1,9 +1,10 @@
 package passwd
 
 import (
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"strings"
 	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestHashAndVerify 验证密码哈希与校验及错误密码返回 ErrMismatch

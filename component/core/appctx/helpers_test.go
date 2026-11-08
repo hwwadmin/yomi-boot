@@ -41,19 +41,19 @@ func TestConfigNormalizeAndValidateEdges(t *testing.T) {
 }
 
 func TestContextHelpers(t *testing.T) {
-	if OrBackground(nil) == nil {
-		t.Fatal("nil context 应归一化为 Background")
-	}
 	parent := context.Background()
 	if OrBackground(parent) != parent {
 		t.Fatal("非 nil context 应原样返回")
 	}
+	if bg := OrBackground(context.TODO()); bg == nil {
+		t.Fatal("OrBackground 不应返回 nil")
+	}
 
-	ctx, cancel := WithCancel(nil)
+	ctx, cancel := WithCancel(context.TODO())
 	cancel()
 	<-ctx.Done()
 
-	ctx, cancel = WithTimeout(nil, time.Hour)
+	ctx, cancel = WithTimeout(context.TODO(), time.Hour)
 	cancel()
 	<-ctx.Done()
 

@@ -519,15 +519,18 @@ type scriptStore struct {
 func (s *scriptStore) Save(context.Context, string, string, *TokenSession, time.Duration) error {
 	return nil
 }
+
 func (s *scriptStore) ReplaceUserSession(context.Context, string, string, *TokenSession, time.Duration) error {
 	return nil
 }
+
 func (s *scriptStore) Load(context.Context, string, string) (*TokenSession, error) {
 	if s.loadErr != nil {
 		return nil, s.loadErr
 	}
 	return s.session, nil
 }
+
 func (s *scriptStore) ListByUserID(context.Context, string, int64) ([]*UserTokenSession, error) {
 	if s.listErr != nil {
 		return nil, s.listErr

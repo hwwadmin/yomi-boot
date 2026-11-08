@@ -2,8 +2,9 @@ package aes
 
 import (
 	"bytes"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestGCMRoundTrip 验证 GCM 加解密往返及密文篡改检测

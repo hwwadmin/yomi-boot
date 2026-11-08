@@ -1,10 +1,11 @@
 package rpc
 
 import (
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // testBreakerConfig 返回测试用熔断参数

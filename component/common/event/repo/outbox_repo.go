@@ -103,7 +103,7 @@ func (r *OutboxRepo) ResetFetchedTimeout(ctx context.Context, serviceName string
 	if limit <= 0 {
 		return 0, errors.New("重置条数必须大于 0")
 	}
-	statement, err := resetFetchedTimeoutSQL(r.DB.Dialector.Name())
+	statement, err := resetFetchedTimeoutSQL(r.DB.Name())
 	if err != nil {
 		return 0, err
 	}

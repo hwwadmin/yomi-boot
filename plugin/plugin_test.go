@@ -2,12 +2,13 @@ package plugin
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/core/config"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/config"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // basePlugin 提供 Plugin 接口的测试实现。

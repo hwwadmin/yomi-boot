@@ -3,15 +3,16 @@ package httpguard
 import (
 	"bytes"
 	"context"
-	"github.com/gin-gonic/gin"
-	"github.com/hwwadmin/yomi-boot/component/core/handler"
-	"github.com/hwwadmin/yomi-boot/component/core/response"
-	"github.com/hwwadmin/yomi-boot/component/core/router"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/hwwadmin/yomi-boot/component/core/handler"
+	"github.com/hwwadmin/yomi-boot/component/core/response"
+	"github.com/hwwadmin/yomi-boot/component/core/router"
 )
 
 // TestMiddleware_RequestTimeout 验证写超时后返回 REQUEST_TIMEOUT

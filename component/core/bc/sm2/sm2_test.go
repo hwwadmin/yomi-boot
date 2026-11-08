@@ -7,10 +7,11 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"testing"
+
 	gmsm "github.com/emmansun/gmsm/sm2"
 	"github.com/emmansun/gmsm/smx509"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	"testing"
 )
 
 // TestSignVerify 验证默认 UID 与自定义 UID 的签名验签及篡改检测

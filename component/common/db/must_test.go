@@ -2,9 +2,10 @@ package db
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/shared/enums"
 )
 
 func TestMustOpen_WarmIdleFails(t *testing.T) {

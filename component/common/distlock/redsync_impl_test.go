@@ -2,11 +2,12 @@ package distlock
 
 import (
 	"context"
+	"io"
+	"testing"
+
 	"github.com/go-redsync/redsync/v4"
 	"github.com/hashicorp/go-multierror"
 	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	"io"
-	"testing"
 )
 
 // TestMapLockContextError 验证 mapLockContextError 各类错误映射

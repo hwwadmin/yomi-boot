@@ -2,10 +2,11 @@ package redis
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 )
 
 // TestNewClient_AppliesCommandTimeout 验证指令超时同时落到客户端读写超时与 context 超时开关

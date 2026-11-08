@@ -116,11 +116,12 @@ func TestFileRotator_ValidationReopenAndCleanup(t *testing.T) {
 	if rot.scanNextSeq("20990101") < 3 {
 		t.Fatal("历史序号应跳过已有文件")
 	}
-	missing := *rot
-	missing.dir = filepath.Join(dir, "missing-seq")
-	if missing.scanNextSeq("20990101") != 1 {
+	savedDir := rot.dir
+	rot.dir = filepath.Join(dir, "missing-seq")
+	if rot.scanNextSeq("20990101") != 1 {
 		t.Fatal("目录不可读时应从 1 开始")
 	}
+	rot.dir = savedDir
 	rot.maxTotalBytes = 1
 	if err := rot.cleanup(); err != nil {
 		t.Fatal(err)

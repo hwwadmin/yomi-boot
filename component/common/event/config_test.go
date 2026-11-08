@@ -1,10 +1,11 @@
 package event
 
 import (
-	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/common/event/cfg"
 )
 
 // TestConfigConsumerDefaults 校验消费重试与收件箱死信重投的默认值

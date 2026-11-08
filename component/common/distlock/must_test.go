@@ -1,8 +1,9 @@
 package distlock
 
 import (
-	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
 )
 
 func TestMustNewFactory_NilClientPanics(t *testing.T) {

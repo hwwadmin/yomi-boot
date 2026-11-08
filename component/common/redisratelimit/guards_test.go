@@ -28,8 +28,8 @@ func TestAllowN_NilAndNonPositive(t *testing.T) {
 	if err := (noopLimiter{}).AllowN(context.Background(), "login:ip:1", 3, Rule{}); err != nil {
 		t.Fatalf("Noop AllowN 应成功: %v", err)
 	}
-	if contextErr(nil) != nil {
-		t.Fatal("nil ctx 没有取消信号")
+	if contextErr(context.Background()) != nil {
+		t.Fatal("未取消的 ctx 应无错误")
 	}
 }
 

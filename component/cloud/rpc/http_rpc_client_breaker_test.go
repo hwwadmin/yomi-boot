@@ -2,12 +2,13 @@ package rpc
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestInvoke_AttemptTimeoutCountsAsFailure 验证单次尝试超时计入熔断失败；默认只尝试一次

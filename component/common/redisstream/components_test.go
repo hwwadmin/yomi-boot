@@ -1,8 +1,9 @@
 package redisstream
 
 import (
-	redisv9 "github.com/redis/go-redis/v9"
 	"testing"
+
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
 func TestNewComponents_InvalidConfig(t *testing.T) {

@@ -2,11 +2,12 @@ package rpc
 
 import (
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestIsRetryable 验证可重试 RPC 错误判定

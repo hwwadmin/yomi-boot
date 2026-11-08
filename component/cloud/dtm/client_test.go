@@ -2,10 +2,11 @@ package dtm
 
 import (
 	"context"
-	"github.com/dtm-labs/client/dtmcli"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"testing"
 	"time"
+
+	"github.com/dtm-labs/client/dtmcli"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // TestNewClientDisabled 验证 server 为空时客户端为未启用状态

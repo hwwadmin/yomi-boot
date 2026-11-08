@@ -3,13 +3,14 @@ package distlock
 import (
 	"context"
 	stderrors "errors"
-	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
-	redisv9 "github.com/redis/go-redis/v9"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hwwadmin/yomi-boot/component/common/redis/redistest"
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
 // releaseFailHook 在开关打开时让 EVAL/EVALSHA 失败，用于模拟释放锁时的 Redis 通信错误。

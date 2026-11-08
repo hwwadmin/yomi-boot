@@ -856,8 +856,12 @@ func TestLoggerAPIAndEncoderEdges(t *testing.T) {
 	}
 
 	enc := newTracingConsoleEncoder(zap.NewDevelopmentEncoderConfig()).(*tracingConsoleEncoder)
-	enc.AddArray("arr", logArray{})
-	enc.AddObject("obj", logObject{})
+	if err := enc.AddArray("arr", logArray{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.AddObject("obj", logObject{}); err != nil {
+		t.Fatal(err)
+	}
 	enc.AddBinary("bin", []byte{1})
 	enc.AddByteString("bs", []byte("b"))
 	enc.AddBool("ok", true)

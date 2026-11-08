@@ -2,11 +2,12 @@ package traceid
 
 import (
 	"context"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 const sampleTP = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
@@ -139,8 +140,8 @@ func TestParseTraceparent_Version00KeepsExtraFields(t *testing.T) {
 }
 
 func TestSpanHelpers_NilAndInvalid(t *testing.T) {
-	if got := SpanFromContext(nil); got != (SpanContext{}) {
-		t.Fatalf("nil ctx span = %+v", got)
+	if got := SpanFromContext(context.TODO()); got != (SpanContext{}) {
+		t.Fatalf("无 span 的 ctx = %+v", got)
 	}
 	if GetTraceparent(nil) != "" {
 		t.Fatal("nil gin context 应返回空 traceparent")
@@ -157,7 +158,7 @@ func TestSpanHelpers_NilAndInvalid(t *testing.T) {
 	SetTraceparent(context.Background(), nil)
 	writeTraceparent(nil, SpanContext{TraceID: "4bf92f3577b34da6a3ce929d0e0e4736", SpanID: "00f067aa0ba902b7"})
 
-	ctx := ContextWithSpanContext(nil, SpanContext{TraceID: "not-hex", SpanID: "00f067aa0ba902b7"})
+	ctx := ContextWithSpanContext(context.TODO(), SpanContext{TraceID: "not-hex", SpanID: "00f067aa0ba902b7"})
 	if FromContext(ctx) != "" {
 		t.Fatal("非法 trace id 不应写入上下文")
 	}

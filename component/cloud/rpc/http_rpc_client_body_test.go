@@ -3,12 +3,13 @@ package rpc
 import (
 	"bytes"
 	"context"
-	"github.com/hwwadmin/yomi-boot/component/core/errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"github.com/hwwadmin/yomi-boot/component/core/errors"
 )
 
 // countingBody 统计响应体读取次数和字节数
