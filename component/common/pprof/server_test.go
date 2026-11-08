@@ -52,3 +52,40 @@ func TestPprofIndex(t *testing.T) {
 		t.Fatal("响应体不能为空")
 	}
 }
+
+func TestConfigValidate_RejectsBadAddr(t *testing.T) {
+	t.Parallel()
+
+	if err := (Config{}).Validate(); err == nil {
+		t.Fatal("空地址应失败")
+	}
+	if _, err := Start(Config{}); err == nil {
+		t.Fatal("空地址启动应失败")
+	}
+	if err := (Config{Addr: "not a host"}).Validate(); err == nil {
+		t.Fatal("非法地址应失败")
+	}
+}
+
+func TestMustStart_InvalidConfigPanics(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("非法配置 MustStart 应 panic")
+		}
+	}()
+	MustStart(Config{})
+}
+
+func TestServer_NilAddrAndStop(t *testing.T) {
+	t.Parallel()
+
+	var srv *Server
+	if srv.Addr() != nil {
+		t.Fatal("nil Server 的 Addr 应为 nil")
+	}
+	if err := srv.Stop(context.Background()); err != nil {
+		t.Fatalf("nil Server 的 Stop 应成功: %v", err)
+	}
+}

@@ -43,6 +43,24 @@ func TestConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestConfigValidate_RejectsOtherNegatives(t *testing.T) {
+	t.Parallel()
+	cases := []Config{
+		{BlockMS: -1},
+		{Count: -1},
+		{ClaimMinIdleMS: -1},
+		{ClaimIntervalMS: -1},
+		{StopTimeoutMS: -1},
+		{PublishWorker: PublishWorkerConfig{Size: -1}},
+		{PublishWorker: PublishWorkerConfig{SubmitTimeoutSeconds: -1}},
+	}
+	for _, cfg := range cases {
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("expected error for %+v", cfg)
+		}
+	}
+}
+
 func TestPublishWorkerConfigValidate(t *testing.T) {
 	t.Parallel()
 	cfg := Config{

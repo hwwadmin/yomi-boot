@@ -139,6 +139,47 @@ func TestParseTraceparent_Version00KeepsExtraFields(t *testing.T) {
 	}
 }
 
+func TestSpanHelpers_NilAndInvalid(t *testing.T) {
+	if got := SpanFromContext(nil); got != (SpanContext{}) {
+		t.Fatalf("nil ctx span = %+v", got)
+	}
+	if GetTraceparent(nil) != "" {
+		t.Fatal("nil gin context 应返回空 traceparent")
+	}
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	if GetTraceparent(c) != "" {
+		t.Fatal("没有 Request 时应返回空 traceparent")
+	}
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	if GetTraceparent(c) != "" {
+		t.Fatal("没有链路时应返回空 traceparent")
+	}
+	SetTraceparent(context.Background(), nil)
+	writeTraceparent(nil, SpanContext{TraceID: "4bf92f3577b34da6a3ce929d0e0e4736", SpanID: "00f067aa0ba902b7"})
+
+	ctx := ContextWithSpanContext(nil, SpanContext{TraceID: "not-hex", SpanID: "00f067aa0ba902b7"})
+	if FromContext(ctx) != "" {
+		t.Fatal("非法 trace id 不应写入上下文")
+	}
+	ctx = ContextWithSpanContext(context.Background(), SpanContext{
+		TraceID:      "4bf92f3577b34da6a3ce929d0e0e4736",
+		SpanID:       "00f067aa0ba902b7",
+		ParentSpanID: "zz",
+		Flags:        "gg",
+	})
+	sc := SpanFromContext(ctx)
+	if sc.Flags != traceFlagsRecorded {
+		t.Fatalf("非法 flags 应回退为 %s，实际 %q", traceFlagsRecorded, sc.Flags)
+	}
+	if sc.ParentSpanID != "" {
+		t.Fatalf("非法 parent span 应被清空，实际 %q", sc.ParentSpanID)
+	}
+	if sc.Traceparent() == "" {
+		t.Fatal("合法 trace/span 应能拼出 traceparent")
+	}
+}
+
 func TestFromContext_EmptyWithoutSpan(t *testing.T) {
 	if got := FromContext(context.Background()); got != "" {
 		t.Fatalf("没有链路时应为空，实际 %q", got)

@@ -33,6 +33,32 @@ func TestMustRegister_DuplicatePanics(t *testing.T) {
 	MustRegister(nopEncoder{})
 }
 
+func TestMustReady_UnregisteredPanics(t *testing.T) {
+	resetRegisterForTest()
+	t.Cleanup(resetRegisterForTest)
+
+	if Registered() {
+		t.Fatal("重置后不应处于已注册状态")
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("未注册时 MustReady 应 panic")
+		}
+	}()
+	MustReady()
+}
+
+func TestMustReady_AfterRegister(t *testing.T) {
+	resetRegisterForTest()
+	t.Cleanup(resetRegisterForTest)
+
+	MustRegister(nopEncoder{})
+	if !Registered() {
+		t.Fatal("注册后 Registered 应为 true")
+	}
+	MustReady()
+}
+
 // nopEncoder 空实现 Encoder（测试桩）
 type nopEncoder struct{}
 

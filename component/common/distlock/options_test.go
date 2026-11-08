@@ -52,6 +52,28 @@ func TestApplyLockOptions_AcquireRetryDelay(t *testing.T) {
 	}
 }
 
+// TestApplyLockOptions_NonPositiveFallbacks 验证非正 TTL、尝试次数和最大持有时长回退默认值
+func TestApplyLockOptions_NonPositiveFallbacks(t *testing.T) {
+	t.Parallel()
+
+	got := applyLockOptions(LockOptions{
+		TTL:                  0,
+		AcquireTries:         0,
+		MaxHoldDuration:      -time.Second,
+		acquireRetryDelaySet: true,
+		AcquireRetryDelay:    0,
+	}, nil)
+	if got.TTL != defaultLockTTL {
+		t.Fatalf("TTL = %v, want %v", got.TTL, defaultLockTTL)
+	}
+	if got.AcquireTries != defaultAcquireTries {
+		t.Fatalf("AcquireTries = %d, want %d", got.AcquireTries, defaultAcquireTries)
+	}
+	if got.MaxHoldDuration != 0 {
+		t.Fatalf("MaxHoldDuration = %v, want 0", got.MaxHoldDuration)
+	}
+}
+
 // TestApplyServiceOptions_PartialDefaultLockOptions 验证部分 DefaultLockOptions 未覆盖项保持默认
 func TestApplyServiceOptions_PartialDefaultLockOptions(t *testing.T) {
 	t.Parallel()
