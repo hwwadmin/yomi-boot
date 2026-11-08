@@ -1,4 +1,4 @@
-// Package idempotency 提供 sys_biz 幂等表仓储
+// Package idempotency 提供 t_sys_biz 幂等表仓储
 //
 // @author zwei
 package idempotency
@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Repository 提供 sys_biz 表访问
+// Repository 提供 t_sys_biz 表访问
 type Repository struct {
 	DB *gorm.DB
 }

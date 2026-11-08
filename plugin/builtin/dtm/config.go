@@ -16,7 +16,7 @@ type BootConfig struct {
 	Enabled      *bool  `mapstructure:"enabled"`       // Enabled 是否启用 DTM，未配置默认 false
 	Server       string `mapstructure:"server"`        // Server 是 DTM 服务器地址
 	Timeout      int    `mapstructure:"timeout"`       // Timeout 是控制面请求超时秒数，未配置默认 3
-	BarrierTable string `mapstructure:"barrier_table"` // BarrierTable 是 DTM Barrier 表名，未配置默认 sys_barrier
+	BarrierTable string `mapstructure:"barrier_table"` // BarrierTable 是 DTM Barrier 表名，未配置默认 t_sys_barrier
 }
 
 // EnabledOrDefault 返回是否启用 DTM，未配置默认 false

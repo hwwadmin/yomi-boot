@@ -4,10 +4,10 @@
 -- 作者: zwei
 -- 说明:
 --   event_id 是全局唯一事件 ID（建议使用雪花 ID），所有 event 表统一遵守此约定；
---   sys_event_outbox.status 对应 EventOutboxStatus: PENDING-待处理, FETCHED-已抓取, SENT_SUCCESS-发送成功, SENT_FAIL-发送失败
+--   t_sys_event_outbox.status 对应 EventOutboxStatus: PENDING-待处理, FETCHED-已抓取, SENT_SUCCESS-发送成功, SENT_FAIL-发送失败
 -- ----------------------------
 
-CREATE TABLE IF NOT EXISTS `sys_event_inbox`
+CREATE TABLE IF NOT EXISTS `t_sys_event_inbox`
 (
     `id`           bigint       NOT NULL COMMENT '主键ID',
     `service_name` varchar(100) NOT NULL COMMENT '归属业务系统名称',
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_inbox`
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '事件收件箱表';
 
-CREATE TABLE IF NOT EXISTS `sys_event_outbox`
+CREATE TABLE IF NOT EXISTS `t_sys_event_outbox`
 (
     `id`           bigint       NOT NULL COMMENT '主键ID',
     `service_name` varchar(100) NOT NULL COMMENT '归属业务系统名称',
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_outbox`
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '事件发件箱表';
 
-CREATE TABLE IF NOT EXISTS `sys_event_outbox_dlq`
+CREATE TABLE IF NOT EXISTS `t_sys_event_outbox_dlq`
 (
     `id`              bigint       NOT NULL COMMENT '主键ID',
     `service_name`    varchar(100) NOT NULL COMMENT '归属业务系统名称',
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS `sys_event_outbox_dlq`
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '事件发件箱死信队列表';
 
-CREATE TABLE IF NOT EXISTS `sys_event_inbox_dlq`
+CREATE TABLE IF NOT EXISTS `t_sys_event_inbox_dlq`
 (
     `id`           bigint       NOT NULL COMMENT '主键ID',
     `service_name` varchar(100) NOT NULL COMMENT '归属业务系统名称',

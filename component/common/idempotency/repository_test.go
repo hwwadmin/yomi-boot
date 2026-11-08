@@ -1,4 +1,4 @@
-// sys_biz 仓储冲突语义与超时清理的集成测试
+// t_sys_biz 仓储冲突语义与超时清理的集成测试
 //
 // @author zwei
 
@@ -109,7 +109,7 @@ func TestRepository_DeleteStaleProcessing(t *testing.T) {
 	// 回拨过期记录的 update_time（绕过 gorm autoUpdateTime 的自动刷新）
 	backdate := func(ids []int64) {
 		t.Helper()
-		if err := env.db.Exec("UPDATE sys_biz SET update_time = ? WHERE id IN ?",
+		if err := env.db.Exec("UPDATE t_sys_biz SET update_time = ? WHERE id IN ?",
 			time.Now().Add(-2*time.Hour), ids).Error; err != nil {
 			t.Fatalf("回拨 update_time 失败: %v", err)
 		}

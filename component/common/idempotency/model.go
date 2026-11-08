@@ -1,4 +1,4 @@
-// Package idempotency 定义 sys_biz 幂等表模型
+// Package idempotency 定义 t_sys_biz 幂等表模型
 //
 // @author zwei
 package idempotency
@@ -15,7 +15,7 @@ const (
 	StatusCompleted  int8 = 2 // 已完成
 )
 
-// SysBiz 映射 sys_biz 幂等表
+// SysBiz 映射 t_sys_biz 幂等表
 type SysBiz struct {
 	ID            int64          `gorm:"column:id;primaryKey" json:"id,string"`                             // ID 是主键
 	BizID         string         `gorm:"column:biz_id;size:100;not null;uniqueIndex:uk_biz,priority:1"`     // BizID 是业务幂等键
@@ -31,7 +31,7 @@ type SysBiz struct {
 	DeleteBy      *int64         `gorm:"column:delete_by" json:"deleteBy,omitempty"`                        // DeleteBy 是删除人
 }
 
-// TableName 返回 sys_biz 幂等表名
+// TableName 返回 t_sys_biz 幂等表名
 func (SysBiz) TableName() string {
-	return "sys_biz"
+	return "t_sys_biz"
 }

@@ -17,13 +17,13 @@ import (
 // listConsumedBeforeSQL 查询已过保留期、且没有被死信引用的已消费记录
 const listConsumedBeforeSQL = `
 SELECT i.id
-FROM sys_event_inbox i
+FROM t_sys_event_inbox i
 WHERE i.service_name = ?
   AND i.create_time <= ?
   AND i.delete_time IS NULL
   AND NOT EXISTS (
       SELECT 1
-      FROM sys_event_inbox_dlq d
+      FROM t_sys_event_inbox_dlq d
       WHERE d.service_name = i.service_name
         AND d.event_id = i.event_id
         AND d.delete_time IS NULL

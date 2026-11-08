@@ -2,7 +2,7 @@
 -- MySQL 版；PostgreSQL 版见 sql/pgsql/barrier.sql，两份字段口径一致。
 -- 与 cloud/dtm 封装口径一致，勿在各服务 script/sql 下复制。
 
-CREATE TABLE IF NOT EXISTS `sys_barrier` (
+CREATE TABLE IF NOT EXISTS `t_sys_barrier` (
     `id`         BIGINT       NOT NULL AUTO_INCREMENT,
     `trans_type` VARCHAR(45)  NOT NULL DEFAULT '',
     `gid`        VARCHAR(128) NOT NULL DEFAULT '',

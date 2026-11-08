@@ -2,7 +2,7 @@
 -- MySQL 版；PostgreSQL 版见 sql/pgsql/sys_biz.sql，两份字段口径一致。
 -- 与 component/idempotency 封装口径一致。
 
-CREATE TABLE IF NOT EXISTS `sys_biz` (
+CREATE TABLE IF NOT EXISTS `t_sys_biz` (
     `id` bigint NOT NULL COMMENT '主键ID',
     `biz_id` varchar(100) NOT NULL COMMENT '业务全局ID（一次 Saga/业务意图）',
     `biz_sub_id` varchar(100) NOT NULL COMMENT '业务子ID（单次领域写调用）',

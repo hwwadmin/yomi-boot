@@ -122,7 +122,7 @@ func TestConfigValidateBarrierTable(t *testing.T) {
 		{name: "默认合法", table: "", wantErr: false},
 		{name: "合法标识符", table: "custom_barrier", wantErr: false},
 		{name: "数字开头非法", table: "1barrier", wantErr: true},
-		{name: "含分号非法", table: "sys_barrier; DROP TABLE x", wantErr: true},
+		{name: "含分号非法", table: "t_sys_barrier; DROP TABLE x", wantErr: true},
 		{name: "含空格非法", table: "sys barrier", wantErr: true},
 	}
 	for _, tc := range cases {

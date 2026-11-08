@@ -1,4 +1,4 @@
-// 业务幂等守卫 Execute / ExecuteInTx 编排的集成测试：临时 MySQL 灌入权威 sys_biz DDL + 临时 Redis
+// 业务幂等守卫 Execute / ExecuteInTx 编排的集成测试：临时 MySQL 灌入权威 t_sys_biz DDL + 临时 Redis
 //
 // @author zwei
 
@@ -32,7 +32,7 @@ type testEnv struct {
 	cleanup func()
 }
 
-// newTestEnv 组装真实 MySQL（灌入权威 sys_biz DDL）与临时 Redis 支撑的完整守卫
+// newTestEnv 组装真实 MySQL（灌入权威 t_sys_biz DDL）与临时 Redis 支撑的完整守卫
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 

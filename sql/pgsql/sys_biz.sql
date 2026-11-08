@@ -3,7 +3,7 @@
 -- 与 component/idempotency 封装口径一致。
 -- update_time 的 MySQL ON UPDATE 语义由应用层（GORM autoUpdateTime）维护，PG 侧不设触发器。
 
-CREATE TABLE IF NOT EXISTS sys_biz (
+CREATE TABLE IF NOT EXISTS t_sys_biz (
     id             BIGINT       NOT NULL,
     biz_id         VARCHAR(100) NOT NULL,
     biz_sub_id     VARCHAR(100) NOT NULL,
@@ -20,20 +20,20 @@ CREATE TABLE IF NOT EXISTS sys_biz (
     CONSTRAINT uk_biz UNIQUE (biz_id, biz_sub_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_operation ON sys_biz (operation_type);
-CREATE INDEX IF NOT EXISTS idx_create_time ON sys_biz (create_time);
-CREATE INDEX IF NOT EXISTS idx_status_update_time ON sys_biz (status, update_time);
+CREATE INDEX IF NOT EXISTS idx_operation ON t_sys_biz (operation_type);
+CREATE INDEX IF NOT EXISTS idx_create_time ON t_sys_biz (create_time);
+CREATE INDEX IF NOT EXISTS idx_status_update_time ON t_sys_biz (status, update_time);
 
-COMMENT ON TABLE sys_biz IS '业务幂等记录表';
-COMMENT ON COLUMN sys_biz.id IS '主键ID';
-COMMENT ON COLUMN sys_biz.biz_id IS '业务全局ID（一次 Saga/业务意图）';
-COMMENT ON COLUMN sys_biz.biz_sub_id IS '业务子ID（单次领域写调用）';
-COMMENT ON COLUMN sys_biz.operation_type IS '操作类型（如 UPDATE_USER_STATUS）';
-COMMENT ON COLUMN sys_biz.status IS '1-处理中 2-已完成';
-COMMENT ON COLUMN sys_biz.response_data IS '成功时的返回结果缓存（用于重试直接返回）';
-COMMENT ON COLUMN sys_biz.create_time IS '创建时间';
-COMMENT ON COLUMN sys_biz.create_by IS '创建人ID';
-COMMENT ON COLUMN sys_biz.update_time IS '更新时间';
-COMMENT ON COLUMN sys_biz.update_by IS '更新人ID';
-COMMENT ON COLUMN sys_biz.delete_time IS '删除时间';
-COMMENT ON COLUMN sys_biz.delete_by IS '删除人ID';
+COMMENT ON TABLE t_sys_biz IS '业务幂等记录表';
+COMMENT ON COLUMN t_sys_biz.id IS '主键ID';
+COMMENT ON COLUMN t_sys_biz.biz_id IS '业务全局ID（一次 Saga/业务意图）';
+COMMENT ON COLUMN t_sys_biz.biz_sub_id IS '业务子ID（单次领域写调用）';
+COMMENT ON COLUMN t_sys_biz.operation_type IS '操作类型（如 UPDATE_USER_STATUS）';
+COMMENT ON COLUMN t_sys_biz.status IS '1-处理中 2-已完成';
+COMMENT ON COLUMN t_sys_biz.response_data IS '成功时的返回结果缓存（用于重试直接返回）';
+COMMENT ON COLUMN t_sys_biz.create_time IS '创建时间';
+COMMENT ON COLUMN t_sys_biz.create_by IS '创建人ID';
+COMMENT ON COLUMN t_sys_biz.update_time IS '更新时间';
+COMMENT ON COLUMN t_sys_biz.update_by IS '更新人ID';
+COMMENT ON COLUMN t_sys_biz.delete_time IS '删除时间';
+COMMENT ON COLUMN t_sys_biz.delete_by IS '删除人ID';

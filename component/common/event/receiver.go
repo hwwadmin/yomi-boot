@@ -85,7 +85,7 @@ return n
 `
 
 // WrapHandler 将业务处理函数包装为 Kafka 消费 handler。
-// 业务失败次数记在 Redis，跨进程累加；达到 InboxDlqMaxRetry 后写入 sys_event_inbox_dlq 并 ack。
+// 业务失败次数记在 Redis，跨进程累加；达到 InboxDlqMaxRetry 后写入 t_sys_event_inbox_dlq 并 ack。
 // Kafka 的 MaxHandlerRetries 必须为 -1 或不小于该值，否则 Kafka 会先丢弃消息。
 func (r *Receiver) WrapHandler(fn func(ctx context.Context, evt Event) error) yomikafka.ConsumeHandler {
 	if fn == nil {

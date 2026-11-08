@@ -1,9 +1,9 @@
 // Package idempotency 提供业务幂等守卫能力
 //
-// 以 sys_biz 幂等表为真源、Redis 结果缓存为快路径，配合分布式锁串行同键请求：
+// 以 t_sys_biz 幂等表为真源、Redis 结果缓存为快路径，配合分布式锁串行同键请求：
 //   - 快路径：命中 Redis 结果缓存直接返回
 //   - 分布式锁：缓存 miss 后串行化，锁内 double-check 缓存
-//   - DB 查证：锁内查 sys_biz，已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈
+//   - DB 查证：锁内查 t_sys_biz，已完成请求直接回放历史快照（纯读，不开启事务），并回写缓存自愈
 //   - 事务抢占：INSERT 以「冲突即空操作」语义抢占处理权，执行业务并标记完成后提交，再回写缓存
 //
 // 双入口按事务形态区分：
@@ -92,7 +92,7 @@ type snapshot[T any] struct {
 // 可见）只有自己的提交点才能兑现；已处于事务内时改用 ExecuteInTx。
 //
 // 事务已经提交，或回放的是已提交结果时，持锁丢失仍返回业务结果，锁丢失只记日志。
-// 幂等真源是已提交的 sys_biz，这个错误不表示业务回滚。提交前锁丢失仍返回错误，事务回滚。
+// 幂等真源是已提交的 t_sys_biz，这个错误不表示业务回滚。提交前锁丢失仍返回错误，事务回滚。
 func Execute[T any](
 	g *Guard,
 	txRunner tx.Runner,
@@ -116,7 +116,7 @@ func Execute[T any](
 //     反查不可见，最终返回 ErrDuplicateWithoutRecord（fail-closed，下次请求回放自愈）。
 //
 // DTM 分支回调（barrier ctx）下本入口会被以 ErrNotInTx 拒绝（barrier 的 InTx 为 false）：
-// 分支幂等由 sys_barrier 承担。Execute 在分支回调内随分支事务提交属既有模式，
+// 分支幂等由 t_sys_barrier 承担。Execute 在分支回调内随分支事务提交属既有模式，
 // 但分支提交 ≠ 全局提交，幂等键不得跨全局事务复用。
 //
 // 传入的 ctx 未绑定同源事务时返回 ErrNotInTx fail-fast：无外层事务时用 Execute，

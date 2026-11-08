@@ -21,7 +21,7 @@ const outboxUpdateBatchSize = 200
 // listSentSuccessBeforeSQL 查询已过保留期、且没有被死信引用的发送成功记录
 const listSentSuccessBeforeSQL = `
 SELECT o.id
-FROM sys_event_outbox o
+FROM t_sys_event_outbox o
 WHERE o.service_name = ?
   AND o.status = ?
   AND o.sent_time IS NOT NULL
@@ -29,7 +29,7 @@ WHERE o.service_name = ?
   AND o.delete_time IS NULL
   AND NOT EXISTS (
       SELECT 1
-      FROM sys_event_outbox_dlq d
+      FROM t_sys_event_outbox_dlq d
       WHERE d.event_outbox_id = o.id
         AND d.delete_time IS NULL
   )
@@ -38,7 +38,7 @@ LIMIT ?`
 
 // resetFetchedTimeoutMySQL 在库内把已超时的 FETCHED 改回 PENDING。按取走时间从早到晚，单轮不超过上限。
 const resetFetchedTimeoutMySQL = `
-UPDATE sys_event_outbox
+UPDATE t_sys_event_outbox
 SET status = ?, fetch_time = NULL
 WHERE service_name = ?
   AND status = ?
@@ -49,12 +49,12 @@ LIMIT ?`
 
 // resetFetchedTimeoutPostgres 与 MySQL 同一语义。PostgreSQL 没有 UPDATE ... LIMIT，上限放在子查询里，主键不回到程序。
 const resetFetchedTimeoutPostgres = `
-UPDATE sys_event_outbox
+UPDATE t_sys_event_outbox
 SET status = ?, fetch_time = NULL
 WHERE id IN (
     SELECT id FROM (
         SELECT id
-        FROM sys_event_outbox
+        FROM t_sys_event_outbox
         WHERE service_name = ?
           AND status = ?
           AND fetch_time < ?

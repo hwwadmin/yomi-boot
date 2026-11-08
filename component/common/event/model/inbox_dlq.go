@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// SysEventInboxDlq 映射 sys_event_inbox_dlq 收件箱死信表
+// SysEventInboxDlq 映射 t_sys_event_inbox_dlq 收件箱死信表
 type SysEventInboxDlq struct {
 	ID             int64          `gorm:"column:id;primaryKey" json:"id,string"`                                 // ID 是主键
 	ServiceName    string         `gorm:"column:service_name;size:100;not null;uniqueIndex:uk_service_event_id"` // ServiceName 是消费方服务名
@@ -30,5 +30,5 @@ type SysEventInboxDlq struct {
 
 // TableName 返回收件箱死信表名
 func (SysEventInboxDlq) TableName() string {
-	return "sys_event_inbox_dlq"
+	return "t_sys_event_inbox_dlq"
 }

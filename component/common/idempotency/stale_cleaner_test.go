@@ -25,7 +25,7 @@ type cleanerEnv struct {
 	cleanup func()
 }
 
-// newCleanerEnv 组装临时 MySQL（权威 sys_biz DDL）与临时 Redis 分布式锁工厂
+// newCleanerEnv 组装临时 MySQL（权威 t_sys_biz DDL）与临时 Redis 分布式锁工厂
 func newCleanerEnv(t *testing.T) *cleanerEnv {
 	t.Helper()
 

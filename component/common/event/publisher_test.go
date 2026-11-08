@@ -69,7 +69,7 @@ func TestPublisherPublish(t *testing.T) {
 func TestPublisherPublishDuplicate(t *testing.T) {
 	gormDB, cleanup := dbtest.New(t,
 		dbtest.WithTables(model.SysEventOutbox{}),
-		dbtest.WithSQL("ALTER TABLE sys_event_outbox ADD UNIQUE KEY uk_outbox_svc_event (service_name, event_id)"),
+		dbtest.WithSQL("ALTER TABLE t_sys_event_outbox ADD UNIQUE KEY uk_outbox_svc_event (service_name, event_id)"),
 	)
 	defer cleanup()
 

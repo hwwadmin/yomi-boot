@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// SysEventOutbox 映射 sys_event_outbox 发件箱表
+// SysEventOutbox 映射 t_sys_event_outbox 发件箱表
 type SysEventOutbox struct {
 	ID          int64          `gorm:"column:id;primaryKey" json:"id,string"` // ID 是主键
 	ServiceName string         `gorm:"column:service_name;size:100;not null"` // ServiceName 是发布方服务名
@@ -29,5 +29,5 @@ type SysEventOutbox struct {
 
 // TableName 返回发件箱表名
 func (SysEventOutbox) TableName() string {
-	return "sys_event_outbox"
+	return "t_sys_event_outbox"
 }

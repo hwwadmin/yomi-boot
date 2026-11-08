@@ -82,7 +82,7 @@ func TestNewTxRunner_RejectsInvalidBarrierTable(t *testing.T) {
 			t.Fatal("非法 barrier_table 期望 panic")
 		}
 	}()
-	NewTxRunner(&gorm.DB{}, enums.MySQL, "sys_barrier; DROP TABLE x")
+	NewTxRunner(&gorm.DB{}, enums.MySQL, "t_sys_barrier; DROP TABLE x")
 }
 
 // dtmTestModel TxRunner 单测用 GORM 模型

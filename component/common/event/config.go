@@ -30,7 +30,7 @@ const (
 	defaultEventCleanupBatchSize     = 500
 	defaultEventCleanupMaxBatches    = 20
 
-	// 与 sys_event_inbox、sys_event_outbox 及两侧死信表的 varchar 列宽一致。
+	// 与 t_sys_event_inbox、t_sys_event_outbox 及两侧死信表的 varchar 列宽一致。
 	// MySQL utf8mb4 和 PostgreSQL 的 varchar(N) 都按字符计，这里用 rune 数。
 	maxServiceNameLen = 100
 	maxEventIDLen     = 100

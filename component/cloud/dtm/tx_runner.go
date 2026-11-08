@@ -21,7 +21,7 @@ import (
 )
 
 // DefaultBarrierTableName 默认 DTM Barrier 表名
-const DefaultBarrierTableName = "sys_barrier"
+const DefaultBarrierTableName = "t_sys_barrier"
 
 // barrierKey 是 DTM Barrier 在上下文中的键
 type barrierKey struct{}

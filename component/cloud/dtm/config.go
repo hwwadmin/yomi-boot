@@ -20,7 +20,7 @@ var barrierTablePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 type Config struct {
 	Server       string // Server 是 DTM 服务器地址
 	Timeout      int    // Timeout 是控制面请求超时秒数，未配置默认 3
-	BarrierTable string // BarrierTable 是 DTM Barrier 表名，未配置默认 sys_barrier
+	BarrierTable string // BarrierTable 是 DTM Barrier 表名，未配置默认 t_sys_barrier
 }
 
 // TimeoutOrDefault 返回控制面请求超时，未配置或非正数时使用 DefaultTimeout

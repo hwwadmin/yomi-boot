@@ -25,7 +25,7 @@ func dropRowBeforeFind(t *testing.T, db *gorm.DB, id int64) {
 		if gdb.Statement == nil || gdb.Statement.Context.Value(findProbeCtxKey{}) == nil {
 			return
 		}
-		if err := db.Session(&gorm.Session{NewDB: true}).Exec("DELETE FROM sys_biz WHERE id = ?", id).Error; err != nil {
+		if err := db.Session(&gorm.Session{NewDB: true}).Exec("DELETE FROM t_sys_biz WHERE id = ?", id).Error; err != nil {
 			// 累加进当前查询，由后续 Error 读出；返回值为累计错误，此处刻意不取
 			_ = gdb.AddError(err)
 		}
