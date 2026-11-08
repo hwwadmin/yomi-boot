@@ -1,6 +1,6 @@
 -- ----------------------------
 -- 消息队列事件模块建表脚本
--- PostgreSQL 版；MySQL 版见 sql/mysql/sys_event.sql，两份字段口径一致。
+-- PostgreSQL 版；MySQL 版见 sql/mysql/t_sys_event.sql，两份字段口径一致。
 -- PG 索引名 schema 级全局唯一，故事件表索引/唯一约束名带表前缀（inbox/outbox/outbox_dlq/inbox_dlq）。
 -- 作者: zwei
 -- 说明:

@@ -1,5 +1,5 @@
 -- 平台共享 DDL：业务幂等表（各领域库内各建一份）
--- PostgreSQL 版；MySQL 版见 sql/mysql/sys_biz.sql，两份字段口径一致。
+-- PostgreSQL 版；MySQL 版见 sql/mysql/t_sys_biz.sql，两份字段口径一致。
 -- 与 component/idempotency 封装口径一致。
 -- update_time 的 MySQL ON UPDATE 语义由应用层（GORM autoUpdateTime）维护，PG 侧不设触发器。
 

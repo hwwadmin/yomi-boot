@@ -36,7 +36,7 @@ type testEnv struct {
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 
-	gormDB, cleanupDB := dbtest.New(t, dbtest.WithSQLFiles("../../../sql/mysql/sys_biz.sql"))
+	gormDB, cleanupDB := dbtest.New(t, dbtest.WithSQLFiles("../../../sql/mysql/t_sys_biz.sql"))
 	client, cleanupRedis := redistest.NewClient(t)
 	factory, err := distlock.NewFactory(client)
 	if err != nil {

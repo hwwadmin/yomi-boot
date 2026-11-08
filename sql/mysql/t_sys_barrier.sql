@@ -1,5 +1,5 @@
 -- 平台共享 DDL：DTM 子事务屏障表（各领域库内各建一份，与业务表同库）
--- MySQL 版；PostgreSQL 版见 sql/pgsql/barrier.sql，两份字段口径一致。
+-- MySQL 版；PostgreSQL 版见 sql/pgsql/t_sys_barrier.sql，两份字段口径一致。
 -- 与 cloud/dtm 封装口径一致，勿在各服务 script/sql 下复制。
 
 CREATE TABLE IF NOT EXISTS `t_sys_barrier` (
