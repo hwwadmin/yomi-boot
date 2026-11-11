@@ -5,10 +5,8 @@ package builtin
 import (
 	"github.com/hwwadmin/yomi-boot/component/core/config"
 	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
-	consulplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/consul"
 	corsplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/cors"
 	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
-	dtmplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/dtm"
 	eventplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/event"
 	httprecordplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/httprecord"
 	idempotencyplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/idempotency"
@@ -39,8 +37,6 @@ func DefaultConfigs() []config.Section {
 		tokenplugin.ConfigSection(),
 		corsplugin.ConfigSection(),
 		httprecordplugin.ConfigSection(),
-		consulplugin.ConfigSection(),
-		dtmplugin.ConfigSection(),
 		eventplugin.ConfigSection(),
 		snowflakeplugin.ConfigSection(),
 		idempotencyplugin.ConfigSection(),

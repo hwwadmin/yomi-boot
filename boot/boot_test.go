@@ -16,7 +16,6 @@ import (
 	"github.com/hwwadmin/yomi-boot/plugin"
 	appctxplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/appctx"
 	dbplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/db"
-	dtmplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/dtm"
 	eventplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/event"
 	routerplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/router"
 	snowflakeplugin "github.com/hwwadmin/yomi-boot/plugin/builtin/snowflake"
@@ -58,9 +57,6 @@ snowflake:
 	}
 	if slot.Started(dbplugin.DBName) {
 		t.Fatal("未启用 db 时 db 插件应为跳过状态")
-	}
-	if dtmplugin.From(slot).Runner() != nil {
-		t.Fatal("未启用 dtm 时 Runner 应返回 nil")
 	}
 	if _, ok := slot.Plugin(eventplugin.Name); !ok {
 		t.Fatal("event 插件应存在于插件链中")
